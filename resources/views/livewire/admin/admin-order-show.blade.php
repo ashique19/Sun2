@@ -14,18 +14,20 @@
                     <path fill="#6B6459" d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/>
                 </svg>
             </a>
-            <a href="{{ route('admin.orders.create', ['repeat' => $order->id]) }}"
-                title="Repeat order"
-                aria-label="Repeat order"
-                class="inline-flex items-center opacity-70 hover:opacity-100">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                    <path fill="#6B6459" d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
-                </svg>
-            </a>
-            <a href="{{ route('admin.orders.edit', $order) }}"
-                class="rounded-lg border border-[#E0D6C2] bg-white px-4 py-1.5 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
-                Edit order
-            </a>
+            @unless ($readOnly)
+                <a href="{{ route('admin.orders.create', ['repeat' => $order->id]) }}"
+                    title="Repeat order"
+                    aria-label="Repeat order"
+                    class="inline-flex items-center opacity-70 hover:opacity-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                        <path fill="#6B6459" d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                    </svg>
+                </a>
+                <a href="{{ route('admin.orders.edit', $order) }}"
+                    class="rounded-lg border border-[#E0D6C2] bg-white px-4 py-1.5 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
+                    Edit order
+                </a>
+            @endunless
             <span class="rounded-full border border-[#E7DFCF] px-4 py-1 text-sm capitalize">{{ $order->status }}</span>
         </div>
     </div>
@@ -107,6 +109,7 @@
         </div>
 
         <div class="space-y-6">
+            @unless ($readOnly)
             <form wire:submit="saveStatus" class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-4">
                 <h2 class="font-semibold">Manage Order</h2>
                 <div>
@@ -182,6 +185,14 @@
                     <p class="text-sm text-[#8C8474]">Dispatch is only available for new or confirmed orders without a tracker.</p>
                 @endif
             </div>
+            @else
+                @if (filled($order->admin_note))
+                    <div class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-2">
+                        <h2 class="font-semibold">Admin note</h2>
+                        <p class="text-sm text-[#6B6459] whitespace-pre-line">{{ $order->admin_note }}</p>
+                    </div>
+                @endif
+            @endunless
         </div>
     </div>
 </div>

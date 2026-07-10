@@ -9,20 +9,23 @@
 </head>
 <body class="min-h-screen bg-[#FAF6EF] text-[#1E1E1E] antialiased">
     @php
-        $orderLinks = [
-            'admin.orders.create' => 'Create Order',
-            'admin.orders.new' => 'New',
-            'admin.orders.dispatched' => 'Dispatched',
-            'admin.orders.delivered' => 'Delivered',
-            'admin.orders.cancel-return' => 'Cancel & Return',
-            'admin.orders.return-pending' => 'Return Pending',
-        ];
+        $isModeratorOnly = auth()->user()?->isModeratorOnly() ?? false;
+        $orderLinks = $isModeratorOnly
+            ? ['admin.orders.new' => 'New']
+            : [
+                'admin.orders.create' => 'Create Order',
+                'admin.orders.new' => 'New',
+                'admin.orders.dispatched' => 'Dispatched',
+                'admin.orders.delivered' => 'Delivered',
+                'admin.orders.cancel-return' => 'Cancel & Return',
+                'admin.orders.return-pending' => 'Return Pending',
+            ];
         $closeDrawer = "document.getElementById('admin-mobile-nav-toggle').checked = false";
     @endphp
 
     {{-- Small screen top bar --}}
     <div class="md:hidden sticky top-0 z-20 border-b border-[#E7DFCF] bg-white px-4 py-3 flex items-center justify-between gap-3">
-        <a href="{{ route('admin.dashboard') }}" wire:navigate class="font-serif font-semibold text-[#C9A227]">Admin</a>
+        <a href="{{ $isModeratorOnly ? route('admin.orders.new') : route('admin.dashboard') }}" wire:navigate class="font-serif font-semibold text-[#C9A227]">Admin</a>
         <div class="flex items-center gap-2">
             <a href="{{ route('home') }}" class="text-sm text-[#6B6459] hover:text-[#C9A227]">Store</a>
             <label for="admin-mobile-nav-toggle"
@@ -83,10 +86,12 @@
             </div>
 
             <nav class="flex-1 overflow-y-auto px-3 py-3 text-sm">
-                <a href="{{ route('admin.dashboard') }}" wire:navigate onclick="{{ $closeDrawer }}"
-                    class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.dashboard') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
-                    Dashboard
-                </a>
+                @unless ($isModeratorOnly)
+                    <a href="{{ route('admin.dashboard') }}" wire:navigate onclick="{{ $closeDrawer }}"
+                        class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.dashboard') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                        Dashboard
+                    </a>
+                @endunless
 
                 <p class="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-[#8C8474]">Orders</p>
                 @foreach ($orderLinks as $routeName => $label)
@@ -96,28 +101,48 @@
                     </a>
                 @endforeach
 
-                <a href="{{ route('admin.products') }}" wire:navigate onclick="{{ $closeDrawer }}"
-                    class="mt-2 block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.products*') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
-                    Products
-                </a>
-                <a href="{{ route('admin.categories') }}" wire:navigate onclick="{{ $closeDrawer }}"
-                    class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.categories*') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
-                    Categories
-                </a>
-                <a href="{{ route('admin.couriers') }}" wire:navigate onclick="{{ $closeDrawer }}"
-                    class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.couriers*') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
-                    Couriers
-                </a>
-                <a href="{{ route('admin.reviews') }}" wire:navigate onclick="{{ $closeDrawer }}"
-                    class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.reviews') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
-                    Reviews
-                </a>
+                @unless ($isModeratorOnly)
+                    <a href="{{ route('admin.products') }}" wire:navigate onclick="{{ $closeDrawer }}"
+                        class="mt-2 block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.products*') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                        Products
+                    </a>
+                    <a href="{{ route('admin.categories') }}" wire:navigate onclick="{{ $closeDrawer }}"
+                        class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.categories*') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                        Categories
+                    </a>
+                    <a href="{{ route('admin.coupons') }}" wire:navigate onclick="{{ $closeDrawer }}"
+                        class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.coupons*') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                        Coupons
+                    </a>
+                    <a href="{{ route('admin.hero-slides') }}" wire:navigate onclick="{{ $closeDrawer }}"
+                        class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.hero-slides*') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                        Hero Slides
+                    </a>
+                    <a href="{{ route('admin.couriers') }}" wire:navigate onclick="{{ $closeDrawer }}"
+                        class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.couriers*') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                        Couriers
+                    </a>
+                    <a href="{{ route('admin.reviews') }}" wire:navigate onclick="{{ $closeDrawer }}"
+                        class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.reviews') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                        Reviews
+                    </a>
 
-                <p class="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-[#8C8474]">Reports</p>
-                <a href="{{ route('admin.reports.sales-by-month') }}" wire:navigate onclick="{{ $closeDrawer }}"
-                    class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.reports.sales-by-month') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
-                    Sales by Month
-                </a>
+                    <p class="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-[#8C8474]">Users</p>
+                    <a href="{{ route('admin.users.customers') }}" wire:navigate onclick="{{ $closeDrawer }}"
+                        class="block rounded-xl px-4 py-3 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.users.customers') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                        Customers
+                    </a>
+                    <a href="{{ route('admin.users.moderators') }}" wire:navigate onclick="{{ $closeDrawer }}"
+                        class="block rounded-xl px-4 py-3 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.users.moderators') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                        Moderators
+                    </a>
+
+                    <p class="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-[#8C8474]">Reports</p>
+                    <a href="{{ route('admin.reports.sales-by-month') }}" wire:navigate onclick="{{ $closeDrawer }}"
+                        class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('admin.reports.sales-by-month') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                        Sales by Month
+                    </a>
+                @endunless
 
                 <a href="{{ route('home') }}" onclick="{{ $closeDrawer }}"
                     class="mt-2 block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF]">

@@ -11,6 +11,7 @@ use App\Services\Admin\OrderDispatchService;
 use App\Services\Admin\ProductShareListService;
 use App\Services\Couriers\CourierApiRegistry;
 use App\Services\Couriers\CourierTrackingService;
+use App\Support\AdminAccess;
 use App\Support\AdminOrderSegment;
 use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Layout;
@@ -76,6 +77,12 @@ class AdminOrders extends Component
     {
         $this->segment = AdminOrderSegment::isValid($segment) ? $segment : 'new';
 
+        if (AdminAccess::isModeratorOnly() && $this->segment !== 'new') {
+            $this->redirect(route('admin.orders.new'), navigate: true);
+
+            return;
+        }
+
         $courierRegistry = app(CourierApiRegistry::class);
 
         $apiCouriers = Courier::query()
@@ -101,6 +108,10 @@ class AdminOrders extends Component
 
     public function switchSegment(string $segment): void
     {
+        if (AdminAccess::isModeratorOnly()) {
+            return;
+        }
+
         if (! AdminOrderSegment::isValid($segment) || $this->segment === $segment) {
             return;
         }
@@ -123,6 +134,10 @@ class AdminOrders extends Component
 
     public function toggleOrder(int $orderId): void
     {
+        if (AdminAccess::isModeratorOnly()) {
+            return;
+        }
+
         $orderId = (int) $orderId;
 
         if (in_array($orderId, $this->selected, true)) {
@@ -134,6 +149,10 @@ class AdminOrders extends Component
 
     public function togglePageSelection(): void
     {
+        if (AdminAccess::isModeratorOnly()) {
+            return;
+        }
+
         $pageIds = $this->pageOrderIds();
 
         if ($pageIds === []) {
@@ -157,6 +176,8 @@ class AdminOrders extends Component
 
     public function listSelectedProducts(ProductShareListService $shares): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->selected === []) {
             return;
         }
@@ -169,6 +190,8 @@ class AdminOrders extends Component
 
     public function deleteOrder(int $orderId, AdminOrderService $orders): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         $order = Order::query()->find($orderId);
 
         if (! $order) {
@@ -181,6 +204,8 @@ class AdminOrders extends Component
 
     public function deleteSelected(AdminOrderService $orders): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->selected === []) {
             return;
         }
@@ -199,6 +224,8 @@ class AdminOrders extends Component
 
     public function quickDispatch(int $orderId, OrderDispatchService $dispatch): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->segment !== 'new') {
             return;
         }
@@ -225,6 +252,8 @@ class AdminOrders extends Component
 
     public function markDelivered(int $orderId, OrderDeliveryReturnService $settlement): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->segment !== 'dispatched') {
             return;
         }
@@ -241,6 +270,8 @@ class AdminOrders extends Component
 
     public function markSelectedDelivered(OrderDeliveryReturnService $settlement): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->segment !== 'dispatched' || $this->selected === []) {
             return;
         }
@@ -262,6 +293,8 @@ class AdminOrders extends Component
 
     public function cancelAndReturn(int $orderId, OrderDeliveryReturnService $settlement): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->segment !== 'dispatched') {
             return;
         }
@@ -278,6 +311,8 @@ class AdminOrders extends Component
 
     public function markReturnReceived(int $orderId, OrderDeliveryReturnService $settlement): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->segment !== 'return-pending') {
             return;
         }
@@ -293,6 +328,8 @@ class AdminOrders extends Component
 
     public function undoReturnReceived(int $orderId, OrderDeliveryReturnService $settlement): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->segment !== 'return-pending') {
             return;
         }
@@ -308,6 +345,8 @@ class AdminOrders extends Component
 
     public function toggleHasReturn(int $orderId, OrderDeliveryReturnService $settlement): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->segment !== 'return-pending') {
             return;
         }
@@ -328,6 +367,8 @@ class AdminOrders extends Component
 
     public function openPartialReturn(int $orderId): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->segment !== 'dispatched') {
             return;
         }
@@ -373,6 +414,8 @@ class AdminOrders extends Component
 
     public function submitPartialReturn(OrderDeliveryReturnService $settlement): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->segment !== 'dispatched' || ! $this->partialOrderId) {
             return;
         }
@@ -433,6 +476,8 @@ class AdminOrders extends Component
 
     public function openSendTo(): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->segment !== 'new' || $this->selected === []) {
             return;
         }
@@ -446,6 +491,8 @@ class AdminOrders extends Component
 
     public function openDispatch(): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->segment !== 'new' || $this->selected === []) {
             return;
         }
@@ -484,6 +531,8 @@ class AdminOrders extends Component
 
     public function submitBulkDispatch(OrderDispatchService $dispatch): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->segment !== 'new' || $this->selected === []) {
             return;
         }
@@ -511,6 +560,8 @@ class AdminOrders extends Component
 
     public function startBulkSend(CourierApiRegistry $courierRegistry): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if ($this->segment !== 'new' || $this->selected === []) {
             return;
         }
@@ -556,6 +607,8 @@ class AdminOrders extends Component
 
     public function dispatchNextSelected(OrderDispatchService $dispatch): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         if (! $this->bulkSending || $this->sendToCourierSlug === '') {
             return;
         }
@@ -731,6 +784,7 @@ class AdminOrders extends Component
             'dispatchCouriers' => $dispatchCouriers,
             'trackingByOrder' => $trackingByOrder,
             'courierApiAvailable' => $courierRegistry->configuredSlugs() !== [],
+            'readOnly' => AdminAccess::isModeratorOnly(),
         ])->title(AdminOrderSegment::label($this->segment).' Orders');
     }
 }

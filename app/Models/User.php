@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\AdminAccess;
 use App\Support\PhoneNumber;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,6 +15,26 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasRoles, Notifiable;
+
+    public function isStaffAdmin(): bool
+    {
+        return AdminAccess::isStaffAdmin($this);
+    }
+
+    public function isModeratorOnly(): bool
+    {
+        return AdminAccess::isModeratorOnly($this);
+    }
+
+    public function canAccessAdmin(): bool
+    {
+        return AdminAccess::canAccessAdmin($this);
+    }
+
+    public function canViewNewOrder(Order $order): bool
+    {
+        return AdminAccess::canViewNewOrder($order, $this);
+    }
 
     protected $fillable = [
         'name',

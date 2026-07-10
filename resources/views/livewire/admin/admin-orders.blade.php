@@ -1,23 +1,27 @@
-<div wire:key="admin-orders-{{ $segment }}-{{ $listRevision }}" @class(['pb-14' => $selectedCount > 0])>
+<div wire:key="admin-orders-{{ $segment }}-{{ $listRevision }}" @class(['pb-14' => ! $readOnly && $selectedCount > 0])>
     <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
         <h1 class="font-serif text-3xl font-semibold">{{ $segmentLabel }} Orders</h1>
-        <a href="{{ route('admin.orders.create') }}"
-            class="rounded-lg bg-[#C9A227] px-4 py-2 text-sm font-medium text-white hover:bg-[#b89220] transition">
-            Create order
-        </a>
+        @unless ($readOnly)
+            <a href="{{ route('admin.orders.create') }}"
+                class="rounded-lg bg-[#C9A227] px-4 py-2 text-sm font-medium text-white hover:bg-[#b89220] transition">
+                Create order
+            </a>
+        @endunless
     </div>
 
-    <div class="flex flex-wrap gap-2 mb-6">
-        @foreach ($segments as $segmentKey => $segmentName)
-            <button type="button"
-                wire:key="segment-tab-{{ $segmentKey }}"
-                wire:click="switchSegment('{{ $segmentKey }}')"
-                wire:loading.attr="disabled"
-                class="rounded-full px-4 py-1.5 text-sm border transition disabled:opacity-60 {{ $segment === $segmentKey ? 'border-[#C9A227] bg-[#C9A227] text-white font-medium' : 'border-[#E0D6C2] bg-white text-[#6B6459] hover:bg-[#FAF6EF]' }}">
-                {{ $segmentName }}
-            </button>
-        @endforeach
-    </div>
+    @unless ($readOnly)
+        <div class="flex flex-wrap gap-2 mb-6">
+            @foreach ($segments as $segmentKey => $segmentName)
+                <button type="button"
+                    wire:key="segment-tab-{{ $segmentKey }}"
+                    wire:click="switchSegment('{{ $segmentKey }}')"
+                    wire:loading.attr="disabled"
+                    class="rounded-full px-4 py-1.5 text-sm border transition disabled:opacity-60 {{ $segment === $segmentKey ? 'border-[#C9A227] bg-[#C9A227] text-white font-medium' : 'border-[#E0D6C2] bg-white text-[#6B6459] hover:bg-[#FAF6EF]' }}">
+                    {{ $segmentName }}
+                </button>
+            @endforeach
+        </div>
+    @endunless
 
     <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-6">
         <input type="search" wire:model.live.debounce.300ms="search" placeholder="Search order #, name, phone…"
@@ -29,17 +33,19 @@
             <table class="w-full text-sm">
                 <thead class="bg-[#FAF6EF] text-left text-[#6B6459]">
                     <tr>
-                        <th class="w-12 px-4 py-3 font-medium">
-                            <label class="inline-flex items-center gap-2 cursor-pointer" title="Select all on this page">
-                                <input type="checkbox"
-                                    wire:key="select-all-{{ $isPageFullySelected ? 'on' : 'off' }}"
-                                    wire:click.prevent="togglePageSelection"
-                                    @checked($isPageFullySelected)
-                                    @disabled($orders->isEmpty())
-                                    class="rounded border-[#C9A227] text-[#C9A227] focus:ring-[#C9A227] disabled:opacity-40">
-                                <span class="sr-only">Select all on this page</span>
-                            </label>
-                        </th>
+                        @unless ($readOnly)
+                            <th class="w-12 px-4 py-3 font-medium">
+                                <label class="inline-flex items-center gap-2 cursor-pointer" title="Select all on this page">
+                                    <input type="checkbox"
+                                        wire:key="select-all-{{ $isPageFullySelected ? 'on' : 'off' }}"
+                                        wire:click.prevent="togglePageSelection"
+                                        @checked($isPageFullySelected)
+                                        @disabled($orders->isEmpty())
+                                        class="rounded border-[#C9A227] text-[#C9A227] focus:ring-[#C9A227] disabled:opacity-40">
+                                    <span class="sr-only">Select all on this page</span>
+                                </label>
+                            </th>
+                        @endunless
                         <th class="px-4 py-3 font-medium">Order</th>
                         <th class="px-4 py-3 font-medium">Customer</th>
                         <th class="px-4 py-3 font-medium">Products</th>
@@ -52,14 +58,16 @@
                 <tbody class="divide-y divide-[#E7DFCF]" wire:key="orders-tbody-{{ $segment }}-{{ $listRevision }}">
                     @forelse ($orders as $order)
                         @php($isSelected = in_array($order->id, $selectedIds, true))
-                        <tr wire:key="order-row-{{ $order->id }}" @class(['hover:bg-[#FAF6EF]/60', 'bg-[#FAF6EF]/80' => $isSelected])>
-                            <td class="px-4 py-3 align-top">
-                                <input type="checkbox"
-                                    wire:key="order-select-{{ $order->id }}-{{ $isSelected ? 'on' : 'off' }}"
-                                    wire:click.prevent="toggleOrder({{ $order->id }})"
-                                    @checked($isSelected)
-                                    class="rounded border-[#C9A227] text-[#C9A227] focus:ring-[#C9A227]">
-                            </td>
+                        <tr wire:key="order-row-{{ $order->id }}" @class(['hover:bg-[#FAF6EF]/60', 'bg-[#FAF6EF]/80' => ! $readOnly && $isSelected])>
+                            @unless ($readOnly)
+                                <td class="px-4 py-3 align-top">
+                                    <input type="checkbox"
+                                        wire:key="order-select-{{ $order->id }}-{{ $isSelected ? 'on' : 'off' }}"
+                                        wire:click.prevent="toggleOrder({{ $order->id }})"
+                                        @checked($isSelected)
+                                        class="rounded border-[#C9A227] text-[#C9A227] focus:ring-[#C9A227]">
+                                </td>
+                            @endunless
                             <td class="px-4 py-3">
                                 <div class="flex flex-wrap items-center gap-1.5">
                                     <a href="{{ route('admin.orders.show', $order) }}" wire:navigate class="font-medium text-[#C9A227] hover:underline">
@@ -109,79 +117,81 @@
                             <td class="px-4 py-3 text-[#6B6459]">{{ $order->placed_at?->format('d M Y') }}</td>
                             <td class="px-4 py-3 text-right whitespace-nowrap">
                                 <div class="inline-flex items-center gap-2">
-                                    @if ($segment === 'new')
-                                        <button type="button"
-                                            wire:click="quickDispatch({{ $order->id }})"
-                                            wire:loading.attr="disabled"
-                                            wire:target="quickDispatch({{ $order->id }})"
-                                            title="Dispatch via default courier"
-                                            aria-label="Dispatch order #{{ $order->order_number }}"
-                                            class="inline-flex h-6 min-w-6 items-center justify-center rounded border border-[#E0D6C2] bg-white px-1.5 text-xs font-semibold text-[#1E1E1E] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60">
-                                            <span wire:loading.remove wire:target="quickDispatch({{ $order->id }})">D</span>
-                                            <svg wire:loading wire:target="quickDispatch({{ $order->id }})"
-                                                class="h-3.5 w-3.5 animate-spin text-[#C9A227]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
-                                        </button>
-                                    @endif
-                                    @if ($segment === 'dispatched')
-                                        <button type="button"
-                                            wire:click="markDelivered({{ $order->id }})"
-                                            wire:loading.attr="disabled"
-                                            wire:target="markDelivered({{ $order->id }})"
-                                            title="Mark delivered"
-                                            class="inline-flex h-6 items-center justify-center rounded border border-emerald-200 bg-white px-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60">
-                                            Delv
-                                        </button>
-                                        <button type="button"
-                                            wire:click="openPartialReturn({{ $order->id }})"
-                                            title="Partial return"
-                                            class="inline-flex h-6 items-center justify-center rounded border border-[#E0D6C2] bg-white px-1.5 text-xs font-semibold text-[#6B6459] hover:bg-[#FAF6EF]">
-                                            Partial
-                                        </button>
-                                        <button type="button"
-                                            wire:click="cancelAndReturn({{ $order->id }})"
-                                            wire:confirm="Cancel &amp; return order #{{ $order->order_number }} with no delivery charge?"
-                                            title="Cancel and return (no delivery charge)"
-                                            class="inline-flex h-6 items-center justify-center rounded border border-rose-200 bg-white px-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
-                                            C/R
-                                        </button>
-                                    @endif
-                                    @if ($segment === 'return-pending')
-                                        @php($hasPendingReturn = $order->items->contains(fn ($item) => (int) $item->returned_quantity > 0 && ! $item->return_received))
-                                        @php($hasReceivedReturn = $order->items->contains(fn ($item) => (bool) $item->return_received))
-                                        <button type="button"
-                                            wire:click="markReturnReceived({{ $order->id }})"
-                                            wire:loading.attr="disabled"
-                                            wire:target="markReturnReceived({{ $order->id }})"
-                                            @disabled(! $hasPendingReturn)
-                                            title="Mark return received"
-                                            class="inline-flex h-6 items-center justify-center rounded border border-emerald-200 bg-white px-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40">
-                                            Recv
-                                        </button>
-                                        <button type="button"
-                                            wire:click="undoReturnReceived({{ $order->id }})"
-                                            wire:loading.attr="disabled"
-                                            wire:target="undoReturnReceived({{ $order->id }})"
-                                            @disabled(! $hasReceivedReturn)
-                                            title="Undo return received"
-                                            class="inline-flex h-6 items-center justify-center rounded border border-amber-200 bg-white px-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-40">
-                                            Undo
-                                        </button>
-                                        <button type="button"
-                                            wire:click="toggleHasReturn({{ $order->id }})"
-                                            wire:loading.attr="disabled"
-                                            wire:target="toggleHasReturn({{ $order->id }})"
-                                            title="{{ $order->has_return ? 'Clear has return (H/R off)' : 'Set has return (H/R on)' }}"
-                                            @class([
-                                                'inline-flex h-6 items-center justify-center rounded border px-1.5 text-xs font-semibold disabled:opacity-60',
-                                                'border-[#C9A227] bg-[#C9A227] text-white' => $order->has_return,
-                                                'border-[#E0D6C2] bg-white text-[#6B6459] hover:bg-[#FAF6EF]' => ! $order->has_return,
-                                            ])>
-                                            H/R
-                                        </button>
-                                    @endif
+                                    @unless ($readOnly)
+                                        @if ($segment === 'new')
+                                            <button type="button"
+                                                wire:click="quickDispatch({{ $order->id }})"
+                                                wire:loading.attr="disabled"
+                                                wire:target="quickDispatch({{ $order->id }})"
+                                                title="Dispatch via default courier"
+                                                aria-label="Dispatch order #{{ $order->order_number }}"
+                                                class="inline-flex h-6 min-w-6 items-center justify-center rounded border border-[#E0D6C2] bg-white px-1.5 text-xs font-semibold text-[#1E1E1E] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60">
+                                                <span wire:loading.remove wire:target="quickDispatch({{ $order->id }})">D</span>
+                                                <svg wire:loading wire:target="quickDispatch({{ $order->id }})"
+                                                    class="h-3.5 w-3.5 animate-spin text-[#C9A227]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                            </button>
+                                        @endif
+                                        @if ($segment === 'dispatched')
+                                            <button type="button"
+                                                wire:click="markDelivered({{ $order->id }})"
+                                                wire:loading.attr="disabled"
+                                                wire:target="markDelivered({{ $order->id }})"
+                                                title="Mark delivered"
+                                                class="inline-flex h-6 items-center justify-center rounded border border-emerald-200 bg-white px-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60">
+                                                Delv
+                                            </button>
+                                            <button type="button"
+                                                wire:click="openPartialReturn({{ $order->id }})"
+                                                title="Partial return"
+                                                class="inline-flex h-6 items-center justify-center rounded border border-[#E0D6C2] bg-white px-1.5 text-xs font-semibold text-[#6B6459] hover:bg-[#FAF6EF]">
+                                                Partial
+                                            </button>
+                                            <button type="button"
+                                                wire:click="cancelAndReturn({{ $order->id }})"
+                                                wire:confirm="Cancel &amp; return order #{{ $order->order_number }} with no delivery charge?"
+                                                title="Cancel and return (no delivery charge)"
+                                                class="inline-flex h-6 items-center justify-center rounded border border-rose-200 bg-white px-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
+                                                C/R
+                                            </button>
+                                        @endif
+                                        @if ($segment === 'return-pending')
+                                            @php($hasPendingReturn = $order->items->contains(fn ($item) => (int) $item->returned_quantity > 0 && ! $item->return_received))
+                                            @php($hasReceivedReturn = $order->items->contains(fn ($item) => (bool) $item->return_received))
+                                            <button type="button"
+                                                wire:click="markReturnReceived({{ $order->id }})"
+                                                wire:loading.attr="disabled"
+                                                wire:target="markReturnReceived({{ $order->id }})"
+                                                @disabled(! $hasPendingReturn)
+                                                title="Mark return received"
+                                                class="inline-flex h-6 items-center justify-center rounded border border-emerald-200 bg-white px-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40">
+                                                Recv
+                                            </button>
+                                            <button type="button"
+                                                wire:click="undoReturnReceived({{ $order->id }})"
+                                                wire:loading.attr="disabled"
+                                                wire:target="undoReturnReceived({{ $order->id }})"
+                                                @disabled(! $hasReceivedReturn)
+                                                title="Undo return received"
+                                                class="inline-flex h-6 items-center justify-center rounded border border-amber-200 bg-white px-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-40">
+                                                Undo
+                                            </button>
+                                            <button type="button"
+                                                wire:click="toggleHasReturn({{ $order->id }})"
+                                                wire:loading.attr="disabled"
+                                                wire:target="toggleHasReturn({{ $order->id }})"
+                                                title="{{ $order->has_return ? 'Clear has return (H/R off)' : 'Set has return (H/R on)' }}"
+                                                @class([
+                                                    'inline-flex h-6 items-center justify-center rounded border px-1.5 text-xs font-semibold disabled:opacity-60',
+                                                    'border-[#C9A227] bg-[#C9A227] text-white' => $order->has_return,
+                                                    'border-[#E0D6C2] bg-white text-[#6B6459] hover:bg-[#FAF6EF]' => ! $order->has_return,
+                                                ])>
+                                                H/R
+                                            </button>
+                                        @endif
+                                    @endunless
                                     <a href="{{ route('admin.orders.print', $order) }}" target="_blank"
                                         title="Print label"
                                         aria-label="Print label"
@@ -190,24 +200,26 @@
                                             <path fill="#6B6459" d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/>
                                         </svg>
                                     </a>
-                                    <a href="{{ route('admin.orders.create', ['repeat' => $order->id]) }}"
-                                        title="Repeat order"
-                                        aria-label="Repeat order"
-                                        class="inline-flex items-center opacity-70 hover:opacity-100">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                                            <path fill="#6B6459" d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
-                                        </svg>
-                                    </a>
-                                    <button type="button"
-                                        wire:click="deleteOrder({{ $order->id }})"
-                                        wire:confirm="Delete order #{{ $order->order_number }} and restore product stock?"
-                                        title="Delete order"
-                                        aria-label="Delete order"
-                                        class="inline-flex items-center opacity-70 hover:opacity-100">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                                            <path fill="#B91C1C" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                                        </svg>
-                                    </button>
+                                    @unless ($readOnly)
+                                        <a href="{{ route('admin.orders.create', ['repeat' => $order->id]) }}"
+                                            title="Repeat order"
+                                            aria-label="Repeat order"
+                                            class="inline-flex items-center opacity-70 hover:opacity-100">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                                                <path fill="#6B6459" d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                                            </svg>
+                                        </a>
+                                        <button type="button"
+                                            wire:click="deleteOrder({{ $order->id }})"
+                                            wire:confirm="Delete order #{{ $order->order_number }} and restore product stock?"
+                                            title="Delete order"
+                                            aria-label="Delete order"
+                                            class="inline-flex items-center opacity-70 hover:opacity-100">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                                                <path fill="#B91C1C" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                            </svg>
+                                        </button>
+                                    @endunless
                                 </div>
                             </td>
                         </tr>
@@ -215,7 +227,7 @@
                             @php($events = $trackingByOrder[$order->id]['events'] ?? [])
                             @php($courierStatus = $trackingByOrder[$order->id]['status'] ?? null)
                             <tr wire:key="order-tracking-{{ $order->id }}">
-                                <td class="px-4 pt-2 pb-6" colspan="8">
+                                <td class="px-4 pt-2 pb-6" colspan="{{ $readOnly ? 7 : 8 }}">
                                     <div
                                         x-data="{ open: true }"
                                         class="ml-8 mb-3 overflow-hidden rounded-lg border border-[#EFE7D6] bg-white"
@@ -271,7 +283,7 @@
                         @endif
                     @empty
                         <tr>
-                            <td colspan="8" class="px-4 py-8 text-center text-[#8C8474]">No orders found.</td>
+                            <td colspan="{{ $readOnly ? 7 : 8 }}" class="px-4 py-8 text-center text-[#8C8474]">No orders found.</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -289,6 +301,7 @@
 
     @teleport('body')
         <div wire:key="admin-orders-overlays">
+            @unless ($readOnly)
             <div wire:key="admin-order-selection-bar"
                 @class([
                     'admin-order-selection-bar fixed bottom-0 left-0 right-0 z-50',
@@ -556,6 +569,7 @@
                     </div>
                 @endif
             </div>
+            @endunless
         </div>
     @endteleport
 </div>

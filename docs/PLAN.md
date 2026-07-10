@@ -7,8 +7,8 @@ Keep this updated so any new contributor/agent can pick up exactly where we are.
 ## 1. Goal
 
 Rebuild the legacy **Laravel 5.4** jewelry e-commerce store as a modern, simple, well-
-navigable app while keeping all features and being able to **intake the legacy data**
-(especially products, categories, orders).
+navigable app focused on catalog, COD checkout, and order operations, while being able
+to **intake the legacy data** (especially products, categories, orders).
 
 ## 2. Target stack (locked)
 
@@ -21,27 +21,30 @@ navigable app while keeping all features and being able to **intake the legacy d
 ## 3. Decisions (locked)
 
 1. Full redesign (not an in-place upgrade); build fresh in `sun2`.
-2. **Keep** blog/CMS and the finance/expenses modules — fully functional.
+2. **Drop** blog/CMS, static pages admin, finance/expenses/payables UI, and site settings
+   admin (tables may remain from early schema; no product work planned).
 3. **Drop** `currencies`, `languages`, `circulars`, `temps`, `gateways` (unused/replaced).
-4. Checkout is **COD-first**, but **online payment is in scope** (bKash/gateway) via
-   `payment_transactions` + `payment_methods`.
+4. Checkout is **COD only** — no bKash / online payment gateway in scope.
 5. RBAC via **spatie/laravel-permission** (replaces legacy `users.role` tinyint +
-   custom `Controller@action` permission strings).
+   custom `Controller@action` permission strings). Roles in use: `dev`, `admin`,
+   `moderator` (New orders view+print only), `customers`.
 6. **Add** reviews, wishlist, and coupons.
 7. Design language: refreshed **gold-on-cream** premium jewelry aesthetic (serif
    headings + clean sans), mobile-first (BD audience). See `docs/mockups/`.
 8. Data is **not** imported during normal dev; the DB stays empty so `migrate:fresh`
    is fast. Production data is loaded later via a dedicated `import:legacy` ETL command.
+9. **Out of scope:** social login, SMS notifications, additional courier APIs beyond
+   what is already wired (Steadfast is the primary courier integration).
 
 ## 4. Delivery sequence
 
 1. ✅ Scaffold + redesigned schema (this repo).
-2. ▶ Buyer's storefront: Home → Product Listing → Product Detail → Cart → COD/bKash
-   checkout → account.
-3. ETL importer (`import:legacy`) validated against the production dump.
-4. Admin back office (built + iterated from real screenshots of current admin options).
-5. Integrations (couriers: Pathao/Steadfast/RedX/CarryBee; SMS; social login; bKash).
-6. Cutover: final data import, DNS switch, legacy DB kept read-only as fallback.
+2. ✅ Buyer's storefront: Home → Product Listing → Product Detail → Cart → COD
+   checkout → account (wishlist, reviews, coupons).
+3. ▶ ETL importer (`import:legacy`) validated against the production dump.
+4. ✅ Admin back office (orders, products, categories, coupons, hero slides, couriers,
+   reviews, reports, users/customers & moderators).
+5. Cutover: final data import, DNS switch, legacy DB kept read-only as fallback.
 
 ## 5. Data model
 
@@ -53,6 +56,9 @@ New tables vs. legacy: `product_images`, `carts`/`cart_items`, `coupons`,
 `order_status_history`, `payment_transactions`, `payment_methods`, `product_reviews`,
 `wishlists`, `addresses`. Renamed: legacy `payments` (business payables) → `payables`
 (customer payments now live in `payment_transactions`).
+
+Note: blogs, pages, costs/payables, settings, and payment-method tables may still exist
+from early migrations but are **not** in active product scope.
 
 ## 6. Legacy → new ETL field mapping (intake-critical)
 
@@ -82,16 +88,14 @@ Preserve legacy `id` as the new `id` (+ `legacy_id`). Transforms below.
 
 ### users → users + spatie roles + addresses
 - Preserve `id`; `contact` → `phone` (unique login); dedupe email.
-- `role` tinyint → spatie role (**need role map, see open items**).
+- `role` tinyint → spatie role: `1=dev`, `2=admin`, `3=vendors`, `4=customers`, `5=moderator`.
 - Split address fields → `addresses`; keep `referrer_id`/`referral_balance`.
 
 ## 7. Open items (need input)
 
-1. **`users.role` map:** what do values `1, 2, 3, 4` mean? (dev/admin/moderator/client?) — needed for spatie role assignment.
-2. **Order `status` values** actually used in production (to complete the enum).
-3. **`all_images` storage format** in legacy `products` (JSON / PHP-serialized / comma-separated) — determines the image parser.
-4. Admin options: the initial admin mockups are a starting point; the full set of current
-   admin options will be provided via screenshots and folded in during phase 4.
+1. **Order `status` values** actually used in production (to complete the enum).
+2. **`all_images` storage format** in legacy `products` (JSON / PHP-serialized / comma-separated) — determines the image parser.
+3. Admin polish: fold in any remaining real-admin screenshots if needed before cutover.
 
 ## 8. Mockups
 

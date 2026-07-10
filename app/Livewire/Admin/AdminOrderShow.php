@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Services\Admin\OrderDispatchService;
 use App\Services\Admin\OrderStatusService;
 use App\Services\Couriers\CourierApiRegistry;
+use App\Support\AdminAccess;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -34,6 +35,8 @@ class AdminOrderShow extends Component
 
     public function mount(Order $order, CourierApiRegistry $courierRegistry): void
     {
+        AdminAccess::ensureCanViewOrder($order);
+
         $this->order = $order->load([
             'items.product:id,slug,name',
             'items.product.images:id,product_id,path,is_primary,sort_order',
@@ -71,6 +74,8 @@ class AdminOrderShow extends Component
 
     public function saveStatus(OrderStatusService $statusService): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         $this->error = null;
         $this->message = null;
 
@@ -102,6 +107,8 @@ class AdminOrderShow extends Component
 
     public function dispatchViaApi(OrderDispatchService $dispatch): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         $this->error = null;
         $this->message = null;
 
@@ -121,12 +128,16 @@ class AdminOrderShow extends Component
 
     public function dispatchSteadfast(OrderDispatchService $dispatch): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         $this->apiCourierSlug = 'steadfast';
         $this->dispatchViaApi($dispatch);
     }
 
     public function dispatchManual(OrderDispatchService $dispatch): void
     {
+        AdminAccess::ensureCanManageOrders();
+
         $this->error = null;
         $this->message = null;
 
@@ -161,6 +172,7 @@ class AdminOrderShow extends Component
         return view('livewire.admin.admin-order-show', [
             'couriers' => Courier::query()->where('is_active', true)->orderBy('name')->get(),
             'apiCouriers' => $apiCouriers,
+            'readOnly' => AdminAccess::isModeratorOnly(),
         ])->title($this->title());
     }
 }

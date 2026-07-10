@@ -2,9 +2,13 @@
 
 use App\Livewire\Admin\AdminCategories;
 use App\Livewire\Admin\AdminCategoryEdit;
+use App\Livewire\Admin\AdminCouponEdit;
+use App\Livewire\Admin\AdminCoupons;
 use App\Livewire\Admin\AdminCourierEdit;
 use App\Livewire\Admin\AdminCouriers;
 use App\Livewire\Admin\AdminDashboard;
+use App\Livewire\Admin\AdminHeroSlideEdit;
+use App\Livewire\Admin\AdminHeroSlides;
 use App\Livewire\Admin\AdminOrderForm;
 use App\Livewire\Admin\AdminOrderShow;
 use App\Livewire\Admin\AdminOrders;
@@ -13,6 +17,8 @@ use App\Livewire\Admin\AdminProductPerformance;
 use App\Livewire\Admin\AdminProducts;
 use App\Livewire\Admin\AdminReviews;
 use App\Livewire\Admin\AdminSalesByMonth;
+use App\Livewire\Admin\AdminUserEdit;
+use App\Livewire\Admin\AdminUsers;
 use App\Livewire\StorefrontWishlist;
 use App\Livewire\StorefrontAccount;
 use App\Livewire\StorefrontCart;
@@ -72,15 +78,12 @@ Route::middleware('auth')->group(function () {
 
 Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/', AdminDashboard::class)->name('dashboard');
+
     Route::redirect('/orders', '/admin/orders/new');
     Route::get('/orders/new', AdminOrders::class)->defaults('segment', 'new')->name('orders.new');
-    Route::get('/orders/dispatched', AdminOrders::class)->defaults('segment', 'dispatched')->name('orders.dispatched');
-    Route::get('/orders/delivered', AdminOrders::class)->defaults('segment', 'delivered')->name('orders.delivered');
-    Route::get('/orders/cancel-return', AdminOrders::class)->defaults('segment', 'cancel-return')->name('orders.cancel-return');
-    Route::get('/orders/return-pending', AdminOrders::class)->defaults('segment', 'return-pending')->name('orders.return-pending');
-    Route::get('/orders/create', AdminOrderForm::class)->name('orders.create');
-    Route::get('/orders/{order}/edit', AdminOrderForm::class)->whereNumber('order')->name('orders.edit');
     Route::get('/orders/{order}/print', function (\App\Models\Order $order) {
+        \App\Support\AdminAccess::ensureCanViewOrder($order);
+
         $shippingAddress = collect([
             $order->address,
             $order->area,
@@ -98,16 +101,36 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
             ->header('Cache-Control', 'no-store');
     })->whereNumber('order')->name('orders.print');
     Route::get('/orders/{order}', AdminOrderShow::class)->whereNumber('order')->name('orders.show');
-    Route::get('/products', AdminProducts::class)->name('products');
-    Route::get('/products/create', AdminProductEdit::class)->name('products.create');
-    Route::get('/products/{product:id}/performance', AdminProductPerformance::class)->whereNumber('product')->name('products.performance');
-    Route::get('/products/{product:id}/edit', AdminProductEdit::class)->name('products.edit');
-    Route::get('/categories', AdminCategories::class)->name('categories');
-    Route::get('/categories/create', AdminCategoryEdit::class)->name('categories.create');
-    Route::get('/categories/{category}/edit', AdminCategoryEdit::class)->name('categories.edit');
-    Route::get('/couriers', AdminCouriers::class)->name('couriers');
-    Route::get('/couriers/create', AdminCourierEdit::class)->name('couriers.create');
-    Route::get('/couriers/{courier}/edit', AdminCourierEdit::class)->name('couriers.edit');
-    Route::get('/reviews', AdminReviews::class)->name('reviews');
-    Route::get('/reports/sales-by-month', AdminSalesByMonth::class)->name('reports.sales-by-month');
+
+    Route::middleware('role:admin|dev')->group(function () {
+        Route::get('/orders/dispatched', AdminOrders::class)->defaults('segment', 'dispatched')->name('orders.dispatched');
+        Route::get('/orders/delivered', AdminOrders::class)->defaults('segment', 'delivered')->name('orders.delivered');
+        Route::get('/orders/cancel-return', AdminOrders::class)->defaults('segment', 'cancel-return')->name('orders.cancel-return');
+        Route::get('/orders/return-pending', AdminOrders::class)->defaults('segment', 'return-pending')->name('orders.return-pending');
+        Route::get('/orders/create', AdminOrderForm::class)->name('orders.create');
+        Route::get('/orders/{order}/edit', AdminOrderForm::class)->whereNumber('order')->name('orders.edit');
+        Route::get('/products', AdminProducts::class)->name('products');
+        Route::get('/products/create', AdminProductEdit::class)->name('products.create');
+        Route::get('/products/{product:id}/performance', AdminProductPerformance::class)->whereNumber('product')->name('products.performance');
+        Route::get('/products/{product:id}/edit', AdminProductEdit::class)->name('products.edit');
+        Route::get('/categories', AdminCategories::class)->name('categories');
+        Route::get('/categories/create', AdminCategoryEdit::class)->name('categories.create');
+        Route::get('/categories/{category}/edit', AdminCategoryEdit::class)->name('categories.edit');
+        Route::get('/coupons', AdminCoupons::class)->name('coupons');
+        Route::get('/coupons/create', AdminCouponEdit::class)->name('coupons.create');
+        Route::get('/coupons/{coupon}/edit', AdminCouponEdit::class)->name('coupons.edit');
+        Route::get('/hero-slides', AdminHeroSlides::class)->name('hero-slides');
+        Route::get('/hero-slides/create', AdminHeroSlideEdit::class)->name('hero-slides.create');
+        Route::get('/hero-slides/{slide}/edit', AdminHeroSlideEdit::class)->name('hero-slides.edit');
+        Route::get('/couriers', AdminCouriers::class)->name('couriers');
+        Route::get('/couriers/create', AdminCourierEdit::class)->name('couriers.create');
+        Route::get('/couriers/{courier}/edit', AdminCourierEdit::class)->name('couriers.edit');
+        Route::get('/reviews', AdminReviews::class)->name('reviews');
+        Route::redirect('/users', '/admin/users/customers');
+        Route::get('/users/customers', AdminUsers::class)->defaults('segment', 'customers')->name('users.customers');
+        Route::get('/users/moderators', AdminUsers::class)->defaults('segment', 'moderators')->name('users.moderators');
+        Route::get('/users/create', AdminUserEdit::class)->name('users.create');
+        Route::get('/users/{user}/edit', AdminUserEdit::class)->whereNumber('user')->name('users.edit');
+        Route::get('/reports/sales-by-month', AdminSalesByMonth::class)->name('reports.sales-by-month');
+    });
 });

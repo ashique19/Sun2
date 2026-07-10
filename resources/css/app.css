@@ -2,8 +2,243 @@
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
+@source '../views/**/*.blade.php';
+
+[x-cloak] {
+    display: none !important;
+}
 
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+@layer components {
+    .product-description h3 {
+        font-family: var(--font-serif);
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #1e1e1e;
+        margin-top: 1.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .product-description h4 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #1e1e1e;
+        margin-top: 1.25rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .product-description p {
+        margin-top: 0.75rem;
+        line-height: 1.65;
+    }
+
+    .product-description ul {
+        margin-top: 0.75rem;
+        padding-left: 1.25rem;
+        list-style: disc;
+    }
+
+    .product-description li {
+        margin-top: 0.35rem;
+        line-height: 1.6;
+    }
+
+    .product-description strong {
+        color: #1e1e1e;
+        font-weight: 600;
+    }
+
+    .product-description em {
+        font-style: italic;
+    }
+
+    .admin-order-selection-bar {
+        background-color: #152238;
+        color: #ffffff;
+        border-top: 1px solid #0f1a33;
+        box-shadow: 0 -4px 20px rgb(0 0 0 / 0.22);
+    }
+
+    .admin-order-selection-bar__clear {
+        color: rgb(255 255 255 / 0.6);
+    }
+
+    .admin-order-selection-bar__clear:hover {
+        color: #ffffff;
+    }
+
+    .admin-courier-box {
+        margin-left: 2rem;
+        margin-bottom: 0.75rem;
+        overflow: hidden;
+        border: 1px solid #efe7d6;
+        border-radius: 0.5rem;
+        background: #ffffff;
+    }
+
+    .admin-courier-box__toggle {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        text-align: left;
+        cursor: pointer;
+        background: #faf6ef;
+        border: 0;
+    }
+
+    .admin-courier-box__toggle:hover {
+        background: #f5efe3;
+    }
+
+    .admin-courier-box__label {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem 0.5rem;
+        min-width: 0;
+        font-size: 0.75rem;
+        line-height: 1.35;
+        color: #1e1e1e;
+    }
+
+    .admin-courier-box__name {
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .admin-courier-box__sep {
+        color: #c9b99a;
+        font-weight: 400;
+    }
+
+    .admin-courier-box__cn {
+        color: #6b6459;
+        font-weight: 500;
+        word-break: break-all;
+    }
+
+    .admin-courier-box__status {
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #1e1e1e;
+    }
+
+    .admin-courier-box__chevron {
+        flex-shrink: 0;
+        width: 1rem;
+        height: 1rem;
+        color: #8c8474;
+        transition: transform 0.15s ease;
+    }
+
+    .admin-courier-box__chevron.is-open {
+        transform: rotate(180deg);
+    }
+
+    .admin-courier-box__body {
+        border-top: 1px solid #e7dfcf;
+        padding: 0.75rem 1rem 1rem;
+        background: #ffffff;
+    }
+
+    .admin-courier-box__events {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .admin-courier-box__events li {
+        display: flex;
+        gap: 0.75rem;
+        font-size: 0.75rem;
+        line-height: 1.45;
+        color: #1e1e1e;
+    }
+
+    .admin-courier-box__events li + li {
+        margin-top: 0.4rem;
+    }
+
+    .admin-courier-box__time {
+        flex-shrink: 0;
+        width: 5.5rem;
+        font-variant-numeric: tabular-nums;
+        color: #5b8def;
+    }
+
+    .admin-courier-box__empty {
+        margin: 0;
+        font-size: 0.75rem;
+        color: #8c8474;
+    }
+
+    /* Mobile account drawer (CSS-only, no Alpine) */
+    .mobile-nav-toggle {
+        position: fixed;
+        left: -9999px;
+        top: 0;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .mobile-nav-drawer {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        pointer-events: none;
+        visibility: hidden;
+    }
+
+    .mobile-nav-drawer__backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgb(0 0 0 / 0.5);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        cursor: pointer;
+    }
+
+    .mobile-nav-drawer__panel {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        width: min(20rem, 85vw);
+        height: 100%;
+        height: 100dvh;
+        flex-direction: column;
+        background: #ffffff;
+        box-shadow: -8px 0 30px rgb(0 0 0 / 0.18);
+        transform: translateX(100%);
+        transition: transform 0.2s ease;
+    }
+
+    .mobile-nav-toggle:checked ~ .mobile-nav-drawer {
+        pointer-events: auto;
+        visibility: visible;
+    }
+
+    .mobile-nav-toggle:checked ~ .mobile-nav-drawer .mobile-nav-drawer__backdrop {
+        opacity: 1;
+    }
+
+    .mobile-nav-toggle:checked ~ .mobile-nav-drawer .mobile-nav-drawer__panel {
+        transform: translateX(0);
+    }
+}
+
+body:has(.mobile-nav-toggle:checked) {
+    overflow: hidden;
 }

@@ -1,0 +1,386 @@
+[
+  {
+    "id": "barisal-barguna",
+    "en": "Barguna",
+    "bn": "বরগুনা",
+    "divisionId": "barisal"
+  },
+  {
+    "id": "barisal-barisal",
+    "en": "Barisal",
+    "bn": "বরিশাল",
+    "divisionId": "barisal"
+  },
+  {
+    "id": "barisal-bhola",
+    "en": "Bhola",
+    "bn": "ভোলা",
+    "divisionId": "barisal"
+  },
+  {
+    "id": "barisal-jhalokati",
+    "en": "Jhalokati",
+    "bn": "ঝালকাঠি",
+    "divisionId": "barisal"
+  },
+  {
+    "id": "barisal-patuakhali",
+    "en": "Patuakhali",
+    "bn": "পটুয়াখালী",
+    "divisionId": "barisal"
+  },
+  {
+    "id": "barisal-pirojpur",
+    "en": "Pirojpur",
+    "bn": "পিরোজপুর",
+    "divisionId": "barisal"
+  },
+  {
+    "id": "chattogram-bandarban",
+    "en": "Bandarban",
+    "bn": "বান্দরবান",
+    "divisionId": "chattogram"
+  },
+  {
+    "id": "chattogram-brahmanbaria",
+    "en": "Brahmanbaria",
+    "bn": "ব্রাহ্মণবাড়িয়া",
+    "divisionId": "chattogram"
+  },
+  {
+    "id": "chattogram-chandpur",
+    "en": "Chandpur",
+    "bn": "চাঁদপুর",
+    "divisionId": "chattogram"
+  },
+  {
+    "id": "chattogram-chattogram",
+    "en": "Chattogram",
+    "bn": "চট্টগ্রাম",
+    "divisionId": "chattogram"
+  },
+  {
+    "id": "chattogram-comilla",
+    "en": "Comilla",
+    "bn": "কুমিল্লা",
+    "divisionId": "chattogram"
+  },
+  {
+    "id": "chattogram-cox-s-bazar",
+    "en": "Cox's Bazar",
+    "bn": "কক্সবাজার",
+    "divisionId": "chattogram"
+  },
+  {
+    "id": "chattogram-feni",
+    "en": "Feni",
+    "bn": "ফেনী",
+    "divisionId": "chattogram"
+  },
+  {
+    "id": "chattogram-khagrachari",
+    "en": "Khagrachari",
+    "bn": "খাগড়াছড়ি",
+    "divisionId": "chattogram"
+  },
+  {
+    "id": "chattogram-lakshmipur",
+    "en": "Lakshmipur",
+    "bn": "লক্ষ্মীপুর",
+    "divisionId": "chattogram"
+  },
+  {
+    "id": "chattogram-noakhali",
+    "en": "Noakhali",
+    "bn": "নোয়াখালী",
+    "divisionId": "chattogram"
+  },
+  {
+    "id": "chattogram-rangamati",
+    "en": "Rangamati",
+    "bn": "রাঙ্গামাটি",
+    "divisionId": "chattogram"
+  },
+  {
+    "id": "dhaka-dhaka",
+    "en": "Dhaka",
+    "bn": "ঢাকা",
+    "divisionId": "dhaka"
+  },
+  {
+    "id": "dhaka-faridpur",
+    "en": "Faridpur",
+    "bn": "ফরিদপুর",
+    "divisionId": "dhaka"
+  },
+  {
+    "id": "dhaka-gazipur",
+    "en": "Gazipur",
+    "bn": "গাজীপুর",
+    "divisionId": "dhaka"
+  },
+  {
+    "id": "dhaka-gopalganj",
+    "en": "Gopalganj",
+    "bn": "গোপালগঞ্জ",
+    "divisionId": "dhaka"
+  },
+  {
+    "id": "dhaka-kishoreganj",
+    "en": "Kishoreganj",
+    "bn": "কিশোরগঞ্জ",
+    "divisionId": "dhaka"
+  },
+  {
+    "id": "dhaka-madaripur",
+    "en": "Madaripur",
+    "bn": "মাদারীপুর",
+    "divisionId": "dhaka"
+  },
+  {
+    "id": "dhaka-manikganj",
+    "en": "Manikganj",
+    "bn": "মানিকগঞ্জ",
+    "divisionId": "dhaka"
+  },
+  {
+    "id": "dhaka-munshiganj",
+    "en": "Munshiganj",
+    "bn": "মুন্সিগঞ্জ",
+    "divisionId": "dhaka"
+  },
+  {
+    "id": "dhaka-narayanganj",
+    "en": "Narayanganj",
+    "bn": "নারায়ণগঞ্জ",
+    "divisionId": "dhaka"
+  },
+  {
+    "id": "dhaka-narsingdi",
+    "en": "Narsingdi",
+    "bn": "নরসিংদী",
+    "divisionId": "dhaka"
+  },
+  {
+    "id": "dhaka-rajbari",
+    "en": "Rajbari",
+    "bn": "রাজবাড়ী",
+    "divisionId": "dhaka"
+  },
+  {
+    "id": "dhaka-shariatpur",
+    "en": "Shariatpur",
+    "bn": "শরীয়তপুর",
+    "divisionId": "dhaka"
+  },
+  {
+    "id": "dhaka-tangail",
+    "en": "Tangail",
+    "bn": "টাঙ্গাইল",
+    "divisionId": "dhaka"
+  },
+  {
+    "id": "khulna-bagerhat",
+    "en": "Bagerhat",
+    "bn": "বাগেরহাট",
+    "divisionId": "khulna"
+  },
+  {
+    "id": "khulna-chuadanga",
+    "en": "Chuadanga",
+    "bn": "চুয়াডাঙ্গা",
+    "divisionId": "khulna"
+  },
+  {
+    "id": "khulna-jessore",
+    "en": "Jessore",
+    "bn": "যশোর",
+    "divisionId": "khulna"
+  },
+  {
+    "id": "khulna-jhenaidah",
+    "en": "Jhenaidah",
+    "bn": "ঝিনাইদহ",
+    "divisionId": "khulna"
+  },
+  {
+    "id": "khulna-khulna",
+    "en": "Khulna",
+    "bn": "খুলনা",
+    "divisionId": "khulna"
+  },
+  {
+    "id": "khulna-kushtia",
+    "en": "Kushtia",
+    "bn": "কুষ্টিয়া",
+    "divisionId": "khulna"
+  },
+  {
+    "id": "khulna-magura",
+    "en": "Magura",
+    "bn": "মাগুরা",
+    "divisionId": "khulna"
+  },
+  {
+    "id": "khulna-meherpur",
+    "en": "Meherpur",
+    "bn": "মেহেরপুর",
+    "divisionId": "khulna"
+  },
+  {
+    "id": "khulna-narail",
+    "en": "Narail",
+    "bn": "নড়াইল",
+    "divisionId": "khulna"
+  },
+  {
+    "id": "khulna-satkhira",
+    "en": "Satkhira",
+    "bn": "সাতক্ষীরা",
+    "divisionId": "khulna"
+  },
+  {
+    "id": "mymensingh-jamalpur",
+    "en": "Jamalpur",
+    "bn": "জামালপুর",
+    "divisionId": "mymensingh"
+  },
+  {
+    "id": "mymensingh-mymensingh",
+    "en": "Mymensingh",
+    "bn": "ময়মনসিংহ",
+    "divisionId": "mymensingh"
+  },
+  {
+    "id": "mymensingh-netrokona",
+    "en": "Netrokona",
+    "bn": "নেত্রকোনা",
+    "divisionId": "mymensingh"
+  },
+  {
+    "id": "mymensingh-sherpur",
+    "en": "Sherpur",
+    "bn": "শেরপুর",
+    "divisionId": "mymensingh"
+  },
+  {
+    "id": "rajshahi-bogra",
+    "en": "Bogra",
+    "bn": "বগুড়া",
+    "divisionId": "rajshahi"
+  },
+  {
+    "id": "rajshahi-chapainawabganj",
+    "en": "Chapainawabganj",
+    "bn": "চাঁপাইনবাবগঞ্জ",
+    "divisionId": "rajshahi"
+  },
+  {
+    "id": "rajshahi-joypurhat",
+    "en": "Joypurhat",
+    "bn": "জয়পুরহাট",
+    "divisionId": "rajshahi"
+  },
+  {
+    "id": "rajshahi-naogaon",
+    "en": "Naogaon",
+    "bn": "নওগাঁ",
+    "divisionId": "rajshahi"
+  },
+  {
+    "id": "rajshahi-natore",
+    "en": "Natore",
+    "bn": "নাটোর",
+    "divisionId": "rajshahi"
+  },
+  {
+    "id": "rajshahi-pabna",
+    "en": "Pabna",
+    "bn": "পাবনা",
+    "divisionId": "rajshahi"
+  },
+  {
+    "id": "rajshahi-rajshahi",
+    "en": "Rajshahi",
+    "bn": "রাজশাহী",
+    "divisionId": "rajshahi"
+  },
+  {
+    "id": "rajshahi-sirajganj",
+    "en": "Sirajganj",
+    "bn": "সিরাজগঞ্জ",
+    "divisionId": "rajshahi"
+  },
+  {
+    "id": "rangpur-dinajpur",
+    "en": "Dinajpur",
+    "bn": "দিনাজপুর",
+    "divisionId": "rangpur"
+  },
+  {
+    "id": "rangpur-gaibandha",
+    "en": "Gaibandha",
+    "bn": "গাইবান্ধা",
+    "divisionId": "rangpur"
+  },
+  {
+    "id": "rangpur-kurigram",
+    "en": "Kurigram",
+    "bn": "কুড়িগ্রাম",
+    "divisionId": "rangpur"
+  },
+  {
+    "id": "rangpur-lalmonirhat",
+    "en": "Lalmonirhat",
+    "bn": "লালমনিরহাট",
+    "divisionId": "rangpur"
+  },
+  {
+    "id": "rangpur-nilphamari",
+    "en": "Nilphamari",
+    "bn": "নীলফামারী",
+    "divisionId": "rangpur"
+  },
+  {
+    "id": "rangpur-panchagarh",
+    "en": "Panchagarh",
+    "bn": "পঞ্চগড়",
+    "divisionId": "rangpur"
+  },
+  {
+    "id": "rangpur-rangpur",
+    "en": "Rangpur",
+    "bn": "রংপুর",
+    "divisionId": "rangpur"
+  },
+  {
+    "id": "rangpur-thakurgaon",
+    "en": "Thakurgaon",
+    "bn": "ঠাকুরগাঁও",
+    "divisionId": "rangpur"
+  },
+  {
+    "id": "sylhet-habiganj",
+    "en": "Habiganj",
+    "bn": "হবিগঞ্জ",
+    "divisionId": "sylhet"
+  },
+  {
+    "id": "sylhet-moulvibazar",
+    "en": "Moulvibazar",
+    "bn": "মৌলভীবাজার",
+    "divisionId": "sylhet"
+  },
+  {
+    "id": "sylhet-sunamganj",
+    "en": "Sunamganj",
+    "bn": "সুনামগঞ্জ",
+    "divisionId": "sylhet"
+  },
+  {
+    "id": "sylhet-sylhet",
+    "en": "Sylhet",
+    "bn": "সিলেট",
+    "divisionId": "sylhet"
+  }
+]

@@ -1,6 +1,113 @@
 <?php
 
+use App\Livewire\Admin\AdminCategories;
+use App\Livewire\Admin\AdminCategoryEdit;
+use App\Livewire\Admin\AdminCourierEdit;
+use App\Livewire\Admin\AdminCouriers;
+use App\Livewire\Admin\AdminDashboard;
+use App\Livewire\Admin\AdminOrderForm;
+use App\Livewire\Admin\AdminOrderShow;
+use App\Livewire\Admin\AdminOrders;
+use App\Livewire\Admin\AdminProductEdit;
+use App\Livewire\Admin\AdminProductPerformance;
+use App\Livewire\Admin\AdminProducts;
+use App\Livewire\Admin\AdminReviews;
+use App\Livewire\Admin\AdminSalesByMonth;
+use App\Livewire\StorefrontWishlist;
+use App\Livewire\StorefrontAccount;
+use App\Livewire\StorefrontCart;
+use App\Livewire\StorefrontCategory;
+use App\Livewire\StorefrontChangePassword;
+use App\Livewire\StorefrontCheckout;
+use App\Livewire\StorefrontForgotPassword;
 use App\Livewire\StorefrontHome;
+use App\Livewire\StorefrontLogin;
+use App\Livewire\StorefrontOrderConfirmation;
+use App\Livewire\StorefrontOrderDetail;
+use App\Livewire\StorefrontOrderHistory;
+use App\Livewire\StorefrontPage;
+use App\Livewire\StorefrontProduct;
+use App\Livewire\StorefrontProfile;
+use App\Livewire\StorefrontRegister;
+use App\Livewire\StorefrontResetPassword;
+use App\Livewire\StorefrontSearch;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', StorefrontHome::class)->name('home');
+Route::get('/category/{category:slug}', StorefrontCategory::class)->name('category.show');
+Route::get('/product/{product:slug}', StorefrontProduct::class)->name('product.show');
+Route::get('/search', StorefrontSearch::class)->name('search');
+Route::get('/cart', StorefrontCart::class)->name('cart');
+Route::get('/checkout', StorefrontCheckout::class)->name('checkout');
+Route::get('/checkout/confirmation/{order}', StorefrontOrderConfirmation::class)->name('checkout.confirmation');
+Route::get('/page/{page:slug}', StorefrontPage::class)->name('page.show');
+Route::get('/share/products/{token}', \App\Livewire\PublicProductShare::class)
+    ->where('token', '[A-Za-z0-9]{32,64}')
+    ->name('share.products');
+
+Route::middleware('guest')->group(function () {
+    Route::get('/register', StorefrontRegister::class)->name('register');
+    Route::get('/login', StorefrontLogin::class)->name('login');
+    Route::get('/forgot-password', StorefrontForgotPassword::class)->name('password.request');
+    Route::get('/reset-password/{token}', StorefrontResetPassword::class)->name('password.reset');
+});
+
+Route::middleware('auth')->group(function () {
+    Route::post('/logout', function () {
+        Auth::logout();
+        request()->session()->invalidate();
+        request()->session()->regenerateToken();
+
+        return redirect()->route('home');
+    })->name('logout');
+
+    Route::get('/account', StorefrontAccount::class)->name('account');
+    Route::get('/account/profile', StorefrontProfile::class)->name('account.profile');
+    Route::get('/account/password', StorefrontChangePassword::class)->name('account.password');
+    Route::get('/account/orders', StorefrontOrderHistory::class)->name('account.orders');
+    Route::get('/account/orders/{order}', StorefrontOrderDetail::class)->name('account.orders.show');
+    Route::get('/account/wishlist', StorefrontWishlist::class)->name('account.wishlist');
+});
+
+Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/', AdminDashboard::class)->name('dashboard');
+    Route::redirect('/orders', '/admin/orders/new');
+    Route::get('/orders/new', AdminOrders::class)->defaults('segment', 'new')->name('orders.new');
+    Route::get('/orders/dispatched', AdminOrders::class)->defaults('segment', 'dispatched')->name('orders.dispatched');
+    Route::get('/orders/delivered', AdminOrders::class)->defaults('segment', 'delivered')->name('orders.delivered');
+    Route::get('/orders/cancel-return', AdminOrders::class)->defaults('segment', 'cancel-return')->name('orders.cancel-return');
+    Route::get('/orders/return-pending', AdminOrders::class)->defaults('segment', 'return-pending')->name('orders.return-pending');
+    Route::get('/orders/create', AdminOrderForm::class)->name('orders.create');
+    Route::get('/orders/{order}/edit', AdminOrderForm::class)->whereNumber('order')->name('orders.edit');
+    Route::get('/orders/{order}/print', function (\App\Models\Order $order) {
+        $shippingAddress = collect([
+            $order->address,
+            $order->area,
+            $order->city,
+            $order->state,
+        ])->filter(fn ($part) => filled($part))
+            ->unique()
+            ->implode(', ');
+
+        return response()
+            ->view('admin.order-print-label', [
+                'order' => $order,
+                'shippingAddress' => $shippingAddress,
+            ])
+            ->header('Cache-Control', 'no-store');
+    })->whereNumber('order')->name('orders.print');
+    Route::get('/orders/{order}', AdminOrderShow::class)->whereNumber('order')->name('orders.show');
+    Route::get('/products', AdminProducts::class)->name('products');
+    Route::get('/products/create', AdminProductEdit::class)->name('products.create');
+    Route::get('/products/{product:id}/performance', AdminProductPerformance::class)->whereNumber('product')->name('products.performance');
+    Route::get('/products/{product:id}/edit', AdminProductEdit::class)->name('products.edit');
+    Route::get('/categories', AdminCategories::class)->name('categories');
+    Route::get('/categories/create', AdminCategoryEdit::class)->name('categories.create');
+    Route::get('/categories/{category}/edit', AdminCategoryEdit::class)->name('categories.edit');
+    Route::get('/couriers', AdminCouriers::class)->name('couriers');
+    Route::get('/couriers/create', AdminCourierEdit::class)->name('couriers.create');
+    Route::get('/couriers/{courier}/edit', AdminCourierEdit::class)->name('couriers.edit');
+    Route::get('/reviews', AdminReviews::class)->name('reviews');
+    Route::get('/reports/sales-by-month', AdminSalesByMonth::class)->name('reports.sales-by-month');
+});

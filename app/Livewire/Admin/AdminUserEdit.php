@@ -37,7 +37,7 @@ class AdminUserEdit extends Component
 
     public function mount(?User $user = null): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         Role::findOrCreate('customers');
         Role::findOrCreate('moderator');
@@ -70,7 +70,7 @@ class AdminUserEdit extends Component
 
     public function save(): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
         $this->message = null;
         $this->error = null;
 
@@ -133,7 +133,7 @@ class AdminUserEdit extends Component
 
     public function delete(): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if (! $this->user) {
             return;

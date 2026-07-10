@@ -4,10 +4,15 @@ namespace App\Support;
 
 use App\Models\Order;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class AdminDashboardMetrics
 {
+    public const DAILY_CACHE_KEY = 'admin.dashboard_daily_totals';
+
+    public const DAILY_CACHE_TTL = 60;
+
     /**
      * @return list<array{
      *     date: string,
@@ -18,9 +23,32 @@ class AdminDashboardMetrics
      *     delivery_value: float
      * }>
      */
-    public static function dailyTotals(int $days = 30): array
+    public static function dailyTotals(int $days = 30, bool $fresh = false): array
     {
         $days = max(1, $days);
+        $cacheKey = self::DAILY_CACHE_KEY.':'.$days.':'.now()->toDateString();
+
+        if ($fresh) {
+            Cache::forget($cacheKey);
+        }
+
+        return Cache::remember($cacheKey, self::DAILY_CACHE_TTL, function () use ($days) {
+            return self::computeDailyTotals($days);
+        });
+    }
+
+    /**
+     * @return list<array{
+     *     date: string,
+     *     label: string,
+     *     order_qty: int,
+     *     order_value: float,
+     *     delivery_qty: int,
+     *     delivery_value: float
+     * }>
+     */
+    private static function computeDailyTotals(int $days): array
+    {
         $start = now()->subDays($days - 1)->startOfDay();
 
         $ordersByDay = Order::query()

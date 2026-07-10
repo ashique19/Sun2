@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Order;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
 
 class AdminOrderSegment
 {
@@ -14,6 +15,10 @@ class AdminOrderSegment
         'cancel-return' => 'Cancel & Return',
         'return-pending' => 'Return Pending',
     ];
+
+    public const COUNTS_CACHE_KEY = 'admin.order_segment_counts';
+
+    public const COUNTS_CACHE_TTL = 60;
 
     public static function apply(Builder $query, string $segment): Builder
     {
@@ -45,15 +50,28 @@ class AdminOrderSegment
     /**
      * @return array<string, int>
      */
-    public static function counts(): array
+    public static function counts(bool $fresh = false): array
     {
-        $counts = [];
-
-        foreach (array_keys(self::SEGMENTS) as $segment) {
-            $counts[$segment] = self::count($segment);
+        if ($fresh) {
+            Cache::forget(self::COUNTS_CACHE_KEY);
         }
 
-        return $counts;
+        return Cache::remember(self::COUNTS_CACHE_KEY, self::COUNTS_CACHE_TTL, function () {
+            $statusCounts = Order::query()
+                ->selectRaw('status, COUNT(*) as aggregate')
+                ->groupBy('status')
+                ->pluck('aggregate', 'status');
+
+            $returnPending = (int) Order::query()->where('has_return', true)->count();
+
+            return [
+                'new' => (int) ($statusCounts['new'] ?? 0) + (int) ($statusCounts['confirmed'] ?? 0),
+                'dispatched' => (int) ($statusCounts['dispatched'] ?? 0),
+                'delivered' => (int) ($statusCounts['delivered'] ?? 0),
+                'cancel-return' => (int) ($statusCounts['cancelled'] ?? 0) + (int) ($statusCounts['returned'] ?? 0),
+                'return-pending' => $returnPending,
+            ];
+        });
     }
 
     public static function route(string $segment): string

@@ -38,7 +38,10 @@ class StorefrontCategory extends Component
     public function render()
     {
         $products = Product::query()
-            ->with(['images', 'category'])
+            ->with([
+                'category:id,name,slug',
+                'listingImage',
+            ])
             ->published()
             ->where('category_id', $this->category->id)
             ->when($this->sort === 'price_asc', fn ($q) => $q->orderBy('price'))

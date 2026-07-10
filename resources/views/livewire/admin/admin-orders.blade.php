@@ -1,12 +1,23 @@
 <div wire:key="admin-orders-{{ $segment }}-{{ $listRevision }}" @class(['pb-14' => ! $readOnly && $selectedCount > 0])>
     <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
         <h1 class="font-serif text-3xl font-semibold">{{ $segmentLabel }} Orders</h1>
-        @unless ($readOnly)
-            <a href="{{ route('admin.orders.create') }}"
-                class="rounded-lg bg-[#C9A227] px-4 py-2 text-sm font-medium text-white hover:bg-[#b89220] transition">
-                Create order
-            </a>
-        @endunless
+        <div class="flex flex-wrap items-center gap-2">
+            @if ($segment === 'dispatched' && $courierApiAvailable && ! $readOnly)
+                <button type="button"
+                    wire:click="refreshCourierStatuses"
+                    wire:loading.attr="disabled"
+                    class="rounded-lg border border-[#E0D6C2] bg-white px-4 py-2 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF] disabled:opacity-60">
+                    <span wire:loading.remove wire:target="refreshCourierStatuses">Refresh tracking</span>
+                    <span wire:loading wire:target="refreshCourierStatuses">Refreshing…</span>
+                </button>
+            @endif
+            @unless ($readOnly)
+                <a href="{{ route('admin.orders.create') }}"
+                    class="rounded-lg bg-[#C9A227] px-4 py-2 text-sm font-medium text-white hover:bg-[#b89220] transition">
+                    Create order
+                </a>
+            @endunless
+        </div>
     </div>
 
     @unless ($readOnly)
@@ -293,11 +304,6 @@
             <div class="px-4 py-3 border-t border-[#E7DFCF]">{{ $orders->links() }}</div>
         @endif
     </div>
-
-    @if ($segment === 'dispatched' && $courierApiAvailable)
-        <div wire:key="courier-status-loader-{{ $segment }}-{{ $orders->currentPage() }}-{{ md5($search) }}"
-            wire:init="refreshCourierStatuses"></div>
-    @endif
 
     @teleport('body')
         <div wire:key="admin-orders-overlays">

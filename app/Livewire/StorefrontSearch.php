@@ -31,7 +31,10 @@ class StorefrontSearch extends Component
     public function render()
     {
         $products = Product::query()
-            ->with(['images', 'category'])
+            ->with([
+                'category:id,name,slug',
+                'listingImage',
+            ])
             ->published()
             ->searchTerm($this->q)
             ->orderBy('display_order')

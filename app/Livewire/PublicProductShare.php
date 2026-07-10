@@ -49,7 +49,7 @@ class PublicProductShare extends Component
     {
         $user = auth()->user();
 
-        return $user !== null && $user->hasAnyRole(['admin', 'dev', 'moderator']);
+        return $user !== null && $user->canAccessAdmin();
     }
 
     private function loadShare(): void

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Product extends Model
 {
@@ -37,6 +38,14 @@ class Product extends Model
     public function images(): HasMany
     {
         return $this->hasMany(ProductImage::class)->orderBy('sort_order');
+    }
+
+    /** Single image for cards/lists (primary preferred, else lowest sort_order). */
+    public function listingImage(): HasOne
+    {
+        return $this->hasOne(ProductImage::class)->ofMany(
+            ['is_primary' => 'max', 'sort_order' => 'min'],
+        );
     }
 
     public function reviews(): HasMany
@@ -85,6 +94,10 @@ class Product extends Model
 
     public function primaryImagePath(): ?string
     {
+        if ($this->relationLoaded('listingImage')) {
+            return $this->listingImage?->path;
+        }
+
         if ($this->relationLoaded('images')) {
             $image = $this->images->firstWhere('is_primary', true) ?? $this->images->first();
 

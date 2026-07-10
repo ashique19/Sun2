@@ -43,7 +43,7 @@ class AdminAccess
         return in_array($order->status, ['new', 'confirmed'], true);
     }
 
-    public static function ensureCanManageOrders(): void
+    public static function ensureStaffAdmin(): void
     {
         abort_unless(self::isStaffAdmin(), 403);
     }

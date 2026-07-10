@@ -23,12 +23,12 @@
         </form>
 
         <div class="flex items-center gap-2 sm:gap-3 text-[#1E1E1E] shrink-0 ml-auto">
-            @role('admin|dev|moderator')
+            @if (auth()->user()?->canAccessAdmin())
                 <a href="{{ route('admin.dashboard') }}" wire:navigate
                     class="text-sm font-medium text-[#C9A227] hover:underline">
                     Admin
                 </a>
-            @endrole
+            @endif
             @auth
                 <a href="{{ route('account.wishlist') }}" wire:navigate class="relative hover:text-[#C9A227] transition text-lg" title="Wishlist" aria-label="Wishlist">
                     ♡
@@ -145,13 +145,13 @@
             </div>
 
             <nav class="flex-1 overflow-y-auto px-3 py-3 text-sm">
-                @role('admin|dev|moderator')
+                @if (auth()->user()?->canAccessAdmin())
                     <a href="{{ route('admin.dashboard') }}" wire:navigate
                         onclick="document.getElementById('mobile-nav-toggle').checked = false"
                         class="mb-2 block rounded-xl bg-[#C9A227] px-4 py-3.5 font-semibold text-white">
                         Admin panel
                     </a>
-                @endrole
+                @endif
 
                 <a href="{{ route('account') }}" wire:navigate
                     onclick="document.getElementById('mobile-nav-toggle').checked = false"

@@ -176,7 +176,7 @@ class AdminOrders extends Component
 
     public function listSelectedProducts(ProductShareListService $shares): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->selected === []) {
             return;
@@ -190,7 +190,7 @@ class AdminOrders extends Component
 
     public function deleteOrder(int $orderId, AdminOrderService $orders): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         $order = Order::query()->find($orderId);
 
@@ -204,7 +204,7 @@ class AdminOrders extends Component
 
     public function deleteSelected(AdminOrderService $orders): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->selected === []) {
             return;
@@ -224,7 +224,7 @@ class AdminOrders extends Component
 
     public function quickDispatch(int $orderId, OrderDispatchService $dispatch): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->segment !== 'new') {
             return;
@@ -252,7 +252,7 @@ class AdminOrders extends Component
 
     public function markDelivered(int $orderId, OrderDeliveryReturnService $settlement): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->segment !== 'dispatched') {
             return;
@@ -270,7 +270,7 @@ class AdminOrders extends Component
 
     public function markSelectedDelivered(OrderDeliveryReturnService $settlement): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->segment !== 'dispatched' || $this->selected === []) {
             return;
@@ -293,7 +293,7 @@ class AdminOrders extends Component
 
     public function cancelAndReturn(int $orderId, OrderDeliveryReturnService $settlement): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->segment !== 'dispatched') {
             return;
@@ -311,7 +311,7 @@ class AdminOrders extends Component
 
     public function markReturnReceived(int $orderId, OrderDeliveryReturnService $settlement): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->segment !== 'return-pending') {
             return;
@@ -328,7 +328,7 @@ class AdminOrders extends Component
 
     public function undoReturnReceived(int $orderId, OrderDeliveryReturnService $settlement): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->segment !== 'return-pending') {
             return;
@@ -345,7 +345,7 @@ class AdminOrders extends Component
 
     public function toggleHasReturn(int $orderId, OrderDeliveryReturnService $settlement): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->segment !== 'return-pending') {
             return;
@@ -367,7 +367,7 @@ class AdminOrders extends Component
 
     public function openPartialReturn(int $orderId): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->segment !== 'dispatched') {
             return;
@@ -414,7 +414,7 @@ class AdminOrders extends Component
 
     public function submitPartialReturn(OrderDeliveryReturnService $settlement): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->segment !== 'dispatched' || ! $this->partialOrderId) {
             return;
@@ -476,7 +476,7 @@ class AdminOrders extends Component
 
     public function openSendTo(): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->segment !== 'new' || $this->selected === []) {
             return;
@@ -491,7 +491,7 @@ class AdminOrders extends Component
 
     public function openDispatch(): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->segment !== 'new' || $this->selected === []) {
             return;
@@ -531,7 +531,7 @@ class AdminOrders extends Component
 
     public function submitBulkDispatch(OrderDispatchService $dispatch): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->segment !== 'new' || $this->selected === []) {
             return;
@@ -560,7 +560,7 @@ class AdminOrders extends Component
 
     public function startBulkSend(CourierApiRegistry $courierRegistry): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if ($this->segment !== 'new' || $this->selected === []) {
             return;
@@ -607,7 +607,7 @@ class AdminOrders extends Component
 
     public function dispatchNextSelected(OrderDispatchService $dispatch): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         if (! $this->bulkSending || $this->sendToCourierSlug === '') {
             return;
@@ -698,6 +698,8 @@ class AdminOrders extends Component
 
     public function refreshCourierStatuses(CourierTrackingService $tracking): void
     {
+        AdminAccess::ensureStaffAdmin();
+
         if ($this->segment !== 'dispatched') {
             return;
         }
@@ -711,9 +713,12 @@ class AdminOrders extends Component
 
         foreach ($orders as $order) {
             $statuses[$order->id] = $tracking->fetchAndRecordLiveStatus($order);
+            $order->unsetRelation('courierLogs');
+            $order->load('courierLogs');
         }
 
         $this->courierLiveStatuses = $statuses;
+        $this->listRevision++;
     }
 
     public function render(CourierApiRegistry $courierRegistry, CourierTrackingService $tracking)
@@ -766,7 +771,7 @@ class AdminOrders extends Component
                 $live = $this->courierLiveStatuses[$order->id] ?? null;
                 $trackingByOrder[$order->id] = [
                     'status' => $tracking->displayStatus($order, is_string($live) ? $live : null),
-                    'events' => $tracking->trackingEvents($order),
+                    'events' => $tracking->eventsFromLoadedLogs($order),
                 ];
             }
         }

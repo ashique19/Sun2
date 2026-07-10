@@ -31,7 +31,7 @@ class AdminUsers extends Component
 
     public function mount(string $segment = 'customers'): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         $this->segment = array_key_exists($segment, self::SEGMENTS) ? $segment : 'customers';
 
@@ -59,7 +59,7 @@ class AdminUsers extends Component
 
     public function toggleActive(int $userId): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
         $this->message = null;
         $this->error = null;
 
@@ -81,7 +81,7 @@ class AdminUsers extends Component
 
     public function delete(int $userId): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
         $this->message = null;
         $this->error = null;
 

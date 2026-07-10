@@ -73,14 +73,15 @@ class CourierTrackingService
 
     /**
      * Tracking timeline for display (newest first), times in Asia/Dhaka.
+     * Uses already-loaded courierLogs when present; does not hit courier APIs or legacy DB.
      *
      * @return list<array{at:string,message:string,status:?string}>
      */
-    public function trackingEvents(Order $order): array
+    public function eventsFromLoadedLogs(Order $order): array
     {
-        $this->backfillFromLegacy($order);
-        $order->unsetRelation('courierLogs');
-        $order->load('courierLogs');
+        if (! $order->relationLoaded('courierLogs')) {
+            $order->load('courierLogs');
+        }
 
         $events = [];
         $seen = [];
@@ -113,6 +114,20 @@ class CourierTrackingService
             ],
             $events,
         );
+    }
+
+    /**
+     * Tracking timeline with optional legacy backfill (for explicit refresh paths).
+     *
+     * @return list<array{at:string,message:string,status:?string}>
+     */
+    public function trackingEvents(Order $order): array
+    {
+        $this->backfillFromLegacy($order);
+        $order->unsetRelation('courierLogs');
+        $order->load('courierLogs');
+
+        return $this->eventsFromLoadedLogs($order);
     }
 
     public function formatDhaka(mixed $value): string

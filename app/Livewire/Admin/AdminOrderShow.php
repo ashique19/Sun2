@@ -74,7 +74,7 @@ class AdminOrderShow extends Component
 
     public function saveStatus(OrderStatusService $statusService): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         $this->error = null;
         $this->message = null;
@@ -107,7 +107,7 @@ class AdminOrderShow extends Component
 
     public function dispatchViaApi(OrderDispatchService $dispatch): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         $this->error = null;
         $this->message = null;
@@ -128,7 +128,7 @@ class AdminOrderShow extends Component
 
     public function dispatchSteadfast(OrderDispatchService $dispatch): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         $this->apiCourierSlug = 'steadfast';
         $this->dispatchViaApi($dispatch);
@@ -136,7 +136,7 @@ class AdminOrderShow extends Component
 
     public function dispatchManual(OrderDispatchService $dispatch): void
     {
-        AdminAccess::ensureCanManageOrders();
+        AdminAccess::ensureStaffAdmin();
 
         $this->error = null;
         $this->message = null;

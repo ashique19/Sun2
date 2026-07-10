@@ -27,7 +27,7 @@ class StorefrontAssets
             return null;
         }
 
-        if (is_file(public_path($relative))) {
+        if (self::shouldProbeLocalFiles() && is_file(public_path($relative))) {
             return asset($relative);
         }
 
@@ -57,13 +57,16 @@ class StorefrontAssets
             ];
         }
 
-        foreach (array_unique($candidates) as $candidate) {
-            if (is_file(public_path($candidate))) {
-                return self::url($candidate);
+        if (self::shouldProbeLocalFiles()) {
+            foreach (array_unique($candidates) as $candidate) {
+                if (is_file(public_path($candidate))) {
+                    return self::url($candidate);
+                }
             }
         }
 
-        return self::url($path);
+        // CDN: prefer largest candidate without disk probes.
+        return self::url($candidates[0] ?? $path);
     }
 
     public static function mediumUrl(?string $pathOrUrl): ?string
@@ -87,11 +90,16 @@ class StorefrontAssets
             $path = 'img/thumb/'.$matches[1];
         }
 
-        if (is_file(public_path($path))) {
+        if (self::shouldProbeLocalFiles() && is_file(public_path($path))) {
             return asset($path);
         }
 
         return self::CDN_BASE.$path;
+    }
+
+    private static function shouldProbeLocalFiles(): bool
+    {
+        return app()->environment('local', 'testing');
     }
 
     private static function toRelativePath(string $pathOrUrl): ?string

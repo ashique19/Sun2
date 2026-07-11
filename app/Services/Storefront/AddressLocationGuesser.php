@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Cache;
 
 class AddressLocationGuesser
 {
-    private const CACHE_KEY = 'storefront.location_guess_index';
+    private const CACHE_KEY = 'storefront.location_guess_index.v2';
 
     /**
      * Alternate spellings that should resolve to a city name already in the index.
@@ -130,27 +130,74 @@ class AddressLocationGuesser
     private function areaIndex(): array
     {
         return Cache::rememberForever(self::CACHE_KEY.':areas', function () {
-            return Area::query()
-                ->active()
-                ->with('city:id,name')
-                ->whereHas('city', fn ($query) => $query->active())
-                ->get(['id', 'city_id', 'name'])
-                ->map(function (Area $area) {
-                    $normalized = $this->normalize($area->name);
+            $rows = [];
 
-                    return [
+            $areas = Area::query()
+                ->active()
+                ->with('city:id,name,slug')
+                ->whereHas('city', fn ($query) => $query->active())
+                ->get(['id', 'city_id', 'name', 'slug']);
+
+            foreach ($areas as $area) {
+                $label = $area->name.', '.$area->city->name;
+                $phrases = $this->areaSearchPhrases($area);
+
+                foreach ($phrases as $normalized) {
+                    $rows[] = [
                         'city_id' => $area->city_id,
                         'area_id' => $area->id,
-                        'label' => $area->name.', '.$area->city->name,
+                        'label' => $label,
                         'normalized' => $normalized,
                         'length' => mb_strlen($normalized),
                     ];
-                })
+                }
+            }
+
+            return collect($rows)
                 ->filter(fn (array $row) => $row['length'] >= 4)
                 ->sortByDesc('length')
                 ->values()
                 ->all();
         });
+    }
+
+    /**
+     * Name plus slug tokens (hyphen-separated) so admins can append user-input
+     * patterns to an area slug for address matching.
+     *
+     * @return list<string>
+     */
+    private function areaSearchPhrases(Area $area): array
+    {
+        $phrases = [];
+        $name = $this->normalize($area->name);
+
+        if ($name !== '') {
+            $phrases[] = $name;
+        }
+
+        $citySkip = array_filter([
+            $this->normalize($area->city?->name),
+            ...preg_split('/[-_]+/u', $this->normalize((string) ($area->city?->slug ?? ''))) ?: [],
+        ]);
+
+        foreach (preg_split('/[-_]+/u', (string) ($area->slug ?? '')) ?: [] as $token) {
+            $normalized = $this->normalize($token);
+
+            if ($normalized === '' || mb_strlen($normalized) < 4) {
+                continue;
+            }
+
+            // Skip district/city slug parts so "chattogram" on every area slug
+            // does not steal the match when only the city is mentioned.
+            if (in_array($normalized, $citySkip, true)) {
+                continue;
+            }
+
+            $phrases[] = $normalized;
+        }
+
+        return array_values(array_unique($phrases));
     }
 
     /**

@@ -252,9 +252,17 @@ PROMPT;
         $query = Area::query()->active()->when($cityId, fn ($q) => $q->where('city_id', $cityId));
 
         foreach ($aliases as $alias) {
+            $slugNeedle = $this->slugSearchToken($alias);
+
             $id = (clone $query)->where('name', $alias)->value('id')
                 ?? (clone $query)->where('name', 'like', $alias.'%')->value('id')
-                ?? (clone $query)->where('name', 'like', '%'.$alias.'%')->value('id');
+                ?? (clone $query)->where('name', 'like', '%'.$alias.'%')->value('id')
+                ?? ($slugNeedle !== ''
+                    ? ((clone $query)->where('slug', $slugNeedle)->value('id')
+                        ?? (clone $query)->where('slug', 'like', '%-'.$slugNeedle)->value('id')
+                        ?? (clone $query)->where('slug', 'like', $slugNeedle.'-%')->value('id')
+                        ?? (clone $query)->where('slug', 'like', '%-'.$slugNeedle.'-%')->value('id'))
+                    : null);
 
             if ($id) {
                 return (int) $id;
@@ -262,6 +270,15 @@ PROMPT;
         }
 
         return null;
+    }
+
+    private function slugSearchToken(string $value): string
+    {
+        $value = mb_strtolower(trim($value));
+        $value = preg_replace('/\s+/u', '-', $value) ?? $value;
+        $value = preg_replace('/[^\p{L}\p{N}\-]+/u', '', $value) ?? $value;
+
+        return trim(preg_replace('/-+/u', '-', $value) ?? $value, '-');
     }
 
     /**

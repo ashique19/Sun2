@@ -54,7 +54,7 @@ class AddressLocationGuesserTest extends TestCase
         $this->kotwaliChattogram = Area::query()->create([
             'city_id' => $this->chattogram->id,
             'name' => 'Kotwali',
-            'slug' => 'chattogram-chattogram-kotwali',
+            'slug' => 'chattogram-chattogram-kotwali-chatteswari',
             'is_active' => true,
             'delivery_charge_upto_5' => 120,
             'delivery_charge_over_5' => 200,
@@ -69,8 +69,49 @@ class AddressLocationGuesserTest extends TestCase
 
         $this->assertNotNull($guess);
         $this->assertSame($this->chattogram->id, $guess['city_id']);
-        $this->assertNull($guess['area_id']);
-        $this->assertSame('Chattogram', $guess['label']);
+        $this->assertSame($this->kotwaliChattogram->id, $guess['area_id']);
+        $this->assertSame('Kotwali, Chattogram', $guess['label']);
+    }
+
+    public function test_slug_alias_token_matches_area_within_city(): void
+    {
+        AddressLocationGuesser::clearCache();
+
+        $this->kotwaliChattogram->update([
+            'slug' => 'chattogram-chattogram-kotwali-finlay-zaran',
+        ]);
+
+        $guess = app(AddressLocationGuesser::class)->guess(
+            '449 Finlay zaran road, Chattogram',
+        );
+
+        $this->assertNotNull($guess);
+        $this->assertSame($this->chattogram->id, $guess['city_id']);
+        $this->assertSame($this->kotwaliChattogram->id, $guess['area_id']);
+    }
+
+    public function test_city_token_in_area_slug_does_not_force_an_area(): void
+    {
+        $plain = Area::query()->create([
+            'city_id' => $this->chattogram->id,
+            'name' => 'Pahartali',
+            'slug' => 'chattogram-chattogram-pahartali',
+            'is_active' => true,
+            'delivery_charge_upto_5' => 120,
+            'delivery_charge_over_5' => 200,
+        ]);
+
+        // Remove chatteswari alias so only city is mentioned.
+        $this->kotwaliChattogram->update([
+            'slug' => 'chattogram-chattogram-kotwali',
+        ]);
+        AddressLocationGuesser::clearCache();
+
+        $guess = app(AddressLocationGuesser::class)->guess('Some street, chattogram');
+
+        $this->assertNotNull($guess);
+        $this->assertSame($this->chattogram->id, $guess['city_id']);
+        $this->assertNull($guess['area_id'], 'Slug city tokens must not pick '.$plain->name.' or Kotwali');
     }
 
     public function test_chittagong_alias_resolves_to_chattogram_city(): void
@@ -81,7 +122,7 @@ class AddressLocationGuesserTest extends TestCase
 
         $this->assertNotNull($guess);
         $this->assertSame($this->chattogram->id, $guess['city_id']);
-        $this->assertNull($guess['area_id']);
+        $this->assertSame($this->kotwaliChattogram->id, $guess['area_id']);
     }
 
     public function test_standalone_wari_still_matches_dhaka_area(): void

@@ -93,7 +93,7 @@ class AdminAreaEdit extends Component
             'slug' => [
                 'required',
                 'string',
-                'max:160',
+                'max:255',
                 Rule::unique('areas', 'slug')->ignore($this->area?->id),
             ],
             'cityId' => ['required', 'integer', 'exists:cities,id'],
@@ -106,7 +106,7 @@ class AdminAreaEdit extends Component
 
         $payload = [
             'name' => $validated['name'],
-            'slug' => Str::slug($validated['slug']) ?: Str::slug($validated['name']),
+            'slug' => $this->normalizeAreaSlug($validated['slug'], $validated['name']),
             'city_id' => (int) $validated['cityId'],
             'police_station' => $validated['police_station'] !== '' ? $validated['police_station'] : null,
             'unit_type' => $validated['unit_type'] !== '' ? $validated['unit_type'] : null,
@@ -164,5 +164,22 @@ class AdminAreaEdit extends Component
         return view('livewire.admin.admin-area-edit', [
             'cities' => City::query()->orderBy('name')->get(['id', 'name']),
         ])->title($this->title());
+    }
+
+    /**
+     * Keep hyphen-separated tokens (including Bangla) for address matching aliases.
+     */
+    private function normalizeAreaSlug(string $slug, string $fallbackName): string
+    {
+        $slug = mb_strtolower(trim($slug));
+        $slug = preg_replace('/\s+/u', '-', $slug) ?? $slug;
+        $slug = preg_replace('/[^\p{L}\p{N}\-]+/u', '', $slug) ?? $slug;
+        $slug = trim(preg_replace('/-+/u', '-', $slug) ?? $slug, '-');
+
+        if ($slug !== '') {
+            return $slug;
+        }
+
+        return Str::slug($fallbackName) ?: 'area';
     }
 }

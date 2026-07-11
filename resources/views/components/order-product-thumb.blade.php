@@ -8,12 +8,20 @@
 @php
     $imageUrl = $item->imageUrl();
     $productName = $item->displayName();
-    $thumbSize = $size === 'md' ? 'h-14 w-14' : 'h-12 w-12';
+    $thumbSize = match ($size) {
+        'md' => 'h-20 w-20',
+        'lg' => 'h-24 w-24',
+        default => 'h-12 w-12',
+    };
+    $quantityClass = match ($size) {
+        'md', 'lg' => 'text-xl font-bold',
+        default => 'text-xs font-semibold',
+    };
     $returnedQty = (int) ($item->returned_quantity ?? 0);
     $returnReceived = (bool) ($item->return_received ?? false);
 @endphp
 
-<div {{ $attributes->merge(['class' => 'inline-flex flex-col items-center gap-1 shrink-0']) }}>
+<div {{ $attributes->merge(['class' => 'inline-flex flex-col items-center gap-1.5 shrink-0']) }}>
     @if ($imageUrl)
         <button type="button"
             title="{{ $productName }} — click to enlarge"
@@ -51,7 +59,13 @@
     @endif
 
     @if ($showQuantity)
-        <span class="text-xs font-semibold leading-none tabular-nums {{ $item->quantity > 1 ? 'text-rose-600' : 'text-[#6B6459]' }}">
+        <span @class([
+            $quantityClass,
+            'leading-none tabular-nums',
+            'text-rose-600' => $item->quantity > 1,
+            'text-[#1E1E1E]' => $item->quantity <= 1 && in_array($size, ['md', 'lg'], true),
+            'text-[#6B6459]' => $item->quantity <= 1 && ! in_array($size, ['md', 'lg'], true),
+        ])>
             &times;{{ $item->quantity }}
         </span>
     @endif

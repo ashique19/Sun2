@@ -27,3 +27,5 @@ Thumbs.db
 
 # Legacy production data dump (contains customer PII - keep local, do not commit)
 /database/legacy/*.sql
+/sun.sql
+/sun2_production_ready.sql

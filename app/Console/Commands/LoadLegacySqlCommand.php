@@ -33,7 +33,9 @@ class LoadLegacySqlCommand extends Command
         $pdo = new \PDO($dsn, $username, $password, [
             \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
         ]);
-        $pdo->exec("CREATE DATABASE IF NOT EXISTS `{$database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        // Always rebuild legacy DB so re-runs do not hit duplicate-key errors on INSERT dumps.
+        $pdo->exec("DROP DATABASE IF EXISTS `{$database}`");
+        $pdo->exec("CREATE DATABASE `{$database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
         $pdo->exec("USE `{$database}`");
 
         $mysql = $this->findMysqlBinary();
@@ -121,6 +123,7 @@ class LoadLegacySqlCommand extends Command
     {
         $candidates = [
             'C:\\Program Files\\Herd\\bin\\mysql.exe',
+            'C:\\Program Files\\MySQL\\MySQL Server 8.4\\bin\\mysql.exe',
             'C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysql.exe',
             'C:\\xampp\\mysql\\bin\\mysql.exe',
             'C:\\laragon\\bin\\mysql\\mysql-8.0.30-winx64\\bin\\mysql.exe',

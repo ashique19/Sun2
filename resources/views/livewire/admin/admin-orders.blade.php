@@ -60,10 +60,12 @@
                         <th class="px-4 py-3 font-medium">Order</th>
                         <th class="px-4 py-3 font-medium">Customer</th>
                         <th class="px-4 py-3 font-medium">Products</th>
-                        <th class="px-4 py-3 font-medium">Total</th>
-                        <th class="px-4 py-3 font-medium">Status</th>
-                        <th class="px-4 py-3 font-medium">Placed</th>
-                        <th class="px-4 py-3 font-medium"></th>
+                        @unless ($readOnly)
+                            <th class="px-4 py-3 font-medium">Total</th>
+                            <th class="px-4 py-3 font-medium">Status</th>
+                            <th class="px-4 py-3 font-medium">Placed</th>
+                            <th class="px-4 py-3 font-medium"></th>
+                        @endunless
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#E7DFCF]" wire:key="orders-tbody-{{ $segment }}-{{ $listRevision }}">
@@ -79,7 +81,7 @@
                                         class="rounded border-[#C9A227] text-[#C9A227] focus:ring-[#C9A227]">
                                 </td>
                             @endunless
-                            <td class="px-4 py-3">
+                            <td class="px-4 py-3 {{ $readOnly ? 'align-middle' : '' }}">
                                 <div class="flex flex-wrap items-center gap-1.5">
                                     <a href="{{ route('admin.orders.show', $order) }}" wire:navigate class="font-medium text-[#C9A227] hover:underline">
                                         #{{ $order->order_number }}
@@ -91,44 +93,47 @@
                                         </span>
                                     @endif
                                 </div>
-                                @if (filled($order->admin_note))
-                                    <p class="mt-1 text-xs text-[#6B6459] whitespace-pre-line max-w-[14rem]">
-                                        <span class="font-medium text-[#8C8474]">Admin:</span>
-                                        {{ \Illuminate\Support\Str::of($order->admin_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() }}
-                                    </p>
-                                @endif
-                                @if (filled($order->courier_note))
-                                    <p class="mt-1 text-xs text-[#6B6459] whitespace-pre-line max-w-[14rem]">
-                                        <span class="font-medium text-[#8C8474]">Courier:</span>
-                                        {{ \Illuminate\Support\Str::of($order->courier_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() }}
-                                    </p>
-                                @endif
+                                @unless ($readOnly)
+                                    @if (filled($order->admin_note))
+                                        <p class="mt-1 text-xs text-[#6B6459] whitespace-pre-line max-w-[14rem]">
+                                            <span class="font-medium text-[#8C8474]">Admin:</span>
+                                            {{ \Illuminate\Support\Str::of($order->admin_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() }}
+                                        </p>
+                                    @endif
+                                    @if (filled($order->courier_note))
+                                        <p class="mt-1 text-xs text-[#6B6459] whitespace-pre-line max-w-[14rem]">
+                                            <span class="font-medium text-[#8C8474]">Courier:</span>
+                                            {{ \Illuminate\Support\Str::of($order->courier_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() }}
+                                        </p>
+                                    @endif
+                                @endunless
                             </td>
-                            <td class="px-4 py-3">
+                            <td class="px-4 py-3 {{ $readOnly ? 'align-middle' : '' }}">
                                 <div>{{ $order->name }}</div>
                                 <div class="text-[#8C8474]">{{ $order->phone }}</div>
                             </td>
-                            <td class="px-4 py-3">
+                            <td class="px-4 py-3 {{ $readOnly ? 'align-middle' : '' }}">
                                 @if ($order->items->isEmpty())
                                     <span class="text-[#8C8474]">—</span>
                                 @else
-                                    <div class="flex flex-wrap items-start gap-3">
+                                    <div @class(['flex flex-wrap items-start', 'gap-4' => $readOnly, 'gap-3' => ! $readOnly])>
                                         @foreach ($order->items as $item)
                                             <x-order-product-thumb
                                                 :item="$item"
+                                                :size="$readOnly ? 'md' : 'sm'"
                                                 show-quantity
-                                                :show-return="$segment === 'return-pending'"
+                                                :show-return="! $readOnly && $segment === 'return-pending'"
                                             />
                                         @endforeach
                                     </div>
                                 @endif
                             </td>
-                            <td class="px-4 py-3">&#2547; {{ number_format($order->total, 0) }}</td>
-                            <td class="px-4 py-3 capitalize">{{ $order->status }}</td>
-                            <td class="px-4 py-3 text-[#6B6459]">{{ $order->placed_at?->format('d M Y') }}</td>
-                            <td class="px-4 py-3 text-right whitespace-nowrap">
-                                <div class="inline-flex items-center gap-2">
-                                    @unless ($readOnly)
+                            @unless ($readOnly)
+                                <td class="px-4 py-3">&#2547; {{ number_format($order->total, 0) }}</td>
+                                <td class="px-4 py-3 capitalize">{{ $order->status }}</td>
+                                <td class="px-4 py-3 text-[#6B6459]">{{ $order->placed_at?->format('d M Y') }}</td>
+                                <td class="px-4 py-3 text-right whitespace-nowrap">
+                                    <div class="inline-flex items-center gap-2">
                                         @if ($segment === 'new')
                                             <button type="button"
                                                 wire:click="quickDispatch({{ $order->id }})"
@@ -202,16 +207,14 @@
                                                 H/R
                                             </button>
                                         @endif
-                                    @endunless
-                                    <a href="{{ route('admin.orders.print', $order) }}" target="_blank"
-                                        title="Print label"
-                                        aria-label="Print label"
-                                        class="inline-flex items-center opacity-70 hover:opacity-100">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                                            <path fill="#6B6459" d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/>
-                                        </svg>
-                                    </a>
-                                    @unless ($readOnly)
+                                        <a href="{{ route('admin.orders.print', $order) }}" target="_blank"
+                                            title="Print label"
+                                            aria-label="Print label"
+                                            class="inline-flex items-center opacity-70 hover:opacity-100">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                                                <path fill="#6B6459" d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/>
+                                            </svg>
+                                        </a>
                                         <a href="{{ route('admin.orders.create', ['repeat' => $order->id]) }}"
                                             title="Repeat order"
                                             aria-label="Repeat order"
@@ -230,15 +233,15 @@
                                                 <path fill="#B91C1C" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                                             </svg>
                                         </button>
-                                    @endunless
-                                </div>
-                            </td>
+                                    </div>
+                                </td>
+                            @endunless
                         </tr>
                         @if ($segment === 'dispatched')
                             @php($events = $trackingByOrder[$order->id]['events'] ?? [])
                             @php($courierStatus = $trackingByOrder[$order->id]['status'] ?? null)
                             <tr wire:key="order-tracking-{{ $order->id }}">
-                                <td class="px-4 pt-2 pb-6" colspan="{{ $readOnly ? 7 : 8 }}">
+                                <td class="px-4 pt-2 pb-6" colspan="{{ $readOnly ? 3 : 8 }}">
                                     <div
                                         x-data="{ open: true }"
                                         class="ml-8 mb-3 overflow-hidden rounded-lg border border-[#EFE7D6] bg-white"
@@ -294,7 +297,7 @@
                         @endif
                     @empty
                         <tr>
-                            <td colspan="{{ $readOnly ? 7 : 8 }}" class="px-4 py-8 text-center text-[#8C8474]">No orders found.</td>
+                            <td colspan="{{ $readOnly ? 3 : 8 }}" class="px-4 py-8 text-center text-[#8C8474]">No orders found.</td>
                         </tr>
                     @endforelse
                 </tbody>

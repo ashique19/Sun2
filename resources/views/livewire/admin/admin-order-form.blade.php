@@ -168,6 +168,7 @@
 
                     <div
                         x-data="{ pasteHint: '' }"
+                        tabindex="0"
                         x-on:paste="
                             const items = [...($event.clipboardData?.items || [])];
                             const imageItem = items.find((item) => item.type && item.type.startsWith('image/'));
@@ -181,15 +182,14 @@
                             if (! file) return;
                             $wire.upload('pastedImage', file, () => {}, () => {}, () => {});
                         "
-                        class="mb-4 rounded-lg border border-dashed border-[#E0D6C2] bg-[#FAF6EF]/50 px-4 py-3 text-sm text-[#6B6459]"
+                        class="mb-4 rounded-lg border border-dashed border-[#E0D6C2] bg-[#FAF6EF]/50 px-4 py-3 text-sm text-[#6B6459] focus:outline-none focus:ring-1 focus:ring-[#C9A227] focus:border-[#C9A227]"
                     >
-                        <p class="font-medium text-[#1E1E1E]">Paste product image</p>
-                        <p class="text-xs mt-1">Tap the field below, then paste (mobile long-press → Paste, or Ctrl+V). ≥90% auto-adds; 80–90% shows suggestions.</p>
-                        <input type="text"
-                            autocomplete="off"
-                            placeholder="Tap here, then paste image…"
-                            class="mt-3 w-full rounded-lg border border-[#E0D6C2] bg-white px-4 py-2.5 text-sm text-[#1E1E1E] focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
-                            x-on:input="$el.value = ''"
+                        <p class="font-medium text-[#1E1E1E]">Product image</p>
+                        <p class="text-xs mt-1">Choose a file or paste (Ctrl+V / Cmd+V). ≥90% auto-adds; 80–90% shows suggestions.</p>
+                        <input type="file"
+                            wire:model="pastedImage"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            class="mt-3 block w-full text-sm text-[#6B6459] file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-[#1E1E1E] hover:file:bg-[#F1EADB]"
                         >
                         <div wire:loading wire:target="pastedImage,searchByPastedImage" class="text-xs text-[#8C8474] mt-2">Matching image…</div>
                         <p class="text-xs text-amber-700 mt-2" x-text="pasteHint" x-show="pasteHint" x-cloak></p>

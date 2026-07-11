@@ -1,4 +1,4 @@
-<div class="pb-24 xl:pb-0">
+<div class="min-w-0 max-w-full overflow-x-hidden pb-24 xl:pb-0">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
         <div class="min-w-0">
             <a href="{{ $order ? route('admin.orders.show', $order) : route('admin.orders.new') }}"
@@ -14,19 +14,19 @@
     </div>
 
     @if ($message)
-        <div class="rounded-lg bg-emerald-50 text-emerald-700 text-sm px-4 py-3 mb-4">{{ $message }}</div>
+        <div class="rounded-lg bg-emerald-50 text-emerald-700 text-sm px-4 py-3 mb-4 break-words">{{ $message }}</div>
     @endif
     @if ($error)
-        <div class="rounded-lg bg-rose-50 text-rose-700 text-sm px-4 py-3 mb-4">{{ $error }}</div>
+        <div class="rounded-lg bg-rose-50 text-rose-700 text-sm px-4 py-3 mb-4 break-words">{{ $error }}</div>
     @endif
 
-    <form wire:submit="save" class="space-y-4 sm:space-y-6">
-        <div class="grid xl:grid-cols-3 gap-4 sm:gap-6 items-start">
-            <div class="xl:col-span-2 space-y-4 sm:space-y-6">
-                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
+    <form wire:submit="save" class="min-w-0 space-y-4 sm:space-y-6">
+        <div class="grid xl:grid-cols-3 gap-4 sm:gap-6 items-start min-w-0">
+            <div class="xl:col-span-2 space-y-4 sm:space-y-6 min-w-0">
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6 min-w-0 overflow-hidden">
                     <h2 class="font-semibold mb-3 sm:mb-4">Customer &amp; Delivery</h2>
-                    <div class="grid grid-cols-2 gap-3 sm:gap-4 text-sm">
-                        <div class="col-span-2">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
+                        <div class="sm:col-span-2">
                             <label class="block text-[#6B6459] mb-1">Phone / paste customer block</label>
                             <textarea wire:model.live.debounce.500ms="phone" rows="3"
                                 placeholder="Paste name, phone, address… or type 01XXXXXXXXX"
@@ -67,13 +67,13 @@
                                 </div>
                             @endif
                         </div>
-                        <div class="col-span-2">
+                        <div class="sm:col-span-2">
                             <label class="block text-[#6B6459] mb-1">Name</label>
                             <input type="text" wire:model="name"
                                 class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
                             @error('name') <p class="text-rose-600 text-xs mt-1">{{ $message }}</p> @enderror
                         </div>
-                        <div class="col-span-2">
+                        <div class="sm:col-span-2">
                             <label class="block text-[#6B6459] mb-1">Address</label>
                             <textarea wire:model.live.debounce.400ms="address" rows="2"
                                 class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"></textarea>
@@ -82,7 +82,7 @@
                                 <p class="text-xs text-emerald-700 mt-1">{{ $addressLocationHint }}</p>
                             @endif
                         </div>
-                        <div class="col-span-2">
+                        <div class="sm:col-span-2">
                             <label class="inline-flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" wire:model.live="isExchange"
                                     class="rounded border-[#C9A227] text-[#C9A227] focus:ring-[#C9A227]">
@@ -115,17 +115,17 @@
                     </div>
                 </div>
 
-                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6 min-w-0 overflow-hidden">
                     <h2 class="font-semibold mb-3 sm:mb-4">Order lines</h2>
                     @error('lines') <p class="text-rose-600 text-sm mb-3">{{ $message }}</p> @enderror
 
                     @if ($lines === [])
                         <p class="text-sm text-[#8C8474]">No products added yet. Search below to add products.</p>
                     @else
-                        <div class="space-y-3">
+                        <div class="space-y-3 min-w-0">
                             @foreach ($lines as $productId => $line)
-                                <div wire:key="line-{{ $productId }}" class="rounded-lg border border-[#E7DFCF] p-3">
-                                    <div class="flex gap-3">
+                                <div wire:key="line-{{ $productId }}" class="rounded-lg border border-[#E7DFCF] p-3 min-w-0 overflow-hidden">
+                                    <div class="flex gap-3 min-w-0">
                                         <a href="{{ route('admin.products.edit', $productId) }}"
                                             wire:navigate
                                             title="{{ $line['name'] }}"
@@ -138,10 +138,10 @@
                                                 <div class="h-14 w-14 sm:h-16 sm:w-16 rounded-md border border-[#E7DFCF] bg-[#FAF6EF] flex items-center justify-center text-xs text-[#8C8474]">No img</div>
                                             @endif
                                         </a>
-                                        <div class="min-w-0 flex-1">
-                                            <div class="flex items-start justify-between gap-2">
-                                                <div class="min-w-0">
-                                                    <p class="text-sm font-medium text-[#1E1E1E] truncate">{{ $line['name'] }}</p>
+                                        <div class="min-w-0 flex-1 overflow-hidden">
+                                            <div class="flex items-start justify-between gap-2 min-w-0">
+                                                <div class="min-w-0 flex-1 overflow-hidden">
+                                                    <p class="text-sm font-medium text-[#1E1E1E] truncate" title="{{ $line['name'] }}">{{ $line['name'] }}</p>
                                                     <p class="text-xs text-[#8C8474] mt-0.5">
                                                         &#2547; {{ number_format($line['price'], 0) }} each
                                                         &middot; Stock: {{ $line['stock_quantity'] }}
@@ -160,7 +160,7 @@
                                                         wire:model.live="lines.{{ $productId }}.quantity"
                                                         class="w-16 sm:w-20 rounded-lg border border-[#E0D6C2] px-2 py-1.5 text-sm">
                                                 </div>
-                                                <div class="font-medium text-sm tabular-nums">
+                                                <div class="font-medium text-sm tabular-nums shrink-0">
                                                     &#2547; {{ number_format($line['line_total'], 0) }}
                                                 </div>
                                             </div>
@@ -172,7 +172,7 @@
                     @endif
                 </div>
 
-                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6 min-w-0 overflow-hidden">
                     <h2 class="font-semibold mb-3 sm:mb-4">Add products</h2>
 
                     <div
@@ -191,7 +191,7 @@
                             if (! file) return;
                             $wire.upload('pastedImage', file, () => {}, () => {}, () => {});
                         "
-                        class="mb-4 rounded-lg border border-dashed border-[#E0D6C2] bg-[#FAF6EF]/50 px-3 sm:px-4 py-3 text-sm text-[#6B6459] focus:outline-none focus:ring-1 focus:ring-[#C9A227] focus:border-[#C9A227]"
+                        class="mb-4 rounded-lg border border-dashed border-[#E0D6C2] bg-[#FAF6EF]/50 px-3 sm:px-4 py-3 text-sm text-[#6B6459] focus:outline-none focus:ring-1 focus:ring-[#C9A227] focus:border-[#C9A227] min-w-0 overflow-hidden"
                     >
                         <p class="font-medium text-[#1E1E1E]">Product image</p>
                         <p class="text-xs mt-1">Choose a file or paste (Ctrl+V / Cmd+V). ≥90% auto-adds; 80–90% shows suggestions.</p>
@@ -201,14 +201,14 @@
                             class="mt-3 block w-full max-w-full text-sm text-[#6B6459] file:mr-3 file:mb-1 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-[#1E1E1E] hover:file:bg-[#F1EADB]"
                         >
                         <div wire:loading wire:target="pastedImage,searchByPastedImage" class="text-xs text-[#8C8474] mt-2">Matching image…</div>
-                        <p class="text-xs text-amber-700 mt-2" x-text="pasteHint" x-show="pasteHint" x-cloak></p>
-                        @error('pastedImage') <p class="text-rose-600 text-xs mt-2">{{ $message }}</p> @enderror
+                        <p class="text-xs text-amber-700 mt-2 break-words" x-text="pasteHint" x-show="pasteHint" x-cloak></p>
+                        @error('pastedImage') <p class="text-rose-600 text-xs mt-2 break-words">{{ $message }}</p> @enderror
                         @if ($imageSearchError)
-                            <p class="text-rose-600 text-xs mt-2">{{ $imageSearchError }}</p>
+                            <p class="text-rose-600 text-xs mt-2 break-words">{{ $imageSearchError }}</p>
                         @endif
                     </div>
 
-                    <div class="grid grid-cols-1 sm:flex sm:flex-wrap gap-3 mb-4">
+                    <div class="flex flex-col sm:flex-row sm:flex-wrap gap-3 mb-4 min-w-0">
                         <input type="search" wire:model.live.debounce.300ms="productSearch"
                             placeholder="Search name, SKU, price…"
                             class="w-full sm:flex-1 sm:min-w-[12rem] rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">

@@ -37,7 +37,7 @@
             <ul class="space-y-2 text-[#6B6459]">
                 <li>Helpline: 01880001255</li>
                 <li>info@sundoritoma.com</li>
-                <li>Free delivery inside Dhaka</li>
+                <li>Home delivery all over Bangladesh</li>
                 <li>Cash on Delivery available</li>
             </ul>
         </div>

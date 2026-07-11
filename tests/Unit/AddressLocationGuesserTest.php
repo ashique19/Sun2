@@ -4,7 +4,6 @@ namespace Tests\Unit;
 
 use App\Models\Area;
 use App\Models\City;
-use App\Services\Locations\LocationAliasLearner;
 use App\Services\Storefront\AddressLocationGuesser;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -13,19 +12,26 @@ class AddressLocationGuesserTest extends TestCase
 {
     use RefreshDatabase;
 
+    private AddressLocationGuesser $guesser;
+
     private City $dhaka;
 
     private City $chattogram;
 
     private Area $wari;
 
-    private Area $kotwaliChattogram;
+    private Area $uttara;
+
+    private Area $bondor;
+
+    private Area $kotwali;
 
     protected function setUp(): void
     {
         parent::setUp();
 
         AddressLocationGuesser::clearCache();
+        $this->guesser = app(AddressLocationGuesser::class);
 
         $this->dhaka = City::query()->create([
             'name' => 'Dhaka',
@@ -34,7 +40,6 @@ class AddressLocationGuesserTest extends TestCase
             'is_dhaka' => true,
             'is_active' => true,
         ]);
-
         $this->chattogram = City::query()->create([
             'name' => 'Chattogram',
             'slug' => 'chattogram-chattogram',
@@ -52,8 +57,24 @@ class AddressLocationGuesserTest extends TestCase
             'delivery_charge_upto_5' => 80,
             'delivery_charge_over_5' => 150,
         ]);
-
-        $this->kotwaliChattogram = Area::query()->create([
+        $this->uttara = Area::query()->create([
+            'city_id' => $this->dhaka->id,
+            'name' => 'Uttara',
+            'slug' => 'dhaka-dhaka-uttara',
+            'is_active' => true,
+            'delivery_charge_upto_5' => 80,
+            'delivery_charge_over_5' => 150,
+        ]);
+        $this->bondor = Area::query()->create([
+            'city_id' => $this->chattogram->id,
+            'name' => 'Bondor',
+            'slug' => 'chattogram-chattogram-bondor',
+            'aliases' => ['বন্দর'],
+            'is_active' => true,
+            'delivery_charge_upto_5' => 120,
+            'delivery_charge_over_5' => 200,
+        ]);
+        $this->kotwali = Area::query()->create([
             'city_id' => $this->chattogram->id,
             'name' => 'Kotwali',
             'slug' => 'chattogram-chattogram-kotwali',
@@ -64,41 +85,68 @@ class AddressLocationGuesserTest extends TestCase
         ]);
     }
 
-    public function test_chatteswari_alias_resolves_kotwali_in_chattogram(): void
+    public function test_it_matches_area_and_returns_its_city(): void
     {
-        $guess = app(AddressLocationGuesser::class)->guess(
-            '449, Finlay zaran, Chatteswari road, chattogram.',
+        $result = $this->guesser->guess('House 12, Wari, Dhaka');
+
+        $this->assertSame($this->dhaka->id, $result['city_id']);
+        $this->assertSame($this->wari->id, $result['area_id']);
+    }
+
+    public function test_it_does_not_match_city_name_alone_without_area(): void
+    {
+        $this->assertNull($this->guesser->guess('Deliver to Chittagong please'));
+    }
+
+    public function test_chatteswari_alias_resolves_kotwali_not_dhaka_wari(): void
+    {
+        $result = $this->guesser->guess(
+            'Soma Chowdhury 449, Finlay zaran, Chatteswari road, chattogram. 01819610359'
         );
 
-        $this->assertNotNull($guess);
-        $this->assertSame($this->chattogram->id, $guess['city_id']);
-        $this->assertSame($this->kotwaliChattogram->id, $guess['area_id']);
-        $this->assertSame('Kotwali, Chattogram', $guess['label']);
+        $this->assertNotNull($result);
+        $this->assertSame($this->chattogram->id, $result['city_id']);
+        $this->assertSame($this->kotwali->id, $result['area_id']);
+        $this->assertNotSame($this->wari->id, $result['area_id']);
     }
 
-    public function test_city_db_alias_resolves_chittagong(): void
+    public function test_it_matches_uttara_sector_as_area_and_city(): void
     {
-        $guess = app(AddressLocationGuesser::class)->guess('Near Agrabad, Chittagong');
+        $result = $this->guesser->guess('Flat B3, Uttara Sector 10, Dhaka');
 
-        $this->assertNotNull($guess);
-        $this->assertSame($this->chattogram->id, $guess['city_id']);
+        $this->assertSame($this->dhaka->id, $result['city_id']);
+        $this->assertSame($this->uttara->id, $result['area_id']);
     }
 
-    public function test_standalone_wari_still_matches_dhaka_area(): void
+    public function test_it_matches_area_alias_and_picks_city(): void
     {
-        $guess = app(AddressLocationGuesser::class)->guess('12 Rankin Street, Wari, Dhaka');
+        $result = $this->guesser->guess('Delivery to বন্দর, Chattogram');
 
-        $this->assertNotNull($guess);
-        $this->assertSame($this->dhaka->id, $guess['city_id']);
-        $this->assertSame($this->wari->id, $guess['area_id']);
+        $this->assertSame($this->chattogram->id, $result['city_id']);
+        $this->assertSame($this->bondor->id, $result['area_id']);
     }
 
-    public function test_area_match_is_scoped_to_detected_city(): void
+    public function test_it_matches_hyphenated_area_slug_tokens(): void
     {
-        $guess = app(AddressLocationGuesser::class)->guess('Near Kotwali, Chattogram');
+        Area::query()->create([
+            'city_id' => $this->dhaka->id,
+            'name' => 'Mirpur DOHS',
+            'slug' => 'mirpur-dohs-dhaka',
+            'is_active' => true,
+            'delivery_charge_upto_5' => 80,
+            'delivery_charge_over_5' => 150,
+        ]);
+        AddressLocationGuesser::clearCache();
 
-        $this->assertNotNull($guess);
-        $this->assertSame($this->chattogram->id, $guess['city_id']);
-        $this->assertSame($this->kotwaliChattogram->id, $guess['area_id']);
+        $result = $this->guesser->guess('House 5, Mirpur DOHS');
+
+        $this->assertNotNull($result);
+        $this->assertSame($this->dhaka->id, $result['city_id']);
+        $this->assertSame('Mirpur DOHS', Area::query()->find($result['area_id'])?->name);
+    }
+
+    public function test_it_returns_null_when_no_area_matches(): void
+    {
+        $this->assertNull($this->guesser->guess('Unknown village somewhere'));
     }
 }

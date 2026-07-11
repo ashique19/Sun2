@@ -16,103 +16,106 @@ class LocationAliasLearner
         'market', 'thana', 'upazila', 'sadar', 'area', 'city', 'district', 'division',
         'bangladesh', 'bd', 'near', 'opposite', 'beside', 'behind', 'front', 'gate',
         'mosque', 'masjid', 'school', 'college', 'hospital', 'park', 'bridge',
+        'delivery', 'deliver', 'please', 'customer', 'order', 'phone', 'mobile',
+        'name', 'address', 'total', 'due', 'taka', 'tk',
     ];
 
-    public function __construct(
-        private AddressLocationGuesser $guesser,
-    ) {}
-
     /**
-     * Learn aliases when an admin finalizes city/area for an address that the
-     * auto-guesser missed or mismatched.
+     * Build a confirmable alias suggestion when the admin picks/corrects an area.
      *
-     * @return array{area: list<string>, city: list<string>}
+     * @return array{
+     *     area_id: int,
+     *     alias: string,
+     *     area_name: string,
+     *     city_name: string,
+     *     prompt: string
+     * }|null
      */
-    public function learnFromCorrection(
+    public function suggestAlias(
         ?string $address,
-        ?int $selectedCityId,
         ?int $selectedAreaId,
-        ?int $guessedCityId = null,
         ?int $guessedAreaId = null,
-    ): array {
-        $learned = ['area' => [], 'city' => []];
-
-        if (! $selectedCityId || trim((string) $address) === '') {
-            return $learned;
+    ): ?array {
+        if (! $selectedAreaId || trim((string) $address) === '') {
+            return null;
         }
 
-        $guess = $this->guesser->guess($address);
-        $effectiveGuessedCityId = $guessedCityId ?? $guess['city_id'] ?? null;
-        $effectiveGuessedAreaId = $guessedAreaId ?? $guess['area_id'] ?? null;
-
-        $city = City::query()->find($selectedCityId);
-        $area = $selectedAreaId
-            ? Area::query()->whereKey($selectedAreaId)->where('city_id', $selectedCityId)->first()
-            : null;
-
-        if (! $city) {
-            return $learned;
+        if ($guessedAreaId && (int) $guessedAreaId === (int) $selectedAreaId) {
+            return null;
         }
 
-        // City was wrong or missing → learn city aliases from address tokens that
-        // look like the selected city name variants (handled lightly via leftover phrases).
-        if ($effectiveGuessedCityId && (int) $effectiveGuessedCityId !== (int) $selectedCityId) {
-            // Do not auto-learn city aliases aggressively; city names are short and risky.
+        $area = Area::query()->with('city:id,name,slug,aliases')->find($selectedAreaId);
+
+        if (! $area?->city) {
+            return null;
         }
 
-        if (! $area) {
-            return $learned;
-        }
-
-        // Only learn when the guesser did not already land on this area.
-        if ($effectiveGuessedAreaId && (int) $effectiveGuessedAreaId === (int) $area->id) {
-            return $learned;
-        }
-
-        $candidates = $this->candidatePhrases($address, $city, $area);
-
-        if ($candidates === []) {
-            return $learned;
-        }
-
-        $safe = [];
+        $candidates = $this->candidatePhrases($address, $area->city, $area);
 
         foreach ($candidates as $candidate) {
             if ($this->aliasConflictsWithOtherArea($candidate, $area)) {
                 continue;
             }
 
-            $safe[] = $candidate;
-        }
+            if ($this->areaAlreadyHasAlias($area, $candidate)) {
+                continue;
+            }
 
-        if ($safe === []) {
-            return $learned;
-        }
-
-        $learned['area'] = $area->addAliases($safe);
-
-        if ($learned['area'] !== []) {
-            AddressLocationGuesser::clearCache();
-
-            Log::info('Learned area aliases from admin correction.', [
+            return [
                 'area_id' => $area->id,
-                'area' => $area->name,
-                'aliases' => $learned['area'],
-                'address' => $address,
-            ]);
+                'alias' => $candidate,
+                'area_name' => $area->name,
+                'city_name' => $area->city->name,
+                'prompt' => 'Add '.$candidate.' to '.$area->city->name.' > '.$area->name.' alias?',
+            ];
         }
 
-        return $learned;
+        return null;
     }
 
     /**
-     * @return list<string>
+     * @return list<string> newly added aliases
+     */
+    public function confirmAlias(int $areaId, string $alias): array
+    {
+        $alias = trim($alias);
+
+        if ($alias === '' || mb_strlen($alias) < 2) {
+            return [];
+        }
+
+        $area = Area::query()->with('city:id,name')->find($areaId);
+
+        if (! $area) {
+            return [];
+        }
+
+        if ($this->aliasConflictsWithOtherArea($alias, $area)) {
+            return [];
+        }
+
+        $added = $area->addAliases([$alias]);
+
+        if ($added !== []) {
+            AddressLocationGuesser::clearCache();
+
+            Log::info('Confirmed area alias from admin prompt.', [
+                'area_id' => $area->id,
+                'area' => $area->name,
+                'aliases' => $added,
+            ]);
+        }
+
+        return $added;
+    }
+
+    /**
+     * @return list<string> original-cased phrases from the address
      */
     public function candidatePhrases(string $address, City $city, Area $area): array
     {
-        $normalized = $this->normalize($address);
-        $tokens = preg_split('/\s+/u', $normalized) ?: [];
-        $tokens = array_values(array_filter($tokens, fn (string $token) => $token !== ''));
+        $originalTokens = $this->tokenizePreserveCase($address);
+        $normalizedTokens = array_map(fn (string $token) => $this->normalize($token), $originalTokens);
 
         $skip = array_unique(array_filter([
             ...self::STOPWORDS,
@@ -126,10 +129,9 @@ class LocationAliasLearner
 
         $candidates = [];
 
-        // Prefer 2-token phrases, then strong single tokens.
-        for ($i = 0; $i < count($tokens) - 1; $i++) {
-            $left = $tokens[$i];
-            $right = $tokens[$i + 1];
+        for ($i = 0; $i < count($normalizedTokens) - 1; $i++) {
+            $left = $normalizedTokens[$i];
+            $right = $normalizedTokens[$i + 1];
 
             if ($this->isSkippableToken($left, $skip) || $this->isSkippableToken($right, $skip)) {
                 continue;
@@ -139,14 +141,18 @@ class LocationAliasLearner
                 continue;
             }
 
-            $phrase = $left.' '.$right;
+            $phraseNormalized = $left.' '.$right;
 
-            if (mb_strlen($phrase) >= 7) {
-                $candidates[] = $phrase;
+            if (mb_strlen($phraseNormalized) >= 6) {
+                $candidates[] = [
+                    'display' => $originalTokens[$i].' '.$originalTokens[$i + 1],
+                    'normalized' => $phraseNormalized,
+                    'length' => mb_strlen($phraseNormalized),
+                ];
             }
         }
 
-        foreach ($tokens as $token) {
+        foreach ($normalizedTokens as $index => $token) {
             if ($this->isSkippableToken($token, $skip)) {
                 continue;
             }
@@ -155,26 +161,38 @@ class LocationAliasLearner
                 continue;
             }
 
-            if (mb_strlen($token) >= 5) {
-                $candidates[] = $token;
+            if (mb_strlen($token) >= 4) {
+                $candidates[] = [
+                    'display' => $originalTokens[$index],
+                    'normalized' => $token,
+                    'length' => mb_strlen($token),
+                ];
             }
         }
 
-        // Keep longest / most specific first, unique.
-        usort($candidates, fn (string $a, string $b) => mb_strlen($b) <=> mb_strlen($a));
+        usort($candidates, function (array $a, array $b) {
+            $aNonLatin = preg_match('/[^\p{Latin}\p{N}\s]/u', $a['display']) === 1 ? 1 : 0;
+            $bNonLatin = preg_match('/[^\p{Latin}\p{N}\s]/u', $b['display']) === 1 ? 1 : 0;
+
+            if ($aNonLatin !== $bNonLatin) {
+                return $bNonLatin <=> $aNonLatin;
+            }
+
+            return $b['length'] <=> $a['length'];
+        });
 
         $unique = [];
         $seen = [];
 
         foreach ($candidates as $candidate) {
-            if (isset($seen[$candidate])) {
+            if (isset($seen[$candidate['normalized']])) {
                 continue;
             }
 
-            $seen[$candidate] = true;
-            $unique[] = $candidate;
+            $seen[$candidate['normalized']] = true;
+            $unique[] = $candidate['display'];
 
-            if (count($unique) >= 3) {
+            if (count($unique) >= 5) {
                 break;
             }
         }
@@ -183,11 +201,41 @@ class LocationAliasLearner
     }
 
     /**
+     * @return list<string>
+     */
+    private function tokenizePreserveCase(string $address): array
+    {
+        // Keep letters, numbers, and combining marks (e.g. Bangla hasant/virama).
+        $text = preg_replace('/[^\p{L}\p{N}\p{M}\s]/u', ' ', $address) ?? $address;
+        $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
+        $tokens = preg_split('/\s+/u', trim($text)) ?: [];
+
+        return array_values(array_filter($tokens, fn (string $token) => $token !== ''));
+    }
+
+    /**
      * @param  list<string>  $skip
      */
     private function isSkippableToken(string $token, array $skip): bool
     {
-        return in_array($token, $skip, true) || mb_strlen($token) < 4;
+        return in_array($token, $skip, true) || mb_strlen($token) < 3;
+    }
+
+    private function areaAlreadyHasAlias(Area $area, string $alias): bool
+    {
+        $normalized = $this->normalize($alias);
+
+        if ($this->normalize($area->name) === $normalized) {
+            return true;
+        }
+
+        foreach ($area->aliasList() as $existing) {
+            if ($this->normalize($existing) === $normalized) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function aliasConflictsWithOtherArea(string $alias, Area $area): bool
@@ -216,7 +264,7 @@ class LocationAliasLearner
     private function normalize(?string $text): string
     {
         $text = mb_strtolower(trim((string) $text));
-        $text = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $text) ?? $text;
+        $text = preg_replace('/[^\p{L}\p{N}\p{M}\s]/u', ' ', $text) ?? $text;
         $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
 
         return trim($text);

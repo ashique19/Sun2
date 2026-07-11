@@ -13,76 +13,83 @@ class LocationAliasLearnerTest extends TestCase
 {
     use RefreshDatabase;
 
-    private City $chattogram;
+    private LocationAliasLearner $learner;
 
-    private Area $kotwali;
+    private City $chittagong;
+
+    private Area $bondor;
 
     protected function setUp(): void
     {
         parent::setUp();
 
         AddressLocationGuesser::clearCache();
+        $this->learner = app(LocationAliasLearner::class);
 
-        $this->chattogram = City::query()->create([
-            'name' => 'Chattogram',
-            'slug' => 'chattogram-chattogram',
+        $this->chittagong = City::query()->create([
+            'name' => 'Chittagong',
+            'slug' => 'chittagong-chittagong',
             'division' => 'Chattogram',
             'is_dhaka' => false,
             'is_active' => true,
         ]);
-
-        $this->kotwali = Area::query()->create([
-            'city_id' => $this->chattogram->id,
-            'name' => 'Kotwali',
-            'slug' => 'chattogram-chattogram-kotwali',
+        $this->bondor = Area::query()->create([
+            'city_id' => $this->chittagong->id,
+            'name' => 'Bondor',
+            'slug' => 'chittagong-chittagong-bondor',
             'is_active' => true,
             'delivery_charge_upto_5' => 120,
             'delivery_charge_over_5' => 200,
         ]);
     }
 
-    public function test_learns_aliases_when_admin_selects_area_guesser_missed(): void
+    public function test_it_suggests_bangla_alias_for_selected_area(): void
     {
-        $learner = app(LocationAliasLearner::class);
-
-        $learned = $learner->learnFromCorrection(
-            address: '449, Finlay zaran, Chatteswari road, chattogram.',
-            selectedCityId: $this->chattogram->id,
-            selectedAreaId: $this->kotwali->id,
-            guessedCityId: $this->chattogram->id,
-            guessedAreaId: null,
+        $suggestion = $this->learner->suggestAlias(
+            "Delivery to বন্দর area\nChittagong",
+            $this->bondor->id,
         );
 
-        $this->assertNotEmpty($learned['area']);
-        $this->assertContains('chatteswari', array_map('mb_strtolower', $learned['area']));
-
-        $this->kotwali->refresh();
-        $this->assertTrue(collect($this->kotwali->aliasList())
-            ->map(fn ($alias) => mb_strtolower($alias))
-            ->contains('chatteswari'));
-
-        AddressLocationGuesser::clearCache();
-
-        $guess = app(AddressLocationGuesser::class)->guess(
-            '449, Finlay zaran, Chatteswari road, chattogram.',
-        );
-
-        $this->assertSame($this->kotwali->id, $guess['area_id'] ?? null);
+        $this->assertNotNull($suggestion);
+        $this->assertSame($this->bondor->id, $suggestion['area_id']);
+        $this->assertSame('বন্দর', $suggestion['alias']);
+        $this->assertSame('Add বন্দর to Chittagong > Bondor alias?', $suggestion['prompt']);
     }
 
-    public function test_does_not_learn_when_guess_already_matched_area(): void
+    public function test_it_does_not_suggest_when_auto_picked_area_matches(): void
     {
-        $this->kotwali->addAliases(['chatteswari']);
-        AddressLocationGuesser::clearCache();
+        $this->assertNull($this->learner->suggestAlias(
+            'Delivery to বন্দর',
+            $this->bondor->id,
+            $this->bondor->id,
+        ));
+    }
 
-        $learned = app(LocationAliasLearner::class)->learnFromCorrection(
-            address: '449, Finlay zaran, Chatteswari road, chattogram.',
-            selectedCityId: $this->chattogram->id,
-            selectedAreaId: $this->kotwali->id,
-            guessedCityId: $this->chattogram->id,
-            guessedAreaId: $this->kotwali->id,
-        );
+    public function test_it_does_not_suggest_when_phrase_already_known(): void
+    {
+        $this->bondor->update(['aliases' => ['বন্দর']]);
 
-        $this->assertSame([], $learned['area']);
+        $this->assertNull($this->learner->suggestAlias(
+            'Delivery to বন্দর',
+            $this->bondor->id,
+        ));
+    }
+
+    public function test_confirm_alias_persists_and_is_idempotent(): void
+    {
+        $added = $this->learner->confirmAlias($this->bondor->id, 'বন্দর');
+        $this->assertSame(['বন্দর'], $added);
+        $this->bondor->refresh();
+        $this->assertContains('বন্দর', $this->bondor->aliasList());
+
+        $this->assertSame([], $this->learner->confirmAlias($this->bondor->id, 'বন্দর'));
+    }
+
+    public function test_it_skips_short_or_numeric_tokens(): void
+    {
+        $this->assertNull($this->learner->suggestAlias(
+            'House 12 Road 5',
+            $this->bondor->id,
+        ));
     }
 }

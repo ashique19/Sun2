@@ -472,4 +472,38 @@
             </div>
         </div>
     @endif
+
+    @if ($showAliasPrompt)
+        <div class="fixed inset-0 z-[100000] flex items-center justify-center p-4">
+            <button type="button" wire:click="dismissAliasPrompt" class="absolute inset-0 bg-black/40" aria-label="Close"></button>
+            <div class="relative w-full max-w-md overflow-hidden rounded-xl border border-[#E7DFCF] bg-white shadow-xl">
+                <div class="flex items-center justify-between border-b border-[#E7DFCF] px-5 py-4">
+                    <h3 class="font-semibold">Save area alias?</h3>
+                    <button type="button" wire:click="dismissAliasPrompt" class="text-[#8C8474] hover:text-[#1E1E1E]">&times;</button>
+                </div>
+                <div class="p-5 space-y-3 text-sm">
+                    <p class="text-[#1E1E1E]">
+                        Add
+                        <span class="font-medium">{{ $aliasPromptText }}</span>
+                        to {{ $aliasPromptCityName }} &gt; {{ $aliasPromptAreaName }} alias?
+                    </p>
+                    <div>
+                        <label class="block text-[#6B6459] mb-1">Alias text</label>
+                        <input type="text" wire:model="aliasPromptText"
+                            class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2">
+                    </div>
+                </div>
+                <div class="border-t border-[#E7DFCF] px-5 py-3 flex justify-end gap-2">
+                    <button type="button" wire:click="dismissAliasPrompt"
+                        class="rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
+                        Skip
+                    </button>
+                    <button type="button" wire:click="confirmAliasPrompt"
+                        class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b89220]">
+                        Yes, save
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
 </div>

@@ -3,22 +3,11 @@
 namespace App\Services\Storefront;
 
 use App\Models\Area;
-use App\Models\City;
 use Illuminate\Support\Facades\Cache;
 
 class AddressLocationGuesser
 {
-    private const CACHE_KEY = 'storefront.location_guess_index.v3';
-
-    /**
-     * Built-in city aliases (DB aliases are also indexed).
-     *
-     * @var array<string, list<string>>
-     */
-    private const CITY_ALIASES = [
-        'chattogram' => ['chittagong', 'ctg', 'চট্টগ্রাম'],
-        'dhaka' => ['ঢাকা'],
-    ];
+    private const CACHE_KEY = 'storefront.location_guess_index.v4';
 
     public static function clearCache(): void
     {
@@ -27,7 +16,9 @@ class AddressLocationGuesser
     }
 
     /**
-     * @return array{city_id: int, area_id: int|null, label: string}|null
+     * Match areas only. City is taken from the matched area.
+     *
+     * @return array{city_id: int, area_id: int, label: string}|null
      */
     public function guess(?string $address): ?array
     {
@@ -35,30 +26,6 @@ class AddressLocationGuesser
 
         if (mb_strlen($needle) < 4) {
             return null;
-        }
-
-        // Prefer an explicit city mention so short area names in other districts
-        // (e.g. Dhaka "Wari" inside "Chatteswari") cannot override the city.
-        $cityMatch = $this->matchFromIndex($needle, $this->cityIndex());
-
-        if ($cityMatch) {
-            $areaInCity = $this->matchFromIndex(
-                $needle,
-                array_values(array_filter(
-                    $this->areaIndex(),
-                    fn (array $row) => $row['city_id'] === $cityMatch['city_id'],
-                )),
-            );
-
-            if ($areaInCity) {
-                return $areaInCity;
-            }
-
-            if ($match = $this->matchUttaraSector($needle, $cityMatch['city_id'])) {
-                return $match;
-            }
-
-            return $cityMatch;
         }
 
         if ($match = $this->matchFromIndex($needle, $this->areaIndex())) {
@@ -73,8 +40,8 @@ class AddressLocationGuesser
     }
 
     /**
-     * @param  list<array{city_id: int, area_id: int|null, label: string, normalized: string, length: int}>  $index
-     * @return array{city_id: int, area_id: int|null, label: string}|null
+     * @param  list<array{city_id: int, area_id: int, label: string, normalized: string, length: int}>  $index
+     * @return array{city_id: int, area_id: int, label: string}|null
      */
     private function matchFromIndex(string $needle, array $index): ?array
     {
@@ -92,9 +59,9 @@ class AddressLocationGuesser
     }
 
     /**
-     * @return array{city_id: int, area_id: int|null, label: string}|null
+     * @return array{city_id: int, area_id: int, label: string}|null
      */
-    private function matchUttaraSector(string $needle, ?int $cityId = null): ?array
+    private function matchUttaraSector(string $needle): ?array
     {
         if (! str_contains($needle, 'uttara') || ! str_contains($needle, 'sector')) {
             return null;
@@ -102,13 +69,7 @@ class AddressLocationGuesser
 
         $area = Area::query()
             ->active()
-            ->whereHas('city', function ($query) use ($cityId) {
-                $query->active()->where('slug', 'dhaka-dhaka');
-
-                if ($cityId) {
-                    $query->whereKey($cityId);
-                }
-            })
+            ->whereHas('city', fn ($query) => $query->active()->where('slug', 'dhaka-dhaka'))
             ->where('name', 'like', 'Uttara%')
             ->orderBy('name')
             ->first(['id', 'city_id', 'name']);
@@ -125,7 +86,7 @@ class AddressLocationGuesser
     }
 
     /**
-     * @return list<array{city_id: int, area_id: int|null, label: string, normalized: string, length: int}>
+     * @return list<array{city_id: int, area_id: int, label: string, normalized: string, length: int}>
      */
     private function areaIndex(): array
     {
@@ -184,7 +145,6 @@ class AddressLocationGuesser
             ...preg_split('/[-_]+/u', $this->normalize((string) ($area->city?->slug ?? ''))) ?: [],
         ]);
 
-        // Slug tokens remain as a fallback for older manually-edited slugs.
         foreach (preg_split('/[-_]+/u', (string) ($area->slug ?? '')) ?: [] as $token) {
             $normalized = $this->normalize($token);
 
@@ -202,47 +162,6 @@ class AddressLocationGuesser
         return array_values(array_unique($phrases));
     }
 
-    /**
-     * @return list<array{city_id: int, area_id: int|null, label: string, normalized: string, length: int}>
-     */
-    private function cityIndex(): array
-    {
-        return Cache::rememberForever(self::CACHE_KEY.':cities', function () {
-            $rows = [];
-
-            foreach (City::query()->active()->get(['id', 'name', 'aliases']) as $city) {
-                $normalizedName = $this->normalize($city->name);
-                $aliasSources = array_merge(
-                    $normalizedName !== '' ? [$city->name] : [],
-                    self::CITY_ALIASES[$normalizedName] ?? [],
-                    $city->aliasList(),
-                );
-
-                foreach ($aliasSources as $phrase) {
-                    $normalized = $this->normalize((string) $phrase);
-
-                    if (mb_strlen($normalized) < 3) {
-                        continue;
-                    }
-
-                    $rows[] = [
-                        'city_id' => $city->id,
-                        'area_id' => null,
-                        'label' => $city->name,
-                        'normalized' => $normalized,
-                        'length' => mb_strlen($normalized),
-                    ];
-                }
-            }
-
-            return collect($rows)
-                ->unique(fn (array $row) => $row['city_id'].'|'.$row['normalized'])
-                ->sortByDesc('length')
-                ->values()
-                ->all();
-        });
-    }
-
     private function containsPhrase(string $haystack, string $phrase): bool
     {
         if ($phrase === '') {
@@ -258,7 +177,7 @@ class AddressLocationGuesser
     private function normalize(?string $text): string
     {
         $text = mb_strtolower(trim((string) $text));
-        $text = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $text) ?? $text;
+        $text = preg_replace('/[^\p{L}\p{N}\p{M}\s]/u', ' ', $text) ?? $text;
         $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
 
         return trim($text);

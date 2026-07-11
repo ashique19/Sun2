@@ -59,6 +59,8 @@ class AdminOrderForm extends Component
 
     public bool $suppressAddressGuess = false;
 
+    private bool $applyingAutoLocation = false;
+
     public string $deliveryCharge = '0';
 
     public string $charge = '0';
@@ -114,6 +116,16 @@ class AdminOrderForm extends Component
     public ?int $guessedCityId = null;
 
     public ?int $guessedAreaId = null;
+
+    public bool $showAliasPrompt = false;
+
+    public ?int $aliasPromptAreaId = null;
+
+    public string $aliasPromptText = '';
+
+    public string $aliasPromptCityName = '';
+
+    public string $aliasPromptAreaName = '';
 
     public function mount(?Order $order = null): void
     {
@@ -293,16 +305,29 @@ class AdminOrderForm extends Component
             $this->suppressAddressGuess = false;
         }
 
-        if (! empty($parsed['cityId'])) {
-            $this->cityId = (int) $parsed['cityId'];
-            $this->guessedCityId = $this->cityId;
-        }
+        // Set guessed ids before city/area so updated* hooks do not offer a false alias prompt.
+        $this->applyingAutoLocation = true;
 
-        if (! empty($parsed['areaId'])) {
-            $this->areaId = (int) $parsed['areaId'];
-            $this->guessedAreaId = $this->areaId;
-        } elseif (! empty($parsed['cityId'])) {
-            $this->guessedAreaId = null;
+        try {
+            if (! empty($parsed['areaId'])) {
+                $this->guessedAreaId = (int) $parsed['areaId'];
+                $this->guessedCityId = ! empty($parsed['cityId'])
+                    ? (int) $parsed['cityId']
+                    : $this->guessedCityId;
+            } elseif (! empty($parsed['cityId'])) {
+                $this->guessedAreaId = null;
+                $this->guessedCityId = (int) $parsed['cityId'];
+            }
+
+            if (! empty($parsed['cityId'])) {
+                $this->cityId = (int) $parsed['cityId'];
+            }
+
+            if (! empty($parsed['areaId'])) {
+                $this->areaId = (int) $parsed['areaId'];
+            }
+        } finally {
+            $this->applyingAutoLocation = false;
         }
 
         if (! empty($parsed['location_hint'])) {
@@ -465,17 +490,98 @@ class AdminOrderForm extends Component
 
     public function updatedCityId(): void
     {
+        if ($this->applyingAutoLocation) {
+            return;
+        }
+
         $this->areaId = null;
+        $this->guessedCityId = null;
+        $this->guessedAreaId = null;
         $this->suppressAddressGuess = true;
         $this->addressLocationHint = null;
+        $this->dismissAliasPrompt();
         $this->refreshDeliveryCharge();
     }
 
     public function updatedAreaId(): void
     {
+        if ($this->applyingAutoLocation) {
+            return;
+        }
+
         $this->suppressAddressGuess = true;
         $this->addressLocationHint = null;
         $this->refreshDeliveryCharge();
+
+        if ($this->areaId) {
+            $area = Area::query()->find($this->areaId);
+
+            if ($area && (int) $this->cityId !== (int) $area->city_id) {
+                $this->applyingAutoLocation = true;
+
+                try {
+                    $this->cityId = $area->city_id;
+                } finally {
+                    $this->applyingAutoLocation = false;
+                }
+            }
+        }
+
+        $this->maybeOfferAliasPrompt();
+    }
+
+    public function confirmAliasPrompt(LocationAliasLearner $learner): void
+    {
+        if (! $this->showAliasPrompt || ! $this->aliasPromptAreaId) {
+            $this->dismissAliasPrompt();
+
+            return;
+        }
+
+        $added = $learner->confirmAlias($this->aliasPromptAreaId, $this->aliasPromptText);
+
+        if ($added !== []) {
+            $this->message = 'Saved alias “'.$added[0].'” for '.$this->aliasPromptCityName.' > '.$this->aliasPromptAreaName.'.';
+            $this->guessedAreaId = $this->aliasPromptAreaId;
+            $this->guessedCityId = $this->cityId;
+        }
+
+        $this->dismissAliasPrompt();
+    }
+
+    public function dismissAliasPrompt(): void
+    {
+        $this->showAliasPrompt = false;
+        $this->aliasPromptAreaId = null;
+        $this->aliasPromptText = '';
+        $this->aliasPromptCityName = '';
+        $this->aliasPromptAreaName = '';
+    }
+
+    private function maybeOfferAliasPrompt(?LocationAliasLearner $learner = null): void
+    {
+        $this->dismissAliasPrompt();
+
+        if (! $this->areaId || trim($this->address) === '') {
+            return;
+        }
+
+        $learner ??= app(LocationAliasLearner::class);
+        $suggestion = $learner->suggestAlias(
+            address: $this->address,
+            selectedAreaId: $this->areaId,
+            guessedAreaId: $this->guessedAreaId,
+        );
+
+        if (! $suggestion) {
+            return;
+        }
+
+        $this->showAliasPrompt = true;
+        $this->aliasPromptAreaId = $suggestion['area_id'];
+        $this->aliasPromptText = $suggestion['alias'];
+        $this->aliasPromptCityName = $suggestion['city_name'];
+        $this->aliasPromptAreaName = $suggestion['area_name'];
     }
 
     public function updatedAutoDelivery(bool $value): void
@@ -552,7 +658,7 @@ class AdminOrderForm extends Component
         $this->refreshDeliveryCharge();
     }
 
-    public function save(AdminOrderService $orders, LocationAliasLearner $aliasLearner): void
+    public function save(AdminOrderService $orders): void
     {
         $this->error = null;
         $this->message = null;
@@ -564,14 +670,6 @@ class AdminOrderForm extends Component
 
         $city = $this->cityId ? City::query()->find($this->cityId) : null;
         $area = $this->areaId ? Area::query()->find($this->areaId) : null;
-
-        $learned = $aliasLearner->learnFromCorrection(
-            address: $validated['address'],
-            selectedCityId: $this->cityId,
-            selectedAreaId: $this->areaId,
-            guessedCityId: $this->guessedCityId,
-            guessedAreaId: $this->guessedAreaId,
-        );
 
         $orderData = AdminOrderService::orderAttributesFromForm([
             'name' => $validated['name'],
@@ -616,10 +714,6 @@ class AdminOrderForm extends Component
             }
 
             $this->order = $order->load('items.product');
-
-            if ($learned['area'] !== []) {
-                $this->message = trim($this->message.' Learned area aliases: '.implode(', ', $learned['area']).'.');
-            }
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e;
         } catch (\Throwable $e) {
@@ -721,11 +815,19 @@ class AdminOrderForm extends Component
             return;
         }
 
-        $this->cityId = $guess['city_id'];
-        $this->areaId = $guess['area_id'];
-        $this->guessedCityId = $guess['city_id'];
-        $this->guessedAreaId = $guess['area_id'];
-        $this->addressLocationHint = 'Detected: '.$guess['label'];
+        // Mark auto-pick before assigning city/area so updatedAreaId skips the alias prompt.
+        $this->applyingAutoLocation = true;
+
+        try {
+            $this->guessedCityId = $guess['city_id'];
+            $this->guessedAreaId = $guess['area_id'];
+            $this->cityId = $guess['city_id'];
+            $this->areaId = $guess['area_id'];
+            $this->addressLocationHint = 'Detected: '.$guess['label'];
+        } finally {
+            $this->applyingAutoLocation = false;
+        }
+
         $this->refreshDeliveryCharge();
     }
 

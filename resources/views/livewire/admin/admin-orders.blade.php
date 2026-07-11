@@ -34,11 +34,68 @@
         </div>
     @endunless
 
-    <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-6">
-        <input type="search" wire:model.live.debounce.300ms="search" placeholder="Search order #, name, phone…"
-            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
-    </div>
+    @unless ($readOnly)
+        <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-6">
+            <input type="search" wire:model.live.debounce.300ms="search" placeholder="Search order #, name, phone…"
+                class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+        </div>
+    @endunless
 
+    @if ($readOnly)
+        <div class="space-y-3" wire:loading.class="opacity-60" wire:target="switchSegment,search,nextPage,previousPage,gotoPage" wire:key="moderator-orders-{{ $segment }}-{{ $listRevision }}">
+            @forelse ($orders as $order)
+                @php($adminNote = filled($order->admin_note) ? \Illuminate\Support\Str::of($order->admin_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
+                @php($courierNote = filled($order->courier_note) ? \Illuminate\Support\Str::of($order->courier_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
+                <article wire:key="order-card-{{ $order->id }}" class="rounded-xl border border-[#EFE7D6] bg-white p-4">
+                    <div class="flex flex-wrap items-start justify-between gap-4">
+                        <div class="min-w-0">
+                            <div class="font-medium text-[#1E1E1E]">{{ $order->name }}</div>
+                            <div class="text-sm text-[#8C8474]">{{ $order->phone }}</div>
+                            @if ($order->is_replacement)
+                                <span title="Exchange order"
+                                    class="mt-1 inline-flex items-center rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
+                                    Exc
+                                </span>
+                            @endif
+                        </div>
+                        <div class="flex flex-wrap items-start gap-4">
+                            @forelse ($order->items as $item)
+                                <x-order-product-thumb
+                                    :item="$item"
+                                    size="md"
+                                    show-quantity
+                                />
+                            @empty
+                                <span class="text-sm text-[#8C8474]">—</span>
+                            @endforelse
+                        </div>
+                    </div>
+                    @if ($adminNote || $courierNote)
+                        <div class="mt-3 space-y-2 border-t border-[#EFE7D6] pt-3">
+                            @if ($adminNote)
+                                <div class="rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2.5">
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Admin</p>
+                                    <p class="mt-1 text-sm leading-relaxed text-[#1E1E1E] whitespace-pre-line break-words">{{ $adminNote }}</p>
+                                </div>
+                            @endif
+                            @if ($courierNote)
+                                <div class="rounded-lg border border-[#E7DFCF] bg-[#FAF6EF]/60 px-3 py-2.5">
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Courier</p>
+                                    <p class="mt-1 text-sm leading-relaxed text-[#1E1E1E] whitespace-pre-line break-words">{{ $courierNote }}</p>
+                                </div>
+                            @endif
+                        </div>
+                    @endif
+                </article>
+            @empty
+                <div class="rounded-xl border border-[#EFE7D6] bg-white px-4 py-8 text-center text-[#8C8474]">No orders found.</div>
+            @endforelse
+
+            @if ($orders->hasPages())
+                <div class="rounded-xl border border-[#EFE7D6] bg-white px-4 py-3">{{ $orders->links() }}</div>
+            @endif
+        </div>
+    @else
     <div class="rounded-xl border border-[#EFE7D6] bg-white overflow-hidden" wire:loading.class="opacity-60" wire:target="switchSegment,search,nextPage,previousPage,gotoPage">
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
@@ -56,8 +113,8 @@
                                     <span class="sr-only">Select all on this page</span>
                                 </label>
                             </th>
+                            <th class="px-4 py-3 font-medium">Order</th>
                         @endunless
-                        <th class="px-4 py-3 font-medium">Order</th>
                         <th class="px-4 py-3 font-medium">Customer</th>
                         <th class="px-4 py-3 font-medium">Products</th>
                         @unless ($readOnly)
@@ -71,6 +128,8 @@
                 <tbody class="divide-y divide-[#E7DFCF]" wire:key="orders-tbody-{{ $segment }}-{{ $listRevision }}">
                     @forelse ($orders as $order)
                         @php($isSelected = in_array($order->id, $selectedIds, true))
+                        @php($adminNote = filled($order->admin_note) ? \Illuminate\Support\Str::of($order->admin_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
+                        @php($courierNote = filled($order->courier_note) ? \Illuminate\Support\Str::of($order->courier_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
                         <tr wire:key="order-row-{{ $order->id }}" @class(['hover:bg-[#FAF6EF]/60', 'bg-[#FAF6EF]/80' => ! $readOnly && $isSelected])>
                             @unless ($readOnly)
                                 <td class="px-4 py-3 align-top">
@@ -80,37 +139,41 @@
                                         @checked($isSelected)
                                         class="rounded border-[#C9A227] text-[#C9A227] focus:ring-[#C9A227]">
                                 </td>
-                            @endunless
-                            <td class="px-4 py-3 {{ $readOnly ? 'align-middle' : '' }}">
-                                <div class="flex flex-wrap items-center gap-1.5">
-                                    <a href="{{ route('admin.orders.show', $order) }}" wire:navigate class="font-medium text-[#C9A227] hover:underline">
-                                        #{{ $order->order_number }}
-                                    </a>
-                                    @if ($order->is_replacement)
-                                        <span title="Exchange order"
-                                            class="inline-flex items-center rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
-                                            Exc
-                                        </span>
-                                    @endif
-                                </div>
-                                @unless ($readOnly)
-                                    @if (filled($order->admin_note))
+                                <td class="px-4 py-3">
+                                    <div class="flex flex-wrap items-center gap-1.5">
+                                        <a href="{{ route('admin.orders.show', $order) }}" wire:navigate class="font-medium text-[#C9A227] hover:underline">
+                                            #{{ $order->order_number }}
+                                        </a>
+                                        @if ($order->is_replacement)
+                                            <span title="Exchange order"
+                                                class="inline-flex items-center rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
+                                                Exc
+                                            </span>
+                                        @endif
+                                    </div>
+                                    @if ($adminNote)
                                         <p class="mt-1 text-xs text-[#6B6459] whitespace-pre-line max-w-[14rem]">
                                             <span class="font-medium text-[#8C8474]">Admin:</span>
-                                            {{ \Illuminate\Support\Str::of($order->admin_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() }}
+                                            {{ $adminNote }}
                                         </p>
                                     @endif
-                                    @if (filled($order->courier_note))
+                                    @if ($courierNote)
                                         <p class="mt-1 text-xs text-[#6B6459] whitespace-pre-line max-w-[14rem]">
                                             <span class="font-medium text-[#8C8474]">Courier:</span>
-                                            {{ \Illuminate\Support\Str::of($order->courier_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() }}
+                                            {{ $courierNote }}
                                         </p>
                                     @endif
-                                @endunless
-                            </td>
+                                </td>
+                            @endunless
                             <td class="px-4 py-3 {{ $readOnly ? 'align-middle' : '' }}">
-                                <div>{{ $order->name }}</div>
+                                <div class="font-medium text-[#1E1E1E]">{{ $order->name }}</div>
                                 <div class="text-[#8C8474]">{{ $order->phone }}</div>
+                                @if ($readOnly && $order->is_replacement)
+                                    <span title="Exchange order"
+                                        class="mt-1 inline-flex items-center rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
+                                        Exc
+                                    </span>
+                                @endif
                             </td>
                             <td class="px-4 py-3 {{ $readOnly ? 'align-middle' : '' }}">
                                 @if ($order->items->isEmpty())
@@ -237,11 +300,31 @@
                                 </td>
                             @endunless
                         </tr>
+                        @if ($readOnly && ($adminNote || $courierNote))
+                            <tr wire:key="order-notes-{{ $order->id }}">
+                                <td colspan="2" class="px-4 pb-4 pt-0">
+                                    <div class="space-y-2">
+                                        @if ($adminNote)
+                                            <div class="rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2.5">
+                                                <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Admin</p>
+                                                <p class="mt-1 text-sm leading-relaxed text-[#1E1E1E] whitespace-pre-line break-words">{{ $adminNote }}</p>
+                                            </div>
+                                        @endif
+                                        @if ($courierNote)
+                                            <div class="rounded-lg border border-[#E7DFCF] bg-white px-3 py-2.5">
+                                                <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Courier</p>
+                                                <p class="mt-1 text-sm leading-relaxed text-[#1E1E1E] whitespace-pre-line break-words">{{ $courierNote }}</p>
+                                            </div>
+                                        @endif
+                                    </div>
+                                </td>
+                            </tr>
+                        @endif
                         @if ($segment === 'dispatched')
                             @php($events = $trackingByOrder[$order->id]['events'] ?? [])
                             @php($courierStatus = $trackingByOrder[$order->id]['status'] ?? null)
                             <tr wire:key="order-tracking-{{ $order->id }}">
-                                <td class="px-4 pt-2 pb-6" colspan="{{ $readOnly ? 3 : 8 }}">
+                                <td class="px-4 pt-2 pb-6" colspan="{{ $readOnly ? 2 : 8 }}">
                                     <div
                                         x-data="{ open: true }"
                                         class="ml-8 mb-3 overflow-hidden rounded-lg border border-[#EFE7D6] bg-white"
@@ -297,7 +380,7 @@
                         @endif
                     @empty
                         <tr>
-                            <td colspan="{{ $readOnly ? 3 : 8 }}" class="px-4 py-8 text-center text-[#8C8474]">No orders found.</td>
+                            <td colspan="{{ $readOnly ? 2 : 8 }}" class="px-4 py-8 text-center text-[#8C8474]">No orders found.</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -307,6 +390,8 @@
             <div class="px-4 py-3 border-t border-[#E7DFCF]">{{ $orders->links() }}</div>
         @endif
     </div>
+
+    @endif
 
     @teleport('body')
         <div wire:key="admin-orders-overlays">

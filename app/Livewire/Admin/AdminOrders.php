@@ -104,6 +104,9 @@ class AdminOrders extends Component
             ->orderByDesc('is_default')
             ->orderBy('name')
             ->value('id');
+
+        // Defer live API calls so the list paints first, then tracking fills in.
+        $this->queueCourierStatusRefresh();
     }
 
     public function switchSegment(string $segment): void
@@ -123,6 +126,7 @@ class AdminOrders extends Component
         $this->courierLiveStatuses = [];
 
         $this->js('history.replaceState({}, "", '.json_encode(route('admin.orders.'.$segment)).')');
+        $this->queueCourierStatusRefresh();
     }
 
     public function updatedSearch(): void
@@ -130,6 +134,7 @@ class AdminOrders extends Component
         $this->resetPage();
         $this->selected = [];
         $this->courierLiveStatuses = [];
+        $this->queueCourierStatusRefresh();
     }
 
     public function toggleOrder(int $orderId): void
@@ -694,6 +699,7 @@ class AdminOrders extends Component
     {
         $this->closeProductImage();
         $this->courierLiveStatuses = [];
+        $this->queueCourierStatusRefresh();
     }
 
     public function refreshCourierStatuses(CourierTrackingService $tracking): void
@@ -719,6 +725,23 @@ class AdminOrders extends Component
 
         $this->courierLiveStatuses = $statuses;
         $this->listRevision++;
+    }
+
+    /**
+     * Schedule a client-side tracking refresh after the current response
+     * (avoids blocking the first paint / segment switch on courier APIs).
+     */
+    private function queueCourierStatusRefresh(): void
+    {
+        if ($this->segment !== 'dispatched' || AdminAccess::isModeratorOnly()) {
+            return;
+        }
+
+        if (app(CourierApiRegistry::class)->configuredSlugs() === []) {
+            return;
+        }
+
+        $this->js('setTimeout(() => $wire.refreshCourierStatuses(), 0)');
     }
 
     public function render(CourierApiRegistry $courierRegistry, CourierTrackingService $tracking)

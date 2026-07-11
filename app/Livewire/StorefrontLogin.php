@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Models\User;
+use App\Support\AdminAccess;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -43,6 +44,12 @@ class StorefrontLogin extends Component
 
         Auth::login($user, $this->remember);
         session()->regenerate();
+
+        if (AdminAccess::isModeratorOnly($user)) {
+            $this->redirect(route('admin.orders.new'), navigate: true);
+
+            return;
+        }
 
         $this->redirectIntended(route('account'), navigate: true);
     }

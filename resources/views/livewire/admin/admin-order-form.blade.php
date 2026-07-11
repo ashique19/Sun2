@@ -1,9 +1,9 @@
-<div>
-    <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div>
+<div class="pb-24 xl:pb-0">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
+        <div class="min-w-0">
             <a href="{{ $order ? route('admin.orders.show', $order) : route('admin.orders.new') }}"
                 class="text-sm text-[#C9A227] hover:underline">&larr; Back</a>
-            <h1 class="font-serif text-3xl font-semibold mt-2">{{ $order ? 'Edit' : 'Create' }} Order</h1>
+            <h1 class="font-serif text-2xl sm:text-3xl font-semibold mt-1 sm:mt-2">{{ $order ? 'Edit' : 'Create' }} Order</h1>
         </div>
         @if ($order)
             <button type="button" wire:click="delete" wire:confirm="Delete this order and restore product stock?"
@@ -20,13 +20,13 @@
         <div class="rounded-lg bg-rose-50 text-rose-700 text-sm px-4 py-3 mb-4">{{ $error }}</div>
     @endif
 
-    <form wire:submit="save" class="space-y-6">
-        <div class="grid xl:grid-cols-3 gap-6 items-start">
-            <div class="xl:col-span-2 space-y-6">
-                <div class="rounded-xl border border-[#EFE7D6] bg-white p-6">
-                    <h2 class="font-semibold mb-4">Customer &amp; Delivery</h2>
-                    <div class="grid sm:grid-cols-2 gap-4 text-sm">
-                        <div class="sm:col-span-2">
+    <form wire:submit="save" class="space-y-4 sm:space-y-6">
+        <div class="grid xl:grid-cols-3 gap-4 sm:gap-6 items-start">
+            <div class="xl:col-span-2 space-y-4 sm:space-y-6">
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
+                    <h2 class="font-semibold mb-3 sm:mb-4">Customer &amp; Delivery</h2>
+                    <div class="grid grid-cols-2 gap-3 sm:gap-4 text-sm">
+                        <div class="col-span-2">
                             <label class="block text-[#6B6459] mb-1">Phone / paste customer block</label>
                             <textarea wire:model.live.debounce.500ms="phone" rows="3"
                                 placeholder="Paste name, phone, address… or type 01XXXXXXXXX"
@@ -67,13 +67,13 @@
                                 </div>
                             @endif
                         </div>
-                        <div class="sm:col-span-2">
+                        <div class="col-span-2">
                             <label class="block text-[#6B6459] mb-1">Name</label>
                             <input type="text" wire:model="name"
                                 class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
                             @error('name') <p class="text-rose-600 text-xs mt-1">{{ $message }}</p> @enderror
                         </div>
-                        <div class="sm:col-span-2">
+                        <div class="col-span-2">
                             <label class="block text-[#6B6459] mb-1">Address</label>
                             <textarea wire:model.live.debounce.400ms="address" rows="2"
                                 class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"></textarea>
@@ -82,7 +82,7 @@
                                 <p class="text-xs text-emerald-700 mt-1">{{ $addressLocationHint }}</p>
                             @endif
                         </div>
-                        <div class="sm:col-span-2">
+                        <div class="col-span-2">
                             <label class="inline-flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" wire:model.live="isExchange"
                                     class="rounded border-[#C9A227] text-[#C9A227] focus:ring-[#C9A227]">
@@ -92,20 +92,20 @@
                                 Marks the order as has return and prefixes address &amp; courier note with [EXCHANGE PARCEL].
                             </p>
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <label class="block text-[#6B6459] mb-1">City</label>
                             <select wire:model.live="cityId"
-                                class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                class="w-full max-w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
                                 <option value="">Select city</option>
                                 @foreach ($cities as $city)
                                     <option value="{{ $city->id }}">{{ $city->name }}</option>
                                 @endforeach
                             </select>
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <label class="block text-[#6B6459] mb-1">Area</label>
                             <select wire:model.live="areaId" @disabled(! $cityId)
-                                class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227] disabled:opacity-50">
+                                class="w-full max-w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227] disabled:opacity-50">
                                 <option value="">Select area</option>
                                 @foreach ($areas as $area)
                                     <option value="{{ $area->id }}">{{ $area->name }}</option>
@@ -115,8 +115,8 @@
                     </div>
                 </div>
 
-                <div class="rounded-xl border border-[#EFE7D6] bg-white p-6">
-                    <h2 class="font-semibold mb-4">Order lines</h2>
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
+                    <h2 class="font-semibold mb-3 sm:mb-4">Order lines</h2>
                     @error('lines') <p class="text-rose-600 text-sm mb-3">{{ $message }}</p> @enderror
 
                     @if ($lines === [])
@@ -124,8 +124,8 @@
                     @else
                         <div class="space-y-3">
                             @foreach ($lines as $productId => $line)
-                                <div wire:key="line-{{ $productId }}" class="flex flex-wrap items-center gap-3 border border-[#E7DFCF] rounded-lg p-3">
-                                    <div class="flex flex-1 min-w-[12rem] items-center gap-3">
+                                <div wire:key="line-{{ $productId }}" class="rounded-lg border border-[#E7DFCF] p-3">
+                                    <div class="flex gap-3">
                                         <a href="{{ route('admin.products.edit', $productId) }}"
                                             wire:navigate
                                             title="{{ $line['name'] }}"
@@ -133,38 +133,47 @@
                                             @if (! empty($line['product_image']))
                                                 <img src="{{ $line['product_image'] }}"
                                                     alt="{{ $line['name'] }}"
-                                                    class="h-16 w-16 rounded-md object-cover border border-[#E7DFCF] bg-[#FAF6EF] hover:opacity-90">
+                                                    class="h-14 w-14 sm:h-16 sm:w-16 rounded-md object-cover border border-[#E7DFCF] bg-[#FAF6EF] hover:opacity-90">
                                             @else
-                                                <div class="h-16 w-16 rounded-md border border-[#E7DFCF] bg-[#FAF6EF] flex items-center justify-center text-xs text-[#8C8474]">No img</div>
+                                                <div class="h-14 w-14 sm:h-16 sm:w-16 rounded-md border border-[#E7DFCF] bg-[#FAF6EF] flex items-center justify-center text-xs text-[#8C8474]">No img</div>
                                             @endif
                                         </a>
-                                        <p class="text-xs text-[#8C8474]">
-                                            &#2547; {{ number_format($line['price'], 0) }} each
-                                            &middot; Stock: {{ $line['stock_quantity'] }}
-                                            @if ($order)
-                                                (+ {{ $line['quantity'] }} on this order)
-                                            @endif
-                                        </p>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-start justify-between gap-2">
+                                                <div class="min-w-0">
+                                                    <p class="text-sm font-medium text-[#1E1E1E] truncate">{{ $line['name'] }}</p>
+                                                    <p class="text-xs text-[#8C8474] mt-0.5">
+                                                        &#2547; {{ number_format($line['price'], 0) }} each
+                                                        &middot; Stock: {{ $line['stock_quantity'] }}
+                                                        @if ($order)
+                                                            (+ {{ $line['quantity'] }} on this order)
+                                                        @endif
+                                                    </p>
+                                                </div>
+                                                <button type="button" wire:click="removeLine({{ $productId }})"
+                                                    class="shrink-0 text-xs text-rose-600 hover:underline pt-0.5">Remove</button>
+                                            </div>
+                                            <div class="mt-3 flex items-center justify-between gap-3">
+                                                <div class="flex items-center gap-2">
+                                                    <label class="text-xs text-[#6B6459]">Qty</label>
+                                                    <input type="number" min="1"
+                                                        wire:model.live="lines.{{ $productId }}.quantity"
+                                                        class="w-16 sm:w-20 rounded-lg border border-[#E0D6C2] px-2 py-1.5 text-sm">
+                                                </div>
+                                                <div class="font-medium text-sm tabular-nums">
+                                                    &#2547; {{ number_format($line['line_total'], 0) }}
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="flex items-center gap-2">
-                                        <label class="text-xs text-[#6B6459]">Qty</label>
-                                        <input type="number" min="1"
-                                            wire:model.live="lines.{{ $productId }}.quantity"
-                                            class="w-20 rounded-lg border border-[#E0D6C2] px-2 py-1 text-sm">
-                                    </div>
-                                    <div class="font-medium text-sm tabular-nums">
-                                        &#2547; {{ number_format($line['line_total'], 0) }}
-                                    </div>
-                                    <button type="button" wire:click="removeLine({{ $productId }})"
-                                        class="text-xs text-rose-600 hover:underline">Remove</button>
                                 </div>
                             @endforeach
                         </div>
                     @endif
                 </div>
 
-                <div class="rounded-xl border border-[#EFE7D6] bg-white p-6">
-                    <h2 class="font-semibold mb-4">Add products</h2>
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
+                    <h2 class="font-semibold mb-3 sm:mb-4">Add products</h2>
 
                     <div
                         x-data="{ pasteHint: '' }"
@@ -182,14 +191,14 @@
                             if (! file) return;
                             $wire.upload('pastedImage', file, () => {}, () => {}, () => {});
                         "
-                        class="mb-4 rounded-lg border border-dashed border-[#E0D6C2] bg-[#FAF6EF]/50 px-4 py-3 text-sm text-[#6B6459] focus:outline-none focus:ring-1 focus:ring-[#C9A227] focus:border-[#C9A227]"
+                        class="mb-4 rounded-lg border border-dashed border-[#E0D6C2] bg-[#FAF6EF]/50 px-3 sm:px-4 py-3 text-sm text-[#6B6459] focus:outline-none focus:ring-1 focus:ring-[#C9A227] focus:border-[#C9A227]"
                     >
                         <p class="font-medium text-[#1E1E1E]">Product image</p>
                         <p class="text-xs mt-1">Choose a file or paste (Ctrl+V / Cmd+V). ≥90% auto-adds; 80–90% shows suggestions.</p>
                         <input type="file"
                             wire:model="pastedImage"
                             accept="image/jpeg,image/png,image/webp,image/gif"
-                            class="mt-3 block w-full text-sm text-[#6B6459] file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-[#1E1E1E] hover:file:bg-[#F1EADB]"
+                            class="mt-3 block w-full max-w-full text-sm text-[#6B6459] file:mr-3 file:mb-1 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-[#1E1E1E] hover:file:bg-[#F1EADB]"
                         >
                         <div wire:loading wire:target="pastedImage,searchByPastedImage" class="text-xs text-[#8C8474] mt-2">Matching image…</div>
                         <p class="text-xs text-amber-700 mt-2" x-text="pasteHint" x-show="pasteHint" x-cloak></p>
@@ -199,21 +208,23 @@
                         @endif
                     </div>
 
-                    <div class="flex flex-wrap gap-3 mb-4">
+                    <div class="grid grid-cols-1 sm:flex sm:flex-wrap gap-3 mb-4">
                         <input type="search" wire:model.live.debounce.300ms="productSearch"
                             placeholder="Search name, SKU, price…"
-                            class="flex-1 min-w-[12rem] rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
-                        <select wire:model.live="productCategory" class="rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
-                            <option value="">All categories</option>
-                            @foreach ($categories as $cat)
-                                <option value="{{ $cat->id }}">{{ $cat->name }}</option>
-                            @endforeach
-                        </select>
-                        <select wire:model.live="productStock" class="rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
-                            <option value="">Any stock</option>
-                            <option value="in">In stock</option>
-                            <option value="out">Out of stock</option>
-                        </select>
+                            class="w-full sm:flex-1 sm:min-w-[12rem] rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                        <div class="grid grid-cols-2 gap-3 sm:contents">
+                            <select wire:model.live="productCategory" class="w-full sm:w-auto rounded-lg border border-[#E0D6C2] px-3 sm:px-4 py-2 text-sm">
+                                <option value="">All categories</option>
+                                @foreach ($categories as $cat)
+                                    <option value="{{ $cat->id }}">{{ $cat->name }}</option>
+                                @endforeach
+                            </select>
+                            <select wire:model.live="productStock" class="w-full sm:w-auto rounded-lg border border-[#E0D6C2] px-3 sm:px-4 py-2 text-sm">
+                                <option value="">Any stock</option>
+                                <option value="in">In stock</option>
+                                <option value="out">Out of stock</option>
+                            </select>
+                        </div>
                     </div>
 
                     @if (! $searchActive)
@@ -251,8 +262,8 @@
                 </div>
             </div>
 
-            <div class="space-y-6">
-                <div class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-4 text-sm">
+            <div class="space-y-4 sm:space-y-6">
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6 space-y-4 text-sm">
                     <h2 class="font-semibold">Totals</h2>
                     <div class="flex justify-between"><span class="text-[#6B6459]">Subtotal</span><span>&#2547; {{ number_format($this->subtotal(), 0) }}</span></div>
                     <div>
@@ -282,7 +293,7 @@
                     </div>
                 </div>
 
-                <div class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-4">
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6 space-y-4">
                     <div>
                         <label class="block text-[#6B6459] text-sm mb-1">Admin note</label>
                         <p class="text-xs text-[#8C8474] mb-2">Visible to admins only.</p>
@@ -298,7 +309,20 @@
                 </div>
 
                 <button type="submit"
-                    class="w-full rounded-lg bg-[#C9A227] px-4 py-3 text-sm font-semibold text-white hover:bg-[#b89220] transition">
+                    class="hidden xl:block w-full rounded-lg bg-[#C9A227] px-4 py-3 text-sm font-semibold text-white hover:bg-[#b89220] transition">
+                    {{ $order ? 'Save changes' : 'Create order' }}
+                </button>
+            </div>
+        </div>
+
+        <div class="xl:hidden fixed inset-x-0 bottom-0 z-30 border-t border-[#E7DFCF] bg-white/95 backdrop-blur px-4 py-3 md:left-56 lg:left-64 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div class="flex items-center gap-3">
+                <div class="min-w-0 flex-1">
+                    <p class="text-[11px] uppercase tracking-wide text-[#8C8474]">Total (COD)</p>
+                    <p class="font-semibold tabular-nums text-[#1E1E1E]">&#2547; {{ number_format($this->total(), 0) }}</p>
+                </div>
+                <button type="submit"
+                    class="shrink-0 rounded-lg bg-[#C9A227] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#b89220] transition">
                     {{ $order ? 'Save changes' : 'Create order' }}
                 </button>
             </div>

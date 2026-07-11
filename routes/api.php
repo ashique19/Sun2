@@ -6,8 +6,13 @@ use App\Http\Controllers\RedxWebhookController;
 use App\Http\Controllers\SteadfastWebhookController;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/webhooks/steadfast', SteadfastWebhookController::class)
+// Steadfast portal callback: /api/steadfast/webhook
+Route::post('/steadfast/webhook', SteadfastWebhookController::class)
     ->name('webhooks.steadfast');
+
+// Legacy alias
+Route::post('/webhooks/steadfast', SteadfastWebhookController::class)
+    ->name('webhooks.steadfast.legacy');
 
 Route::post('/webhooks/pathao', PathaoWebhookController::class)
     ->name('webhooks.pathao');

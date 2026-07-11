@@ -55,12 +55,16 @@ class SteadfastWebhookController extends Controller
 
         $authorization = (string) $request->header('Authorization', '');
 
-        if ($authorization === 'Bearer '.$expected) {
-            return true;
+        if (str_starts_with($authorization, 'Bearer ')) {
+            $provided = substr($authorization, 7);
+
+            if (hash_equals($expected, $provided)) {
+                return true;
+            }
         }
 
         $alternate = (string) $request->header('X-Steadfast-Token', '');
 
-        return hash_equals($expected, $alternate);
+        return $alternate !== '' && hash_equals($expected, $alternate);
     }
 }

@@ -14,6 +14,6 @@ return [
 
         'token' => env('STEADFAST_WEBHOOK_TOKEN'),
 
-        'path' => trim(env('STEADFAST_WEBHOOK_PATH', 'api/webhooks/steadfast'), '/'),
+        'path' => trim(env('STEADFAST_WEBHOOK_PATH', 'api/steadfast/webhook'), '/'),
     ],
 ];

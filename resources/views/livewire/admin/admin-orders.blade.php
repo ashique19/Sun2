@@ -175,9 +175,22 @@
                                     @endif
                                 </td>
                             @endunless
-                            <td class="px-4 py-3 {{ $readOnly ? 'align-middle' : '' }}">
+                            <td class="px-4 py-3 cursor-pointer {{ $readOnly ? 'align-middle' : '' }}"
+                                role="button"
+                                tabindex="0"
+                                title="Click to copy phone"
+                                data-phone="{{ $order->phone }}"
+                                onclick="window.sunCopyText(this.dataset.phone, this.querySelector('[data-copy-feedback]'))"
+                                onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.click(); }">
                                 <div class="font-medium text-[#1E1E1E]">{{ $order->name }}</div>
-                                <div class="text-[#8C8474]">{{ $order->phone }}</div>
+                                <div class="flex items-center gap-1.5 text-[#8C8474]">
+                                    <span>{{ $order->phone }}</span>
+                                    <span data-copy-feedback class="hidden text-[10px] font-semibold uppercase text-emerald-600">Copied</span>
+                                </div>
+                                @php($customerAddress = collect([$order->address, $order->area, $order->city])->filter()->implode(', '))
+                                @if ($customerAddress !== '')
+                                    <p class="mt-0.5 text-xs leading-snug text-[#8C8474] max-w-[14rem] break-words">{{ $customerAddress }}</p>
+                                @endif
                                 @if ($readOnly && $order->is_replacement)
                                     <span title="Exchange order"
                                         class="mt-1 inline-flex items-center rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">

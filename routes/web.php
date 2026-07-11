@@ -1,7 +1,11 @@
 <?php
 
+use App\Livewire\Admin\AdminAreaEdit;
+use App\Livewire\Admin\AdminAreas;
 use App\Livewire\Admin\AdminCategories;
 use App\Livewire\Admin\AdminCategoryEdit;
+use App\Livewire\Admin\AdminCities;
+use App\Livewire\Admin\AdminCityEdit;
 use App\Livewire\Admin\AdminCouponEdit;
 use App\Livewire\Admin\AdminCoupons;
 use App\Livewire\Admin\AdminCourierEdit;
@@ -125,6 +129,12 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/couriers', AdminCouriers::class)->name('couriers');
         Route::get('/couriers/create', AdminCourierEdit::class)->name('couriers.create');
         Route::get('/couriers/{courier}/edit', AdminCourierEdit::class)->name('couriers.edit');
+        Route::get('/cities', AdminCities::class)->name('cities');
+        Route::get('/cities/create', AdminCityEdit::class)->name('cities.create');
+        Route::get('/cities/{city}/edit', AdminCityEdit::class)->name('cities.edit');
+        Route::get('/areas', AdminAreas::class)->name('areas');
+        Route::get('/areas/create', AdminAreaEdit::class)->name('areas.create');
+        Route::get('/areas/{area}/edit', AdminAreaEdit::class)->name('areas.edit');
         Route::get('/reviews', AdminReviews::class)->name('reviews');
         Route::redirect('/users', '/admin/users/customers');
         Route::get('/users/customers', AdminUsers::class)->defaults('segment', 'customers')->name('users.customers');

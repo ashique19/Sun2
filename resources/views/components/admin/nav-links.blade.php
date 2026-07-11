@@ -85,6 +85,10 @@
         class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.couriers*') ? $active : $inactive }}">
         Couriers
     </a>
+    <a href="{{ route('admin.cities') }}" wire:navigate {!! $click !!}
+        class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.cities*') || request()->routeIs('admin.areas*') ? $active : $inactive }}">
+        Cities &amp; Areas
+    </a>
     <a href="{{ route('admin.reviews') }}" wire:navigate {!! $click !!}
         class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.reviews') ? $active : $inactive }}">
         Reviews

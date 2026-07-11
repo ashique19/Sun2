@@ -9,11 +9,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('cities', function (Blueprint $table) {
+            $table->dropUnique(['steadfast_id']);
             $table->dropColumn('steadfast_id');
             $table->string('slug')->nullable()->unique()->after('id');
         });
 
         Schema::table('areas', function (Blueprint $table) {
+            $table->dropUnique(['steadfast_id']);
             $table->dropColumn('steadfast_id');
             $table->string('slug')->nullable()->unique()->after('id');
             $table->string('unit_type', 32)->nullable()->after('police_station');

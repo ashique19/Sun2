@@ -100,20 +100,27 @@ class OrderPasteParser
      */
     public function resolveLocation(?string $address, ?string $cityHint = null, ?string $areaHint = null): array
     {
-        $cityId = $this->findCityId($cityHint);
-        $areaId = $this->findAreaId($areaHint, $cityId);
+        // Prefer area resolution; city always comes from the matched area.
+        $cityIdFromHint = $this->findCityId($cityHint);
+        $areaId = $this->findAreaId($areaHint, $cityIdFromHint)
+            ?? $this->findAreaId($areaHint, null);
 
-        if ($cityId && $areaId) {
-            $cityName = City::query()->find($cityId)?->name;
-            $areaName = Area::query()->find($areaId)?->name;
+        if ($areaId) {
+            $area = Area::query()->with('city:id,name')->find($areaId);
 
-            return [$cityId, $areaId, $areaName && $cityName ? "{$areaName}, {$cityName}" : null];
+            if ($area) {
+                return [
+                    $area->city_id,
+                    $area->id,
+                    $area->city ? $area->name.', '.$area->city->name : $area->name,
+                ];
+            }
         }
 
         $guessText = trim(implode(', ', array_filter([$areaHint, $cityHint, $address])));
         $guess = $this->locationGuesser->guess($guessText !== '' ? $guessText : $address);
 
-        if ($guess) {
+        if ($guess && ! empty($guess['area_id'])) {
             return [
                 $guess['city_id'],
                 $guess['area_id'],
@@ -121,8 +128,9 @@ class OrderPasteParser
             ];
         }
 
-        if ($cityId) {
-            return [$cityId, $areaId, City::query()->find($cityId)?->name];
+        // City-only fallback when Gemini/heuristics named a city but no area matched.
+        if ($cityIdFromHint) {
+            return [$cityIdFromHint, null, City::query()->find($cityIdFromHint)?->name];
         }
 
         return [null, null, null];

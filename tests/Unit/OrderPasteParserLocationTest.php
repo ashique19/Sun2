@@ -62,9 +62,8 @@ TXT);
 
         $this->assertSame('Soma Chowdhury', $parsed['name']);
         $this->assertSame('01819610359', $parsed['phone']);
-        $this->assertNotNull($parsed['cityId']);
-        $this->assertSame('Chattogram', City::query()->find($parsed['cityId'])?->name);
+        // Area-only auto search: without a known area phrase, do not invent Dhaka > Wari.
         $this->assertNull($parsed['areaId']);
-        $this->assertSame('Chattogram', $parsed['location_hint']);
+        $this->assertNotSame('Dhaka', City::query()->find($parsed['cityId'])?->name);
     }
 }

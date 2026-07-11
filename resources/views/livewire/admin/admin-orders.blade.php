@@ -51,6 +51,16 @@
                         <div class="min-w-0">
                             <div class="font-medium text-[#1E1E1E]">{{ $order->name }}</div>
                             <div class="text-sm text-[#8C8474]">{{ $order->phone }}</div>
+                            @if (filled($order->address))
+                                <p class="mt-1 text-sm leading-relaxed text-[#6B6459] break-words">
+                                    {{ $order->address }}
+                                    @if (filled($order->area) || filled($order->city))
+                                        <span class="text-[#8C8474]">
+                                            — {{ collect([$order->area, $order->city])->filter()->implode(', ') }}
+                                        </span>
+                                    @endif
+                                </p>
+                            @endif
                             @if ($order->is_replacement)
                                 <span title="Exchange order"
                                     class="mt-1 inline-flex items-center rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">

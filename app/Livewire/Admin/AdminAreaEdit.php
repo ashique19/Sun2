@@ -23,6 +23,8 @@ class AdminAreaEdit extends Component
 
     public string $slug = '';
 
+    public string $aliasesText = '';
+
     public ?int $cityId = null;
 
     public string $police_station = '';
@@ -45,6 +47,7 @@ class AdminAreaEdit extends Component
             $this->area = $area;
             $this->name = $area->name;
             $this->slug = (string) ($area->slug ?? '');
+            $this->aliasesText = implode("\n", $area->aliasList());
             $this->cityId = $area->city_id;
             $this->police_station = (string) ($area->police_station ?? '');
             $this->unit_type = (string) ($area->unit_type ?? '');
@@ -96,6 +99,7 @@ class AdminAreaEdit extends Component
                 'max:255',
                 Rule::unique('areas', 'slug')->ignore($this->area?->id),
             ],
+            'aliasesText' => ['nullable', 'string', 'max:5000'],
             'cityId' => ['required', 'integer', 'exists:cities,id'],
             'police_station' => ['nullable', 'string', 'max:120'],
             'unit_type' => ['nullable', 'string', 'max:32'],
@@ -107,6 +111,7 @@ class AdminAreaEdit extends Component
         $payload = [
             'name' => $validated['name'],
             'slug' => $this->normalizeAreaSlug($validated['slug'], $validated['name']),
+            'aliases' => $this->parseAliasesText($validated['aliasesText'] ?? ''),
             'city_id' => (int) $validated['cityId'],
             'police_station' => $validated['police_station'] !== '' ? $validated['police_station'] : null,
             'unit_type' => $validated['unit_type'] !== '' ? $validated['unit_type'] : null,
@@ -131,6 +136,7 @@ class AdminAreaEdit extends Component
         }
 
         $this->slug = (string) ($this->area->slug ?? '');
+        $this->aliasesText = implode("\n", $this->area->aliasList());
         $this->cityId = $this->area->city_id;
         $this->police_station = (string) ($this->area->police_station ?? '');
         $this->unit_type = (string) ($this->area->unit_type ?? '');
@@ -167,7 +173,7 @@ class AdminAreaEdit extends Component
     }
 
     /**
-     * Keep hyphen-separated tokens (including Bangla) for address matching aliases.
+     * Keep hyphen-separated tokens (including Bangla) for legacy slug matching.
      */
     private function normalizeAreaSlug(string $slug, string $fallbackName): string
     {
@@ -181,5 +187,34 @@ class AdminAreaEdit extends Component
         }
 
         return Str::slug($fallbackName) ?: 'area';
+    }
+
+    /**
+     * @return list<string>|null
+     */
+    private function parseAliasesText(?string $text): ?array
+    {
+        $parts = preg_split('/[\n,]+/u', (string) $text) ?: [];
+        $aliases = [];
+        $seen = [];
+
+        foreach ($parts as $part) {
+            $alias = trim($part);
+
+            if ($alias === '') {
+                continue;
+            }
+
+            $key = mb_strtolower($alias);
+
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $aliases[] = $alias;
+        }
+
+        return $aliases === [] ? null : $aliases;
     }
 }

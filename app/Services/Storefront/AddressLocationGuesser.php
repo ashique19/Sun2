@@ -8,10 +8,10 @@ use Illuminate\Support\Facades\Cache;
 
 class AddressLocationGuesser
 {
-    private const CACHE_KEY = 'storefront.location_guess_index.v2';
+    private const CACHE_KEY = 'storefront.location_guess_index.v3';
 
     /**
-     * Alternate spellings that should resolve to a city name already in the index.
+     * Built-in city aliases (DB aliases are also indexed).
      *
      * @var array<string, list<string>>
      */
@@ -136,13 +136,12 @@ class AddressLocationGuesser
                 ->active()
                 ->with('city:id,name,slug')
                 ->whereHas('city', fn ($query) => $query->active())
-                ->get(['id', 'city_id', 'name', 'slug']);
+                ->get(['id', 'city_id', 'name', 'slug', 'aliases', 'police_station']);
 
             foreach ($areas as $area) {
                 $label = $area->name.', '.$area->city->name;
-                $phrases = $this->areaSearchPhrases($area);
 
-                foreach ($phrases as $normalized) {
+                foreach ($this->areaSearchPhrases($area) as $normalized) {
                     $rows[] = [
                         'city_id' => $area->city_id,
                         'area_id' => $area->id,
@@ -162,18 +161,22 @@ class AddressLocationGuesser
     }
 
     /**
-     * Name plus slug tokens (hyphen-separated) so admins can append user-input
-     * patterns to an area slug for address matching.
-     *
      * @return list<string>
      */
     private function areaSearchPhrases(Area $area): array
     {
         $phrases = [];
-        $name = $this->normalize($area->name);
 
-        if ($name !== '') {
-            $phrases[] = $name;
+        foreach (array_filter([
+            $area->name,
+            $area->police_station,
+            ...$area->aliasList(),
+        ]) as $phrase) {
+            $normalized = $this->normalize((string) $phrase);
+
+            if ($normalized !== '') {
+                $phrases[] = $normalized;
+            }
         }
 
         $citySkip = array_filter([
@@ -181,6 +184,7 @@ class AddressLocationGuesser
             ...preg_split('/[-_]+/u', $this->normalize((string) ($area->city?->slug ?? ''))) ?: [],
         ]);
 
+        // Slug tokens remain as a fallback for older manually-edited slugs.
         foreach (preg_split('/[-_]+/u', (string) ($area->slug ?? '')) ?: [] as $token) {
             $normalized = $this->normalize($token);
 
@@ -188,8 +192,6 @@ class AddressLocationGuesser
                 continue;
             }
 
-            // Skip district/city slug parts so "chattogram" on every area slug
-            // does not steal the match when only the city is mentioned.
             if (in_array($normalized, $citySkip, true)) {
                 continue;
             }
@@ -208,25 +210,18 @@ class AddressLocationGuesser
         return Cache::rememberForever(self::CACHE_KEY.':cities', function () {
             $rows = [];
 
-            foreach (City::query()->active()->get(['id', 'name']) as $city) {
-                $normalized = $this->normalize($city->name);
+            foreach (City::query()->active()->get(['id', 'name', 'aliases']) as $city) {
+                $normalizedName = $this->normalize($city->name);
+                $aliasSources = array_merge(
+                    $normalizedName !== '' ? [$city->name] : [],
+                    self::CITY_ALIASES[$normalizedName] ?? [],
+                    $city->aliasList(),
+                );
 
-                if (mb_strlen($normalized) < 4) {
-                    continue;
-                }
+                foreach ($aliasSources as $phrase) {
+                    $normalized = $this->normalize((string) $phrase);
 
-                $rows[] = [
-                    'city_id' => $city->id,
-                    'area_id' => null,
-                    'label' => $city->name,
-                    'normalized' => $normalized,
-                    'length' => mb_strlen($normalized),
-                ];
-
-                foreach (self::CITY_ALIASES[$normalized] ?? [] as $alias) {
-                    $aliasNormalized = $this->normalize($alias);
-
-                    if (mb_strlen($aliasNormalized) < 3) {
+                    if (mb_strlen($normalized) < 3) {
                         continue;
                     }
 
@@ -234,13 +229,14 @@ class AddressLocationGuesser
                         'city_id' => $city->id,
                         'area_id' => null,
                         'label' => $city->name,
-                        'normalized' => $aliasNormalized,
-                        'length' => mb_strlen($aliasNormalized),
+                        'normalized' => $normalized,
+                        'length' => mb_strlen($normalized),
                     ];
                 }
             }
 
             return collect($rows)
+                ->unique(fn (array $row) => $row['city_id'].'|'.$row['normalized'])
                 ->sortByDesc('length')
                 ->values()
                 ->all();
@@ -253,7 +249,6 @@ class AddressLocationGuesser
             return false;
         }
 
-        // True Unicode letter/number boundaries (not letter-then-digit).
         return preg_match(
             '/(?<![\p{L}\p{N}])'.preg_quote($phrase, '/').'(?![\p{L}\p{N}])/u',
             $haystack,

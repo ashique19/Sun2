@@ -26,6 +26,13 @@
                 <input type="text" wire:model="division" class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
                 @error('division') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
             </div>
+            <div class="sm:col-span-2">
+                <label class="block text-sm font-medium mb-1">Aliases</label>
+                <textarea wire:model="aliasesText" rows="2" placeholder="chittagong&#10;ctg&#10;চট্টগ্রাম"
+                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm"></textarea>
+                <p class="text-xs text-[#8C8474] mt-1">Alternate spellings for address auto-detect (one per line).</p>
+                @error('aliasesText') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+            </div>
             <label class="flex items-center gap-2 text-sm">
                 <input type="checkbox" wire:model="is_active" class="rounded border-[#E0D6C2] text-[#C9A227]">
                 Active

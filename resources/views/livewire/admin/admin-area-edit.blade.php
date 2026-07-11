@@ -19,12 +19,18 @@
             <div class="sm:col-span-2">
                 <label class="block text-sm font-medium mb-1">Slug</label>
                 <input type="text" wire:model="slug" class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
-                <p class="text-xs text-[#8C8474] mt-1">
-                    Used for address auto-detect. Append extra spellings with hyphens
-                    (e.g. <code class="text-[11px]">chattogram-chattogram-kotwali-chatteswari</code>).
-                    City/district tokens are ignored when matching.
-                </p>
+                <p class="text-xs text-[#8C8474] mt-1">Stable identifier. Prefer Aliases below for spellings / Bangla names.</p>
                 @error('slug') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+            </div>
+            <div class="sm:col-span-2">
+                <label class="block text-sm font-medium mb-1">Aliases</label>
+                <textarea wire:model="aliasesText" rows="3" placeholder="chatteswari&#10;Chatteswari Road&#10;চট্টেশ্বরী"
+                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm"></textarea>
+                <p class="text-xs text-[#8C8474] mt-1">
+                    One per line (or comma-separated). Used by Create Order address auto-detect.
+                    The app can also append aliases when you correct a missed area on an order.
+                </p>
+                @error('aliasesText') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
             </div>
             <div>
                 <label class="block text-sm font-medium mb-1">City</label>

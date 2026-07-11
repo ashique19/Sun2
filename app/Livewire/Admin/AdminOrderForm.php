@@ -13,6 +13,7 @@ use App\Services\Admin\CustomerLookupService;
 use App\Services\Admin\OrderPasteParser;
 use App\Services\Admin\ProductImageHashService;
 use App\Services\Admin\ProductImageService;
+use App\Services\Locations\LocationAliasLearner;
 use App\Services\Storefront\AddressLocationGuesser;
 use App\Services\Storefront\CheckoutPricing;
 use App\Support\PhoneNumber;
@@ -109,6 +110,10 @@ class AdminOrderForm extends Component
     public ?int $newProductCategoryId = null;
 
     public ?string $imageSearchError = null;
+
+    public ?int $guessedCityId = null;
+
+    public ?int $guessedAreaId = null;
 
     public function mount(?Order $order = null): void
     {
@@ -290,10 +295,14 @@ class AdminOrderForm extends Component
 
         if (! empty($parsed['cityId'])) {
             $this->cityId = (int) $parsed['cityId'];
+            $this->guessedCityId = $this->cityId;
         }
 
         if (! empty($parsed['areaId'])) {
             $this->areaId = (int) $parsed['areaId'];
+            $this->guessedAreaId = $this->areaId;
+        } elseif (! empty($parsed['cityId'])) {
+            $this->guessedAreaId = null;
         }
 
         if (! empty($parsed['location_hint'])) {
@@ -543,7 +552,7 @@ class AdminOrderForm extends Component
         $this->refreshDeliveryCharge();
     }
 
-    public function save(AdminOrderService $orders): void
+    public function save(AdminOrderService $orders, LocationAliasLearner $aliasLearner): void
     {
         $this->error = null;
         $this->message = null;
@@ -555,6 +564,14 @@ class AdminOrderForm extends Component
 
         $city = $this->cityId ? City::query()->find($this->cityId) : null;
         $area = $this->areaId ? Area::query()->find($this->areaId) : null;
+
+        $learned = $aliasLearner->learnFromCorrection(
+            address: $validated['address'],
+            selectedCityId: $this->cityId,
+            selectedAreaId: $this->areaId,
+            guessedCityId: $this->guessedCityId,
+            guessedAreaId: $this->guessedAreaId,
+        );
 
         $orderData = AdminOrderService::orderAttributesFromForm([
             'name' => $validated['name'],
@@ -599,6 +616,10 @@ class AdminOrderForm extends Component
             }
 
             $this->order = $order->load('items.product');
+
+            if ($learned['area'] !== []) {
+                $this->message = trim($this->message.' Learned area aliases: '.implode(', ', $learned['area']).'.');
+            }
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e;
         } catch (\Throwable $e) {
@@ -694,12 +715,16 @@ class AdminOrderForm extends Component
 
         if (! $guess) {
             $this->addressLocationHint = null;
+            $this->guessedCityId = null;
+            $this->guessedAreaId = null;
 
             return;
         }
 
         $this->cityId = $guess['city_id'];
         $this->areaId = $guess['area_id'];
+        $this->guessedCityId = $guess['city_id'];
+        $this->guessedAreaId = $guess['area_id'];
         $this->addressLocationHint = 'Detected: '.$guess['label'];
         $this->refreshDeliveryCharge();
     }

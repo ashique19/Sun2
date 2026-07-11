@@ -69,7 +69,8 @@ class AdminAreas extends Component
                     $inner->where('name', 'like', $term)
                         ->orWhere('police_station', 'like', $term)
                         ->orWhere('slug', 'like', $term)
-                        ->orWhere('unit_type', 'like', $term);
+                        ->orWhere('unit_type', 'like', $term)
+                        ->orWhere('aliases', 'like', $term);
                 });
             })
             ->when($this->city !== '', fn ($q) => $q->where('city_id', $this->city))

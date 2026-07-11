@@ -257,6 +257,7 @@ PROMPT;
             $id = (clone $query)->where('name', $alias)->value('id')
                 ?? (clone $query)->where('name', 'like', $alias.'%')->value('id')
                 ?? (clone $query)->where('name', 'like', '%'.$alias.'%')->value('id')
+                ?? (clone $query)->whereJsonContains('aliases', $alias)->value('id')
                 ?? ($slugNeedle !== ''
                     ? ((clone $query)->where('slug', $slugNeedle)->value('id')
                         ?? (clone $query)->where('slug', 'like', '%-'.$slugNeedle)->value('id')
@@ -269,7 +270,20 @@ PROMPT;
             }
         }
 
-        return null;
+        // Case-insensitive alias scan within the city scope (JSON contains is exact).
+        $needle = mb_strtolower($name);
+        $match = (clone $query)->get(['id', 'aliases'])
+            ->first(function (Area $area) use ($needle) {
+                foreach ($area->aliasList() as $alias) {
+                    if (mb_strtolower($alias) === $needle) {
+                        return true;
+                    }
+                }
+
+                return false;
+            });
+
+        return $match ? (int) $match->id : null;
     }
 
     private function slugSearchToken(string $value): string

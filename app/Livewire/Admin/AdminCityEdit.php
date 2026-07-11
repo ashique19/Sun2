@@ -18,6 +18,8 @@ class AdminCityEdit extends Component
 
     public string $slug = '';
 
+    public string $aliasesText = '';
+
     public string $division = '';
 
     public bool $is_dhaka = false;
@@ -34,6 +36,7 @@ class AdminCityEdit extends Component
             $this->city = $city;
             $this->name = $city->name;
             $this->slug = (string) ($city->slug ?? '');
+            $this->aliasesText = implode("\n", $city->aliasList());
             $this->division = (string) ($city->division ?? '');
             $this->is_dhaka = (bool) $city->is_dhaka;
             $this->is_active = (bool) $city->is_active;
@@ -74,18 +77,25 @@ class AdminCityEdit extends Component
                 'max:120',
                 Rule::unique('cities', 'slug')->ignore($this->city?->id),
             ],
+            'aliasesText' => ['nullable', 'string', 'max:5000'],
             'division' => ['nullable', 'string', 'max:120'],
             'is_dhaka' => ['boolean'],
             'is_active' => ['boolean'],
         ]);
 
-        $validated['slug'] = Str::slug($validated['slug']) ?: Str::slug($validated['name']);
-        $validated['division'] = $validated['division'] !== '' ? $validated['division'] : null;
+        $payload = [
+            'name' => $validated['name'],
+            'slug' => Str::slug($validated['slug']) ?: Str::slug($validated['name']),
+            'aliases' => $this->parseAliasesText($validated['aliasesText'] ?? ''),
+            'division' => $validated['division'] !== '' ? $validated['division'] : null,
+            'is_dhaka' => $validated['is_dhaka'],
+            'is_active' => $validated['is_active'],
+        ];
 
         if ($this->city) {
-            $this->city->update($validated);
+            $this->city->update($payload);
         } else {
-            $this->city = City::query()->create($validated);
+            $this->city = City::query()->create($payload);
         }
 
         AddressLocationGuesser::clearCache();
@@ -98,6 +108,7 @@ class AdminCityEdit extends Component
         }
 
         $this->slug = (string) ($this->city->slug ?? '');
+        $this->aliasesText = implode("\n", $this->city->aliasList());
         $this->division = (string) ($this->city->division ?? '');
         $this->is_dhaka = (bool) $this->city->is_dhaka;
         $this->is_active = (bool) $this->city->is_active;
@@ -131,5 +142,34 @@ class AdminCityEdit extends Component
         return view('livewire.admin.admin-city-edit', [
             'areasCount' => $this->city?->areas()->count() ?? 0,
         ])->title($this->title());
+    }
+
+    /**
+     * @return list<string>|null
+     */
+    private function parseAliasesText(?string $text): ?array
+    {
+        $parts = preg_split('/[\n,]+/u', (string) $text) ?: [];
+        $aliases = [];
+        $seen = [];
+
+        foreach ($parts as $part) {
+            $alias = trim($part);
+
+            if ($alias === '') {
+                continue;
+            }
+
+            $key = mb_strtolower($alias);
+
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $aliases[] = $alias;
+        }
+
+        return $aliases === [] ? null : $aliases;
     }
 }

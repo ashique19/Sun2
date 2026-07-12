@@ -44,7 +44,9 @@ use App\Livewire\StorefrontResetPassword;
 use App\Livewire\StorefrontSearch;
 use App\Http\Controllers\RobotsController;
 use App\Http\Controllers\SitemapController;
+use App\Http\Controllers\ProductImageHashRebuildController;
 use App\Livewire\Admin\AdminSitemap;
+use App\Livewire\Admin\AdminProductImageHashes;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -54,6 +56,8 @@ Route::get('/sitemaps/{file}', [SitemapController::class, 'child'])
     ->where('file', '[A-Za-z0-9._-]+\.xml')
     ->name('sitemap.child');
 Route::get('/internal/sitemap/rebuild', [SitemapController::class, 'rebuild'])->name('sitemap.rebuild');
+Route::get('/internal/product-image-hashes/rebuild', ProductImageHashRebuildController::class)
+    ->name('product-image-hashes.rebuild');
 
 Route::get('/', StorefrontHome::class)->name('home');
 Route::get('/category/{category:slug}', StorefrontCategory::class)->name('category.show');
@@ -155,5 +159,6 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/users/{user}/edit', AdminUserEdit::class)->whereNumber('user')->name('users.edit');
         Route::get('/reports/sales-by-month', AdminSalesByMonth::class)->name('reports.sales-by-month');
         Route::get('/sitemap', AdminSitemap::class)->name('sitemap');
+        Route::get('/image-hashes', AdminProductImageHashes::class)->name('image-hashes');
     });
 });

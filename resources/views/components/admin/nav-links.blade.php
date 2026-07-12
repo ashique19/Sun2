@@ -113,6 +113,10 @@
             class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.sitemap') ? $active : $inactive }}">
             Sitemap
         </a>
+        <a href="{{ route('admin.image-hashes') }}" wire:navigate {!! $click !!}
+            class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.image-hashes') ? $active : $inactive }}">
+            Image Hashes
+        </a>
     @else
         <div class="space-y-1 pt-2">
             <p class="{{ $sectionLabel }}">Users</p>
@@ -137,6 +141,10 @@
                 <a href="{{ route('admin.sitemap') }}" wire:navigate
                     class="block rounded-lg px-3 {{ $linkPadSm }} {{ request()->routeIs('admin.sitemap') ? $active : $inactive }}">
                     Sitemap
+                </a>
+                <a href="{{ route('admin.image-hashes') }}" wire:navigate
+                    class="block rounded-lg px-3 {{ $linkPadSm }} {{ request()->routeIs('admin.image-hashes') ? $active : $inactive }}">
+                    Image Hashes
                 </a>
             </div>
         </div>

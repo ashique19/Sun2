@@ -35,11 +35,15 @@ class OrderProduct extends Model
     public function imageUrl(): ?string
     {
         if ($this->product_image) {
-            return StorefrontAssets::url($this->product_image);
+            return StorefrontAssets::smallUrl($this->product_image)
+                ?? StorefrontAssets::url($this->product_image);
         }
 
         if ($this->relationLoaded('product') && $this->product) {
-            return StorefrontAssets::url($this->product->primaryImagePath());
+            $path = $this->product->primaryImagePath();
+
+            return StorefrontAssets::smallUrl($path)
+                ?? StorefrontAssets::url($path);
         }
 
         return null;

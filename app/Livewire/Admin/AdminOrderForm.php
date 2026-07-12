@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\City;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\User;
 use App\Rules\BangladeshMobile;
 use App\Services\Admin\AdminOrderService;
 use App\Services\Admin\CustomerLookupService;
@@ -36,6 +37,10 @@ class AdminOrderForm extends Component
     /** Prefill create form from this order id (query ?repeat=). */
     #[Url]
     public ?int $repeat = null;
+
+    /** Prefill create form from this customer id (query ?customer=). */
+    #[Url]
+    public ?int $customer = null;
 
     public string $name = '';
 
@@ -127,6 +132,9 @@ class AdminOrderForm extends Component
 
     public string $aliasPromptAreaName = '';
 
+    /** Pasted/parsed area label kept when auto-resolve misses (e.g. Bondor → Bandar). */
+    public ?string $pendingAreaAliasHint = null;
+
     public function mount(?Order $order = null): void
     {
         if ($order?->exists) {
@@ -139,6 +147,8 @@ class AdminOrderForm extends Component
                 $this->fillFromOrder($source);
                 $this->message = 'Prefilled from order #'.$source->order_number.'. Saving will create a new order.';
             }
+        } elseif ($this->customer) {
+            $this->fillFromCustomer($this->customer);
         }
 
         if ($this->phone !== '') {
@@ -156,7 +166,99 @@ class AdminOrderForm extends Component
             return 'Create Order (repeat #'.$this->repeat.')';
         }
 
+        if ($this->customer) {
+            return 'Create Order';
+        }
+
         return 'Create Order';
+    }
+
+    private function fillFromCustomer(int $userId): void
+    {
+        $user = User::query()->find($userId);
+
+        if (! $user || $user->hasAnyRole(['admin', 'dev', 'moderator'])) {
+            return;
+        }
+
+        $latestOrder = Order::query()
+            ->where('user_id', $user->id)
+            ->latest('placed_at')
+            ->latest('id')
+            ->first();
+
+        if ($latestOrder) {
+            $this->name = (string) $latestOrder->name;
+            $this->phone = (string) $latestOrder->phone;
+            $this->address = (string) $latestOrder->address;
+            $this->paymentMethod = 'cod';
+            $this->adminNote = '';
+            $this->courierNote = '';
+            $this->isExchange = false;
+            $this->autoDelivery = true;
+            $this->lines = [];
+
+            $resolved = app(OrderPasteParser::class)->resolveLocation(
+                address: $latestOrder->address,
+                cityHint: $latestOrder->city,
+                areaHint: $latestOrder->area,
+            );
+            $this->cityId = $resolved[0];
+            $this->areaId = $resolved[1];
+            $this->addressLocationHint = $resolved[2];
+            $this->suppressAddressGuess = (bool) ($this->cityId || $this->areaId);
+            $this->pendingAreaAliasHint = $this->unresolvedAreaHint(
+                areaHint: $latestOrder->area,
+                areaId: $resolved[1],
+            );
+            $this->message = 'Prefilled from '.$user->name.'. Add products and save.';
+            $this->refreshDeliveryCharge();
+
+            return;
+        }
+
+        $address = $user->addresses()
+            ->with(['city:id,name', 'area:id,name'])
+            ->orderByDesc('is_default')
+            ->orderByDesc('id')
+            ->first();
+
+        $this->name = (string) $user->name;
+        $this->phone = (string) $user->phone;
+        $this->address = (string) ($address?->address ?? '');
+        $this->paymentMethod = 'cod';
+        $this->adminNote = '';
+        $this->courierNote = '';
+        $this->isExchange = false;
+        $this->autoDelivery = true;
+        $this->lines = [];
+
+        $cityHint = $address?->city?->name ?? $address?->city;
+        $areaHint = $address?->area?->name ?? $address?->area;
+
+        if ($address?->city_id) {
+            $this->cityId = (int) $address->city_id;
+            $this->areaId = $address->area_id ? (int) $address->area_id : null;
+            $this->addressLocationHint = collect([$areaHint, $cityHint])->filter()->implode(', ') ?: null;
+            $this->suppressAddressGuess = true;
+        } else {
+            $resolved = app(OrderPasteParser::class)->resolveLocation(
+                address: $this->address,
+                cityHint: is_string($cityHint) ? $cityHint : null,
+                areaHint: is_string($areaHint) ? $areaHint : null,
+            );
+            $this->cityId = $resolved[0];
+            $this->areaId = $resolved[1];
+            $this->addressLocationHint = $resolved[2];
+            $this->suppressAddressGuess = (bool) ($this->cityId || $this->areaId);
+        }
+
+        $this->pendingAreaAliasHint = $this->unresolvedAreaHint(
+            areaHint: is_string($areaHint) ? $areaHint : null,
+            areaId: $this->areaId,
+        );
+        $this->message = 'Prefilled from '.$user->name.'. Add products and save.';
+        $this->refreshDeliveryCharge();
     }
 
     private function fillFromOrder(Order $source): void
@@ -182,6 +284,10 @@ class AdminOrderForm extends Component
         $this->areaId = $resolved[1];
         $this->addressLocationHint = $resolved[2];
         $this->suppressAddressGuess = (bool) ($this->cityId || $this->areaId);
+        $this->pendingAreaAliasHint = $this->unresolvedAreaHint(
+            areaHint: $source->area,
+            areaId: $resolved[1],
+        );
 
         $this->lines = [];
 
@@ -330,6 +436,11 @@ class AdminOrderForm extends Component
             $this->applyingAutoLocation = false;
         }
 
+        $this->pendingAreaAliasHint = $this->unresolvedAreaHint(
+            areaHint: isset($parsed['area']) ? (string) $parsed['area'] : null,
+            areaId: ! empty($parsed['areaId']) ? (int) $parsed['areaId'] : null,
+        );
+
         if (! empty($parsed['location_hint'])) {
             $this->addressLocationHint = (string) $parsed['location_hint'];
             $this->suppressAddressGuess = true;
@@ -341,6 +452,34 @@ class AdminOrderForm extends Component
                 $this->adminNote = 'Pasted TOTAL DUE: '.number_format((float) $parsed['due_amount'], 0).' Tk';
             }
         }
+    }
+
+    /**
+     * Keep a pasted area label when it did not resolve, or differs from the matched area name.
+     */
+    private function unresolvedAreaHint(?string $areaHint, ?int $areaId): ?string
+    {
+        $areaHint = trim((string) $areaHint);
+
+        if ($areaHint === '') {
+            return null;
+        }
+
+        if (! $areaId) {
+            return $areaHint;
+        }
+
+        $areaName = Area::query()->whereKey($areaId)->value('name');
+
+        if (! $areaName) {
+            return $areaHint;
+        }
+
+        if (mb_strtolower($areaName) === mb_strtolower($areaHint)) {
+            return null;
+        }
+
+        return $areaHint;
     }
 
     public function updatedIsExchange(bool $value): void
@@ -544,6 +683,7 @@ class AdminOrderForm extends Component
             $this->message = 'Saved alias “'.$added[0].'” for '.$this->aliasPromptCityName.' > '.$this->aliasPromptAreaName.'.';
             $this->guessedAreaId = $this->aliasPromptAreaId;
             $this->guessedCityId = $this->cityId;
+            $this->pendingAreaAliasHint = null;
         }
 
         $this->dismissAliasPrompt();
@@ -562,7 +702,7 @@ class AdminOrderForm extends Component
     {
         $this->dismissAliasPrompt();
 
-        if (! $this->areaId || trim($this->address) === '') {
+        if (! $this->areaId || (trim($this->address) === '' && trim((string) $this->pendingAreaAliasHint) === '')) {
             return;
         }
 
@@ -571,6 +711,7 @@ class AdminOrderForm extends Component
             address: $this->address,
             selectedAreaId: $this->areaId,
             guessedAreaId: $this->guessedAreaId,
+            areaHint: $this->pendingAreaAliasHint,
         );
 
         if (! $suggestion) {

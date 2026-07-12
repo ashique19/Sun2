@@ -35,8 +35,9 @@ class LocationAliasLearner
         ?string $address,
         ?int $selectedAreaId,
         ?int $guessedAreaId = null,
+        ?string $areaHint = null,
     ): ?array {
-        if (! $selectedAreaId || trim((string) $address) === '') {
+        if (! $selectedAreaId) {
             return null;
         }
 
@@ -50,7 +51,21 @@ class LocationAliasLearner
             return null;
         }
 
-        $candidates = $this->candidatePhrases($address, $area->city, $area);
+        $candidates = [];
+
+        // Prefer the parsed/pasted area label (often stripped out of the address field).
+        if (filled($areaHint)) {
+            $candidates[] = trim((string) $areaHint);
+        }
+
+        if (filled($address)) {
+            $candidates = [...$candidates, ...$this->candidatePhrases((string) $address, $area->city, $area)];
+        }
+
+        $candidates = array_values(array_unique(array_filter(
+            $candidates,
+            fn (string $candidate) => trim($candidate) !== '',
+        )));
 
         foreach ($candidates as $candidate) {
             if ($this->aliasConflictsWithOtherArea($candidate, $area)) {

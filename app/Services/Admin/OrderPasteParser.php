@@ -6,7 +6,10 @@ use App\Models\Area;
 use App\Models\City;
 use App\Services\Storefront\AddressLocationGuesser;
 use App\Support\PhoneNumber;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 class OrderPasteParser
 {
@@ -263,9 +266,10 @@ PROMPT;
             $slugNeedle = $this->slugSearchToken($alias);
 
             $id = (clone $query)->where('name', $alias)->value('id')
+                ?? (clone $query)->whereRaw('LOWER(name) = ?', [mb_strtolower($alias)])->value('id')
                 ?? (clone $query)->where('name', 'like', $alias.'%')->value('id')
                 ?? (clone $query)->where('name', 'like', '%'.$alias.'%')->value('id')
-                ?? (clone $query)->whereJsonContains('aliases', $alias)->value('id')
+                ?? $this->findAreaIdByJsonAlias(clone $query, $alias)
                 ?? ($slugNeedle !== ''
                     ? ((clone $query)->where('slug', $slugNeedle)->value('id')
                         ?? (clone $query)->where('slug', 'like', '%-'.$slugNeedle)->value('id')
@@ -279,6 +283,10 @@ PROMPT;
         }
 
         // Case-insensitive alias scan within the city scope (JSON contains is exact).
+        if (! Schema::hasColumn('areas', 'aliases')) {
+            return null;
+        }
+
         $needle = mb_strtolower($name);
         $match = (clone $query)->get(['id', 'aliases'])
             ->first(function (Area $area) use ($needle) {
@@ -292,6 +300,21 @@ PROMPT;
             });
 
         return $match ? (int) $match->id : null;
+    }
+
+    private function findAreaIdByJsonAlias(Builder $query, string $alias): ?int
+    {
+        if (! Schema::hasColumn('areas', 'aliases')) {
+            return null;
+        }
+
+        try {
+            $id = $query->whereJsonContains('aliases', $alias)->value('id');
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $id ? (int) $id : null;
     }
 
     private function slugSearchToken(string $value): string

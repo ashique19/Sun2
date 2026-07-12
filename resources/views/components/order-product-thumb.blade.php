@@ -8,20 +8,14 @@
 @php
     $imageUrl = $item->imageUrl();
     $productName = $item->displayName();
-    $thumbSize = match ($size) {
-        'md' => 'h-20 w-20',
-        'lg' => 'h-24 w-24',
-        default => 'h-12 w-12',
-    };
-    $quantityClass = match ($size) {
-        'md', 'lg' => 'text-xl font-bold',
-        default => 'text-xs font-semibold',
-    };
+    $isLarge = in_array($size, ['md', 'lg'], true);
+    $thumbSize = $isLarge ? 'aspect-square w-full' : 'h-12 w-12';
+    $quantityClass = $isLarge ? 'text-2xl font-bold' : 'text-xs font-semibold';
     $returnedQty = (int) ($item->returned_quantity ?? 0);
     $returnReceived = (bool) ($item->return_received ?? false);
 @endphp
 
-<div {{ $attributes->merge(['class' => 'inline-flex flex-col items-center gap-1.5 shrink-0']) }}>
+<div {{ $attributes->merge(['class' => $isLarge ? 'flex w-full flex-col items-center gap-1.5' : 'inline-flex flex-col items-center gap-1.5 shrink-0']) }}>
     @if ($imageUrl)
         <button type="button"
             title="{{ $productName }} — click to enlarge"
@@ -63,8 +57,8 @@
             $quantityClass,
             'leading-none tabular-nums',
             'text-rose-600' => $item->quantity > 1,
-            'text-[#1E1E1E]' => $item->quantity <= 1 && in_array($size, ['md', 'lg'], true),
-            'text-[#6B6459]' => $item->quantity <= 1 && ! in_array($size, ['md', 'lg'], true),
+            'text-[#1E1E1E]' => $item->quantity <= 1 && $isLarge,
+            'text-[#6B6459]' => $item->quantity <= 1 && ! $isLarge,
         ])>
             &times;{{ $item->quantity }}
         </span>

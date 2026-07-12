@@ -7,7 +7,9 @@ use App\Models\User;
 use App\Services\Couriers\CourierApiRegistry;
 use App\Services\Couriers\SteadfastApiClient;
 use App\Support\PhoneNumber;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
+use Spatie\Permission\Models\Role;
 
 class CustomerLookupService
 {
@@ -70,6 +72,48 @@ class CustomerLookupService
             'steadfast' => $steadfast,
             'steadfast_error' => $steadfastError,
         ];
+    }
+
+    /**
+     * Find an existing customer by phone, or create one with the customers role.
+     * Phone is unique — concurrent creates fall back to a second lookup.
+     */
+    public function findOrCreateCustomer(string $phone, string $name, ?string $email = null): ?User
+    {
+        $displayPhone = PhoneNumber::display($phone);
+
+        if (! PhoneNumber::isValidDisplayMobile($displayPhone)) {
+            return null;
+        }
+
+        $existing = User::findByPhone($displayPhone);
+
+        if ($existing) {
+            return $existing;
+        }
+
+        Role::findOrCreate('customers');
+
+        $email = filled($email) ? trim((string) $email) : null;
+        if ($email !== null && User::query()->where('email', $email)->exists()) {
+            $email = null;
+        }
+
+        try {
+            $user = User::query()->create([
+                'name' => trim($name) !== '' ? trim($name) : $displayPhone,
+                'phone' => $displayPhone,
+                'email' => $email,
+                'password' => null,
+                'is_active' => true,
+            ]);
+            $user->assignRole('customers');
+
+            return $user;
+        } catch (QueryException) {
+            // Unique phone race: another request created the same customer.
+            return User::findByPhone($displayPhone);
+        }
     }
 
     /**

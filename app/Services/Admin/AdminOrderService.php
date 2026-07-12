@@ -15,6 +15,7 @@ class AdminOrderService
     public function __construct(
         private OrderStockService $stock,
         private OrderStatusService $statusHistory,
+        private CustomerLookupService $customers,
     ) {}
 
     /**
@@ -30,6 +31,8 @@ class AdminOrderService
         }
 
         return DB::transaction(function () use ($orderData, $lines) {
+            $orderData = $this->attachCustomerUser($orderData);
+
             $newQuantities = $this->stock->quantitiesFromLines($lines);
             $this->stock->syncQuantities([], $newQuantities);
 
@@ -69,6 +72,8 @@ class AdminOrderService
 
         return DB::transaction(function () use ($order, $orderData, $lines) {
             $order->load('items');
+
+            $orderData = $this->attachCustomerUser($orderData);
 
             $changeSummary = $this->summarizeUpdateChanges($order, $orderData, $lines);
 
@@ -120,6 +125,27 @@ class AdminOrderService
                 'line_total' => $line['line_total'],
             ]);
         }
+    }
+
+    /**
+     * Link order to an existing customer by phone, or create one (no duplicates).
+     *
+     * @param  array<string, mixed>  $orderData
+     * @return array<string, mixed>
+     */
+    private function attachCustomerUser(array $orderData): array
+    {
+        $phone = (string) ($orderData['phone'] ?? '');
+        $name = (string) ($orderData['name'] ?? '');
+        $email = isset($orderData['email']) ? (string) $orderData['email'] : null;
+
+        $user = $this->customers->findOrCreateCustomer($phone, $name, $email);
+
+        if ($user) {
+            $orderData['user_id'] = $user->id;
+        }
+
+        return $orderData;
     }
 
     /**

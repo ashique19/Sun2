@@ -10,6 +10,7 @@ use App\Livewire\Admin\AdminCouponEdit;
 use App\Livewire\Admin\AdminCoupons;
 use App\Livewire\Admin\AdminCourierEdit;
 use App\Livewire\Admin\AdminCouriers;
+use App\Livewire\Admin\AdminCustomerShow;
 use App\Livewire\Admin\AdminDashboard;
 use App\Livewire\Admin\AdminHeroSlideEdit;
 use App\Livewire\Admin\AdminHeroSlides;
@@ -140,6 +141,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/users/customers', AdminUsers::class)->defaults('segment', 'customers')->name('users.customers');
         Route::get('/users/moderators', AdminUsers::class)->defaults('segment', 'moderators')->name('users.moderators');
         Route::get('/users/create', AdminUserEdit::class)->name('users.create');
+        Route::get('/customers/{user}', AdminCustomerShow::class)->whereNumber('user')->name('customers.show');
         Route::get('/users/{user}/edit', AdminUserEdit::class)->whereNumber('user')->name('users.edit');
         Route::get('/reports/sales-by-month', AdminSalesByMonth::class)->name('reports.sales-by-month');
     });

@@ -71,8 +71,24 @@ class StorefrontAssets
 
     public static function mediumUrl(?string $pathOrUrl): ?string
     {
+        return self::variantUrl($pathOrUrl, 'md');
+    }
+
+    public static function smallUrl(?string $pathOrUrl): ?string
+    {
+        return self::variantUrl($pathOrUrl, 'sm');
+    }
+
+    public static function variantUrl(?string $pathOrUrl, string $variant = 'md'): ?string
+    {
         if (! $pathOrUrl) {
             return null;
+        }
+
+        $variant = strtolower($variant);
+
+        if (! in_array($variant, ['xs', 'sm', 'md', 'lg'], true)) {
+            $variant = 'md';
         }
 
         $path = self::toRelativePath($pathOrUrl);
@@ -82,10 +98,10 @@ class StorefrontAssets
         }
 
         if (preg_match('/_(xs|sm|md|lg)(\.[a-zA-Z0-9]+)$/i', $path)) {
-            $path = preg_replace('/_(xs|sm|md|lg)(\.[a-zA-Z0-9]+)$/i', '_md$2', $path);
+            $path = preg_replace('/_(xs|sm|md|lg)(\.[a-zA-Z0-9]+)$/i', '_'.$variant.'$2', $path);
         }
 
-        // Order line snapshots are usually _xs-only; product thumbs have _md.
+        // Order line snapshots are usually _xs-only; product thumbs live under img/thumb.
         if (preg_match('#^img/order/(.+)$#i', $path, $matches)) {
             $path = 'img/thumb/'.$matches[1];
         }

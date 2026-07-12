@@ -46,7 +46,13 @@
                 <tbody class="divide-y divide-[#E7DFCF]">
                     @forelse ($users as $user)
                         <tr class="hover:bg-[#FAF6EF]/60" wire:key="user-{{ $user->id }}">
-                            <td class="px-4 py-3 font-medium">{{ $user->name }}</td>
+                            <td class="px-4 py-3 font-medium">
+                                @if ($segment === 'customers')
+                                    <a href="{{ route('admin.customers.show', $user) }}" wire:navigate class="text-[#C9A227] hover:underline">{{ $user->name }}</a>
+                                @else
+                                    {{ $user->name }}
+                                @endif
+                            </td>
                             <td class="px-4 py-3 tabular-nums">{{ $user->phone }}</td>
                             <td class="px-4 py-3 text-[#6B6459]">{{ $user->email ?: '—' }}</td>
                             <td class="px-4 py-3">
@@ -58,6 +64,9 @@
                             </td>
                             <td class="px-4 py-3 text-[#6B6459] whitespace-nowrap">{{ $user->created_at?->format('d M Y') }}</td>
                             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
+                                @if ($segment === 'customers')
+                                    <a href="{{ route('admin.customers.show', $user) }}" wire:navigate class="text-[#C9A227] hover:underline">View</a>
+                                @endif
                                 <a href="{{ route('admin.users.edit', $user) }}" wire:navigate class="text-[#C9A227] hover:underline">Edit</a>
                                 @if ((int) $user->id !== (int) auth()->id())
                                     <button type="button"

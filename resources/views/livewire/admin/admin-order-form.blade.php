@@ -23,7 +23,7 @@
     <form wire:submit="save" class="min-w-0 space-y-4 sm:space-y-6">
         <div class="grid xl:grid-cols-3 gap-4 sm:gap-6 items-start min-w-0">
             <div class="xl:col-span-2 space-y-4 sm:space-y-6 min-w-0">
-                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6 min-w-0 overflow-hidden">
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6 min-w-0 overflow-visible">
                     <h2 class="font-semibold mb-3 sm:mb-4">Customer &amp; Delivery</h2>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
                         <div class="sm:col-span-2">
@@ -94,23 +94,25 @@
                         </div>
                         <div class="min-w-0">
                             <label class="block text-[#6B6459] mb-1">City</label>
-                            <select wire:model.live="cityId"
-                                class="w-full max-w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
-                                <option value="">Select city</option>
-                                @foreach ($cities as $city)
-                                    <option value="{{ $city->id }}">{{ $city->name }}</option>
-                                @endforeach
-                            </select>
+                            <x-admin.searchable-select
+                                wire:key="order-city-select"
+                                wire:model.live="cityId"
+                                :options="$cities"
+                                placeholder="Select city"
+                            />
+                            @error('cityId') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                         </div>
                         <div class="min-w-0">
                             <label class="block text-[#6B6459] mb-1">Area</label>
-                            <select wire:model.live="areaId" @disabled(! $cityId)
-                                class="w-full max-w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227] disabled:opacity-50">
-                                <option value="">Select area</option>
-                                @foreach ($areas as $area)
-                                    <option value="{{ $area->id }}">{{ $area->name }}</option>
-                                @endforeach
-                            </select>
+                            <x-admin.searchable-select
+                                wire:key="order-area-select-{{ $cityId ?: 'none' }}"
+                                wire:model.live="areaId"
+                                :options="$areas"
+                                placeholder="{{ $cityId ? 'Select area' : 'Select city first' }}"
+                                :disabled="! $cityId"
+                                empty-label="No areas match"
+                            />
+                            @error('areaId') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                         </div>
                     </div>
                 </div>

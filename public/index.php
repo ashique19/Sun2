@@ -13,6 +13,9 @@ if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php'))
 // Register the Composer autoloader...
 require __DIR__.'/../vendor/autoload.php';
 
+// Guarantee fileinfo polyfill is loaded even if Composer autoload files were not regenerated on deploy.
+require __DIR__.'/../app/Support/php_fileinfo_polyfill.php';
+
 // Bootstrap Laravel and handle the request...
 /** @var Application $app */
 $app = require_once __DIR__.'/../bootstrap/app.php';

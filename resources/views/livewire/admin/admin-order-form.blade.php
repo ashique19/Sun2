@@ -178,7 +178,7 @@
                     <h2 class="font-semibold mb-3 sm:mb-4">Add products</h2>
 
                     <div
-                        x-data="{ pasteHint: '' }"
+                        x-data="{ pasteHint: '', uploadError: '' }"
                         tabindex="0"
                         x-on:paste="
                             const items = [...($event.clipboardData?.items || [])];
@@ -189,9 +189,21 @@
                             }
                             $event.preventDefault();
                             pasteHint = '';
+                            uploadError = '';
                             const file = imageItem.getAsFile();
                             if (! file) return;
-                            $wire.upload('pastedImage', file, () => {}, () => {}, () => {});
+                            $wire.upload(
+                                'pastedImage',
+                                file,
+                                () => { uploadError = ''; },
+                                () => { uploadError = 'Upload was cancelled.'; },
+                                (errors) => {
+                                    const messages = errors ? Object.values(errors).flat() : [];
+                                    uploadError = messages.length
+                                        ? messages.join(' ')
+                                        : 'Upload failed. Check APP_URL matches this site (https), storage/app is writable, and PHP upload_max_filesize is large enough.';
+                                }
+                            );
                         "
                         class="mb-4 rounded-lg border border-dashed border-[#E0D6C2] bg-[#FAF6EF]/50 px-3 sm:px-4 py-3 text-sm text-[#6B6459] focus:outline-none focus:ring-1 focus:ring-[#C9A227] focus:border-[#C9A227] min-w-0 overflow-hidden"
                     >
@@ -204,6 +216,7 @@
                         >
                         <div wire:loading wire:target="pastedImage,searchByPastedImage" class="text-xs text-[#8C8474] mt-2">Matching image…</div>
                         <p class="text-xs text-amber-700 mt-2 break-words" x-text="pasteHint" x-show="pasteHint" x-cloak></p>
+                        <p class="text-xs text-rose-600 mt-2 break-words" x-text="uploadError" x-show="uploadError" x-cloak></p>
                         @error('pastedImage') <p class="text-rose-600 text-xs mt-2 break-words">{{ $message }}</p> @enderror
                         @if ($imageSearchError)
                             <p class="text-rose-600 text-xs mt-2 break-words">{{ $imageSearchError }}</p>

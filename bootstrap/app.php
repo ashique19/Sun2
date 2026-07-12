@@ -13,6 +13,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
@@ -21,6 +23,16 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*'),
+            fn (Request $request) => $request->is('api/*') || $request->is('livewire/*'),
         );
+
+        $exceptions->reportable(function (\Throwable $e): void {
+            if (request()?->is('livewire/*')) {
+                logger()->error('Livewire request failed', [
+                    'message' => $e->getMessage(),
+                    'url' => request()?->fullUrl(),
+                    'exception' => $e::class,
+                ]);
+            }
+        });
     })->create();

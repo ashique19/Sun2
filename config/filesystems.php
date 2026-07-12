@@ -38,6 +38,14 @@ return [
             'report' => false,
         ],
 
+        // Livewire temporary uploads (order image paste, product images, etc.)
+        'livewire' => [
+            'driver' => 'local',
+            'root' => storage_path('app'),
+            'throw' => true,
+            'report' => true,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

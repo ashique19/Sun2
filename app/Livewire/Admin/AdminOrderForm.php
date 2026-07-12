@@ -509,8 +509,9 @@ class AdminOrderForm extends Component
         $this->showImageMatchModal = false;
         $this->showCreateProductModal = false;
 
+        // After Livewire stores the file with an extension, validate by extension (not fileinfo).
         $this->validate([
-            'pastedImage' => ['required', 'image', 'max:10240'],
+            'pastedImage' => ['required', 'file', 'extensions:jpeg,jpg,png,webp,gif', 'max:10240'],
         ]);
 
         try {
@@ -561,7 +562,7 @@ class AdminOrderForm extends Component
     public function createProductFromPaste(ProductImageService $images): void
     {
         $this->validate([
-            'pastedImage' => ['required', 'image', 'max:10240'],
+            'pastedImage' => ['required', 'file', 'extensions:jpeg,jpg,png,webp,gif', 'max:10240'],
             'newProductName' => ['required', 'string', 'max:190'],
             'newProductPrice' => ['required', 'numeric', 'min:0'],
             'newProductStock' => ['required', 'integer', 'min:0'],

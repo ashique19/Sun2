@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Observers\SitemapInvalidationObserver;
 use App\Services\Sms\LogSmsSender;
 use App\Services\Sms\SslWirelessSmsSender;
+use App\Support\Fileinfo;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
@@ -27,6 +28,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configurePublicUrl();
+        $this->configureLivewireUploads();
         $this->ensureLivewireUploadDirectory();
 
         Product::observe(SitemapInvalidationObserver::class);
@@ -49,6 +51,17 @@ class AppServiceProvider extends ServiceProvider
         if (str_starts_with($appUrl, 'https://')) {
             URL::forceScheme('https');
         }
+    }
+
+    /**
+     * Use real image/mime validation when fileinfo is on; otherwise keep uploads working
+     * with presence/size checks only on the temporary upload endpoint.
+     */
+    private function configureLivewireUploads(): void
+    {
+        config([
+            'livewire.temporary_file_upload.rules' => Fileinfo::temporaryUploadRules(),
+        ]);
     }
 
     private function ensureLivewireUploadDirectory(): void

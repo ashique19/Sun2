@@ -3,13 +3,18 @@
 declare(strict_types=1);
 
 /**
- * Hosts without ext-fileinfo break Laravel Storage, Livewire uploads, and
- * league/mime-type-detection (Class "finfo" not found).
+ * Fallback only — skipped entirely when ext-fileinfo is enabled.
  *
- * This stub lets FinfoMimeTypeDetector construct successfully; its buffer/file
- * methods return false so detection falls back to extension maps.
+ * Laravel Storage, Livewire uploads, and league/mime-type-detection need the
+ * finfo class. On hosts that disable fileinfo, this stub lets those libraries
+ * construct successfully and fall back to extension-based MIME maps.
  */
-if (extension_loaded('fileinfo') || class_exists('finfo', false)) {
+if (extension_loaded('fileinfo')) {
+    return;
+}
+
+// Already installed by a previous require (e.g. Composer files + index.php).
+if (class_exists('finfo', false)) {
     return;
 }
 

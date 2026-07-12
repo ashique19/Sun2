@@ -3,8 +3,9 @@
 namespace App\Services\Sitemap;
 
 /**
- * Uses plain PHP file I/O so sitemap admin/rebuild works on hosts
- * without the fileinfo extension (Laravel Storage/Flysystem needs finfo).
+ * Plain PHP file I/O for sitemap XML.
+ * Avoids Laravel Storage/Flysystem so rebuilds still work if fileinfo is disabled
+ * (Storage falls back via the polyfill, but this path stays independent).
  */
 class SitemapXmlWriter
 {

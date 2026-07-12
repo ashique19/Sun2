@@ -72,11 +72,11 @@ class AdminHeroSlideEdit extends Component
             'link_label' => ['nullable', 'string', 'max:80'],
             'display_order' => ['integer', 'min:0', 'max:32767'],
             'is_published' => ['boolean'],
-            'imageUpload' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:8192'],
+            'imageUpload' => \App\Support\Fileinfo::storedImageRules(8192, required: false),
         ];
 
         if ($isCreate && ! $this->imageUpload) {
-            $rules['imageUpload'] = ['required', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:8192'];
+            $rules['imageUpload'] = \App\Support\Fileinfo::storedImageRules(8192, required: true);
         }
 
         $validated = $this->validate($rules);

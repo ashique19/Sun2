@@ -124,7 +124,7 @@ class AdminProductEdit extends Component
 
         $this->validate([
             'newImages' => ['required', 'array', 'min:1'],
-            'newImages.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'newImages.*' => \App\Support\Fileinfo::storedImageItemRules(5120),
         ]);
 
         $count = count($this->newImages);

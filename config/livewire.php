@@ -130,10 +130,10 @@ return [
 
     'temporary_file_upload' => [
         // Dedicated disk rooted at storage/app (avoids storage/app/private permission issues).
+        // Rules are set at runtime in AppServiceProvider from App\Support\Fileinfo
+        // (image/mimes when fileinfo is enabled; file+size fallback when it is not).
         'disk' => env('LIVEWIRE_TEMPORARY_FILE_UPLOAD_DISK', 'livewire'),
-        // Keep this minimal: PHP's upload tmp files have no extension, so "mimes"/"image"
-        // need fileinfo content sniffing and fail on hosts without it.
-        'rules' => ['required', 'file', 'max:12288'],
+        'rules' => null,
         'directory' => 'livewire-tmp',
         'middleware' => null,                                 // Example: 'throttle:5,1'            | Default: 'throttle:60,1'
         'preview_mimes' => [                                  // Supported file types for temporary pre-signed file URLs...

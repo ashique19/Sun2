@@ -96,7 +96,7 @@ class AdminCategoryEdit extends Component
             'display_order' => ['integer', 'min:0', 'max:32767'],
             'is_active' => ['boolean'],
             'is_homepage' => ['boolean'],
-            'thumbUpload' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'],
+            'thumbUpload' => \App\Support\Fileinfo::storedImageRules(5120, required: false),
         ]);
 
         if ($validated['slug'] === '') {

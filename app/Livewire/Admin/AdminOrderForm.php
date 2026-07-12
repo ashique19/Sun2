@@ -804,6 +804,8 @@ class AdminOrderForm extends Component
         $this->error = null;
         $this->message = null;
 
+        $this->normalizeCustomerFieldsForSave();
+
         $validated = $this->validate($this->rules());
 
         $this->address = $this->applyExchangePrefix($validated['address'], $this->isExchange);
@@ -1022,6 +1024,39 @@ class AdminOrderForm extends Component
         }
 
         return $without === '' ? $prefix : $prefix.' '.$without;
+    }
+
+    /**
+     * Ensure phone/name/address are trimmed and paste blocks are parsed before validation.
+     * Guards against Livewire morph races where the DOM still shows values but properties were reset.
+     */
+    private function normalizeCustomerFieldsForSave(): void
+    {
+        $this->name = trim($this->name);
+        $this->phone = trim($this->phone);
+        $this->address = trim($this->address);
+
+        if ($this->phone === '') {
+            return;
+        }
+
+        $pasteParser = app(OrderPasteParser::class);
+
+        if ($pasteParser->looksLikePasteBlock($this->phone)) {
+            $this->lookupPhone();
+
+            $this->name = trim($this->name);
+            $this->phone = trim($this->phone);
+            $this->address = trim($this->address);
+
+            return;
+        }
+
+        $extracted = PhoneNumber::extractFirstBangladeshMobile($this->phone);
+
+        if ($extracted) {
+            $this->phone = $extracted;
+        }
     }
 
     /**

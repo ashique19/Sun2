@@ -1,7 +1,4 @@
-<div>
-    <x-storefront.announcement />
-    <x-storefront.header :query="$q" />
-
+<x-storefront.shell :query="$q">
     <div class="mx-auto max-w-6xl px-4 py-8">
         <h1 class="font-serif text-3xl font-semibold mb-2">
             @if ($q !== '')
@@ -15,7 +12,7 @@
         @if ($products->isEmpty())
             <div class="rounded-xl border border-dashed border-[#D8CDB6] p-10 text-center text-[#6B6459]">
                 @if ($q === '')
-                    Enter a search term above to find jewelry.
+                    Enter a search term above to find handmade jewellery.
                 @else
                     No products matched your search. Try a different keyword.
                 @endif
@@ -29,6 +26,4 @@
             <div class="mt-8">{{ $products->links() }}</div>
         @endif
     </div>
-
-    <x-storefront.footer />
-</div>
+</x-storefront.shell>

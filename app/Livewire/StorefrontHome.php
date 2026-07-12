@@ -4,11 +4,10 @@ namespace App\Livewire;
 
 use App\Models\Category;
 use App\Models\HeroSlide;
+use App\Support\Seo;
 use Livewire\Attributes\Layout;
-use Livewire\Attributes\Title;
 use Livewire\Component;
 
-#[Title('Sundoritoma - Traditional & Imitation Jewelry')]
 #[Layout('components.layouts.app')]
 class StorefrontHome extends Component
 {
@@ -27,6 +26,12 @@ class StorefrontHome extends Component
                 ->published()
                 ->orderBy('display_order')
                 ->get(),
-        ]);
+        ])
+            ->title(config('seo.default_title'))
+            ->layoutData([
+                'seoDescription' => Seo::description(null),
+                'seoCanonical' => route('home'),
+                'seoType' => 'website',
+            ]);
     }
 }

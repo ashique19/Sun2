@@ -14,10 +14,10 @@ class PageSeeder extends Seeder
                 'slug' => 'about-us',
                 'name' => 'About Us',
                 'meta_tag_title' => 'About Us - Sundoritoma',
-                'meta_tag_description' => 'Learn about Sundoritoma, traditional and imitation jewelry with home delivery across Bangladesh.',
+                'meta_tag_description' => 'Learn about Sundoritoma — high-quality handmade jewellery with home delivery across Bangladesh.',
                 'details' => <<<'HTML'
-<p>Sundoritoma is a Bangladesh-based jewelry store specializing in traditional and imitation jewelry — German silver, brass, beads, and handcrafted collections for everyday wear and special occasions.</p>
-<p>From necklaces and earrings to bangles and festive sets, we curate pieces that blend heritage craftsmanship with contemporary style. Our goal is simple: beautiful jewelry that feels special, at accessible prices, delivered to your door.</p>
+<p>Sundoritoma is a Bangladesh-based jewellery store specializing in high-quality handmade jewellery — German silver, brass, beads, and handcrafted collections for everyday wear and special occasions.</p>
+<p>From necklaces and earrings to bangles and festive sets, we make pieces that blend careful craftsmanship with contemporary style. Our goal is simple: beautiful handmade jewellery that feels special, at accessible prices, delivered to your door.</p>
 <p>We offer cash on delivery and home delivery all over Bangladesh so shopping stays easy wherever you are.</p>
 <p><strong>Contact:</strong> 01880001255 &middot; info@sundoritoma.com</p>
 <p><strong>Address:</strong> Dhaka, Bangladesh</p>
@@ -51,7 +51,7 @@ HTML,
                 'details' => <<<'HTML'
 <p>Welcome to Sundoritoma. By browsing or placing an order on sundoritoma.com, you agree to the following terms.</p>
 <h2>Products</h2>
-<p>We sell traditional and imitation jewelry. Product images and descriptions are provided for reference; slight variations in color, finish, or handmade detail may occur.</p>
+<p>We sell high-quality handmade jewellery. Product images and descriptions are provided for reference; slight variations in color, finish, or handmade detail may occur.</p>
 <h2>Pricing and payment</h2>
 <p>All prices are listed in Bangladeshi Taka (৳). Cash on delivery is available subject to service area and order acceptance by our team. We reserve the right to cancel orders in case of pricing errors, stock issues, or suspected fraud.</p>
 <h2>Delivery</h2>

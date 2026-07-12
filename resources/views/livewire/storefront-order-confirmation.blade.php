@@ -1,7 +1,4 @@
-<div>
-    <x-storefront.announcement />
-    <x-storefront.header />
-
+<x-storefront.shell>
     <div class="mx-auto max-w-3xl px-4 py-10 text-center">
         <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 text-2xl mb-6">&#10003;</div>
         <h1 class="font-serif text-3xl font-semibold mb-2">Order Confirmed</h1>
@@ -46,6 +43,4 @@
             </a>
         @endauth
     </div>
-
-    <x-storefront.footer />
-</div>
+</x-storefront.shell>

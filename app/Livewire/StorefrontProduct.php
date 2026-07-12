@@ -6,6 +6,8 @@ use App\Models\Product;
 use App\Models\ProductReview;
 use App\Services\Storefront\CartService;
 use App\Services\Storefront\WishlistService;
+use App\Support\Seo;
+use App\Support\StorefrontAssets;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -116,12 +118,25 @@ class StorefrontProduct extends Component
 
     public function title(): string
     {
-        return $this->product->name.' - Sundoritoma';
+        return $this->product->meta_title
+            ?: ($this->product->name.' - Sundoritoma');
     }
 
     public function render()
     {
+        $image = StorefrontAssets::mediumUrl($this->product->primaryImagePath())
+            ?? StorefrontAssets::url($this->product->primaryImagePath());
+
         return view('livewire.storefront-product')
-            ->title($this->title());
+            ->title($this->title())
+            ->layoutData([
+                'seoDescription' => Seo::description(
+                    $this->product->meta_description ?: $this->product->description,
+                    $this->product->name.' — high-quality handmade jewellery from Sundoritoma. Home delivery all over Bangladesh.',
+                ),
+                'seoCanonical' => route('product.show', $this->product),
+                'seoImage' => $image,
+                'seoType' => 'product',
+            ]);
     }
 }

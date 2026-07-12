@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Models\Product;
+use App\Support\Seo;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -43,6 +44,15 @@ class StorefrontSearch extends Component
 
         return view('livewire.storefront-search', [
             'products' => $products,
-        ])->title($this->title());
+        ])
+            ->title($this->title())
+            ->layoutData([
+                'seoDescription' => Seo::description(
+                    $this->q !== ''
+                        ? 'Search results for “'.$this->q.'” at Sundoritoma.'
+                        : 'Search high-quality handmade jewellery at Sundoritoma.',
+                ),
+                'seoCanonical' => route('search'),
+            ]);
     }
 }

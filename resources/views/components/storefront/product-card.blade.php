@@ -1,14 +1,17 @@
 @props(['product'])
 
 @php
-    $image = \App\Support\StorefrontAssets::url($product->primaryImagePath());
+    $imagePath = $product->primaryImagePath();
 @endphp
 
 <a href="{{ route('product.show', $product) }}" wire:navigate
    class="group block rounded-xl bg-white border border-[#EFE7D6] overflow-hidden hover:shadow-md transition">
-    @if ($image)
-        <img src="{{ $image }}" alt="{{ $product->name }}"
-            class="aspect-square w-full object-cover bg-[#F1EADB] group-hover:scale-[1.02] transition-transform duration-300">
+    @if ($imagePath)
+        <x-storefront.listing-image
+            :path="$imagePath"
+            :alt="$product->name"
+            class="aspect-square w-full object-cover bg-[#F1EADB] group-hover:scale-[1.02] transition-transform duration-300"
+        />
     @else
         <div class="aspect-square bg-[#F1EADB] flex items-center justify-center text-4xl text-[#C9A227]">
             &#9670;

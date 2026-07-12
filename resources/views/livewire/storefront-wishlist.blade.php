@@ -1,7 +1,4 @@
-<div>
-    <x-storefront.announcement />
-    <x-storefront.header />
-
+<x-storefront.shell>
     <div class="mx-auto max-w-6xl px-4 py-8">
         <h1 class="font-serif text-3xl font-semibold mb-2">Wishlist</h1>
         <p class="text-sm text-[#8C8474] mb-8">{{ $items->count() }} saved item(s)</p>
@@ -26,7 +23,12 @@
                             @php $img = $product->primaryImagePath() @endphp
                             <div class="aspect-square bg-[#F1EADB]">
                                 @if ($img)
-                                    <img src="{{ \App\Support\StorefrontAssets::url($img) }}" alt="{{ $product->name }}" class="w-full h-full object-cover">
+                                    <x-storefront.listing-image
+                                        :path="$img"
+                                        :alt="$product->name"
+                                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                                        class="w-full h-full object-cover"
+                                    />
                                 @endif
                             </div>
                         </a>
@@ -49,6 +51,4 @@
             </div>
         @endif
     </div>
-
-    <x-storefront.footer />
-</div>
+</x-storefront.shell>

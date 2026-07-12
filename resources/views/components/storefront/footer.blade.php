@@ -3,7 +3,7 @@
         <div>
             <h3 class="font-serif text-lg font-semibold mb-3">Sundoritoma</h3>
             <p class="text-[#6B6459] leading-relaxed">
-                Traditional &amp; imitation jewelry — German silver, brass, beads, and exclusive handcrafted collections.
+                High-quality handmade jewellery — German silver, brass, beads, and exclusive handcrafted collections.
             </p>
         </div>
         <div>

@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Models\Page;
+use App\Support\Seo;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -24,6 +25,13 @@ class StorefrontPage extends Component
     public function render()
     {
         return view('livewire.storefront-page')
-            ->title($this->title());
+            ->title($this->title())
+            ->layoutData([
+                'seoDescription' => Seo::description(
+                    $this->page->meta_tag_description ?: $this->page->details,
+                ),
+                'seoCanonical' => route('page.show', $this->page),
+                'seoType' => 'article',
+            ]);
     }
 }

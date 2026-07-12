@@ -109,6 +109,10 @@
             class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.reports.sales-by-month') ? $active : $inactive }}">
             Sales by Month
         </a>
+        <a href="{{ route('admin.sitemap') }}" wire:navigate {!! $click !!}
+            class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.sitemap') ? $active : $inactive }}">
+            Sitemap
+        </a>
     @else
         <div class="space-y-1 pt-2">
             <p class="{{ $sectionLabel }}">Users</p>
@@ -129,6 +133,10 @@
                 <a href="{{ route('admin.reports.sales-by-month') }}" wire:navigate
                     class="block rounded-lg px-3 {{ $linkPadSm }} {{ request()->routeIs('admin.reports.sales-by-month') ? $active : $inactive }}">
                     Sales by Month
+                </a>
+                <a href="{{ route('admin.sitemap') }}" wire:navigate
+                    class="block rounded-lg px-3 {{ $linkPadSm }} {{ request()->routeIs('admin.sitemap') ? $active : $inactive }}">
+                    Sitemap
                 </a>
             </div>
         </div>

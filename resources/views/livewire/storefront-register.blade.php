@@ -1,7 +1,4 @@
-<div>
-    <x-storefront.announcement />
-    <x-storefront.header />
-
+<x-storefront.shell>
     <div class="mx-auto max-w-md px-4 py-10">
         <h1 class="font-serif text-3xl font-semibold mb-2 text-center">Create Account</h1>
         <p class="text-sm text-[#8C8474] text-center mb-8">Join Sundoritoma to track orders and checkout faster.</p>
@@ -47,6 +44,4 @@
             <a href="{{ route('login') }}" wire:navigate class="text-[#C9A227] hover:underline">Log in</a>
         </p>
     </div>
-
-    <x-storefront.footer />
-</div>
+</x-storefront.shell>

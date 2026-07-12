@@ -1,7 +1,4 @@
-<div>
-    <x-storefront.announcement />
-    <x-storefront.header />
-
+<x-storefront.shell>
     <div class="mx-auto max-w-md px-4 py-10">
         <h1 class="font-serif text-3xl font-semibold mb-2 text-center">Reset Password</h1>
         <p class="text-sm text-[#8C8474] text-center mb-8">Choose a new password for your account.</p>
@@ -30,6 +27,4 @@
             </button>
         </form>
     </div>
-
-    <x-storefront.footer />
-</div>
+</x-storefront.shell>

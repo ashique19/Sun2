@@ -1,7 +1,4 @@
-<div>
-    <x-storefront.announcement />
-    <x-storefront.header />
-
+<x-storefront.shell>
     <div class="mx-auto max-w-6xl px-4 py-8">
         <h1 class="font-serif text-3xl font-semibold mb-2">Checkout</h1>
         <p class="text-sm text-[#8C8474] mb-8">Cash on Delivery &middot; OTP confirmation required</p>
@@ -211,6 +208,4 @@
             </div>
         </div>
     </div>
-
-    <x-storefront.footer />
-</div>
+</x-storefront.shell>

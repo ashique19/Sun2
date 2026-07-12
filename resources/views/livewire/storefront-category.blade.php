@@ -1,9 +1,8 @@
-<div>
-    <x-storefront.announcement />
-    <x-storefront.header />
+<x-storefront.shell>
+    <x-seo.json-ld :data="\App\Support\JsonLd::categoryBreadcrumb($category)" />
 
     <div class="mx-auto max-w-6xl px-4 py-8">
-        <nav class="text-xs text-[#8C8474] mb-4">
+        <nav class="text-xs text-[#8C8474] mb-4" aria-label="Breadcrumb">
             <a href="{{ route('home') }}" wire:navigate class="hover:text-[#C9A227]">Home</a>
             <span class="mx-2">/</span>
             <span class="text-[#1E1E1E]">{{ $category->name }}</span>
@@ -42,6 +41,4 @@
             <div class="mt-8">{{ $products->links() }}</div>
         @endif
     </div>
-
-    <x-storefront.footer />
-</div>
+</x-storefront.shell>

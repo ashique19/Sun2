@@ -1,7 +1,4 @@
-<div>
-    <x-storefront.announcement />
-    <x-storefront.header />
-
+<x-storefront.shell>
     <div class="mx-auto max-w-md px-4 py-10">
         <h1 class="font-serif text-3xl font-semibold mb-2 text-center">Login</h1>
         <p class="text-sm text-[#8C8474] text-center mb-8">Use your email or mobile number with password.</p>
@@ -41,6 +38,4 @@
             <a href="{{ route('register') }}" wire:navigate class="text-[#C9A227] hover:underline">Create an account</a>
         </p>
     </div>
-
-    <x-storefront.footer />
-</div>
+</x-storefront.shell>

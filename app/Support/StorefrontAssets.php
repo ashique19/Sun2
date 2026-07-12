@@ -79,6 +79,34 @@ class StorefrontAssets
         return self::variantUrl($pathOrUrl, 'sm');
     }
 
+    /**
+     * Build a responsive srcset for listing/thumb images.
+     *
+     * @param  array<string, int>  $widths  variant => CSS pixel width hint
+     */
+    public static function srcset(?string $pathOrUrl, array $widths = [
+        'sm' => 400,
+        'md' => 800,
+        'lg' => 1200,
+    ]): ?string
+    {
+        if (! $pathOrUrl) {
+            return null;
+        }
+
+        $parts = [];
+
+        foreach ($widths as $variant => $width) {
+            $url = self::variantUrl($pathOrUrl, (string) $variant);
+
+            if ($url) {
+                $parts[] = $url.' '.(int) $width.'w';
+            }
+        }
+
+        return $parts === [] ? null : implode(', ', $parts);
+    }
+
     public static function variantUrl(?string $pathOrUrl, string $variant = 'md'): ?string
     {
         if (! $pathOrUrl) {

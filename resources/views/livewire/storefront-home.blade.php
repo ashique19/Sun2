@@ -1,7 +1,4 @@
-<div>
-    <x-storefront.announcement />
-    <x-storefront.header />
-
+<x-storefront.shell>
     @if ($heroSlides->isNotEmpty())
         <section
             x-data="{
@@ -31,13 +28,22 @@
                         @if ($index > 0) style="display: none;" @endif
                     >
                         @if ($image = \App\Support\StorefrontAssets::url($slide->image))
-                            <img src="{{ $image }}" alt="{{ $slide->title }}" class="h-full w-full object-cover">
+                            <img
+                                src="{{ $image }}"
+                                alt="{{ $slide->title }}"
+                                class="h-full w-full object-cover"
+                                @if ($index === 0) fetchpriority="high" @else loading="lazy" @endif
+                            >
                         @endif
                         <div class="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent"></div>
                         <div class="absolute inset-0 flex items-center">
                             <div class="mx-auto w-full max-w-6xl px-6 md:px-10">
-                                <p class="text-[#E9C978] uppercase tracking-[0.25em] text-xs mb-3">Traditional &amp; Imitation Jewelry</p>
-                                <h1 class="font-serif text-3xl md:text-5xl font-semibold leading-tight text-white max-w-xl">{{ $slide->title }}</h1>
+                                <p class="text-[#E9C978] uppercase tracking-[0.25em] text-xs mb-3">High-Quality Handmade Jewellery</p>
+                                @if ($index === 0)
+                                    <h1 class="font-serif text-3xl md:text-5xl font-semibold leading-tight text-white max-w-xl">{{ $slide->title }}</h1>
+                                @else
+                                    <p class="font-serif text-3xl md:text-5xl font-semibold leading-tight text-white max-w-xl">{{ $slide->title }}</p>
+                                @endif
                                 @if ($slide->subtitle)
                                     <p class="mt-3 text-sm md:text-base text-white/80 max-w-lg">{{ $slide->subtitle }}</p>
                                 @endif
@@ -61,6 +67,11 @@
                 </div>
             @endif
         </section>
+    @else
+        <div class="mx-auto max-w-6xl px-4 pt-10">
+            <h1 class="font-serif text-3xl md:text-4xl font-semibold">High-Quality Handmade Jewellery</h1>
+            <p class="mt-2 text-[#6B6459]">German silver, brass, beads, and exclusive handcrafted collections — home delivery all over Bangladesh.</p>
+        </div>
     @endif
 
     <section id="collection" class="mx-auto max-w-6xl px-4 py-12">
@@ -78,9 +89,13 @@
                 @foreach ($categories as $category)
                     <a href="{{ route('category.show', $category) }}" wire:navigate
                        class="group rounded-xl bg-white border border-[#EFE7D6] overflow-hidden hover:shadow-md transition">
-                        @if ($image = \App\Support\StorefrontAssets::url($category->thumb_image))
-                            <img src="{{ $image }}" alt="{{ $category->name }}"
-                                class="aspect-square w-full object-cover bg-[#F1EADB] group-hover:scale-[1.02] transition-transform duration-300">
+                        @if ($category->thumb_image)
+                            <x-storefront.listing-image
+                                :path="$category->thumb_image"
+                                :alt="$category->name"
+                                sizes="(max-width: 768px) 50vw, 25vw"
+                                class="aspect-square w-full object-cover bg-[#F1EADB] group-hover:scale-[1.02] transition-transform duration-300"
+                            />
                         @else
                             <div class="aspect-square bg-[#F1EADB] flex items-center justify-center text-4xl text-[#C9A227]">&#9670;</div>
                         @endif
@@ -96,6 +111,4 @@
             </div>
         @endif
     </section>
-
-    <x-storefront.footer />
-</div>
+</x-storefront.shell>

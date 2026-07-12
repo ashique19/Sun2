@@ -42,8 +42,18 @@ use App\Livewire\StorefrontProfile;
 use App\Livewire\StorefrontRegister;
 use App\Livewire\StorefrontResetPassword;
 use App\Livewire\StorefrontSearch;
+use App\Http\Controllers\RobotsController;
+use App\Http\Controllers\SitemapController;
+use App\Livewire\Admin\AdminSitemap;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/robots.txt', RobotsController::class)->name('robots');
+Route::get('/sitemap.xml', [SitemapController::class, 'index'])->name('sitemap');
+Route::get('/sitemaps/{file}', [SitemapController::class, 'child'])
+    ->where('file', '[A-Za-z0-9._-]+\.xml')
+    ->name('sitemap.child');
+Route::get('/internal/sitemap/rebuild', [SitemapController::class, 'rebuild'])->name('sitemap.rebuild');
 
 Route::get('/', StorefrontHome::class)->name('home');
 Route::get('/category/{category:slug}', StorefrontCategory::class)->name('category.show');
@@ -144,5 +154,6 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/customers/{user}', AdminCustomerShow::class)->whereNumber('user')->name('customers.show');
         Route::get('/users/{user}/edit', AdminUserEdit::class)->whereNumber('user')->name('users.edit');
         Route::get('/reports/sales-by-month', AdminSalesByMonth::class)->name('reports.sales-by-month');
+        Route::get('/sitemap', AdminSitemap::class)->name('sitemap');
     });
 });

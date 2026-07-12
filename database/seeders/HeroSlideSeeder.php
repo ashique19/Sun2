@@ -12,7 +12,7 @@ class HeroSlideSeeder extends Seeder
         $slides = [
             [
                 'title' => 'Sparkle with Tradition',
-                'subtitle' => 'Premium silver-plated jhumkas & layered necklaces',
+                'subtitle' => 'Handmade silver-plated jhumkas & layered necklaces',
                 'image' => '/img/hero/slide-1.jpg',
                 'link_url' => '#collection',
                 'link_label' => 'Shop Collection',
@@ -24,7 +24,7 @@ class HeroSlideSeeder extends Seeder
                 'subtitle' => 'Antique gold bangles & German silver collections',
                 'image' => '/img/hero/slide-2.jpg',
                 'link_url' => '#collection',
-                'link_label' => 'Explore Jewelry',
+                'link_label' => 'Explore Jewellery',
                 'display_order' => 2,
                 'is_published' => true,
             ],

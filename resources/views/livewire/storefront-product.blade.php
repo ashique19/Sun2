@@ -1,15 +1,15 @@
-<div>
-    <x-storefront.announcement />
-    <x-storefront.header />
-
+<x-storefront.shell>
     @php
         $images = $product->images;
         $active = $images[$activeImage] ?? $images->first();
         $activeUrl = $active ? \App\Support\StorefrontAssets::url($active->path) : null;
     @endphp
 
+    <x-seo.json-ld :data="\App\Support\JsonLd::product($product)" />
+    <x-seo.json-ld :data="\App\Support\JsonLd::productBreadcrumb($product)" />
+
     <div class="mx-auto max-w-6xl px-4 py-8">
-        <nav class="text-xs text-[#8C8474] mb-4">
+        <nav class="text-xs text-[#8C8474] mb-4" aria-label="Breadcrumb">
             <a href="{{ route('home') }}" wire:navigate class="hover:text-[#C9A227]">Home</a>
             @if ($product->category)
                 <span class="mx-2">/</span>
@@ -23,7 +23,7 @@
             <div>
                 <div class="rounded-xl overflow-hidden bg-white border border-[#EFE7D6] aspect-square">
                     @if ($activeUrl)
-                        <img src="{{ $activeUrl }}" alt="{{ $product->name }}" class="w-full h-full object-cover">
+                        <img src="{{ $activeUrl }}" alt="{{ $product->name }}" class="w-full h-full object-cover" fetchpriority="high">
                     @else
                         <div class="w-full h-full bg-[#F1EADB] flex items-center justify-center text-5xl text-[#C9A227]">&#9670;</div>
                     @endif
@@ -31,10 +31,10 @@
                 @if ($images->count() > 1)
                     <div class="mt-4 grid grid-cols-5 gap-2">
                         @foreach ($images as $index => $image)
-                            @if ($thumb = \App\Support\StorefrontAssets::url($image->path))
+                            @if ($thumb = \App\Support\StorefrontAssets::smallUrl($image->path) ?? \App\Support\StorefrontAssets::url($image->path))
                                 <button type="button" wire:click="selectImage({{ $index }})"
                                     class="rounded-lg overflow-hidden border-2 aspect-square {{ $activeImage === $index ? 'border-[#C9A227]' : 'border-transparent' }}">
-                                    <img src="{{ $thumb }}" alt="" class="w-full h-full object-cover">
+                                    <img src="{{ $thumb }}" alt="" class="w-full h-full object-cover" loading="lazy" decoding="async">
                                 </button>
                             @endif
                         @endforeach
@@ -86,7 +86,7 @@
                     </div>
                 @else
                     <p class="mt-6 text-[#6B6459] leading-relaxed">
-                        Handcrafted traditional jewelry from Sundoritoma. Contact us for more details about materials, sizing, and care.
+                        High-quality handmade jewellery from Sundoritoma. Contact us for more details about materials, sizing, and care.
                     </p>
                 @endif
 
@@ -188,6 +188,4 @@
             </div>
         </div>
     </div>
-
-    <x-storefront.footer />
-</div>
+</x-storefront.shell>

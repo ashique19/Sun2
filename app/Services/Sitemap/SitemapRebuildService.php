@@ -8,8 +8,6 @@ use App\Models\Product;
 use App\Models\SitemapRun;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class SitemapRebuildService
@@ -60,7 +58,7 @@ class SitemapRebuildService
 
     public function indexExists(): bool
     {
-        return Storage::disk('local')->exists($this->writer->indexRelativePath());
+        return $this->writer->indexExists();
     }
 
     public function start(string $trigger, ?User $user = null, bool $force = false): SitemapRun

@@ -2,8 +2,10 @@
 
 namespace App\Services\Sitemap;
 
-use Illuminate\Support\Facades\Storage;
-
+/**
+ * Uses plain PHP file I/O so sitemap admin/rebuild works on hosts
+ * without the fileinfo extension (Laravel Storage/Flysystem needs finfo).
+ */
 class SitemapXmlWriter
 {
     public function diskPath(): string
@@ -11,19 +13,34 @@ class SitemapXmlWriter
         return trim((string) config('sitemap.directory', 'sitemaps'), '/');
     }
 
+    public function absoluteDirectory(): string
+    {
+        return storage_path('app/'.$this->diskPath());
+    }
+
+    public function indexAbsolutePath(): string
+    {
+        return $this->absoluteDirectory().DIRECTORY_SEPARATOR.'sitemap.xml';
+    }
+
+    public function childAbsolutePath(string $filename): string
+    {
+        return $this->absoluteDirectory().DIRECTORY_SEPARATOR.ltrim($filename, '/\\');
+    }
+
+    /** @deprecated Prefer absolute helpers; kept for callers that only need the relative key. */
     public function indexRelativePath(): string
     {
         return $this->diskPath().'/sitemap.xml';
     }
 
-    public function childRelativePath(string $filename): string
-    {
-        return $this->diskPath().'/'.ltrim($filename, '/');
-    }
-
     public function prepareDirectory(): void
     {
-        Storage::disk('local')->makeDirectory($this->diskPath());
+        $dir = $this->absoluteDirectory();
+
+        if (! is_dir($dir) && ! mkdir($dir, 0755, true) && ! is_dir($dir)) {
+            throw new \RuntimeException('Unable to create sitemap directory: '.$dir);
+        }
     }
 
     /**
@@ -31,8 +48,9 @@ class SitemapXmlWriter
      */
     public function writeUrlset(string $filename, array $urls): void
     {
+        $this->prepareDirectory();
         $xml = view('sitemap', ['urls' => $urls])->render();
-        Storage::disk('local')->put($this->childRelativePath($filename), $this->normalizeXml($xml));
+        $this->writeFile($this->childAbsolutePath($filename), $this->normalizeXml($xml));
     }
 
     /**
@@ -40,6 +58,8 @@ class SitemapXmlWriter
      */
     public function writeIndex(array $childFilenames): void
     {
+        $this->prepareDirectory();
+
         $sitemaps = [];
 
         foreach ($childFilenames as $filename) {
@@ -50,7 +70,7 @@ class SitemapXmlWriter
         }
 
         $xml = view('sitemap-index', ['sitemaps' => $sitemaps])->render();
-        Storage::disk('local')->put($this->indexRelativePath(), $this->normalizeXml($xml));
+        $this->writeFile($this->indexAbsolutePath(), $this->normalizeXml($xml));
     }
 
     /**
@@ -59,28 +79,37 @@ class SitemapXmlWriter
     public function pruneStaleProductFiles(array $keepProductFiles): void
     {
         $keep = array_flip($keepProductFiles);
-        $files = Storage::disk('local')->files($this->diskPath());
+        $dir = $this->absoluteDirectory();
 
-        foreach ($files as $path) {
+        if (! is_dir($dir)) {
+            return;
+        }
+
+        foreach (glob($dir.DIRECTORY_SEPARATOR.'products-*.xml') ?: [] as $path) {
             $basename = basename($path);
 
-            if (! preg_match('/^products-\d+\.xml$/', $basename)) {
-                continue;
-            }
-
             if (! isset($keep[$basename])) {
-                Storage::disk('local')->delete($path);
+                @unlink($path);
             }
         }
     }
 
+    public function indexExists(): bool
+    {
+        return is_file($this->indexAbsolutePath());
+    }
+
     public function readIndex(): ?string
     {
-        if (! Storage::disk('local')->exists($this->indexRelativePath())) {
+        $path = $this->indexAbsolutePath();
+
+        if (! is_file($path)) {
             return null;
         }
 
-        return Storage::disk('local')->get($this->indexRelativePath());
+        $contents = file_get_contents($path);
+
+        return $contents === false ? null : $contents;
     }
 
     public function readChild(string $filename): ?string
@@ -89,13 +118,22 @@ class SitemapXmlWriter
             return null;
         }
 
-        $path = $this->childRelativePath($filename);
+        $path = $this->childAbsolutePath($filename);
 
-        if (! Storage::disk('local')->exists($path)) {
+        if (! is_file($path)) {
             return null;
         }
 
-        return Storage::disk('local')->get($path);
+        $contents = file_get_contents($path);
+
+        return $contents === false ? null : $contents;
+    }
+
+    private function writeFile(string $path, string $contents): void
+    {
+        if (file_put_contents($path, $contents, LOCK_EX) === false) {
+            throw new \RuntimeException('Unable to write sitemap file: '.$path);
+        }
     }
 
     private function normalizeXml(string $xml): string

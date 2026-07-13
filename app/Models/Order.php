@@ -68,8 +68,52 @@ class Order extends Model
         return in_array($this->status, ['new', 'confirmed'], true) && ! $this->courier_tracker;
     }
 
+    /**
+     * Parcel / consignment ID for thermal labels (Steadfast Id), not the tracking code.
+     */
+    public function printParcelId(): ?string
+    {
+        if (filled($this->courier_consignment_id)) {
+            return (string) $this->courier_consignment_id;
+        }
+
+        $fromLogs = $this->consignmentIdFromCourierLogs();
+
+        if ($fromLogs !== null) {
+            return $fromLogs;
+        }
+
+        return filled($this->courier_tracker) ? (string) $this->courier_tracker : null;
+    }
+
     public function scopeMatchingPhone(Builder $query, string $phone): Builder
     {
         return $query->whereIn('phone', \App\Support\PhoneNumber::matchCandidates($phone));
+    }
+
+    private function consignmentIdFromCourierLogs(): ?string
+    {
+        $this->loadMissing('courierLogs');
+
+        foreach ($this->courierLogs as $log) {
+            $data = is_array($log->api_data) ? $log->api_data : null;
+
+            if ($data === null) {
+                continue;
+            }
+
+            $id = data_get($data, 'consignment.consignment_id')
+                ?? data_get($data, 'consignment.id')
+                ?? data_get($data, 'data.consignment.consignment_id')
+                ?? data_get($data, 'data.consignment.id')
+                ?? data_get($data, 'data.consignment_id')
+                ?? data_get($data, 'data.order.consignment_id');
+
+            if (filled($id)) {
+                return (string) $id;
+            }
+        }
+
+        return null;
     }
 }

@@ -116,6 +116,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
             ->view('admin.order-print-label', [
                 'order' => $order,
                 'shippingAddress' => $shippingAddress,
+                'parcelId' => $order->printParcelId(),
             ])
             ->header('Cache-Control', 'no-store');
     })->whereNumber('order')->name('orders.print');

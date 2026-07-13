@@ -169,7 +169,24 @@ class OrderDispatchService
             throw new RuntimeException('Steadfast did not return a tracking code.');
         }
 
+        // Keep tracking_code for status APIs; consignment_id is the parcel Id shown in Steadfast UI / print.
         return [$response, $trackingCode];
+    }
+
+    /**
+     * @param  array<string, mixed>  $response
+     */
+    private function extractConsignmentId(array $response): ?string
+    {
+        $id = data_get($response, 'consignment.consignment_id')
+            ?? data_get($response, 'consignment.id')
+            ?? data_get($response, 'data.consignment.consignment_id')
+            ?? data_get($response, 'data.consignment.id')
+            ?? data_get($response, 'data.consignment_id')
+            ?? data_get($response, 'data.data.consignment_id')
+            ?? data_get($response, 'data.order.consignment_id');
+
+        return filled($id) ? (string) $id : null;
     }
 
     /**
@@ -237,17 +254,24 @@ class OrderDispatchService
                 'created_at' => now(),
             ]);
 
+            $consignmentId = $this->extractConsignmentId($response);
+
+            $courierFields = array_filter([
+                'courier_id' => $courier->id,
+                'courier_tracker' => $trackingCode,
+                'courier_consignment_id' => $consignmentId,
+            ], fn ($value) => $value !== null && $value !== '');
+
             if ($markDispatched) {
                 $order = $this->statusService->update(
                     $order,
                     'dispatched',
-                    'Dispatched via '.$courierName.'. Tracking: '.$trackingCode,
+                    'Dispatched via '.$courierName.'. Tracking: '.$trackingCode
+                        .($consignmentId ? ' Parcel ID: '.$consignmentId : ''),
                     $changedBy,
-                    [
-                        'courier_id' => $courier->id,
-                        'courier_tracker' => $trackingCode,
+                    array_merge($courierFields, [
                         'dispatch_date' => now(),
-                    ],
+                    ]),
                 );
 
                 $this->courierBalances->creditOnDispatch($courier, $order, $changedBy);
@@ -255,14 +279,12 @@ class OrderDispatchService
                 return $order;
             }
 
-            $order->update([
-                'courier_id' => $courier->id,
-                'courier_tracker' => $trackingCode,
-            ]);
+            $order->update($courierFields);
 
             $this->statusService->record(
                 $order,
-                'Sent to '.$courierName.' via API. Tracking: '.$trackingCode,
+                'Sent to '.$courierName.' via API. Tracking: '.$trackingCode
+                    .($consignmentId ? ' Parcel ID: '.$consignmentId : ''),
                 $changedBy,
             );
 

@@ -8,7 +8,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: Arial, Helvetica, sans-serif;
-            color: #111;
+            color: #000;
             background: #fff;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
@@ -17,43 +17,54 @@
             width: 80mm;
             max-width: 100%;
             margin: 12px auto;
-            padding: 8px 10px 12px;
+            padding: 6px 8px 10px;
             text-align: center;
         }
+        .cn-label {
+            font-size: 16px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            line-height: 1.1;
+            margin-bottom: 2px;
+        }
         .cn {
-            font-size: 22px;
-            font-weight: 700;
-            letter-spacing: 0.02em;
-            margin-bottom: 10px;
-            line-height: 1.2;
+            font-size: 36px;
+            font-weight: 900;
+            letter-spacing: 0.01em;
+            margin-bottom: 12px;
+            line-height: 1.05;
+            word-break: break-word;
         }
         .brand {
-            font-size: 18px;
-            font-weight: 700;
+            font-size: 24px;
+            font-weight: 900;
             letter-spacing: 0.04em;
             text-transform: uppercase;
-            line-height: 1.2;
+            line-height: 1.15;
         }
         .helpline {
-            font-size: 12px;
-            color: #888;
-            margin-top: 2px;
+            font-size: 16px;
+            font-weight: 700;
+            color: #000;
+            margin-top: 4px;
             margin-bottom: 12px;
         }
         .box {
-            border: 1px solid #cfcfcf;
+            border: 2px solid #000;
             text-align: left;
             width: 100%;
             margin: 0 auto 10px;
             border-collapse: collapse;
         }
         .box td {
-            border: 1px solid #cfcfcf;
-            padding: 8px 10px;
-            font-size: 14px;
-            font-weight: 700;
+            border: 2px solid #000;
+            padding: 10px 10px;
+            font-size: 18px;
+            font-weight: 800;
             vertical-align: top;
             word-break: break-word;
+            line-height: 1.25;
         }
         .due {
             width: 100%;
@@ -61,11 +72,12 @@
             margin: 0 auto;
         }
         .due td {
-            border: 1px solid #cfcfcf;
-            padding: 10px 12px;
-            font-size: 15px;
-            font-weight: 700;
+            border: 2px solid #000;
+            padding: 12px 10px;
+            font-size: 20px;
+            font-weight: 900;
             text-transform: uppercase;
+            line-height: 1.15;
         }
         .due td:first-child { width: 55%; }
         .due td:last-child { text-align: right; white-space: nowrap; }
@@ -85,7 +97,7 @@
         @media print {
             .screen-actions { display: none !important; }
             .sheet { margin: 0; width: 100%; max-width: none; }
-            @page { margin: 6mm; size: auto; }
+            @page { margin: 4mm; size: auto; }
         }
     </style>
 </head>
@@ -95,8 +107,9 @@
     </div>
 
     <div class="sheet">
-        @if (filled($order->courier_tracker))
-            <div class="cn">CN# {{ $order->courier_tracker }}</div>
+        @if (filled($parcelId))
+            <div class="cn-label">Parcel ID</div>
+            <div class="cn">{{ $parcelId }}</div>
         @endif
 
         <div class="brand">SUNDORITOMA</div>

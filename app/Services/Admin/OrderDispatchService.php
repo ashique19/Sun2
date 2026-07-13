@@ -28,10 +28,6 @@ class OrderDispatchService
 
     public function dispatchViaApi(Order $order, string $slug, ?int $changedBy = null, bool $markDispatched = true): Order
     {
-        if ($order->courier_tracker) {
-            throw new RuntimeException('This order already has a courier tracking code.');
-        }
-
         $slug = strtolower(trim($slug));
 
         if (! $this->courierRegistry->isConfigured($slug)) {
@@ -80,14 +76,21 @@ class OrderDispatchService
         }
 
         return DB::transaction(function () use ($order, $courier, $tracker, $changedBy) {
+            $previousTracker = filled($order->courier_tracker) ? (string) $order->courier_tracker : null;
+            $tracker = trim($tracker);
+
+            $note = $previousTracker && $previousTracker !== $tracker
+                ? 'Tracking replaced via '.$courier->name.'. '.$previousTracker.' → '.$tracker
+                : 'Dispatched via '.$courier->name.'. Tracking: '.$tracker;
+
             $order = $this->statusService->update(
                 $order,
                 'dispatched',
-                'Dispatched via '.$courier->name.'. Tracking: '.$tracker,
+                $note,
                 $changedBy,
                 [
                     'courier_id' => $courier->id,
-                    'courier_tracker' => trim($tracker),
+                    'courier_tracker' => $tracker,
                     'dispatch_date' => $order->dispatch_date ?? now(),
                 ],
             );
@@ -255,22 +258,29 @@ class OrderDispatchService
             ]);
 
             $consignmentId = $this->extractConsignmentId($response);
+            $previousTracker = filled($order->courier_tracker) ? (string) $order->courier_tracker : null;
 
-            $courierFields = array_filter([
+            // Always overwrite tracker / consignment id — a new send replaces the previous one.
+            $courierFields = [
                 'courier_id' => $courier->id,
                 'courier_tracker' => $trackingCode,
                 'courier_consignment_id' => $consignmentId,
-            ], fn ($value) => $value !== null && $value !== '');
+            ];
+
+            $note = $previousTracker && $previousTracker !== $trackingCode
+                ? 'Tracking replaced via '.$courierName.'. '.$previousTracker.' → '.$trackingCode
+                    .($consignmentId ? ' Parcel ID: '.$consignmentId : '')
+                : 'Dispatched via '.$courierName.'. Tracking: '.$trackingCode
+                    .($consignmentId ? ' Parcel ID: '.$consignmentId : '');
 
             if ($markDispatched) {
                 $order = $this->statusService->update(
                     $order,
                     'dispatched',
-                    'Dispatched via '.$courierName.'. Tracking: '.$trackingCode
-                        .($consignmentId ? ' Parcel ID: '.$consignmentId : ''),
+                    $note,
                     $changedBy,
                     array_merge($courierFields, [
-                        'dispatch_date' => now(),
+                        'dispatch_date' => $order->dispatch_date ?? now(),
                     ]),
                 );
 
@@ -283,8 +293,11 @@ class OrderDispatchService
 
             $this->statusService->record(
                 $order,
-                'Sent to '.$courierName.' via API. Tracking: '.$trackingCode
-                    .($consignmentId ? ' Parcel ID: '.$consignmentId : ''),
+                $previousTracker && $previousTracker !== $trackingCode
+                    ? 'Tracking replaced via '.$courierName.' API. '.$previousTracker.' → '.$trackingCode
+                        .($consignmentId ? ' Parcel ID: '.$consignmentId : '')
+                    : 'Sent to '.$courierName.' via API. Tracking: '.$trackingCode
+                        .($consignmentId ? ' Parcel ID: '.$consignmentId : ''),
                 $changedBy,
             );
 

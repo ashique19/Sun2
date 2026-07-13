@@ -65,7 +65,8 @@ class Order extends Model
 
     public function isDispatchable(): bool
     {
-        return in_array($this->status, ['new', 'confirmed'], true) && ! $this->courier_tracker;
+        // Allow re-send even when a tracker already exists — new tracking replaces the old one.
+        return in_array($this->status, ['new', 'confirmed'], true);
     }
 
     /**

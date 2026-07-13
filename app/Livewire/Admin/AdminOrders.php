@@ -640,11 +640,7 @@ class AdminOrders extends Component
             $order = Order::query()->findOrFail($nextId);
 
             if (! $order->isDispatchable()) {
-                throw new \RuntimeException(
-                    $order->courier_tracker
-                        ? 'Already has tracking code.'
-                        : 'Order status does not allow dispatch.'
-                );
+                throw new \RuntimeException('Order status does not allow dispatch.');
             }
 
             $order = $dispatch->dispatchViaApi($order, $this->sendToCourierSlug, markDispatched: false);

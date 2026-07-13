@@ -100,6 +100,33 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
 
     Route::redirect('/orders', '/admin/orders/new');
     Route::get('/orders/new', AdminOrders::class)->defaults('segment', 'new')->name('orders.new');
+    Route::get('/orders/print-selected', function (\Illuminate\Http\Request $request) {
+        $ids = collect(explode(',', (string) $request->query('ids', '')))
+            ->map(fn ($id) => (int) trim($id))
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values();
+
+        abort_if($ids->isEmpty(), 404);
+
+        $orders = \App\Models\Order::query()
+            ->whereIn('id', $ids)
+            ->get()
+            ->sortBy(fn (\App\Models\Order $order) => $ids->search($order->id))
+            ->values();
+
+        abort_if($orders->isEmpty(), 404);
+
+        foreach ($orders as $order) {
+            \App\Support\AdminAccess::ensureCanViewOrder($order);
+        }
+
+        return response()
+            ->view('admin.orders-print-selected', [
+                'orders' => $orders,
+            ])
+            ->header('Cache-Control', 'no-store');
+    })->name('orders.print-selected');
     Route::get('/orders/{order}/print', function (\App\Models\Order $order) {
         \App\Support\AdminAccess::ensureCanViewOrder($order);
 

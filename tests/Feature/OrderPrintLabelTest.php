@@ -128,6 +128,72 @@ class OrderPrintLabelTest extends TestCase
             ->assertSee('3,120 Tk', false);
     }
 
+    public function test_print_selected_shows_parcel_id_brand_and_customer_name_per_order(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $first = $this->order([
+            'order_number' => '26765',
+            'name' => 'Alyssa Russo',
+            'courier_consignment_id' => '270697676',
+        ]);
+        $second = $this->order([
+            'order_number' => '26766',
+            'name' => 'Karim Hossain',
+            'courier_consignment_id' => '270697677',
+        ]);
+
+        $response = $this->get(route('admin.orders.print-selected', [
+            'ids' => $first->id.','.$second->id,
+        ]));
+
+        $response->assertOk();
+        $response->assertSee('Parcel ID', false);
+        $response->assertSee('270697676', false);
+        $response->assertSee('270697677', false);
+        $response->assertSee('Sundoritoma.com', false);
+        $response->assertSee('Alyssa Russo', false);
+        $response->assertSee('Karim Hossain', false);
+        $response->assertSee('page-break-after: always', false);
+        $response->assertDontSee('TOTAL DUE', false);
+        $response->assertDontSee('CALL:', false);
+    }
+
+    public function test_print_selected_requires_ids(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $this->get(route('admin.orders.print-selected'))
+            ->assertNotFound();
+    }
+
+    public function test_print_selected_preserves_selection_order(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $first = $this->order([
+            'order_number' => '10001',
+            'name' => 'First Customer',
+            'courier_consignment_id' => '111',
+        ]);
+        $second = $this->order([
+            'order_number' => '10002',
+            'name' => 'Second Customer',
+            'courier_consignment_id' => '222',
+        ]);
+
+        $html = $this->get(route('admin.orders.print-selected', [
+            'ids' => $second->id.','.$first->id,
+        ]))->assertOk()->getContent();
+
+        $this->assertNotFalse(strpos($html, 'Second Customer'));
+        $this->assertNotFalse(strpos($html, 'First Customer'));
+        $this->assertLessThan(
+            strpos($html, 'First Customer'),
+            strpos($html, 'Second Customer')
+        );
+    }
+
     public function test_collectable_amount_prefers_positive_cod_over_total(): void
     {
         $order = $this->order([

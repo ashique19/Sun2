@@ -193,6 +193,30 @@ class AdminOrders extends Component
         $this->js('window.open('.json_encode($url).', "_blank")');
     }
 
+    public function printSelected(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->selected === []) {
+            return;
+        }
+
+        $ids = collect($this->selected)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($ids === []) {
+            return;
+        }
+
+        $url = route('admin.orders.print-selected', ['ids' => implode(',', $ids)]);
+
+        $this->js('window.open('.json_encode($url).', "_blank")');
+    }
+
     public function deleteOrder(int $orderId, AdminOrderService $orders): void
     {
         AdminAccess::ensureStaffAdmin();

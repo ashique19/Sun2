@@ -414,6 +414,13 @@
                             class="rounded-full border border-white/40 bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/20 disabled:opacity-60">
                             List products
                         </button>
+                        <button type="button"
+                            wire:click="printSelected"
+                            wire:loading.attr="disabled"
+                            wire:target="printSelected"
+                            class="rounded-full border border-white/40 bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/20 disabled:opacity-60">
+                            Print
+                        </button>
                     </div>
                 </div>
             </div>

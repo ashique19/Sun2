@@ -86,6 +86,25 @@ class Order extends Model
         return filled($this->courier_tracker) ? (string) $this->courier_tracker : null;
     }
 
+    /**
+     * Amount to collect / print as TOTAL DUE.
+     *
+     * Prefer cod_amount, then due_amount, then total. Compare as floats — Laravel's
+     * decimal cast yields "0.00", which is truthy for ?: and would print 0 forever.
+     */
+    public function collectableAmount(): float
+    {
+        foreach ([$this->cod_amount, $this->due_amount, $this->total] as $amount) {
+            $value = round((float) $amount, 2);
+
+            if ($value > 0) {
+                return $value;
+            }
+        }
+
+        return 0.0;
+    }
+
     public function scopeMatchingPhone(Builder $query, string $phone): Builder
     {
         return $query->whereIn('phone', \App\Support\PhoneNumber::matchCandidates($phone));

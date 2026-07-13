@@ -25,7 +25,7 @@ class RedxApiClient
             'delivery_area_id' => $area['id'],
             'customer_address' => $this->formatAddress($order),
             'merchant_invoice_id' => (string) $order->order_number,
-            'cash_collection_amount' => (string) (int) round((float) $order->cod_amount),
+            'cash_collection_amount' => (string) (int) round($order->collectableAmount()),
             'parcel_weight' => (string) config('redx.default_weight', 1),
             'instruction' => $order->customer_note ?: null,
             'value' => (int) round((float) $order->total),

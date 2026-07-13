@@ -149,7 +149,7 @@ class OrderDispatchService
             'recipient_name' => $order->name,
             'recipient_phone' => PhoneNumber::display($order->phone),
             'recipient_address' => $this->formatAddress($order),
-            'cod_amount' => (float) $order->cod_amount,
+            'cod_amount' => $order->collectableAmount(),
             'note' => $order->courier_note ?: null,
             'recipient_email' => $order->email,
             'item_description' => $this->itemSummary($order),

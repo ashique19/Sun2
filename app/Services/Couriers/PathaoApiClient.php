@@ -29,7 +29,7 @@ class PathaoApiClient
             'item_type' => (int) config('pathao.item_type', 2),
             'item_quantity' => max(1, (int) $order->items()->sum('quantity')),
             'item_weight' => (float) config('pathao.default_weight', 0.5),
-            'amount_to_collect' => (int) round((float) $order->cod_amount),
+            'amount_to_collect' => (int) round($order->collectableAmount()),
             'item_description' => $this->itemSummary($order),
             'special_instruction' => $order->customer_note ?: null,
         ];

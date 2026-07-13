@@ -107,6 +107,38 @@ class OrderPrintLabelTest extends TestCase
         $response->assertDontSee('width: 80mm', false);
     }
 
+    public function test_print_label_uses_order_total_when_cod_amount_is_zero(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $order = $this->order([
+            'courier_consignment_id' => '270697676',
+            'subtotal' => 3120,
+            'total' => 3120,
+            'cod_amount' => 0,
+            'due_amount' => 0,
+        ]);
+
+        // Decimal cast makes "0.00", which is truthy for ?: and used to print 0.
+        $this->assertSame('0.00', $order->cod_amount);
+        $this->assertSame(3120.0, $order->collectableAmount());
+
+        $this->get(route('admin.orders.print', $order))
+            ->assertOk()
+            ->assertSee('3,120 Tk', false);
+    }
+
+    public function test_collectable_amount_prefers_positive_cod_over_total(): void
+    {
+        $order = $this->order([
+            'total' => 3120,
+            'cod_amount' => 2500,
+            'due_amount' => 3120,
+        ]);
+
+        $this->assertSame(2500.0, $order->collectableAmount());
+    }
+
     public function test_dispatch_extracts_steadfast_consignment_id(): void
     {
         $service = app(OrderDispatchService::class);

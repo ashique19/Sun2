@@ -156,7 +156,7 @@
         <table class="due" width="100%">
             <tr>
                 <td>TOTAL DUE</td>
-                <td>{{ number_format((float) ($order->cod_amount ?: $order->total), 0) }} Tk</td>
+                <td>{{ number_format($order->collectableAmount(), 0) }} Tk</td>
             </tr>
         </table>
     </div>

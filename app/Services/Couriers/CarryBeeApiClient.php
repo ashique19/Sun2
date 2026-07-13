@@ -29,7 +29,7 @@ class CarryBeeApiClient
             'zone_id' => $location['zone_id'],
             'item_weight' => $this->orderWeightGrams($order),
             'item_quantity' => max(1, (int) $order->items->sum('quantity')),
-            'collectable_amount' => (int) round((float) $order->cod_amount),
+            'collectable_amount' => (int) round($order->collectableAmount()),
             'product_description' => $this->itemSummary($order),
         ];
 

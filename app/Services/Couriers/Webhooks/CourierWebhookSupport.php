@@ -156,7 +156,7 @@ class CourierWebhookSupport
             }
         }
 
-        return (float) $order->cod_amount;
+        return $order->collectableAmount();
     }
 
     private function parseTimestamp(mixed $value): ?Carbon

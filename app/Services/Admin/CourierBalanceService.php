@@ -32,7 +32,7 @@ class CourierBalanceService
             return;
         }
 
-        $amount = (int) round((float) $order->cod_amount);
+        $amount = (int) round($order->collectableAmount());
 
         if ($amount <= 0) {
             return;

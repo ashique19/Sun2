@@ -2,25 +2,22 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    {{-- Match thermal roll width so Android/Chrome print does not lay out as A4 --}}
-    <meta name="viewport" content="width=80mm, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Print #{{ $order->order_number }}</title>
     <style>
+        /*
+         * Android USB print often lays out on A4, then scales the whole page
+         * down to the thermal roll. Fixed 80mm content becomes ~1/3 of the roll.
+         * Use 100% page width so scaling fills the paper.
+         */
         * { box-sizing: border-box; margin: 0; padding: 0; }
         @page {
-            size: 80mm auto;
+            size: auto;
             margin: 0;
         }
-        html {
-            width: 80mm;
-            max-width: 80mm;
-            margin: 0;
-            padding: 0;
-        }
-        body {
-            width: 80mm;
-            max-width: 80mm;
-            min-width: 80mm;
+        html, body {
+            width: 100%;
+            min-width: 100%;
             margin: 0;
             padding: 0;
             font-family: Arial, Helvetica, sans-serif;
@@ -30,32 +27,33 @@
             print-color-adjust: exact;
         }
         .sheet {
-            width: 80mm;
-            max-width: 80mm;
-            min-width: 80mm;
+            width: 100%;
+            min-width: 100%;
             margin: 0;
-            padding: 2mm 1mm 3mm;
+            padding: 2vw 1vw 3vw;
             text-align: center;
         }
         .cn-label {
-            font-size: 32px;
+            font-size: clamp(28px, 8vw, 64px);
             font-weight: 900;
             text-transform: uppercase;
             letter-spacing: 0.02em;
             line-height: 1.1;
-            margin-bottom: 4px;
+            margin-bottom: 0.3vw;
+            width: 100%;
         }
         .cn {
-            font-size: 72px;
+            font-size: clamp(48px, 18vw, 140px);
             font-weight: 900;
             letter-spacing: 0;
-            margin-bottom: 14px;
+            margin-bottom: 2vw;
             line-height: 1.05;
             word-break: break-word;
+            overflow-wrap: anywhere;
             width: 100%;
         }
         .brand {
-            font-size: 48px;
+            font-size: clamp(36px, 12vw, 96px);
             font-weight: 900;
             letter-spacing: 0.02em;
             text-transform: uppercase;
@@ -63,30 +61,30 @@
             width: 100%;
         }
         .helpline {
-            font-size: 32px;
+            font-size: clamp(28px, 8vw, 64px);
             font-weight: 700;
             color: #000;
-            margin-top: 6px;
-            margin-bottom: 14px;
+            margin-top: 1vw;
+            margin-bottom: 2vw;
             width: 100%;
         }
         .box,
         .due {
             width: 100% !important;
-            min-width: 100%;
-            max-width: 100%;
+            min-width: 100% !important;
+            max-width: 100% !important;
             border-collapse: collapse;
             table-layout: fixed;
-            margin: 0 0 12px;
+            margin: 0 0 2vw;
         }
         .box {
-            border: 3px solid #000;
+            border: 0.5vw solid #000;
             text-align: left;
         }
         .box td {
-            border: 3px solid #000;
-            padding: 12px 8px;
-            font-size: 36px;
+            border: 0.5vw solid #000;
+            padding: 2vw 1.5vw;
+            font-size: clamp(28px, 9vw, 72px);
             font-weight: 800;
             vertical-align: top;
             word-break: break-word;
@@ -94,9 +92,9 @@
             line-height: 1.25;
         }
         .due td {
-            border: 3px solid #000;
-            padding: 14px 8px;
-            font-size: 40px;
+            border: 0.5vw solid #000;
+            padding: 2.2vw 1.5vw;
+            font-size: clamp(28px, 10vw, 80px);
             font-weight: 900;
             text-transform: uppercase;
             line-height: 1.15;
@@ -119,12 +117,13 @@
         @media print {
             .screen-actions { display: none !important; }
             html, body, .sheet {
-                width: 80mm !important;
-                max-width: 80mm !important;
-                min-width: 80mm !important;
+                width: 100% !important;
+                min-width: 100% !important;
+                max-width: none !important;
                 margin: 0 !important;
             }
-            .box, .due { width: 100% !important; }
+            .box, .due { width: 100% !important; min-width: 100% !important; }
+            @page { margin: 0; size: auto; }
         }
     </style>
 </head>
@@ -142,7 +141,7 @@
         <div class="brand">SUNDORITOMA</div>
         <div class="helpline">CALL: 01880001255</div>
 
-        <table class="box">
+        <table class="box" width="100%">
             <tr>
                 <td>{{ $order->name }}</td>
             </tr>
@@ -154,7 +153,7 @@
             </tr>
         </table>
 
-        <table class="due">
+        <table class="due" width="100%">
             <tr>
                 <td>TOTAL DUE</td>
                 <td>{{ number_format((float) ($order->cod_amount ?: $order->total), 0) }} Tk</td>

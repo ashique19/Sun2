@@ -6,7 +6,10 @@
     <title>Print #{{ $order->order_number }}</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
+        html, body {
+            width: 100%;
+            margin: 0;
+            padding: 0;
             font-family: Arial, Helvetica, sans-serif;
             color: #000;
             background: #fff;
@@ -14,24 +17,25 @@
             print-color-adjust: exact;
         }
         .sheet {
-            width: 80mm;
-            max-width: 100%;
-            margin: 12px auto;
-            padding: 8px 6px 12px;
+            /* Full paper width — RawBT often renders screen CSS, not @media print. */
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            padding: 4px 0 8px;
             text-align: center;
         }
         .cn-label {
             font-size: 32px;
             font-weight: 900;
             text-transform: uppercase;
-            letter-spacing: 0.04em;
+            letter-spacing: 0.02em;
             line-height: 1.1;
             margin-bottom: 4px;
         }
         .cn {
             font-size: 72px;
             font-weight: 900;
-            letter-spacing: 0.01em;
+            letter-spacing: 0;
             margin-bottom: 14px;
             line-height: 1.05;
             word-break: break-word;
@@ -39,7 +43,7 @@
         .brand {
             font-size: 48px;
             font-weight: 900;
-            letter-spacing: 0.04em;
+            letter-spacing: 0.02em;
             text-transform: uppercase;
             line-height: 1.15;
         }
@@ -54,26 +58,29 @@
             border: 3px solid #000;
             text-align: left;
             width: 100%;
-            margin: 0 auto 12px;
+            margin: 0 0 12px;
             border-collapse: collapse;
+            table-layout: fixed;
         }
         .box td {
             border: 3px solid #000;
-            padding: 12px 10px;
+            padding: 12px 8px;
             font-size: 36px;
             font-weight: 800;
             vertical-align: top;
             word-break: break-word;
             line-height: 1.25;
+            width: 100%;
         }
         .due {
             width: 100%;
             border-collapse: collapse;
-            margin: 0 auto;
+            margin: 0;
+            table-layout: fixed;
         }
         .due td {
             border: 3px solid #000;
-            padding: 14px 10px;
+            padding: 14px 8px;
             font-size: 40px;
             font-weight: 900;
             text-transform: uppercase;
@@ -96,8 +103,8 @@
         }
         @media print {
             .screen-actions { display: none !important; }
-            .sheet { margin: 0; width: 100%; max-width: none; }
-            @page { margin: 4mm; size: auto; }
+            html, body, .sheet { width: 100% !important; margin: 0 !important; padding-left: 0 !important; padding-right: 0 !important; }
+            @page { margin: 0; size: auto; }
         }
     </style>
 </head>

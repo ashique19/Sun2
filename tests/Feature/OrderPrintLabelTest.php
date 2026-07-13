@@ -103,8 +103,8 @@ class OrderPrintLabelTest extends TestCase
         $response->assertDontSee('CN#', false);
         $response->assertSee('font-size: 72px', false);
         $response->assertSee('font-weight: 900', false);
-        $response->assertSee('width: 100%', false);
-        $response->assertDontSee('width: 80mm', false);
+        $response->assertSee('size: 80mm auto', false);
+        $response->assertSee('width: 80mm', false);
     }
 
     public function test_dispatch_extracts_steadfast_consignment_id(): void

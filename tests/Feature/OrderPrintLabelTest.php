@@ -101,7 +101,7 @@ class OrderPrintLabelTest extends TestCase
         $response->assertSee('270697676', false);
         $response->assertDontSee('SFR260713STA4C54B9BD', false);
         $response->assertDontSee('CN#', false);
-        $response->assertSee('font-size: 36px', false);
+        $response->assertSee('font-size: 72px', false);
         $response->assertSee('font-weight: 900', false);
     }
 

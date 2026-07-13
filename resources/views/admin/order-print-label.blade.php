@@ -17,50 +17,50 @@
             width: 80mm;
             max-width: 100%;
             margin: 12px auto;
-            padding: 6px 8px 10px;
+            padding: 8px 6px 12px;
             text-align: center;
         }
         .cn-label {
-            font-size: 16px;
+            font-size: 32px;
             font-weight: 900;
             text-transform: uppercase;
             letter-spacing: 0.04em;
             line-height: 1.1;
-            margin-bottom: 2px;
+            margin-bottom: 4px;
         }
         .cn {
-            font-size: 36px;
+            font-size: 72px;
             font-weight: 900;
             letter-spacing: 0.01em;
-            margin-bottom: 12px;
+            margin-bottom: 14px;
             line-height: 1.05;
             word-break: break-word;
         }
         .brand {
-            font-size: 24px;
+            font-size: 48px;
             font-weight: 900;
             letter-spacing: 0.04em;
             text-transform: uppercase;
             line-height: 1.15;
         }
         .helpline {
-            font-size: 16px;
+            font-size: 32px;
             font-weight: 700;
             color: #000;
-            margin-top: 4px;
-            margin-bottom: 12px;
+            margin-top: 6px;
+            margin-bottom: 14px;
         }
         .box {
-            border: 2px solid #000;
+            border: 3px solid #000;
             text-align: left;
             width: 100%;
-            margin: 0 auto 10px;
+            margin: 0 auto 12px;
             border-collapse: collapse;
         }
         .box td {
-            border: 2px solid #000;
-            padding: 10px 10px;
-            font-size: 18px;
+            border: 3px solid #000;
+            padding: 12px 10px;
+            font-size: 36px;
             font-weight: 800;
             vertical-align: top;
             word-break: break-word;
@@ -72,9 +72,9 @@
             margin: 0 auto;
         }
         .due td {
-            border: 2px solid #000;
-            padding: 12px 10px;
-            font-size: 20px;
+            border: 3px solid #000;
+            padding: 14px 10px;
+            font-size: 40px;
             font-weight: 900;
             text-transform: uppercase;
             line-height: 1.15;

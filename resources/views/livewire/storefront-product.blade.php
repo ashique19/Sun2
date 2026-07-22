@@ -14,7 +14,7 @@
     <x-seo.json-ld :data="\App\Support\JsonLd::product($product)" />
     <x-seo.json-ld :data="\App\Support\JsonLd::productBreadcrumb($product)" />
 
-    <div class="mx-auto max-w-6xl px-4 py-8 pb-36 lg:pb-0">
+    <div class="mx-auto max-w-6xl px-4 py-8 pb-24 lg:pb-0">
         <nav class="text-xs text-[#8C8474] mb-4" aria-label="Breadcrumb">
             <a href="{{ route('home') }}" wire:navigate class="hover:text-[#C9A227]">{{ __('storefront.breadcrumb_home') }}</a>
             @if ($product->category)
@@ -197,30 +197,6 @@
                     </p>
                 @endauth
             </div>
-        </div>
-    </div>
-
-    {{-- Sticky mobile buy bar (above bottom nav) --}}
-    <div class="storefront-buy-bar">
-        <div class="storefront-buy-bar__inner">
-            <div class="storefront-buy-bar__qty">
-                <button type="button" wire:click="$set('quantity', max(1, quantity - 1))" aria-label="-">−</button>
-                <span>{{ $quantity }}</span>
-                <button type="button" wire:click="$set('quantity', quantity + 1)" aria-label="+">+</button>
-            </div>
-            <button type="button" wire:click="addToCart"
-                @disabled(! $product->isInStock())
-                class="storefront-buy-bar__cart">
-                {{ __('storefront.add_to_cart') }}
-            </button>
-            <button type="button" wire:click="toggleWishlist"
-                class="storefront-buy-bar__wish"
-                title="{{ $isWishlisted ? __('storefront.saved') : __('storefront.save') }}"
-                aria-label="{{ $isWishlisted ? __('storefront.saved') : __('storefront.save') }}">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="{{ $isWishlisted ? 'currentColor' : 'none' }}" aria-hidden="true" class="{{ $isWishlisted ? 'text-[#C9A227]' : 'text-[#6B6459]' }}">
-                    <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20s-7-4.35-7-9.2A3.8 3.8 0 0 1 12 7.5a3.8 3.8 0 0 1 7 3.3C19 15.65 12 20 12 20Z"/>
-                </svg>
-            </button>
         </div>
     </div>
 </x-storefront.shell>

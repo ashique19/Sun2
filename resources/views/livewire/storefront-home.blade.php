@@ -38,7 +38,7 @@
                         <div class="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent"></div>
                         <div class="absolute inset-0 flex items-center">
                             <div class="mx-auto w-full max-w-6xl px-6 md:px-10">
-                                <p class="text-[#E9C978] uppercase tracking-[0.25em] text-xs mb-3">High-Quality Handmade Jewellery</p>
+                                <p class="text-[#E9C978] uppercase tracking-[0.2em] text-[10px] md:text-xs mb-3 opacity-80">{{ __('storefront.handmade_jewellery') }}</p>
                                 @if ($index === 0)
                                     <h1 class="font-serif text-3xl md:text-5xl font-semibold leading-tight text-white max-w-xl">{{ $slide->title }}</h1>
                                 @else
@@ -49,7 +49,7 @@
                                 @endif
                                 <a href="{{ $slide->link_url ?: '#collection' }}"
                                    class="mt-6 inline-block rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#b8931f] transition">
-                                    {{ $slide->link_label ?? 'Shop Now' }}
+                                    {{ $slide->link_label ?: __('storefront.shop_now') }}
                                 </a>
                             </div>
                         </div>
@@ -62,27 +62,32 @@
                         <button type="button" @click="goTo({{ $index }})"
                             :class="active === {{ $index }} ? 'bg-[#C9A227] w-8' : 'bg-white/50 w-2'"
                             class="h-2 rounded-full transition-all duration-300"
-                            aria-label="Go to slide {{ $index + 1 }}"></button>
+                            aria-label="{{ $index + 1 }}"></button>
                     @endforeach
                 </div>
             @endif
         </section>
     @else
-        <div class="mx-auto max-w-6xl px-4 pt-10">
-            <h1 class="font-serif text-3xl md:text-4xl font-semibold">High-Quality Handmade Jewellery</h1>
-            <p class="mt-2 text-[#6B6459]">German silver, brass, beads, and exclusive handcrafted collections — home delivery all over Bangladesh.</p>
+        <div class="mx-auto max-w-6xl px-4 pt-10 text-center sm:text-left">
+            <img src="/img/settings/logo.png" alt="Sundoritoma" class="mx-auto sm:mx-0 h-16 w-auto object-contain mb-4">
+            <h1 class="font-serif text-3xl md:text-4xl font-semibold">{{ __('storefront.handmade_jewellery') }}</h1>
+            <p class="mt-2 text-[#6B6459] max-w-2xl mx-auto sm:mx-0">{{ __('storefront.handmade_tagline') }}</p>
+            <a href="#collection"
+               class="mt-6 inline-block rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#b8931f] transition">
+                {{ __('storefront.shop_by_category') }}
+            </a>
         </div>
     @endif
 
     <section id="collection" class="mx-auto max-w-6xl px-4 py-12">
         <div class="flex items-end justify-between gap-4 mb-6">
-            <h2 class="font-serif text-2xl font-semibold">Shop by Category</h2>
-            <a href="{{ route('search') }}" wire:navigate class="text-sm text-[#C9A227] hover:underline">View all products</a>
+            <h2 class="font-serif text-2xl font-semibold">{{ __('storefront.shop_by_category') }}</h2>
+            <a href="{{ route('search') }}" wire:navigate class="text-sm text-[#C9A227] hover:underline">{{ __('storefront.view_all_products') }}</a>
         </div>
 
         @if ($categories->isEmpty())
             <div class="rounded-xl border border-dashed border-[#D8CDB6] p-10 text-center text-[#6B6459]">
-                No categories yet.
+                {{ __('storefront.no_categories_yet') }}
             </div>
         @else
             <div class="grid grid-cols-2 md:grid-cols-4 gap-5">
@@ -104,7 +109,7 @@
                             @if ($category->headline)
                                 <p class="text-xs text-[#8C8474] mt-1 line-clamp-2">{{ $category->headline }}</p>
                             @endif
-                            <p class="text-xs text-[#8C8474] mt-1">{{ $category->products_count }} products</p>
+                            <p class="text-xs text-[#8C8474] mt-1">{{ __('storefront.products_count', ['count' => $category->products_count]) }}</p>
                         </div>
                     </a>
                 @endforeach

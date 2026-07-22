@@ -1,7 +1,7 @@
 <x-storefront.shell>
     <div class="mx-auto max-w-6xl px-4 py-8">
-        <h1 class="font-serif text-3xl font-semibold mb-2">Wishlist</h1>
-        <p class="text-sm text-[#8C8474] mb-8">{{ $items->count() }} saved item(s)</p>
+        <h1 class="font-serif text-3xl font-semibold mb-2">{{ __('storefront.wishlist') }}</h1>
+        <p class="text-sm text-[#8C8474] mb-8">{{ __('storefront.saved_items', ['count' => $items->count()]) }}</p>
 
         @if ($message)
             <div class="rounded-lg bg-emerald-50 text-emerald-700 text-sm px-4 py-3 mb-6">{{ $message }}</div>
@@ -9,10 +9,10 @@
 
         @if ($items->isEmpty())
             <div class="rounded-xl border border-[#EFE7D6] bg-white p-10 text-center">
-                <p class="text-[#6B6459] mb-4">Your wishlist is empty.</p>
+                <p class="text-[#6B6459] mb-4">{{ __('storefront.wishlist_empty') }}</p>
                 <a href="{{ route('home') }}" wire:navigate
                     class="inline-block rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white hover:bg-[#b8931f]">
-                    Browse Products
+                    {{ __('storefront.browse_products') }}
                 </a>
             </div>
         @else
@@ -38,11 +38,11 @@
                             <div class="mt-4 flex gap-2">
                                 <button type="button" wire:click="addToCart({{ $product->id }})"
                                     class="flex-1 rounded-full bg-[#C9A227] px-4 py-2 text-xs font-semibold text-white hover:bg-[#b8931f]">
-                                    Add to Cart
+                                    {{ __('storefront.add_to_cart') }}
                                 </button>
                                 <button type="button" wire:click="remove({{ $product->id }})"
                                     class="rounded-full border border-[#E0D6C2] px-4 py-2 text-xs hover:bg-[#FAF6EF]">
-                                    Remove
+                                    {{ __('storefront.remove') }}
                                 </button>
                             </div>
                         </div>

@@ -699,7 +699,7 @@ class AdminOrders extends Component
 
     private function filteredOrdersQuery(): Builder
     {
-        return AdminOrderSegment::apply(
+        $query = AdminOrderSegment::apply(
             Order::query()
                 ->when($this->search !== '', function ($q) {
                     $term = '%'.$this->search.'%';
@@ -710,9 +710,15 @@ class AdminOrders extends Component
                     });
                 }),
             $this->segment
-        )
-            ->latest('placed_at')
-            ->latest('id');
+        );
+
+        // Dispatched: newest dispatch date first (for date grouping).
+        // Other segments: newest order date first.
+        if ($this->segment === 'dispatched') {
+            return $query->orderByDesc('dispatch_date')->orderByDesc('id');
+        }
+
+        return $query->latest('placed_at')->latest('id');
     }
 
     public function updatedPage(): void

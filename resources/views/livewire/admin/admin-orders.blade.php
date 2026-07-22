@@ -43,9 +43,16 @@
 
     @if ($readOnly)
         <div class="space-y-3" wire:loading.class="opacity-60" wire:target="switchSegment,search,nextPage,previousPage,gotoPage" wire:key="moderator-orders-{{ $segment }}-{{ $listRevision }}">
+            @php($lastGroupKey = null)
             @forelse ($orders as $order)
                 @php($adminNote = filled($order->admin_note) ? \Illuminate\Support\Str::of($order->admin_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
                 @php($courierNote = filled($order->courier_note) ? \Illuminate\Support\Str::of($order->courier_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
+                @php($groupDate = $order->placed_at)
+                @php($groupKey = $groupDate?->timezone('Asia/Dhaka')->toDateString() ?? '_none')
+                @if ($groupKey !== $lastGroupKey)
+                    <x-admin.order-date-heading :date="$groupDate" kind="order" />
+                    @php($lastGroupKey = $groupKey)
+                @endif
                 <article wire:key="order-card-{{ $order->id }}" class="rounded-xl border border-[#EFE7D6] bg-white p-4">
                     <div class="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                         <div class="min-w-0 sm:flex-1">
@@ -122,11 +129,24 @@
         </div>
 
         <div class="space-y-3" wire:loading.class="opacity-60" wire:target="switchSegment,search,nextPage,previousPage,gotoPage,refreshCourierStatuses" wire:key="staff-orders-{{ $segment }}-{{ $listRevision }}">
+            @php($lastGroupKey = null)
+            @php($groupByDate = in_array($segment, ['new', 'dispatched'], true))
             @forelse ($orders as $order)
                 @php($isSelected = in_array($order->id, $selectedIds, true))
                 @php($adminNote = filled($order->admin_note) ? \Illuminate\Support\Str::of($order->admin_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
                 @php($courierNote = filled($order->courier_note) ? \Illuminate\Support\Str::of($order->courier_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
                 @php($areaCity = collect([$order->area, $order->city])->filter()->implode(', '))
+                @if ($groupByDate)
+                    @php($groupDate = $segment === 'dispatched' ? $order->dispatch_date : $order->placed_at)
+                    @php($groupKey = $groupDate?->timezone('Asia/Dhaka')->toDateString() ?? '_none')
+                    @if ($groupKey !== $lastGroupKey)
+                        <x-admin.order-date-heading
+                            :date="$groupDate"
+                            :kind="$segment === 'dispatched' ? 'dispatch' : 'order'"
+                        />
+                        @php($lastGroupKey = $groupKey)
+                    @endif
+                @endif
                 <article wire:key="order-card-{{ $order->id }}"
                     @class([
                         'rounded-xl border bg-white p-4',

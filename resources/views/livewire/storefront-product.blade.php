@@ -14,7 +14,7 @@
     <x-seo.json-ld :data="\App\Support\JsonLd::product($product)" />
     <x-seo.json-ld :data="\App\Support\JsonLd::productBreadcrumb($product)" />
 
-    <div class="mx-auto max-w-6xl px-4 py-8 pb-24 lg:pb-0">
+    <div class="mx-auto max-w-6xl px-4 py-8 pb-36 lg:pb-0">
         <nav class="text-xs text-[#8C8474] mb-4" aria-label="Breadcrumb">
             <a href="{{ route('home') }}" wire:navigate class="hover:text-[#C9A227]">{{ __('storefront.breadcrumb_home') }}</a>
             @if ($product->category)
@@ -86,6 +86,36 @@
                     @endif
                 </div>
 
+                {{-- Buy controls sit above the description so they are visible on small screens --}}
+                <div class="mt-6 flex flex-wrap items-center gap-3">
+                    <div class="flex items-center rounded-full border border-[#E0D6C2] overflow-hidden bg-white">
+                        <button type="button" wire:click="$set('quantity', max(1, quantity - 1))"
+                            class="px-3 py-2.5 hover:bg-[#F1EADB]" aria-label="-">−</button>
+                        <span class="px-4 py-2.5 text-sm font-medium min-w-[2.5rem] text-center">{{ $quantity }}</span>
+                        <button type="button" wire:click="$set('quantity', quantity + 1)"
+                            class="px-3 py-2.5 hover:bg-[#F1EADB]" aria-label="+">+</button>
+                    </div>
+                    <button type="button" wire:click="addToCart"
+                        @disabled(! $product->isInStock())
+                        class="flex-1 min-w-[10rem] rounded-full bg-[#C9A227] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#b8931f] transition disabled:opacity-50 disabled:cursor-not-allowed">
+                        {{ __('storefront.add_to_cart') }}
+                    </button>
+                    <button type="button" wire:click="toggleWishlist"
+                        class="inline-flex items-center gap-2 rounded-full border border-[#E0D6C2] bg-white px-4 py-3 text-sm hover:bg-[#FAF6EF] transition"
+                        title="{{ $isWishlisted ? __('storefront.saved') : __('storefront.save') }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="{{ $isWishlisted ? 'currentColor' : 'none' }}" aria-hidden="true" class="{{ $isWishlisted ? 'text-[#C9A227]' : 'text-[#6B6459]' }}">
+                            <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20s-7-4.35-7-9.2A3.8 3.8 0 0 1 12 7.5a3.8 3.8 0 0 1 7 3.3C19 15.65 12 20 12 20Z"/>
+                        </svg>
+                        <span class="hidden sm:inline">{{ $isWishlisted ? __('storefront.saved') : __('storefront.save') }}</span>
+                    </button>
+                </div>
+
+                @if ($addedMessage)
+                    <p class="mt-3 text-sm text-emerald-700">{{ __('storefront.added_to_cart') }}
+                        <a href="{{ route('cart') }}" wire:navigate class="underline">{{ __('storefront.view_cart') }}</a>
+                    </p>
+                @endif
+
                 @if ($descriptionHtml)
                     <div class="product-description mt-6 text-[#6B6459]">
                         {!! $descriptionHtml !!}
@@ -93,35 +123,6 @@
                 @else
                     <p class="mt-6 text-[#6B6459] leading-relaxed">
                         {{ __('storefront.handmade_tagline') }}
-                    </p>
-                @endif
-
-                <div class="mt-8 hidden lg:flex flex-wrap items-center gap-4">
-                    <div class="flex items-center rounded-full border border-[#E0D6C2] overflow-hidden">
-                        <button type="button" wire:click="$set('quantity', max(1, quantity - 1))"
-                            class="px-3 py-2 hover:bg-[#F1EADB]">−</button>
-                        <span class="px-4 py-2 text-sm font-medium min-w-[2.5rem] text-center">{{ $quantity }}</span>
-                        <button type="button" wire:click="$set('quantity', quantity + 1)"
-                            class="px-3 py-2 hover:bg-[#F1EADB]">+</button>
-                    </div>
-                    <button type="button" wire:click="addToCart"
-                        @disabled(! $product->isInStock())
-                        class="rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#b8931f] transition disabled:opacity-50 disabled:cursor-not-allowed">
-                        {{ __('storefront.add_to_cart') }}
-                    </button>
-                    <button type="button" wire:click="toggleWishlist"
-                        class="inline-flex items-center gap-2 rounded-full border border-[#E0D6C2] px-4 py-3 text-sm hover:bg-[#FAF6EF] transition"
-                        title="{{ $isWishlisted ? __('storefront.saved') : __('storefront.save') }}">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="{{ $isWishlisted ? 'currentColor' : 'none' }}" aria-hidden="true" class="{{ $isWishlisted ? 'text-[#C9A227]' : 'text-[#6B6459]' }}">
-                            <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20s-7-4.35-7-9.2A3.8 3.8 0 0 1 12 7.5a3.8 3.8 0 0 1 7 3.3C19 15.65 12 20 12 20Z"/>
-                        </svg>
-                        <span>{{ $isWishlisted ? __('storefront.saved') : __('storefront.save') }}</span>
-                    </button>
-                </div>
-
-                @if ($addedMessage)
-                    <p class="mt-3 text-sm text-emerald-700">{{ __('storefront.added_to_cart') }}
-                        <a href="{{ route('cart') }}" wire:navigate class="underline">{{ __('storefront.view_cart') }}</a>
                     </p>
                 @endif
 
@@ -199,24 +200,21 @@
         </div>
     </div>
 
-    {{-- Sticky mobile buy bar --}}
-    <div class="lg:hidden fixed bottom-16 inset-x-0 z-20 border-t border-[#E7DFCF] bg-white/95 backdrop-blur"
-         style="padding-bottom: env(safe-area-inset-bottom, 0);">
-        <div class="mx-auto max-w-6xl px-4 py-3 flex items-center gap-3">
-            <div class="flex items-center rounded-full border border-[#E0D6C2] overflow-hidden shrink-0">
-                <button type="button" wire:click="$set('quantity', max(1, quantity - 1))"
-                    class="px-3 py-2 hover:bg-[#F1EADB]">−</button>
-                <span class="px-3 py-2 text-sm font-medium min-w-[2rem] text-center">{{ $quantity }}</span>
-                <button type="button" wire:click="$set('quantity', quantity + 1)"
-                    class="px-3 py-2 hover:bg-[#F1EADB]">+</button>
+    {{-- Sticky mobile buy bar (above bottom nav) --}}
+    <div class="storefront-buy-bar">
+        <div class="storefront-buy-bar__inner">
+            <div class="storefront-buy-bar__qty">
+                <button type="button" wire:click="$set('quantity', max(1, quantity - 1))" aria-label="-">−</button>
+                <span>{{ $quantity }}</span>
+                <button type="button" wire:click="$set('quantity', quantity + 1)" aria-label="+">+</button>
             </div>
             <button type="button" wire:click="addToCart"
                 @disabled(! $product->isInStock())
-                class="flex-1 rounded-full bg-[#C9A227] px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#b8931f] transition disabled:opacity-50 disabled:cursor-not-allowed">
+                class="storefront-buy-bar__cart">
                 {{ __('storefront.add_to_cart') }}
             </button>
             <button type="button" wire:click="toggleWishlist"
-                class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] hover:bg-[#FAF6EF]"
+                class="storefront-buy-bar__wish"
                 title="{{ $isWishlisted ? __('storefront.saved') : __('storefront.save') }}"
                 aria-label="{{ $isWishlisted ? __('storefront.saved') : __('storefront.save') }}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="{{ $isWishlisted ? 'currentColor' : 'none' }}" aria-hidden="true" class="{{ $isWishlisted ? 'text-[#C9A227]' : 'text-[#6B6459]' }}">

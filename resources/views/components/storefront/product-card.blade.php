@@ -29,7 +29,7 @@
             @endif
         </div>
         @unless ($product->isInStock())
-            <p class="mt-1 text-xs text-rose-600">Out of stock</p>
+            <p class="mt-1 text-xs text-rose-600">{{ __('storefront.out_of_stock') }}</p>
         @endunless
     </div>
 </a>

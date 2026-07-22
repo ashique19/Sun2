@@ -79,15 +79,20 @@ class StorefrontAssets
         return self::variantUrl($pathOrUrl, 'sm');
     }
 
+    public static function extraSmallUrl(?string $pathOrUrl): ?string
+    {
+        return self::variantUrl($pathOrUrl, 'xs');
+    }
+
     /**
      * Build a responsive srcset for listing/thumb images.
      *
      * @param  array<string, int>  $widths  variant => CSS pixel width hint
      */
     public static function srcset(?string $pathOrUrl, array $widths = [
+        'xs' => 200,
         'sm' => 400,
         'md' => 800,
-        'lg' => 1200,
     ]): ?string
     {
         if (! $pathOrUrl) {

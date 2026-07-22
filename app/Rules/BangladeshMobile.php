@@ -11,7 +11,7 @@ class BangladeshMobile implements ValidationRule
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
         if (! is_string($value) || ! PhoneNumber::isValidDisplayMobile($value)) {
-            $fail('Enter a valid Bangladesh mobile number (11 digits, starting with 01).');
+            $fail(__('storefront.invalid_mobile'));
         }
     }
 }

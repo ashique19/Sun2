@@ -42,7 +42,7 @@ class PublicProductShare extends Component
         return view('livewire.public-product-share', [
             'items' => $this->share?->items ?? [],
             'canManage' => $this->canManageList(),
-        ])->title($this->expired ? 'Link expired' : 'Product list');
+        ])->title($this->expired ? __('storefront.share_expired_title') : __('storefront.share_title'));
     }
 
     private function canManageList(): bool

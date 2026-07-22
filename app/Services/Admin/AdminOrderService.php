@@ -24,12 +24,6 @@ class AdminOrderService
      */
     public function create(array $orderData, array $lines): Order
     {
-        if ($lines === []) {
-            throw ValidationException::withMessages([
-                'lines' => 'Add at least one product to the order.',
-            ]);
-        }
-
         return DB::transaction(function () use ($orderData, $lines) {
             $orderData = $this->attachCustomerUser($orderData);
 
@@ -64,12 +58,6 @@ class AdminOrderService
      */
     public function update(Order $order, array $orderData, array $lines): Order
     {
-        if ($lines === []) {
-            throw ValidationException::withMessages([
-                'lines' => 'Add at least one product to the order.',
-            ]);
-        }
-
         return DB::transaction(function () use ($order, $orderData, $lines) {
             $order->load('items');
 

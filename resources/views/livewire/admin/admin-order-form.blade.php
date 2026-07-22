@@ -162,7 +162,7 @@
                     @error('lines') <p class="text-rose-600 text-sm mb-3">{{ $message }}</p> @enderror
 
                     @if ($lines === [])
-                        <p class="text-sm text-[#8C8474]">No products added yet. Search below to add products.</p>
+                        <p class="text-sm text-[#8C8474]">No products yet — you can save now and add products later. Search below when ready.</p>
                     @else
                         <div class="space-y-3 min-w-0">
                             @foreach ($lines as $productId => $line)

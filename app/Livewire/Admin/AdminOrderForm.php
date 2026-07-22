@@ -1101,7 +1101,8 @@ class AdminOrderForm extends Component
             'deliveryCharge' => ['required', 'integer', 'min:0'],
             'charge' => ['required', 'integer', 'min:0'],
             'discount' => ['required', 'integer', 'min:0'],
-            'lines' => ['required', 'array', 'min:1'],
+            // Products optional — rush intake often saves customer details first, lines later.
+            'lines' => ['array'],
             'lines.*.quantity' => ['required', 'integer', 'min:1'],
         ];
     }

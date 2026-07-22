@@ -110,6 +110,28 @@ class AdminOrderFormValidationTest extends TestCase
         $this->assertSame('01627237432', $order->phone);
     }
 
+    public function test_create_order_allows_saving_without_products(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->mockCustomerLookup();
+
+        Livewire::test(AdminOrderForm::class)
+            ->set('phone', '01627237432')
+            ->set('name', 'Rush customer')
+            ->set('address', 'Bashabo, Dhaka')
+            ->set('lines', [])
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertRedirect();
+
+        $order = Order::query()->first();
+        $this->assertNotNull($order);
+        $this->assertSame('Rush customer', $order->name);
+        $this->assertSame('01627237432', $order->phone);
+        $this->assertSame(0, $order->items()->count());
+        $this->assertSame(0.0, (float) $order->subtotal);
+    }
+
     public function test_create_order_requires_phone_and_name_when_empty(): void
     {
         $this->actingAs($this->adminUser());

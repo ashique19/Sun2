@@ -14,9 +14,10 @@ class AdminOrderSegment
         'delivered' => 'Delivered',
         'cancel-return' => 'Cancel & Return',
         'return-pending' => 'Return Pending',
+        'all' => 'All',
     ];
 
-    public const COUNTS_CACHE_KEY = 'admin.order_segment_counts';
+    public const COUNTS_CACHE_KEY = 'admin.order_segment_counts.v2';
 
     public const COUNTS_CACHE_TTL = 60;
 
@@ -28,6 +29,7 @@ class AdminOrderSegment
             'delivered' => $query->where('status', 'delivered'),
             'cancel-return' => $query->whereIn('status', ['cancelled', 'returned']),
             'return-pending' => $query->where('has_return', true),
+            'all' => $query,
             default => $query,
         };
     }
@@ -63,6 +65,7 @@ class AdminOrderSegment
                 ->pluck('aggregate', 'status');
 
             $returnPending = (int) Order::query()->where('has_return', true)->count();
+            $all = (int) $statusCounts->sum();
 
             return [
                 'new' => (int) ($statusCounts['new'] ?? 0) + (int) ($statusCounts['confirmed'] ?? 0),
@@ -70,6 +73,7 @@ class AdminOrderSegment
                 'delivered' => (int) ($statusCounts['delivered'] ?? 0),
                 'cancel-return' => (int) ($statusCounts['cancelled'] ?? 0) + (int) ($statusCounts['returned'] ?? 0),
                 'return-pending' => $returnPending,
+                'all' => $all,
             ];
         });
     }

@@ -1,7 +1,7 @@
 <div>
     <h1 class="font-serif text-3xl font-semibold mb-6">Dashboard</h1>
 
-    <div class="grid sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-4 mb-8">
+    <div class="grid sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4 mb-8">
         @foreach ($segments as $segmentKey => $segmentLabel)
             <a href="{{ route('admin.orders.'.$segmentKey) }}"
                 class="rounded-xl border border-[#EFE7D6] bg-white p-5 hover:border-[#C9A227] hover:bg-[#FAF6EF] transition group">

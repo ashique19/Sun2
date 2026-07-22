@@ -8,7 +8,6 @@ use App\Models\OrderStatusHistory;
 use App\Services\Orders\OrderStockService;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 class AdminOrderService
 {

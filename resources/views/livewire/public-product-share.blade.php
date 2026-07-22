@@ -61,7 +61,7 @@
                         {{ __('storefront.share_lines_pcs', ['lines' => number_format($lineCount), 'pcs' => number_format($pcsCount)]) }}
                     </p>
                     <button type="button" onclick="window.print()"
-                        class="rounded-full border border-[#E0D6C2] bg-white px-4 py-1.5 text-xs font-semibold hover:bg-[#FAF6EF]">
+                        class="share-no-print rounded-full border border-[#E0D6C2] bg-white px-4 py-1.5 text-xs font-semibold hover:bg-[#FAF6EF]">
                         {{ __('storefront.print_list') }}
                     </button>
                 </div>
@@ -105,7 +105,7 @@
                             <button type="button"
                                 wire:click="removeRow('{{ $item['key'] }}')"
                                 wire:confirm="{{ __('storefront.share_remove_confirm') }}"
-                                class="shrink-0 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50">
+                                class="share-no-print shrink-0 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50">
                                 {{ __('storefront.delete') }}
                             </button>
                         @endif

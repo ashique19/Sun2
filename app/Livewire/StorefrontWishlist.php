@@ -17,14 +17,14 @@ class StorefrontWishlist extends Component
     public function remove(int $productId, WishlistService $wishlist): void
     {
         $wishlist->toggle(auth()->id(), $productId);
-        $this->message = 'Removed from wishlist.';
+        $this->message = __('storefront.wishlist_removed');
     }
 
     public function addToCart(int $productId, CartService $cart): void
     {
         $cart->add($productId, 1);
         $this->dispatch('cart-updated');
-        $this->message = 'Added to cart.';
+        $this->message = __('storefront.added_to_cart');
     }
 
     public function render(WishlistService $wishlist)

@@ -57,7 +57,7 @@ class StorefrontProduct extends Component
         }
 
         $cart->add($this->product->id, $this->quantity);
-        $this->addedMessage = 'Added to cart';
+        $this->addedMessage = __('storefront.added_to_cart');
         $this->dispatch('cart-updated');
     }
 
@@ -96,7 +96,7 @@ class StorefrontProduct extends Component
             ->exists();
 
         if ($exists) {
-            $this->reviewError = 'You have already reviewed this product.';
+            $this->reviewError = __('storefront.already_reviewed');
 
             return;
         }
@@ -113,7 +113,7 @@ class StorefrontProduct extends Component
         $this->reviewTitle = '';
         $this->reviewBody = '';
         $this->reviewRating = 5;
-        $this->reviewMessage = 'Thank you! Your review will appear after approval.';
+        $this->reviewMessage = __('storefront.review_thanks');
     }
 
     public function title(): string
@@ -131,7 +131,8 @@ class StorefrontProduct extends Component
             ->title($this->title())
             ->layoutData([
                 'seoDescription' => Seo::description(
-                    $this->product->meta_description ?: $this->product->description,
+                    $this->product->meta_description
+                        ?: (trim((string) $this->product->description_bn) !== '' ? $this->product->description_bn : $this->product->description),
                     $this->product->name.' — high-quality handmade jewellery from Sundoritoma. Home delivery all over Bangladesh.',
                 ),
                 'seoCanonical' => route('product.show', $this->product),

@@ -4,6 +4,7 @@
         <h1 class="font-serif text-3xl font-semibold mb-2">{{ __('storefront.order_confirmed') }}</h1>
         <p class="text-[#6B6459] mb-1">{{ __('storefront.thank_you', ['name' => $order->name]) }}</p>
         <p class="text-[#6B6459] mb-8">{{ __('storefront.order_placed', ['number' => $order->order_number]) }}</p>
+        <p class="text-sm text-[#8C8474] mb-8">{{ __('storefront.save_order_hint') }}</p>
 
         <div class="rounded-xl border border-[#EFE7D6] bg-white p-6 text-left text-sm space-y-3 mb-8">
             <div class="flex justify-between">

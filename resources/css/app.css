@@ -243,3 +243,26 @@
 body:has(.mobile-nav-toggle:checked) {
     overflow: hidden;
 }
+
+@media print {
+    .share-print-root header a[href^="tel"],
+    .share-print-root .share-no-print {
+        display: none !important;
+    }
+
+    .share-print-root {
+        max-width: none;
+        padding: 0;
+    }
+
+    .share-print-root .sticky {
+        position: static;
+        border: 0;
+        backdrop-filter: none;
+        background: transparent !important;
+    }
+
+    body {
+        background: #fff;
+    }
+}

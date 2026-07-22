@@ -1,75 +1,38 @@
 <x-storefront.shell>
     @if ($heroSlides->isNotEmpty())
-        <section
-            x-data="{
-                active: 0,
-                total: {{ $heroSlides->count() }},
-                timer: null,
-                start() { this.timer = setInterval(() => { this.active = (this.active + 1) % this.total; }, 6000); },
-                stop() { clearInterval(this.timer); },
-                goTo(index) { this.active = index; },
-            }"
-            x-init="start()"
-            @mouseenter="stop()"
-            @mouseleave="start()"
-            class="relative overflow-hidden bg-[#1E1E1E]"
-        >
-            <div class="relative w-full min-h-[280px] md:min-h-[420px] max-h-[520px]">
-                @foreach ($heroSlides as $index => $slide)
-                    <div
-                        x-show="active === {{ $index }}"
-                        x-transition:enter="transition ease-out duration-700"
-                        x-transition:enter-start="opacity-0"
-                        x-transition:enter-end="opacity-100"
-                        x-transition:leave="transition ease-in duration-500"
-                        x-transition:leave-start="opacity-100"
-                        x-transition:leave-end="opacity-0"
-                        class="absolute inset-0"
-                        @if ($index > 0) style="display: none;" @endif
-                    >
-                        @if ($image = \App\Support\StorefrontAssets::url($slide->image))
-                            <img
-                                src="{{ $image }}"
-                                alt="{{ $slide->title }}"
-                                class="h-full w-full object-cover"
-                                @if ($index === 0) fetchpriority="high" @else loading="lazy" @endif
-                            >
-                        @endif
-                        <div class="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent"></div>
-                        <div class="absolute inset-0 flex items-center">
-                            <div class="mx-auto w-full max-w-6xl px-6 md:px-10">
-                                <p class="text-[#E9C978] uppercase tracking-[0.2em] text-[10px] md:text-xs mb-3 opacity-80">{{ __('storefront.handmade_jewellery') }}</p>
-                                @if ($index === 0)
-                                    <h1 class="font-serif text-3xl md:text-5xl font-semibold leading-tight text-white max-w-xl">{{ $slide->title }}</h1>
-                                @else
-                                    <p class="font-serif text-3xl md:text-5xl font-semibold leading-tight text-white max-w-xl">{{ $slide->title }}</p>
-                                @endif
-                                @if ($slide->subtitle)
-                                    <p class="mt-3 text-sm md:text-base text-white/80 max-w-lg">{{ $slide->subtitle }}</p>
-                                @endif
-                                <a href="{{ $slide->link_url ?: '#collection' }}"
-                                   class="mt-6 inline-block rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#b8931f] transition">
-                                    {{ $slide->link_label ?: __('storefront.shop_now') }}
-                                </a>
-                            </div>
+        @php $slide = $heroSlides->first(); @endphp
+        <section class="relative overflow-hidden bg-[#1E1E1E]">
+            <div class="relative w-full min-h-[220px] sm:min-h-[280px] md:min-h-[420px] max-h-[520px]">
+                <div class="absolute inset-0">
+                    @if ($image = \App\Support\StorefrontAssets::mediumUrl($slide->image) ?? \App\Support\StorefrontAssets::url($slide->image))
+                        <img
+                            src="{{ $image }}"
+                            alt="{{ $slide->title }}"
+                            class="h-full w-full object-cover"
+                            width="1200"
+                            height="520"
+                            fetchpriority="high"
+                        >
+                    @endif
+                    <div class="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent"></div>
+                    <div class="absolute inset-0 flex items-center">
+                        <div class="mx-auto w-full max-w-6xl px-6 md:px-10">
+                            <h1 class="font-serif text-3xl md:text-5xl font-semibold leading-tight text-white max-w-xl">{{ $slide->title }}</h1>
+                            @if ($slide->subtitle)
+                                <p class="mt-3 text-sm md:text-base text-white/80 max-w-lg">{{ $slide->subtitle }}</p>
+                            @endif
+                            <a href="{{ $slide->link_url ?: '#collection' }}"
+                               class="mt-6 inline-block rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#b8931f] transition">
+                                {{ $slide->link_label ?: __('storefront.shop_now') }}
+                            </a>
                         </div>
                     </div>
-                @endforeach
-            </div>
-            @if ($heroSlides->count() > 1)
-                <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-                    @foreach ($heroSlides as $index => $slide)
-                        <button type="button" @click="goTo({{ $index }})"
-                            :class="active === {{ $index }} ? 'bg-[#C9A227] w-8' : 'bg-white/50 w-2'"
-                            class="h-2 rounded-full transition-all duration-300"
-                            aria-label="{{ $index + 1 }}"></button>
-                    @endforeach
                 </div>
-            @endif
+            </div>
         </section>
     @else
         <div class="mx-auto max-w-6xl px-4 pt-10 text-center sm:text-left">
-            <img src="/img/settings/logo.png" alt="Sundoritoma" class="mx-auto sm:mx-0 h-16 w-auto object-contain mb-4">
+            <img src="/img/settings/logo.png" alt="Sundoritoma" class="mx-auto sm:mx-0 h-16 w-auto object-contain mb-4" width="192" height="64">
             <h1 class="font-serif text-3xl md:text-4xl font-semibold">{{ __('storefront.handmade_jewellery') }}</h1>
             <p class="mt-2 text-[#6B6459] max-w-2xl mx-auto sm:mx-0">{{ __('storefront.handmade_tagline') }}</p>
             <a href="#collection"

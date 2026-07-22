@@ -202,11 +202,13 @@
                         {{ __('storefront.select_city_area') }}
                     @endif
                 </p>
-                <div class="mt-4 rounded-lg bg-[#FAF6EF] p-3 text-xs text-[#6B6459] leading-relaxed">
-                    <p class="font-medium mb-1">{{ __('storefront.delivery_guide_title') }}</p>
-                    <p>{{ __('storefront.delivery_guide_dhaka') }}</p>
-                    <p>{{ __('storefront.delivery_guide_outside') }}</p>
-                </div>
+                @if ($selectedCity || $selectedArea)
+                    <div class="mt-4 rounded-lg bg-[#FAF6EF] p-3 text-xs text-[#6B6459] leading-relaxed">
+                        <p class="font-medium mb-1">{{ __('storefront.delivery_guide_title') }}</p>
+                        <p>{{ __('storefront.delivery_guide_dhaka') }}</p>
+                        <p>{{ __('storefront.delivery_guide_outside') }}</p>
+                    </div>
+                @endif
             </div>
         </div>
     </div>

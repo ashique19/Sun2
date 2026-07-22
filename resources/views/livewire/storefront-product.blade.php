@@ -2,8 +2,13 @@
     @php
         $images = $product->images;
         $active = $images[$activeImage] ?? $images->first();
-        $activeUrl = $active ? \App\Support\StorefrontAssets::url($active->path) : null;
-        $descriptionHtml = $product->description_bn ?: $product->description;
+        $activeUrl = $active
+            ? (\App\Support\StorefrontAssets::mediumUrl($active->path)
+                ?? \App\Support\StorefrontAssets::url($active->path))
+            : null;
+        $descriptionHtml = trim((string) $product->description_bn) !== ''
+            ? $product->description_bn
+            : $product->description;
     @endphp
 
     <x-seo.json-ld :data="\App\Support\JsonLd::product($product)" />

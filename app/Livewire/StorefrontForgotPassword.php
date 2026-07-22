@@ -41,7 +41,7 @@ class StorefrontForgotPassword extends Component
             $status = Password::sendResetLink(['email' => $this->identifier]);
 
             if ($status === Password::RESET_LINK_SENT) {
-                $this->statusMessage = 'Password reset link sent to your email.';
+                $this->statusMessage = __('storefront.password_reset_email');
                 $this->step = 'email-sent';
 
                 return;
@@ -59,7 +59,7 @@ class StorefrontForgotPassword extends Component
         $user = User::findByPhone($this->identifier);
 
         if (! $user) {
-            $this->addError('identifier', 'No account found with this mobile number.');
+            $this->addError('identifier', __('storefront.account_not_found'));
 
             return;
         }
@@ -68,7 +68,9 @@ class StorefrontForgotPassword extends Component
             app(PasswordResetOtpService::class)->send($this->identifier);
             $this->step = 'phone-otp';
             $this->otp = '';
-            $this->statusMessage = 'OTP sent to '.PhoneNumber::display($this->identifier).'.';
+            $this->statusMessage = __('storefront.otp_sent_display', [
+                'phone' => PhoneNumber::display($this->identifier),
+            ]);
         } catch (\Throwable $e) {
             $this->formError = $e->getMessage();
         }
@@ -86,19 +88,19 @@ class StorefrontForgotPassword extends Component
         $user = User::findByPhone($this->identifier);
 
         if (! $user) {
-            $this->formError = 'Account not found.';
+            $this->formError = __('storefront.account_not_found');
 
             return;
         }
 
         if (! $otpService->verify($this->identifier, $this->otp)) {
-            $this->addError('otp', 'Invalid or expired OTP.');
+            $this->addError('otp', __('storefront.otp_invalid'));
 
             return;
         }
 
         $user->update(['password' => $this->password]);
-        $this->statusMessage = 'Password updated successfully. You can now log in.';
+        $this->statusMessage = __('storefront.password_updated_login');
         $this->step = 'done';
     }
 

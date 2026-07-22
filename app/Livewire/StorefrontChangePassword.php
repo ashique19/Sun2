@@ -38,7 +38,7 @@ class StorefrontChangePassword extends Component
         $user->update(['password' => $this->password]);
 
         $this->reset(['current_password', 'password', 'password_confirmation']);
-        $this->statusMessage = 'Password changed successfully.';
+        $this->statusMessage = __('storefront.password_changed');
     }
 
     public function render()

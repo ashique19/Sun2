@@ -125,7 +125,7 @@ class StorefrontProfile extends Component
                 ->update(['is_default' => false]);
         }
 
-        $this->statusMessage = 'Profile updated successfully.';
+        $this->statusMessage = __('storefront.profile_updated');
     }
 
     public function render()

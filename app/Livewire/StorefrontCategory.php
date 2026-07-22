@@ -21,12 +21,20 @@ class StorefrontCategory extends Component
     #[Url(as: 'sort')]
     public string $sort = 'featured';
 
+    #[Url(as: 'stock')]
+    public bool $inStockOnly = false;
+
     public function mount(Category $category): void
     {
         abort_unless($category->is_active, 404);
     }
 
     public function updatedSort(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedInStockOnly(): void
     {
         $this->resetPage();
     }
@@ -45,6 +53,7 @@ class StorefrontCategory extends Component
             ])
             ->published()
             ->where('category_id', $this->category->id)
+            ->when($this->inStockOnly, fn ($q) => $q->where('stock_quantity', '>', 0))
             ->when($this->sort === 'price_asc', fn ($q) => $q->orderBy('price'))
             ->when($this->sort === 'price_desc', fn ($q) => $q->orderByDesc('price'))
             ->when($this->sort === 'newest', fn ($q) => $q->orderByDesc('id'))

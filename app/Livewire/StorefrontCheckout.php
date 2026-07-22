@@ -161,7 +161,7 @@ class StorefrontCheckout extends Component
 
         $coupon = $coupons->findValid($this->couponCode, $subtotal);
         $this->appliedCouponId = $coupon?->id;
-        $this->couponMessage = 'Coupon applied successfully.';
+        $this->couponMessage = __('storefront.coupon_applied');
         session(['checkout.coupon_code' => strtoupper(trim($this->couponCode))]);
     }
 
@@ -191,13 +191,13 @@ class StorefrontCheckout extends Component
 
         $area = Area::query()->with('city')->find($this->areaId);
         if (! $area || $area->city_id !== $this->cityId) {
-            $this->addError('areaId', 'Please select a valid area for the chosen city.');
+            $this->addError('areaId', __('storefront.invalid_area'));
 
             return;
         }
 
         if (! PhoneNumber::isValidBangladeshMobile($this->phone)) {
-            $this->addError('phone', 'Enter a valid Bangladesh mobile number.');
+            $this->addError('phone', __('storefront.invalid_mobile'));
 
             return;
         }
@@ -236,14 +236,14 @@ class StorefrontCheckout extends Component
         ]);
 
         if (! $otpService->verify($this->phone, $this->otp)) {
-            $this->otpError = 'Invalid or expired OTP. Please try again or resend a new code.';
+            $this->otpError = __('storefront.otp_invalid');
 
             return;
         }
 
         $area = Area::query()->with('city')->find($this->areaId);
         if (! $area || $area->city_id !== $this->cityId) {
-            $this->otpError = 'Invalid city or area selection. Please go back and update your delivery details.';
+            $this->otpError = __('storefront.otp_invalid_location');
 
             return;
         }

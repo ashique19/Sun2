@@ -154,6 +154,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/orders/delivered', AdminOrders::class)->defaults('segment', 'delivered')->name('orders.delivered');
         Route::get('/orders/cancel-return', AdminOrders::class)->defaults('segment', 'cancel-return')->name('orders.cancel-return');
         Route::get('/orders/return-pending', AdminOrders::class)->defaults('segment', 'return-pending')->name('orders.return-pending');
+        Route::get('/orders/all', AdminOrders::class)->defaults('segment', 'all')->name('orders.all');
         Route::get('/orders/create', AdminOrderForm::class)->name('orders.create');
         Route::get('/orders/{order}/edit', AdminOrderForm::class)->whereNumber('order')->name('orders.edit');
         Route::get('/products', AdminProducts::class)->name('products');

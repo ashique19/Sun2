@@ -27,6 +27,7 @@
             'admin.orders.delivered' => 'Delivered',
             'admin.orders.cancel-return' => 'Cancel & Return',
             'admin.orders.return-pending' => 'Return Pending',
+            'admin.orders.all' => 'All',
         ];
     $click = $onclick ? 'onclick="'.$onclick.'"' : '';
 @endphp

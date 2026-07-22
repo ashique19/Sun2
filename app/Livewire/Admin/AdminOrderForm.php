@@ -48,6 +48,9 @@ class AdminOrderForm extends Component
 
     public string $address = '';
 
+    /** Calendar order date (Y-m-d, Asia/Dhaka). Defaults to today; past allowed, future blocked. */
+    public string $orderDate = '';
+
     public ?int $cityId = null;
 
     public ?int $areaId = null;
@@ -137,9 +140,13 @@ class AdminOrderForm extends Component
 
     public function mount(?Order $order = null): void
     {
+        $this->orderDate = now('Asia/Dhaka')->toDateString();
+
         if ($order?->exists) {
             $this->order = $order->load('items.product');
             $this->fillFromOrder($this->order);
+            $this->orderDate = $this->order->placed_at?->timezone('Asia/Dhaka')->toDateString()
+                ?? $this->orderDate;
         } elseif ($this->repeat) {
             $source = Order::query()->with('items.product')->find($this->repeat);
 
@@ -832,7 +839,7 @@ class AdminOrderForm extends Component
             'discount' => (float) $this->roundedMoney($this->discount),
             'city' => $city?->name,
             'area' => $area?->name,
-            'placed_at' => $this->order?->placed_at ?? now(),
+            'placed_at' => $this->resolvedPlacedAt(),
         ]);
 
         $lines = array_values(array_map(fn (array $line) => [
@@ -1068,6 +1075,23 @@ class AdminOrderForm extends Component
             'name' => ['required', 'string', 'max:120'],
             'phone' => ['required', 'string', 'max:32', new BangladeshMobile],
             'address' => ['required', 'string', 'max:500'],
+            'orderDate' => [
+                'required',
+                'date_format:Y-m-d',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    try {
+                        $date = \Carbon\Carbon::createFromFormat('Y-m-d', (string) $value, 'Asia/Dhaka')->startOfDay();
+                    } catch (\Throwable) {
+                        $fail('Enter a valid order date.');
+
+                        return;
+                    }
+
+                    if ($date->gt(now('Asia/Dhaka')->startOfDay())) {
+                        $fail('Order date cannot be in the future.');
+                    }
+                },
+            ],
             'cityId' => ['nullable', 'integer', 'exists:cities,id'],
             'areaId' => ['nullable', 'integer', 'exists:areas,id'],
             'paymentMethod' => ['required', 'string', 'max:32'],
@@ -1080,5 +1104,24 @@ class AdminOrderForm extends Component
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.quantity' => ['required', 'integer', 'min:1'],
         ];
+    }
+
+    private function resolvedPlacedAt(): \Carbon\CarbonInterface
+    {
+        $dhaka = 'Asia/Dhaka';
+        $selected = \Carbon\Carbon::createFromFormat('Y-m-d', $this->orderDate, $dhaka)->startOfDay();
+        $today = now($dhaka)->startOfDay();
+
+        // Today: keep existing timestamp when editing, otherwise now.
+        if ($selected->equalTo($today)) {
+            if ($this->order?->placed_at && $this->order->placed_at->timezone($dhaka)->toDateString() === $this->orderDate) {
+                return $this->order->placed_at;
+            }
+
+            return now();
+        }
+
+        // Past calendar day in Dhaka — store noon local so the day groups cleanly.
+        return $selected->setTime(12, 0, 0);
     }
 }

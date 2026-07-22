@@ -98,6 +98,17 @@
                             >
                             @error('name') <p class="text-rose-600 text-xs mt-1">{{ $errors->first('name') }}</p> @enderror
                         </div>
+                        <div>
+                            <label class="block text-[#6B6459] mb-1">Order date</label>
+                            <input
+                                type="date"
+                                wire:model="orderDate"
+                                max="{{ now('Asia/Dhaka')->toDateString() }}"
+                                class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
+                            >
+                            @error('orderDate') <p class="text-rose-600 text-xs mt-1">{{ $errors->first('orderDate') }}</p> @enderror
+                            <p class="text-xs text-[#8C8474] mt-1">Defaults to today. Past dates allowed; future dates are not.</p>
+                        </div>
                         <div class="sm:col-span-2">
                             <label class="block text-[#6B6459] mb-1">Address</label>
                             <textarea

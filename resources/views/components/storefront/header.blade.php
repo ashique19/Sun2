@@ -93,6 +93,20 @@
             </a>
 
             <div class="flex items-center gap-2 text-[#1E1E1E] shrink-0 ml-auto">
+                <a href="{{ route('account.wishlist') }}" wire:navigate
+                    class="relative inline-flex h-10 w-10 shrink-0 items-center justify-center text-[#1E1E1E] hover:text-[#C9A227]"
+                    title="{{ __('storefront.save') }}"
+                    aria-label="{{ __('storefront.save') }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20s-7-4.35-7-9.2A3.8 3.8 0 0 1 12 7.5a3.8 3.8 0 0 1 7 3.3C19 15.65 12 20 12 20Z"/>
+                    </svg>
+                    @if ($wishlistCount > 0)
+                        <span class="absolute top-0.5 right-0.5 min-w-[1.1rem] h-[1.1rem] rounded-full bg-[#C9A227] text-white text-[10px] font-semibold flex items-center justify-center px-1">
+                            {{ $wishlistCount > 99 ? '99+' : $wishlistCount }}
+                        </span>
+                    @endif
+                </a>
+
                 <label for="mobile-nav-toggle"
                     class="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#1E1E1E]"
                     aria-label="{{ __('storefront.menu') }}">

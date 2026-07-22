@@ -1,7 +1,11 @@
 @php
     $isHome = request()->routeIs('home');
     $isCart = request()->routeIs('cart') || request()->routeIs('checkout*');
+    $isWishlist = request()->routeIs('account.wishlist');
     $whatsappUrl = config('seo.whatsapp_url');
+    $wishlistCount = auth()->check()
+        ? app(\App\Services\Storefront\WishlistService::class)->count(auth()->id())
+        : 0;
 @endphp
 
 <nav class="storefront-bottom-nav sm:hidden" aria-label="{{ __('storefront.menu') }}">
@@ -28,6 +32,20 @@
                 <circle cx="17" cy="20" r="1.25" fill="currentColor"/>
             </svg>
             <span>{{ __('storefront.cart') }}</span>
+        </a>
+        <a href="{{ route('account.wishlist') }}" wire:navigate
+           class="storefront-bottom-nav__link {{ $isWishlist ? 'is-active' : '' }}">
+            <span class="relative inline-flex">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20s-7-4.35-7-9.2A3.8 3.8 0 0 1 12 7.5a3.8 3.8 0 0 1 7 3.3C19 15.65 12 20 12 20Z"/>
+                </svg>
+                @if ($wishlistCount > 0)
+                    <span class="absolute -top-1.5 -right-2 min-w-[1rem] h-[1rem] rounded-full bg-[#C9A227] text-white text-[9px] font-semibold flex items-center justify-center px-0.5">
+                        {{ $wishlistCount > 99 ? '99+' : $wishlistCount }}
+                    </span>
+                @endif
+            </span>
+            <span>{{ __('storefront.save') }}</span>
         </a>
         <a href="{{ $whatsappUrl }}" target="_blank" rel="noopener noreferrer"
            class="storefront-bottom-nav__link">

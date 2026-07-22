@@ -244,7 +244,7 @@ body:has(.mobile-nav-toggle:checked) {
     overflow: hidden;
 }
 
-/* Mobile bottom nav — explicit CSS so it stays a fixed 4-column bar
+/* Mobile bottom nav — explicit CSS so it stays a fixed row
    even if utility classes are missing from a stale Vite build. */
 .storefront-bottom-nav {
     position: fixed;

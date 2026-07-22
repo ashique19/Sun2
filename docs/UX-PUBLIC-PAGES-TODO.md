@@ -26,7 +26,7 @@ Status: **implemented on branch `cursor/bangla-ux-storefront-6039`**.
 - [x] Prefer `description_bn` on PDP
 
 ### P0 — Simple nav
-- [x] Sticky bottom: হোম | ক্যাটাগরি | কার্ট | কল
+- [x] Sticky bottom: হোম | ক্যাটাগরি | কার্ট | WhatsApp
 - [x] Guest mobile menu with shop links
 - [x] Single hero image; category-first home
 

@@ -19,7 +19,7 @@ class PageSeeder extends Seeder
 <p>Sundoritoma is a Bangladesh-based jewellery store specializing in high-quality handmade jewellery — German silver, brass, beads, and handcrafted collections for everyday wear and special occasions.</p>
 <p>From necklaces and earrings to bangles and festive sets, we make pieces that blend careful craftsmanship with contemporary style. Our goal is simple: beautiful handmade jewellery that feels special, at accessible prices, delivered to your door.</p>
 <p>We offer cash on delivery and home delivery all over Bangladesh so shopping stays easy wherever you are.</p>
-<p><strong>Contact:</strong> 01880001255 &middot; info@sundoritoma.com</p>
+<p><strong>Contact:</strong> WhatsApp 01880001255 &middot; info@sundoritoma.com</p>
 <p><strong>Address:</strong> Dhaka, Bangladesh</p>
 HTML,
             ],
@@ -39,7 +39,7 @@ HTML,
 <h2>Data security</h2>
 <p>We take reasonable steps to protect your information. Please keep your account password confidential and contact us if you suspect unauthorized access.</p>
 <h2>Contact</h2>
-<p>For privacy-related questions, email info@sundoritoma.com or call 01880001255.</p>
+<p>For privacy-related questions, email info@sundoritoma.com or WhatsApp 01880001255.</p>
 <p><em>Last updated: July 2026</em></p>
 HTML,
             ],
@@ -59,7 +59,7 @@ HTML,
 <h2>Returns and exchanges</h2>
 <p>Returns and exchanges are handled according to our customer care policy. Please contact us promptly if your order arrives damaged or incorrect so we can help resolve the issue.</p>
 <h2>Contact</h2>
-<p>For order assistance, call 01880001255 or email info@sundoritoma.com.</p>
+<p>For order assistance, WhatsApp 01880001255 or email info@sundoritoma.com.</p>
 <p><em>Last updated: July 2026</em></p>
 HTML,
             ],

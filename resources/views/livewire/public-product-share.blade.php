@@ -4,8 +4,8 @@
             <img src="/img/settings/logo.png" alt="Sundoritoma" class="h-10 w-auto object-contain">
             <span class="font-serif text-lg font-semibold truncate">Sundoritoma</span>
         </a>
-        <a href="tel:01880001255" class="shrink-0 text-sm font-medium text-[#C9A227] hover:underline">
-            {{ __('storefront.helpline_label') }}: 01880001255
+        <a href="{{ config('seo.whatsapp_url') }}" target="_blank" rel="noopener noreferrer" class="shrink-0 text-sm font-medium text-[#C9A227] hover:underline">
+            {{ __('storefront.helpline_label') }}: {{ config('seo.whatsapp_display') }}
         </a>
     </header>
 
@@ -18,7 +18,7 @@
                    class="inline-block rounded-full bg-[#C9A227] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f]">
                     {{ __('storefront.go_home') }}
                 </a>
-                <a href="tel:01880001255"
+                <a href="{{ config('seo.whatsapp_url') }}" target="_blank" rel="noopener noreferrer"
                    class="inline-block rounded-full border border-[#C9A227] px-6 py-2.5 text-sm font-semibold text-[#C9A227] hover:bg-[#FAF6EF]">
                     {{ __('storefront.call_us') }}
                 </a>
@@ -43,7 +43,7 @@
                        class="inline-block rounded-full bg-[#C9A227] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f]">
                         {{ __('storefront.go_home') }}
                     </a>
-                    <a href="tel:01880001255"
+                    <a href="{{ config('seo.whatsapp_url') }}" target="_blank" rel="noopener noreferrer"
                        class="inline-block rounded-full border border-[#C9A227] px-6 py-2.5 text-sm font-semibold text-[#C9A227] hover:bg-[#FAF6EF]">
                         {{ __('storefront.call_us') }}
                     </a>

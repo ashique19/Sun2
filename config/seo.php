@@ -15,9 +15,13 @@ return [
     'organization' => [
         'email' => 'info@sundoritoma.com',
         'telephone' => '+8801880001255',
+        'whatsapp' => '8801880001255',
         'address_locality' => 'Dhaka',
         'address_country' => 'BD',
     ],
+
+    'whatsapp_url' => 'https://wa.me/8801880001255',
+    'whatsapp_display' => '01880001255',
 
     /*
     |--------------------------------------------------------------------------

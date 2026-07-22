@@ -139,7 +139,7 @@
         @endif
 
         <div class="brand">SUNDORITOMA</div>
-        <div class="helpline">CALL: 01880001255</div>
+        <div class="helpline">WhatsApp: 01880001255</div>
 
         <table class="box" width="100%">
             <tr>

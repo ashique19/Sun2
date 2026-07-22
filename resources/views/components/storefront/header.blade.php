@@ -174,9 +174,9 @@
                     <span class="rounded-full bg-[#C9A227] px-2 py-0.5 text-[10px] font-semibold text-white">{{ $cartCount > 99 ? '99+' : $cartCount }}</span>
                 @endif
             </a>
-            <a href="tel:01880001255"
+            <a href="{{ config('seo.whatsapp_url') }}" target="_blank" rel="noopener noreferrer"
                 class="block rounded-xl px-4 py-3.5 font-semibold text-[#C9A227] hover:bg-[#FAF6EF]">
-                {{ __('storefront.call') }} — 01880001255
+                {{ __('storefront.whatsapp') }} — {{ config('seo.whatsapp_display') }}
             </a>
 
             <p class="px-4 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">{{ __('storefront.account_section') }}</p>

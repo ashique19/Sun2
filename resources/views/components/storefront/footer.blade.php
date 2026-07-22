@@ -35,7 +35,7 @@
         <div>
             <h4 class="font-semibold mb-3">{{ __('storefront.customer_care') }}</h4>
             <ul class="space-y-2 text-[#6B6459]">
-                <li>{{ __('storefront.helpline_label') }}: <a href="tel:01880001255" class="hover:text-[#C9A227]">01880001255</a></li>
+                <li>{{ __('storefront.helpline_label') }}: <a href="{{ config('seo.whatsapp_url') }}" target="_blank" rel="noopener noreferrer" class="hover:text-[#C9A227]">{{ config('seo.whatsapp_display') }}</a></li>
                 <li>{{ __('storefront.email_label') }}: info@sundoritoma.com</li>
                 <li>{{ __('storefront.delivery_all_bd') }}</li>
                 <li>{{ __('storefront.cod_available') }}</li>

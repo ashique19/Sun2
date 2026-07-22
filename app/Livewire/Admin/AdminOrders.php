@@ -721,6 +721,40 @@ class AdminOrders extends Component
         return $query->latest('placed_at')->latest('id');
     }
 
+    /**
+     * Order counts keyed by Asia/Dhaka calendar date (Y-m-d) for New / Dispatched groupings.
+     *
+     * @return array<string, int>
+     */
+    private function dateGroupCounts(): array
+    {
+        if (! in_array($this->segment, ['new', 'dispatched'], true)) {
+            return [];
+        }
+
+        $column = $this->segment === 'dispatched' ? 'dispatch_date' : 'placed_at';
+        $tz = 'Asia/Dhaka';
+
+        $timestamps = $this->filteredOrdersQuery()
+            ->reorder()
+            ->toBase()
+            ->pluck($column);
+
+        $counts = [];
+
+        foreach ($timestamps as $raw) {
+            if ($raw === null) {
+                $key = '_none';
+            } else {
+                $key = \Carbon\Carbon::parse($raw, 'UTC')->timezone($tz)->toDateString();
+            }
+
+            $counts[$key] = ($counts[$key] ?? 0) + 1;
+        }
+
+        return $counts;
+    }
+
     public function updatedPage(): void
     {
         $this->closeProductImage();
@@ -839,6 +873,7 @@ class AdminOrders extends Component
             'trackingByOrder' => $trackingByOrder,
             'courierApiAvailable' => $courierRegistry->configuredSlugs() !== [],
             'readOnly' => AdminAccess::isModeratorOnly(),
+            'dateGroupCounts' => $this->dateGroupCounts(),
         ])->title(AdminOrderSegment::label($this->segment).' Orders');
     }
 }

@@ -50,7 +50,11 @@
                 @php($groupDate = $order->placed_at)
                 @php($groupKey = $groupDate?->timezone('Asia/Dhaka')->toDateString() ?? '_none')
                 @if ($groupKey !== $lastGroupKey)
-                    <x-admin.order-date-heading :date="$groupDate" kind="order" />
+                    <x-admin.order-date-heading
+                        :date="$groupDate"
+                        kind="order"
+                        :count="$dateGroupCounts[$groupKey] ?? null"
+                    />
                     @php($lastGroupKey = $groupKey)
                 @endif
                 <article wire:key="order-card-{{ $order->id }}" class="rounded-xl border border-[#EFE7D6] bg-white p-4">
@@ -143,6 +147,7 @@
                         <x-admin.order-date-heading
                             :date="$groupDate"
                             :kind="$segment === 'dispatched' ? 'dispatch' : 'order'"
+                            :count="$dateGroupCounts[$groupKey] ?? null"
                         />
                         @php($lastGroupKey = $groupKey)
                     @endif

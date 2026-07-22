@@ -291,11 +291,23 @@
                             @foreach ($searchResults as $product)
                                 <div wire:key="search-product-{{ $product->id }}" class="flex items-center gap-3 p-3 hover:bg-[#FAF6EF]/60">
                                     @php $thumb = $product->images->first()?->path @endphp
-                                    @if ($thumb)
-                                        <img src="{{ \App\Support\StorefrontAssets::url($thumb) }}" alt="" class="w-10 h-10 rounded object-cover bg-[#FAF6EF] shrink-0">
-                                    @endif
+                                    <a href="{{ route('admin.products.edit', $product) }}"
+                                        wire:navigate
+                                        title="Open {{ $product->name }} in admin"
+                                        class="shrink-0 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A227]">
+                                        @if ($thumb)
+                                            <img src="{{ \App\Support\StorefrontAssets::url($thumb) }}" alt="" class="w-10 h-10 rounded object-cover bg-[#FAF6EF] hover:opacity-90">
+                                        @else
+                                            <div class="w-10 h-10 rounded border border-[#E7DFCF] bg-[#FAF6EF] flex items-center justify-center text-[10px] text-[#8C8474]">No img</div>
+                                        @endif
+                                    </a>
                                     <div class="flex-1 min-w-0">
-                                        <p class="font-medium text-sm truncate">{{ $product->name }}</p>
+                                        <a href="{{ route('admin.products.edit', $product) }}"
+                                            wire:navigate
+                                            class="font-medium text-sm text-[#C9A227] hover:underline truncate block"
+                                            title="{{ $product->name }}">
+                                            {{ $product->name }}
+                                        </a>
                                         <p class="text-xs text-[#8C8474]">
                                             {{ $product->sku ?: $product->slug }}
                                             &middot; &#2547; {{ number_format($product->price, 0) }}
@@ -442,11 +454,23 @@
                     @else
                         @foreach ($imageMatches as $match)
                             <div wire:key="image-match-{{ $match['product_id'] }}" class="flex items-center gap-3 rounded-lg border border-[#E7DFCF] p-3">
-                                @if ($match['image_url'])
-                                    <img src="{{ $match['image_url'] }}" alt="" class="h-14 w-14 rounded object-cover bg-[#FAF6EF] shrink-0">
-                                @endif
+                                <a href="{{ route('admin.products.edit', $match['product_id']) }}"
+                                    wire:navigate
+                                    title="Open {{ $match['name'] }} in admin"
+                                    class="shrink-0 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A227]">
+                                    @if ($match['image_url'])
+                                        <img src="{{ $match['image_url'] }}" alt="" class="h-14 w-14 rounded object-cover bg-[#FAF6EF] hover:opacity-90">
+                                    @else
+                                        <div class="h-14 w-14 rounded border border-[#E7DFCF] bg-[#FAF6EF] flex items-center justify-center text-[10px] text-[#8C8474]">No img</div>
+                                    @endif
+                                </a>
                                 <div class="flex-1 min-w-0">
-                                    <p class="font-medium text-sm truncate">{{ $match['name'] }}</p>
+                                    <a href="{{ route('admin.products.edit', $match['product_id']) }}"
+                                        wire:navigate
+                                        class="font-medium text-sm text-[#C9A227] hover:underline truncate block"
+                                        title="{{ $match['name'] }}">
+                                        {{ $match['name'] }}
+                                    </a>
                                     <p class="text-xs text-[#8C8474]">
                                         {{ $match['sku'] ?: '—' }}
                                         &middot; &#2547; {{ number_format($match['price'], 0) }}

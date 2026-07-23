@@ -19,6 +19,8 @@ class Order extends Model
             'reseller_id' => 'integer',
             'coupon_id' => 'integer',
             'courier_id' => 'integer',
+            'created_by' => 'integer',
+            'updated_by' => 'integer',
             'subtotal'        => 'decimal:2',
             'delivery_charge' => 'decimal:2',
             'charge'          => 'decimal:2',
@@ -49,6 +51,16 @@ class Order extends Model
     public function reseller(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reseller_id');
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function updatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'updated_by');
     }
 
     /** Primary/legacy coupon. Source of truth is adjustments() for stacked coupons. */

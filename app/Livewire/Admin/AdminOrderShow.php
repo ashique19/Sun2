@@ -60,6 +60,7 @@ class AdminOrderShow extends Component
             'adjustmentLogs.actor',
             'paymentTransactions.receivedBy',
             'courier',
+            'createdBy:id,name',
             'statusHistory.changedBy',
             'courierLogs.courier',
         ]);

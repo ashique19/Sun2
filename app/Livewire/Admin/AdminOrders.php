@@ -815,6 +815,7 @@ class AdminOrders extends Component
 
         $with = [
             'courier:id,name,slug',
+            'createdBy:id,name',
             'items:'.$itemColumns,
             'adjustments:id,order_id,type,label,amount,sort_order',
         ];

@@ -3,7 +3,11 @@
         <div class="min-w-0">
             <a href="{{ route('admin.orders.new') }}" wire:navigate class="text-sm text-[#C9A227] hover:underline">&larr; Back to orders</a>
             <h1 class="mt-2 font-serif text-2xl font-semibold sm:text-3xl">Order #{{ $order->order_number }}</h1>
-            <p class="text-sm text-[#8C8474]">Placed {{ $order->placed_at?->format('d M Y, h:i A') }}</p>
+            <p class="text-sm text-[#8C8474]">
+                Placed {{ $order->placed_at?->format('d M Y, h:i A') }}
+                <span class="text-[#D8CDB6]">·</span>
+                Created by {{ $order->createdBy?->name ?? '—' }}
+            </p>
         </div>
         <div class="flex flex-wrap items-center gap-2 sm:gap-3">
             <a href="{{ route('admin.orders.print', $order) }}" target="_blank"

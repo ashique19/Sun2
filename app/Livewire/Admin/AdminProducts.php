@@ -126,7 +126,7 @@ class AdminProducts extends Component
             ->when($this->published === '0', fn ($q) => $q->where('is_published', false))
             ->orderBy('display_order')
             ->orderByDesc('id')
-            ->paginate(20);
+            ->paginate(50);
 
         return view('livewire.admin.admin-products', [
             'products' => $products,

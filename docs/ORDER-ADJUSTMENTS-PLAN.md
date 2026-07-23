@@ -1,6 +1,6 @@
-# Order Adjustments — Charges, Discounts, Coupons & Delivery Costs
+# Order Money — Adjustments, Delivery Costs & Payments
 
-Additive redesign so orders support **many charges, discounts, and stacked coupons**, separate **customer delivery vs courier cost**, and a **full money change log**, without breaking the running `sun2` app.
+Additive redesign so orders support **many charges, discounts, and stacked coupons**, separate **customer delivery vs courier cost**, **multiple payment events** (advance + due, gateway + COD), and a **full money change log**, without breaking the running `sun2` app.
 
 Status: **planning** (not implemented).
 
@@ -26,6 +26,16 @@ Status: **planning** (not implemented).
 
    (i.e. merchandise margin + delivery margin). Show customer delivery and courier cost as separate breakdown lines so they never look like one field.
 8. **Product max allowed discount** — Admin → Products gets a **max allowed discount** field (taka **per unit**). Stacked coupons must not discount a product line beyond that cap. Protects margin so coupon stacks cannot erase COGS protection on thin-margin SKUs.
+9. **Multiple payments per order** — stop one-shot overwrite of paid/due. Record each receipt as a `payment_transactions` row (advance via gateway, later COD / another gateway, partials, refunds). Order scalars become **caches** derived from the ledger:
+
+   ```
+   paid_amount = sum(successful payment amounts)
+   due_amount  = max(0, total − paid_amount)
+   cod_amount  = residual to collect with courier (usually = due when remainder is COD)
+   payment_status = unpaid | partial | paid   // from paid vs total
+   ```
+
+   Mix allowed: e.g. bKash advance now + remaining cash on delivery (or another gateway) later.
 
 ---
 
@@ -39,10 +49,12 @@ On `orders` today (scalars only):
 | `delivery_charge` | **Customer** delivery (used) |
 | `charge` | Extra **customer** surcharge (not courier cost) |
 | `discount`, `total` | Totals |
-| `cod_amount` / `due_amount` / … | Settlement; print & courier COD |
-| `courier_id` / tracker / consignment | Fulfillment refs |
+| `cod_amount` / `due_amount` / `paid_amount` / `collected_amount` | Settlement scalars (written once today) |
+| `payment_status` / `payment_method` / `payment_date` | Single-shot status / method |
 
-**Gap today:** there is **no** order-level field for what the courier charges us. `couriers.charge` / `osd_charge` are only a rate catalog; never snapshotted onto the order; never updated from API/webhook/deliver. `courier_balance_entries` tracks **COD book balance**, not delivery fees. `orders.charge` must not be overloaded for courier cost.
+**Payment gap today:** `payment_transactions` and `payment_methods` tables exist but are **unused** (no models, no admin “record payment” UI). Deliver / webhook / partial-return **overwrite** `paid_amount` / `due_amount` / `payment_status` in one shot. Admin order edit resets `due_amount = total` and `payment_status = unpaid`. Cannot record advance now and residual later, or gateway + COD mix.
+
+**Courier-cost gap today:** there is **no** order-level field for what the courier charges us. `couriers.charge` / `osd_charge` are only a rate catalog; never snapshotted onto the order; never updated from API/webhook/deliver. `courier_balance_entries` tracks **COD book balance**, not delivery fees. `orders.charge` must not be overloaded for courier cost.
 
 Formulas in use:
 
@@ -117,6 +129,22 @@ Cached on `orders` for compat:
 
 Optional later: persist `net_revenue` and/or `cogs` as cached columns if list queries need them without loading items/adjustments; until then derive in the calculator / model accessor (eager-load `items` + `adjustments` on admin list).
 
+**Payment ledger → order caches:**
+
+```
+paid_amount      = sum(payment_transactions.amount where status in successful set)
+due_amount       = max(0, total − paid_amount)
+payment_status   = paid_amount <= 0 → unpaid
+                   paid_amount < total → partial
+                   else → paid
+cod_amount       = residual intended for courier collection (default = due_amount when remainder is COD)
+collected_amount = sum of COD/collection settlement txns (or courier-confirmed collect) — see open questions vs paid_amount
+```
+
+When `total` changes (adjustments / delivery edit), **recompute** `due_amount` / `payment_status` from existing successful payments — do **not** wipe `paid_amount` or delete transactions.
+
+`orders.payment_method` becomes a **compat summary** (e.g. primary / last method, or `mixed`) — source of truth for methods is the transaction list.
+
 ---
 
 ## Customer delivery vs courier cost (detail)
@@ -159,6 +187,69 @@ Implementation notes:
 | `couriers.charge` / `osd_charge` | Default rates courier bills us (catalog) |
 | `couriers.customer_*` | Legacy unused customer defaults |
 | `courier_balance_entries` | COD held at courier (not delivery fee) |
+
+---
+
+## Multiple payments (advance + due, gateway + COD)
+
+### Current (broken for this goal)
+
+- Place order → `due_amount = total`, `paid_amount = 0`, `payment_status = unpaid`, single `payment_method` (usually `cod`).
+- Deliver / webhook → set `paid = collected = cod`, `due = 0`, `status = paid` (**one shot**).
+- No way to record “৳500 bKash now, ৳2000 COD later”.
+
+### Target flow
+
+1. Order created → `total` set; `paid=0`, `due=total`, `status=unpaid` (same as today).
+2. **Record payment** (admin or gateway callback): insert `payment_transactions` row → sync order caches.
+3. Residual due can be:
+   - collected later as **COD** (courier `collectableAmount()` uses residual `cod_amount` / `due_amount`), or
+   - collected later via **another gateway** (second txn), or
+   - split across multiple events.
+4. Deliver / webhook records a **COD payment txn for the residual** (or confirms collected amount), then syncs caches — **never** blindly sets `paid = full total` if advances already exist.
+5. Admin can always open order → Payments → add/void/refund with audit.
+
+### Example
+
+| Step | Txn | paid | due | status |
+|---|---|---|---|---|
+| Place (total ৳3000) | — | 0 | 3000 | unpaid |
+| Advance bKash ৳1000 | +1000 bKash | 1000 | 2000 | partial |
+| Dispatch to courier | COD collectable = ৳2000 | 1000 | 2000 | partial |
+| Delivered, COD ৳2000 | +2000 cod | 3000 | 0 | paid |
+
+### Activate / extend `payment_transactions`
+
+Existing columns are a good start. Additions:
+
+| Column | Type | Notes |
+|---|---|---|
+| (existing) `order_id`, `method`, `amount`, `reference`, `status`, `meta`, `received_by` | | Keep |
+| `kind` | string | `advance` \| `partial` \| `settlement` \| `refund` \| `adjustment` (optional; can live in `meta` initially) |
+| `payment_method_id` | FK nullable → `payment_methods` | Prefer over free-string long-term; keep `method` code denormalized |
+| `paid_at` | timestamp nullable | When money was received (vs `created_at`) |
+| `external_id` | string nullable | Gateway charge id / trx id (unique per method when set) |
+
+Successful statuses (propose): `completed` / `succeeded` (normalize one). Pending / failed / voided do **not** count toward `paid_amount`.
+
+### `payment_methods` catalog
+
+Seed/activate: `cod`, `bkash`, `nagad`, `cash`, `bank`, … (match what ops use). Admin CRUD can come later; hard-coded active list is fine for v1 if seeded.
+
+### Sync rules (non-negotiable)
+
+1. **Only** `OrderPaymentSync` (or equivalent) writes `paid_amount` / `due_amount` / `payment_status` / (usually) `cod_amount` from the ledger.
+2. Deliver / webhook / partial-return **create or update payment txns**, then call sync — no direct scalar overwrite of paid/due except via sync.
+3. Admin order money edits that change `total` call sync afterward.
+4. Courier dispatch uses **residual** collectable (`due_amount` / `cod_amount`), not full `total`, when advances exist.
+5. Cancel/return: do **not** silently zero successful gateway advances; use refund txns / policy (open question).
+
+### Admin UI
+
+- Order show / form: **Payments** panel — list txns (method, amount, reference, status, time, actor).
+- Actions: **Record payment** (method, amount ≤ due unless override, reference, note).
+- Show running **Paid / Due / Status**.
+- Optional: “Mark residual as COD” sets expectation for dispatch without recording money yet.
 
 ## Proposed schema
 
@@ -295,6 +386,7 @@ When resolving stacked coupons:
 - [x] Percent → resolved taka + meta: yes
 - [x] Admin Orders net revenue = Revenue − COGS + Charges − Discounts/coupons + Customer delivery − Courier cost
 - [x] Product max allowed discount (per unit) caps coupon stacks
+- [x] Multiple payments: ledger via `payment_transactions`; advance + due; gateway + COD mix; scalars = caches
 - [ ] Confirm percent base: remaining merchandise after prior discount/coupon lines (proposed)
 - [ ] Confirm `min_order` check: against original subtotal vs remaining after prior coupons
 - [ ] Confirm max stack count (unlimited vs soft cap, e.g. 5)
@@ -306,23 +398,27 @@ When resolving stacked coupons:
 - [ ] Confirm default for existing products: `max_discount = null` (uncapped) vs seed to `price − purchase_price`
 - [ ] Confirm cancel/return policy for `courier_charge` (keep / zero / partial)
 - [ ] Per-courier: which API/webhook fields carry the actual fee (Steadfast / Pathao / Redx / CarryBee)
+- [ ] Confirm `collected_amount` vs `paid_amount` (propose: `paid` = all successful txns; `collected` = COD/courier-confirmed subset)
+- [ ] Confirm overpayment allowed (propose: allow with `due=0` and audit note)
+- [ ] Confirm cancel with prior gateway advance: auto-refund txn vs leave paid and flag due negative / credit
 
 ### B. Schema & migrations
 
 - [ ] Migration: create `order_adjustments`
 - [ ] Migration: create `order_adjustment_logs` (with `field` + `phase` for delivery/courier cost too)
 - [ ] Migration: add `orders.courier_charge` decimal(12,2) default 0
+- [ ] Migration: enhance `payment_transactions` (`kind`, `paid_at`, `payment_method_id`, `external_id` as needed)
+- [ ] Seed `payment_methods` (`cod`, `bkash`, `nagad`, `cash`, …)
 - [ ] Migration: add `products.max_discount` (nullable decimal)
 - [ ] Migration: add `order_products.max_discount` snapshot (nullable decimal)
 - [ ] Unique index: one row per `(order_id, coupon_id)` where `type = coupon`
-- [ ] Eloquent: `OrderAdjustment`, `OrderAdjustmentLog`; update `Product`, `OrderProduct`
-- [ ] `Order` relations: `adjustments()`, `adjustmentLogs()`, keep `coupon()` for compat
+- [ ] Eloquent: `OrderAdjustment`, `OrderAdjustmentLog`, `PaymentTransaction`, `PaymentMethod`; update `Product`, `OrderProduct`, `Order`
+- [ ] `Order` relations: `adjustments()`, `adjustmentLogs()`, `paymentTransactions()`, keep `coupon()` for compat
 - [ ] Factories for tests
-- [ ] Backfill command/migration:  
-  - `charge > 0` → one `charge` line (`source=backfill`)  
-  - `discount > 0` + `coupon_id` → one `coupon` line  
-  - `discount > 0` without coupon → one `discount` line  
-  - write `backfilled` log rows with scalar before/after equal  
+- [ ] Backfill command/migration:
+  - adjustment lines from scalar charge/discount/coupon
+  - optional: synthesize one `payment_transactions` row from existing paid/collected when `paid_amount > 0`
+  - write `backfilled` log rows
 - [ ] Verify backfill on a copy of production (40MB data dump when available)
 
 ### C. Domain services
@@ -333,14 +429,18 @@ When resolving stacked coupons:
 - [ ] `OrderAdjustmentAuditor` — write full log entries on every mutation (including batch replace)
 - [ ] `OrderCourierChargeSync` — set/compare `courier_charge` by phase; audit only on change; never touch `delivery_charge`
 - [ ] `OrderDeliveryChargeAudit` — log customer `delivery_charge` edits (checkout/admin) without treating them as adjustments
+- [ ] `OrderPaymentRecorder` — create/void/refund payment txns (method, amount, reference, kind)
+- [ ] `OrderPaymentSync` — recompute `paid_amount` / `due_amount` / `payment_status` / `cod_amount` (and `payment_method` summary) from ledger; **only** writer of those scalars
 - [ ] Wire dispatch / webhook / tracking / deliver / cancel paths to `OrderCourierChargeSync`
+- [ ] Rewire deliver / webhook / partial-return to record payment txn(s) then `OrderPaymentSync` (no direct paid/due overwrite)
 - [ ] Provider fee parsers (Steadfast, Pathao, Redx, CarryBee) — extract fee from payload when present; else leave unchanged (dispatch may use catalog estimate)
 - [ ] `CouponStackingService` — validate stack, compute resolved amounts, build meta for percent
 - [ ] `ProductDiscountCap` helper — per-line / order coupon room from `max_discount × qty`; allocate & clamp coupon amounts
 - [ ] Stop diverging storefront vs admin formulas (both include `charge` sum)
 - [ ] Keep `delivery_charge` updates independent of adjustment sync **and** of `courier_charge`
-- [ ] On admin order edit: if lines exist, prefer lines as source of truth; sync scalars from lines
+- [ ] On admin order edit: if lines exist, prefer lines as source of truth; sync scalars from lines; **re-run payment sync** after `total` changes (do not reset paid)
 - [ ] On legacy path that only sets scalars: optional “materialize lines from scalars” helper for safety
+- [ ] `Order::collectableAmount()` uses residual due/COD after advances
 
 ### D. Coupon catalog & usage
 
@@ -381,9 +481,14 @@ When resolving stacked coupons:
   - **Net revenue**
   - **COD / Total**
 - [ ] Order show: **Money history** panel from `order_adjustment_logs` (adjustments + delivery_charge + courier_charge)
-- [ ] Keep print label on `collectableAmount()` (no change required if scalars synced)
+- [ ] Order show / form: **Payments** panel
+  - List transactions (method, amount, reference, status, paid_at, actor)
+  - **Record payment** (gateway / cash / COD / other; amount; reference; note)
+  - Show Paid / Due / Status live after each record
+  - Void / refund action (policy-gated) with audit
+- [ ] Keep print label on `collectableAmount()` (residual after advances)
 - [ ] Moderator list/show: same net revenue + breakdown (read-only)
-- [ ] Moderator permissions: who can add charges vs discounts vs coupons
+- [ ] Moderator permissions: who can add charges vs discounts vs coupons vs **record payments**
 - [ ] Bangla not required in admin (admin stays English per existing locale split)
 
 ### E2. Admin → Products (max discount)
@@ -399,18 +504,21 @@ When resolving stacked coupons:
 - [ ] Checkout: multi-coupon apply/remove; list stacked discounts
 - [ ] Checkout summary: show each adjustment line (not one “Discount” blob)
 - [ ] Order detail: list charge/discount/coupon lines; keep delivery separate
-- [ ] Bangla strings for stacked coupons / extra charges
+- [ ] Order detail: show payment history / paid vs due when partial (already partially there — wire to real txns)
+- [ ] Bangla strings for stacked coupons / extra charges / partial payment
 - [ ] Session key migration: `checkout.coupon_code` → `checkout.coupon_codes[]` (with fallback)
+- [ ] Later: storefront advance pay via gateway at checkout (optional phase; admin recording is v1)
 
 ### G. Integrations & reports
 
-- [ ] Courier dispatch / Steadfast: still pass synced collectable amount (customer COD — unaffected by `courier_charge`)
+- [ ] Courier dispatch / Steadfast: pass **residual** collectable amount after advances
 - [ ] On dispatch success: set initial `courier_charge` (API fee or catalog estimate) + audit
 - [ ] On webhook / tracking: parse fee; update + audit only when value changes
 - [ ] On delivered / cancelled (webhook or admin): apply final fee policy + audit if changed
-- [ ] Dashboard/report queries: document that `orders.charge`/`discount` remain sum caches; add delivery margin = `delivery_charge − courier_charge`
+- [ ] On delivered / COD collect: insert COD `payment_transactions` for collected residual (or confirm amount), then payment sync
+- [ ] Dashboard/report queries: document that `orders.charge`/`discount` remain sum caches; add delivery margin = `delivery_charge − courier_charge`; payments from txn ledger
 - [ ] Optional later: report “discount given by coupon X” via `order_adjustments`
-- [ ] Legacy `import:legacy`: map single legacy charge/discount into one line each + scalars; map legacy courier fee fields if present into `courier_charge`
+- [ ] Legacy `import:legacy`: map single legacy charge/discount into one line each + scalars; map legacy courier fee fields if present into `courier_charge`; backfill payment txn from legacy paid when possible
 
 ### H. Audit & status history
 
@@ -418,9 +526,10 @@ When resolving stacked coupons:
 - [ ] Batch recalculation → `replaced_set` (or per-line logs — prefer per-line + one totals snapshot)
 - [ ] Every `delivery_charge` change → audit (`field=delivery_charge`, phase=`checkout`/`admin_edit`)
 - [ ] Every `courier_charge` change → audit (`field=courier_charge`, phase=`dispatch`/`webhook`/`tracking`/`delivered`/`cancelled`/`manual`)
-- [ ] Mirror short note on `order_status_history` when `total` or courier fee changes materially
+- [ ] Every payment txn create/void/refund → money audit (or txn itself is the ledger + status history note)
+- [ ] Mirror short note on `order_status_history` when `total`, payment status, or courier fee changes materially
 - [ ] Actor always set when admin; null/system for checkout/backfill/API
-- [ ] Admin filter/search money logs by order (and later by coupon / phase)
+- [ ] Admin filter/search money logs by order (and later by coupon / phase / payment method)
 
 ### I. Tests
 
@@ -440,12 +549,17 @@ When resolving stacked coupons:
 - [ ] Feature: admin orders list shows net revenue + breakdown (incl. customer delivery + courier cost)
 - [ ] Feature: admin order show shows full breakdown (incl. COGS + both delivery fields) + net revenue + COD total
 - [ ] Feature: dispatch sets courier_charge; webhook/deliver updates with audit trail
+- [ ] Feature: record advance gateway payment then residual COD; status becomes partial then paid
+- [ ] Feature: deliver/webhook does not wipe prior advances; paid = sum(txns)
+- [ ] Feature: dispatch collectable amount uses residual due after advance
 - [ ] Feature: admin add/remove multiple adjustments
 - [ ] Feature: checkout apply two coupons respects product max discounts
 - [ ] Feature: backfill from scalar-only order
-- [ ] Feature: print/COD unchanged when scalars synced
+- [ ] Feature: print/COD unchanged when scalars synced (except residual collectable)
 - [ ] Feature: subtotal change recalculates percent coupon lines
+- [ ] Unit: `OrderPaymentSync` paid/due/status from multiple txns
 - [ ] Regression: old single-coupon checkout path until session migrated
+- [ ] Regression: fully unpaid COD orders still behave as today
 
 ### J. Rollout / ops
 
@@ -483,13 +597,17 @@ When resolving stacked coupons:
 9. Existing products: leave `max_discount` null (uncapped) until staff set values, or backfill to `price − purchase_price`?
 10. On courier cancel / C/R, what happens to `courier_charge` — keep last fee, set 0, or provider-specific?
 11. If webhook has no fee field, leave `courier_charge` unchanged (proposed **yes**) vs re-estimate from catalog?
+12. Storefront gateway advance at checkout in v1, or admin-recorded payments first? (proposed **admin v1**, storefront gateway later)
+13. Which methods to seed first beyond COD (`bkash`, `nagad`, `cash`, `bank`)?
+14. On cancel with gateway advance already captured — refund flow required in v1?
 
 ---
 
 ## Out of scope (this initiative)
 
 - Changing product line discounts / per-item promotions
-- Payment gateway fees (`payment_methods.charge`)
+- Payment gateway fees as order adjustments (`payment_methods.charge` may stay metadata until needed)
+- Full PSP integration / automated bKash API (v1 can be **manual record** of gateway payments; automate later)
 - Merging customer delivery or courier cost into `order_adjustments` rows
 - Using `courier_balance_entries` for delivery fees (stays COD ledger)
 - Removing scalar columns in the first production deploy
@@ -502,8 +620,10 @@ When resolving stacked coupons:
 - Migrations under `database/migrations/`
 - `app/Models/Order.php`, new adjustment models
 - `app/Services/...` (CheckoutPricing, OrderPlacer, AdminOrderService, CouponService)
-- Livewire: `AdminOrderForm`, `AdminOrderShow`, `StorefrontCheckout`, `StorefrontOrderDetail`
-- Views for breakdown + money history
+- Livewire: `AdminOrderForm`, `AdminOrderShow`, `AdminOrders`, `StorefrontCheckout`, `StorefrontOrderDetail`
+- Courier: `OrderDispatchService`, webhook processors, `OrderDeliveryReturnService`, `CourierBalanceService`
+- Payments: new recorder/sync + activate `payment_transactions` / `payment_methods`
+- Views for breakdown + money history + **payments panel**
 - Tests under `tests/Unit` + `tests/Feature`
 
 ---
@@ -514,6 +634,8 @@ When resolving stacked coupons:
 - Admin can add multiple charges, discounts, and stacked coupons on one order.
 - **Admin → Orders** list and detail each show **net revenue** = Revenue − COGS + Charges − Discounts/coupons + Customer delivery − Courier cost, with a clear **breakdown**.
 - Customer `delivery_charge` and merchant `courier_charge` stay independent; courier fee changes across dispatch / webhook / deliver-cancel are audited.
+- **Multiple payments** work: advance via gateway + remaining COD (or another gateway); Paid/Due/Status always match the transaction ledger; deliver does not wipe advances.
+- Courier collectable amount is the **residual due**, not always full total.
 - **Admin → Products** supports per-unit **max allowed discount**; coupon stacks cannot exceed line/order caps.
 - Checkout can apply more than one coupon.
 - Every money-component change has a full audit row with actor and before/after totals.

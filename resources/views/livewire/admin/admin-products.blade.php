@@ -2,7 +2,7 @@
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
             <h1 class="font-serif text-3xl font-semibold">Products</h1>
-            <p class="mt-1 text-xs text-[#8C8474]">Double-click price, cost, or stock to edit inline.</p>
+            <p class="mt-1 text-xs text-[#8C8474]">Double-click price, cost, commission, max discount, or stock to edit inline.</p>
         </div>
         <a href="{{ route('admin.products.create') }}" wire:navigate
             class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">
@@ -63,11 +63,17 @@
                             <td class="px-4 py-3">{{ $product->category?->name ?? '—' }}</td>
 
                             @foreach ([
-                                'price' => ['value' => (string) (int) round((float) $product->price), 'prefix' => '৳ '],
-                                'purchase_price' => ['value' => (string) (int) round((float) $product->purchase_price), 'prefix' => '৳ '],
+                                'price' => ['value' => (string) (int) round((float) $product->price), 'prefix' => '৳ ', 'nullable' => false],
+                                'purchase_price' => ['value' => (string) (int) round((float) $product->purchase_price), 'prefix' => '৳ ', 'nullable' => false],
+                                'commission' => ['value' => (string) (int) round((float) $product->commission), 'prefix' => '৳ ', 'nullable' => false],
+                                'max_discount' => [
+                                    'value' => $product->max_discount !== null ? (string) (int) round((float) $product->max_discount) : '',
+                                    'prefix' => '৳ ',
+                                    'nullable' => true,
+                                ],
                             ] as $field => $cell)
                                 <td
-                                    class="px-4 py-3 tabular-nums {{ $editingProductId === $product->id && $editingField === $field ? '' : 'cursor-pointer select-none' }}"
+                                    class="px-4 py-3 tabular-nums {{ $editingProductId === $product->id && $editingField === $field ? '' : 'cursor-pointer select-none' }} {{ $field === 'commission' || $field === 'max_discount' ? 'text-[#6B6459]' : '' }}"
                                     title="Double-click to edit"
                                     @if (! ($editingProductId === $product->id && $editingField === $field))
                                         wire:dblclick="startInlineEdit({{ $product->id }}, '{{ $field }}', '{{ $cell['value'] }}')"
@@ -85,27 +91,18 @@
                                             x-init="$nextTick(() => { $el.focus(); $el.select() })"
                                             class="w-24 rounded-lg border border-[#C9A227] bg-white px-2 py-1 text-sm tabular-nums shadow-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
                                             aria-label="Edit {{ str_replace('_', ' ', $field) }}"
+                                            @if ($cell['nullable']) placeholder="—" @endif
                                         >
                                         @error('editingValue')
                                             <p class="mt-1 text-[11px] text-rose-600">{{ $message }}</p>
                                         @enderror
+                                    @elseif ($cell['nullable'] && $cell['value'] === '')
+                                        <span class="text-[#8C8474]">—</span>
                                     @else
                                         {{ $cell['prefix'] }}{{ number_format((float) $cell['value'], 0) }}
                                     @endif
                                 </td>
                             @endforeach
-
-                            <td class="px-4 py-3 tabular-nums text-[#6B6459]">
-                                ৳ {{ number_format((float) $product->commission, 0) }}
-                            </td>
-
-                            <td class="px-4 py-3 tabular-nums text-[#6B6459]">
-                                @if ($product->max_discount !== null)
-                                    ৳ {{ number_format((float) $product->max_discount, 0) }}
-                                @else
-                                    <span class="text-[#8C8474]">—</span>
-                                @endif
-                            </td>
 
                             @php($stockCell = ['value' => (string) (int) $product->stock_quantity, 'prefix' => ''])
                             <td

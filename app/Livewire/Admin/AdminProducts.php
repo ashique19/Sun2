@@ -17,7 +17,7 @@ class AdminProducts extends Component
 {
     use WithPagination;
 
-    private const INLINE_FIELDS = ['price', 'purchase_price', 'stock_quantity'];
+    private const INLINE_FIELDS = ['price', 'purchase_price', 'commission', 'max_discount', 'stock_quantity'];
 
     #[Url]
     public string $search = '';
@@ -87,8 +87,8 @@ class AdminProducts extends Component
 
         $this->validate([
             'editingValue' => match ($field) {
-                'price' => ['required', 'numeric', 'min:0'],
-                'purchase_price' => ['nullable', 'numeric', 'min:0'],
+                'price', 'commission' => ['required', 'numeric', 'min:0'],
+                'purchase_price', 'max_discount' => ['nullable', 'numeric', 'min:0'],
                 'stock_quantity' => ['required', 'integer', 'min:0'],
             },
         ]);
@@ -96,7 +96,10 @@ class AdminProducts extends Component
         $product = Product::query()->findOrFail($this->editingProductId);
 
         $value = match ($field) {
-            'price', 'purchase_price' => (int) round((float) ($this->editingValue === '' ? 0 : $this->editingValue)),
+            'price', 'purchase_price', 'commission' => (int) round((float) ($this->editingValue === '' ? 0 : $this->editingValue)),
+            'max_discount' => $this->editingValue === ''
+                ? null
+                : (int) round((float) $this->editingValue),
             'stock_quantity' => (int) $this->editingValue,
         };
 

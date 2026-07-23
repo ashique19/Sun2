@@ -33,6 +33,8 @@ class AdminProductInlineEditTest extends TestCase
             'sku' => 'GPJ-1',
             'price' => 980,
             'purchase_price' => 400,
+            'commission' => 50,
+            'max_discount' => 100,
             'stock_quantity' => 10,
             'is_published' => true,
             'display_order' => 0,
@@ -40,7 +42,7 @@ class AdminProductInlineEditTest extends TestCase
     }
 
     #[Test]
-    public function admin_can_inline_edit_price_cost_and_stock_from_product_list(): void
+    public function admin_can_inline_edit_price_cost_commission_discount_and_stock_from_product_list(): void
     {
         $this->actingAs($this->adminUser());
         $product = $this->product();
@@ -63,6 +65,27 @@ class AdminProductInlineEditTest extends TestCase
         $this->assertSame(525.0, (float) $product->fresh()->purchase_price);
 
         Livewire::test(AdminProducts::class)
+            ->call('startInlineEdit', $product->id, 'commission', '50')
+            ->set('editingValue', '75')
+            ->call('saveInlineEdit');
+
+        $this->assertSame(75.0, (float) $product->fresh()->commission);
+
+        Livewire::test(AdminProducts::class)
+            ->call('startInlineEdit', $product->id, 'max_discount', '100')
+            ->set('editingValue', '120')
+            ->call('saveInlineEdit');
+
+        $this->assertSame(120.0, (float) $product->fresh()->max_discount);
+
+        Livewire::test(AdminProducts::class)
+            ->call('startInlineEdit', $product->id, 'max_discount', '120')
+            ->set('editingValue', '')
+            ->call('saveInlineEdit');
+
+        $this->assertNull($product->fresh()->max_discount);
+
+        Livewire::test(AdminProducts::class)
             ->call('startInlineEdit', $product->id, 'stock_quantity', '10')
             ->set('editingValue', '3')
             ->call('saveInlineEdit');
@@ -83,6 +106,14 @@ class AdminProductInlineEditTest extends TestCase
             ->assertHasErrors(['editingValue']);
 
         $this->assertSame(980.0, (float) $product->fresh()->price);
+
+        Livewire::test(AdminProducts::class)
+            ->call('startInlineEdit', $product->id, 'commission', '50')
+            ->set('editingValue', '-1')
+            ->call('saveInlineEdit')
+            ->assertHasErrors(['editingValue']);
+
+        $this->assertSame(50.0, (float) $product->fresh()->commission);
 
         Livewire::test(AdminProducts::class)
             ->call('startInlineEdit', $product->id, 'name', 'Nope')

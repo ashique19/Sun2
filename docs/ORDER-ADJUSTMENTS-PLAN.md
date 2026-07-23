@@ -367,7 +367,7 @@ When resolving stacked coupons:
 
 ### K. Nice-to-haves (later)
 
-- Named charge presets (“Packaging”, “Gift wrap”, “Remote area fee”)
+- [ ] Named charge presets (“Packaging”, “Gift wrap”, “Remote area fee”)
 - [ ] Coupon mutual-exclusion groups (cannot combine with X)
 - [ ] Per-customer coupon claim table
 - [ ] Adjustment templates for common admin edits

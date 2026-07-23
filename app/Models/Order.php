@@ -63,6 +63,18 @@ class Order extends Model
         return $this->belongsTo(User::class, 'updated_by');
     }
 
+    /**
+     * Who created the order record: staff/reseller name, or Customer for storefront.
+     */
+    public function createdByLabel(): string
+    {
+        $this->loadMissing('createdBy');
+
+        $name = trim((string) ($this->createdBy?->name ?? ''));
+
+        return $name !== '' ? $name : 'Customer';
+    }
+
     /** Primary/legacy coupon. Source of truth is adjustments() for stacked coupons. */
     public function coupon(): BelongsTo
     {

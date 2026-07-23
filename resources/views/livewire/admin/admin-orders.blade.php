@@ -62,7 +62,7 @@
                         <div class="min-w-0 sm:flex-1">
                             <div class="font-medium text-[#1E1E1E]">{{ $order->name }}</div>
                             <div class="text-sm text-[#8C8474]">{{ $order->phone }}</div>
-                            <div class="mt-0.5 text-xs text-[#8C8474]">Created by {{ $order->createdBy?->name ?? '—' }}</div>
+                            <div class="mt-0.5 text-xs text-[#8C8474]">Created by {{ $order->createdByLabel() }}</div>
                             @php($areaCity = collect([$order->area, $order->city])->filter()->implode(', '))
                             @if ($areaCity !== '' || filled($order->address))
                                 <div x-data="{ open: false }" class="mt-1">
@@ -190,7 +190,7 @@
                                         <span class="rounded-full bg-[#FAF6EF] px-2 py-0.5 text-[11px] capitalize text-[#6B6459]">{{ $order->status }}</span>
                                     </div>
                                     <p class="mt-0.5 text-xs text-[#8C8474]">{{ $order->placed_at?->format('d M Y') }}</p>
-                                    <p class="mt-0.5 text-xs text-[#8C8474]">Created by {{ $order->createdBy?->name ?? '—' }}</p>
+                                    <p class="mt-0.5 text-xs text-[#8C8474]">Created by {{ $order->createdByLabel() }}</p>
                                 </div>
                                 <div class="shrink-0 text-right">
                                     <p class="text-[11px] uppercase tracking-wide text-[#8C8474]">COD</p>

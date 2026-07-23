@@ -6,7 +6,7 @@
             <p class="text-sm text-[#8C8474]">
                 Placed {{ $order->placed_at?->format('d M Y, h:i A') }}
                 <span class="text-[#D8CDB6]">·</span>
-                Created by {{ $order->createdBy?->name ?? '—' }}
+                Created by {{ $order->createdByLabel() }}
             </p>
         </div>
         <div class="flex flex-wrap items-center gap-2 sm:gap-3">

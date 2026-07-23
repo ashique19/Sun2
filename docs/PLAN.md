@@ -99,8 +99,8 @@ Preserve legacy `id` as the new `id` (+ `legacy_id`). Transforms below.
 4. **Order adjustments (multi charge / discount / stacked coupons + money audit)** — planning in
    [`docs/ORDER-ADJUSTMENTS-PLAN.md`](ORDER-ADJUSTMENTS-PLAN.md). Locked: coupons stack; delivery
    stays on `orders.delivery_charge`; full adjustment change log; percent coupons store resolved
-   taka + meta; **Admin → Orders shows net revenue + breakdown** (delivery excluded from net
-   revenue). Remaining product rules listed as open questions in that doc.
+   taka + meta; **Admin → Orders net revenue** = Revenue − COGS + Charges − Discounts/coupons
+   (delivery excluded). Remaining product rules listed as open questions in that doc.
 
 ## 8. Mockups
 

@@ -12,7 +12,11 @@ Status: **planning** (not implemented).
 2. **Delivery stays separate** — keep `orders.delivery_charge`; do **not** model delivery as an adjustment row.
 3. **Audit depth: full change log** — every add / edit / remove / replace of money components is append-only with actor + before/after.
 4. **Percent coupons** — store **resolved taka** on the line; put original `%` (and base used) in optional `meta` JSON.
-5. **Admin → Orders shows net revenue** — every order (list + detail) shows **net revenue after charges, discounts, and coupons**, with a visible **breakdown**. Delivery remains listed separately and is **not** included in net revenue (see formulas below).
+5. **Admin → Orders shows net revenue** — every order (list + detail) shows **net revenue** with a visible **breakdown**, using:
+
+   `Revenue − COGS + Charges − Discounts/coupons`
+
+   Delivery remains listed separately and is **not** included in net revenue.
 
 ---
 
@@ -52,22 +56,35 @@ total = max(0,
 )
 ```
 
-**Net revenue** (admin metric — merchandise money after adjustments; **excludes delivery**):
+**Net revenue** (admin metric — delivery excluded):
 
 ```
-net_revenue = max(0,
-  subtotal
-  + sum(charge lines)
-  − sum(discount lines)      -- includes coupon-resolved amounts
-)
+revenue      = subtotal                         -- merchandise sell total
+cogs         = sum(order_products.purchase_price × quantity)
+               // propose: use (quantity − returned_quantity) when returns apply
+charges      = sum(charge lines)
+discounts    = sum(discount lines + coupon lines)
+
+net_revenue  = revenue − cogs + charges − discounts
 ```
 
-Equivalently: `net_revenue = max(0, total − delivery_charge)` when scalars are in sync.
+Notes:
+- **Do not clamp** to zero — lossy orders should show negative net revenue in admin.
+- **Not** equivalent to `total − delivery_charge` once COGS is included.
+- Delivery is shown in the breakdown for ops, but never enters `net_revenue`.
 
 Admin UI must show both:
 - **Net revenue** (primary business figure on list cards / rows)
 - **COD / Total** (what to collect — keep for ops / print / courier)
-- **Breakdown** expandable or always-visible: subtotal, each charge line, each discount line, each coupon line (code + amount), delivery (separate), then net revenue + COD total
+- **Breakdown** expandable or always-visible:
+  - Revenue (subtotal)
+  - COGS (with optional per-line cost detail on order show)
+  - Each charge line
+  - Each discount line
+  - Each coupon line (code + amount)
+  - Delivery (separate; not in net)
+  - **Net revenue**
+  - **COD total**
 
 Cached on `orders` for compat:
 
@@ -76,7 +93,7 @@ Cached on `orders` for compat:
 - `coupon_id` = primary/first coupon (compat until readers migrate)  
 - `total` / COD fields recomputed whenever lines change  
 
-Optional later: persist `net_revenue` as a cached column if list queries need it without loading adjustments; until then derive in the calculator / model accessor.
+Optional later: persist `net_revenue` and/or `cogs` as cached columns if list queries need them without loading items/adjustments; until then derive in the calculator / model accessor (eager-load `items` + `adjustments` on admin list).
 ---
 
 ## Proposed schema
@@ -166,7 +183,7 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 - [x] Delivery separate: yes
 - [x] Full money audit log: yes
 - [x] Percent → resolved taka + meta: yes
-- [x] Admin Orders: show net revenue + breakdown (delivery excluded from net revenue)
+- [x] Admin Orders: show net revenue + breakdown using `Revenue − COGS + Charges − Discounts/coupons` (delivery excluded)
 - [ ] Confirm percent base: remaining merchandise after prior discount/coupon lines (proposed)
 - [ ] Confirm `min_order` check: against original subtotal vs remaining after prior coupons
 - [ ] Confirm max stack count (unlimited vs soft cap, e.g. 5)
@@ -192,8 +209,8 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 
 ### C. Domain services
 
-- [ ] `OrderTotalCalculator` — single formula used by checkout + admin + sync; exposes `total`, `netRevenue()`, and breakdown DTO (subtotal, delivery, charge lines, discount lines, coupon lines)
-- [ ] `Order::netRevenue()` accessor/helper using calculator (fallback to `max(0, total − delivery_charge)` when no lines)
+- [ ] `OrderTotalCalculator` — single formula used by checkout + admin + sync; exposes `total`, `cogs()`, `netRevenue()` (`revenue − cogs + charges − discounts`), and breakdown DTO (subtotal/revenue, cogs, delivery, charge/discount/coupon lines)
+- [ ] `Order::netRevenue()` / `Order::cogs()` helpers using calculator (COGS from snapshotted `order_products.purchase_price × quantity`)
 - [ ] `OrderAdjustmentSync` — replace/set lines → recompute `charge`/`discount`/`total`/`cod_amount`/`due_amount` as needed
 - [ ] `OrderAdjustmentAuditor` — write full log entries on every mutation (including batch replace)
 - [ ] `CouponStackingService` — validate stack, compute resolved amounts, build meta for percent
@@ -216,22 +233,23 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 ### E. Admin UI
 
 - [ ] **Orders list (`Admin → Orders`)**: for each order show
-  - **Net revenue** (after charges / discounts / coupons; excludes delivery)
-  - Compact **breakdown** (inline expand or secondary lines): subtotal, +charges, −discounts, −coupons (with codes), delivery (separate), COD total
+  - **Net revenue** = Revenue − COGS + Charges − Discounts/coupons (excludes delivery; may be negative)
+  - Compact **breakdown** (inline expand or secondary lines): revenue, COGS, +charges, −discounts, −coupons (with codes), delivery (separate), COD total
   - Keep COD/total visible for ops; do not replace it silently with net revenue
-  - Eager-load `adjustments` (or use cached scalars + coupon) so list pagination stays fast
+  - Eager-load `items` + `adjustments` (or cached scalars) so list pagination stays fast
 - [ ] Order form: replace single charge/discount inputs with adjustment list editor
   - Add charge (label + amount)
   - Add discount (label + amount)
   - Add coupon (search/select → resolved amount + meta)
   - Edit / remove line with reason (feeds audit `note`)
-- [ ] Live preview: net revenue **and** COD total from calculator
+- [ ] Live preview: net revenue (with COGS) **and** COD total from calculator
 - [ ] Order show: full money panel
-  - Subtotal
+  - Revenue (subtotal)
+  - COGS (order-level sum; optional per-line purchase cost)
   - Each charge line (label + amount)
   - Each discount line (label + amount)
   - Each coupon line (code + resolved amount; show % from meta when present)
-  - Delivery (separate)
+  - Delivery (separate; not in net)
   - **Net revenue**
   - **COD / Total**
 - [ ] Order show: **Money history** panel from `order_adjustment_logs`
@@ -266,14 +284,15 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 ### I. Tests
 
 - [ ] Unit: calculator with mixed charges/discounts/coupons + delivery
-- [ ] Unit: `netRevenue` excludes delivery; equals subtotal + charges − discounts/coupons
+- [ ] Unit: `netRevenue` = revenue − cogs + charges − discounts; excludes delivery; can be negative
+- [ ] Unit: COGS from `purchase_price × quantity` on order lines
 - [ ] Unit: percent stacking order & rounding
 - [ ] Unit: duplicate coupon rejected
 - [ ] Unit: min_order / inactive / expired per coupon in a stack
 - [ ] Unit: sync updates scalars correctly
 - [ ] Unit: auditor writes before/after totals
 - [ ] Feature: admin orders list shows net revenue + breakdown per order
-- [ ] Feature: admin order show shows full breakdown + net revenue + COD total
+- [ ] Feature: admin order show shows full breakdown (incl. COGS) + net revenue + COD total
 - [ ] Feature: admin add/remove multiple adjustments
 - [ ] Feature: checkout apply two coupons
 - [ ] Feature: backfill from scalar-only order
@@ -310,8 +329,7 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 4. Admin override of expired/inactive coupons?
 5. Rounding rule: always integer taka at persist time?
 6. On order cancel, decrement `used_count` for each coupon line?
-7. Confirm net revenue **excludes delivery** (proposed **yes** — delivery is courier pass-through, not merchandise revenue).
-8. Should net revenue later subtract product `purchase_price` cost (true margin), or stay at “adjusted merchandise total” for v1? (proposed **v1 = adjusted merchandise / no COGS**)
+7. For returned lines, should COGS use `(quantity − returned_quantity) × purchase_price`? (proposed **yes**)
 
 ---
 
@@ -339,7 +357,7 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 
 - Existing orders look identical after backfill (same total / COD).
 - Admin can add multiple charges, discounts, and stacked coupons on one order.
-- **Admin → Orders** list and detail each show **net revenue** after charges/discounts/coupons, with a clear **breakdown**; delivery shown separately and excluded from net revenue.
+- **Admin → Orders** list and detail each show **net revenue** = Revenue − COGS + Charges − Discounts/coupons, with a clear **breakdown**; delivery shown separately and excluded from net revenue.
 - Checkout can apply more than one coupon.
 - Every money-component change has a full audit row with actor and before/after totals.
 - Print labels & courier COD keep working without code changes beyond scalar sync.

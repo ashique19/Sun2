@@ -97,11 +97,12 @@ Preserve legacy `id` as the new `id` (+ `legacy_id`). Transforms below.
 2. **`all_images` storage format** in legacy `products` (JSON / PHP-serialized / comma-separated) — determines the image parser.
 3. Admin polish: fold in any remaining real-admin screenshots if needed before cutover.
 4. **Order adjustments (multi charge / discount / stacked coupons + money audit)** — planning in
-   [`docs/ORDER-ADJUSTMENTS-PLAN.md`](ORDER-ADJUSTMENTS-PLAN.md). Locked: coupons stack; delivery
-   stays on `orders.delivery_charge`; full adjustment change log; percent coupons store resolved
-   taka + meta; **Admin → Orders net revenue** = Revenue − COGS + Charges − Discounts/coupons
-   (delivery excluded); **product max allowed discount** caps coupon stacks. Remaining product
-   rules listed as open questions in that doc.
+   [`docs/ORDER-ADJUSTMENTS-PLAN.md`](ORDER-ADJUSTMENTS-PLAN.md). Locked: coupons stack; customer
+   `delivery_charge` vs merchant `courier_charge` tracked separately (phase updates + audit);
+   full money change log; percent coupons store resolved taka + meta; **Admin → Orders net
+   revenue** = Revenue − COGS + Charges − Discounts/coupons + Customer delivery − Courier cost;
+   **product max allowed discount** caps coupon stacks. Remaining rules listed as open questions
+   in that doc.
 
 ## 8. Mockups
 

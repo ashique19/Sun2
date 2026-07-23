@@ -9,16 +9,23 @@ Status: **planning** (not implemented).
 ## Locked decisions
 
 1. **Coupons can stack** — an order may have multiple coupon lines.
-2. **Delivery stays separate** — keep `orders.delivery_charge`; do **not** model delivery as an adjustment row.
-3. **Audit depth: full change log** — every add / edit / remove / replace of money components is append-only with actor + before/after.
-4. **Percent coupons** — store **resolved taka** on the line; put original `%` (and base used) in optional `meta` JSON.
-5. **Admin → Orders shows net revenue** — every order (list + detail) shows **net revenue** with a visible **breakdown**, using:
+2. **Delivery stays separate from order adjustments** — customer delivery is **not** an `order_adjustments` row.
+3. **Customer delivery vs courier cost are two different money fields** — never conflate:
+   - **Customer delivery** → `orders.delivery_charge` (what we charge the buyer; defaults from `areas.delivery_charge_*`, editable on checkout/admin).
+   - **Courier cost** → `orders.courier_charge` (**new** snapshotted field: what the courier charges **us**). Do **not** reuse `orders.charge` (that remains customer extras / adjustment charges) or COD `courier_balance_entries`.
+4. **Courier cost updates across fulfillment phases** — set/refresh `courier_charge` when:
+   - parcel is **created/sent to courier via API** (dispatch),
+   - courier sends an **update notification** (webhook / status payload with fee),
+   - parcel is **delivered or cancelled** (final fee / zero / policy).
+   If the amount **changes** at any phase → append **audit log** (before/after, phase, source payload ref).
+5. **Audit depth: full change log** — every add / edit / remove / replace of money components is append-only with actor + before/after; includes customer `delivery_charge` edits and `courier_charge` phase changes.
+6. **Percent coupons** — store **resolved taka** on the line; put original `%` (and base used) in optional `meta` JSON.
+7. **Admin → Orders shows net revenue** — every order (list + detail) shows **net revenue** with a visible **breakdown**, using:
 
-   `Revenue − COGS + Charges − Discounts/coupons`
+   `Revenue − COGS + Charges − Discounts/coupons + Customer delivery − Courier cost`
 
-   Delivery remains listed separately and is **not** included in net revenue.
-
-6. **Product max allowed discount** — Admin → Products gets a **max allowed discount** field (taka **per unit**). Stacked coupons must not discount a product line beyond that cap. Protects margin so coupon stacks cannot erase COGS protection on thin-margin SKUs.
+   (i.e. merchandise margin + delivery margin). Show customer delivery and courier cost as separate breakdown lines so they never look like one field.
+8. **Product max allowed discount** — Admin → Products gets a **max allowed discount** field (taka **per unit**). Stacked coupons must not discount a product line beyond that cap. Protects margin so coupon stacks cannot erase COGS protection on thin-margin SKUs.
 
 ---
 
@@ -28,13 +35,14 @@ On `orders` today (scalars only):
 
 | Field | Role |
 |---|---|
-| `subtotal` | Sum of product lines |
-| `delivery_charge` | Geo delivery (stays as-is) |
-| `charge` | Single extra charge |
-| `discount` | Single discount amount |
-| `coupon_id` | Single coupon FK |
-| `total` | Persisted grand total |
-| `cod_amount` / `due_amount` / … | Settlement; print & courier use these |
+| `subtotal` | Line goods |
+| `delivery_charge` | **Customer** delivery (used) |
+| `charge` | Extra **customer** surcharge (not courier cost) |
+| `discount`, `total` | Totals |
+| `cod_amount` / `due_amount` / … | Settlement; print & courier COD |
+| `courier_id` / tracker / consignment | Fulfillment refs |
+
+**Gap today:** there is **no** order-level field for what the courier charges us. `couriers.charge` / `osd_charge` are only a rate catalog; never snapshotted onto the order; never updated from API/webhook/deliver. `courier_balance_entries` tracks **COD book balance**, not delivery fees. `orders.charge` must not be overloaded for courier cost.
 
 Formulas in use:
 
@@ -58,24 +66,33 @@ total = max(0,
 )
 ```
 
-**Net revenue** (admin metric — delivery excluded):
+**Net revenue** (admin metric):
 
 ```
-revenue      = subtotal                         -- merchandise sell total
-cogs         = sum(order_products.purchase_price × quantity)
-               // propose: use (quantity − returned_quantity) when returns apply
-charges      = sum(charge lines)
-discounts    = sum(discount lines + coupon lines)
+revenue             = subtotal                         -- merchandise sell total
+cogs                = sum(order_products.purchase_price × quantity)
+                      // propose: use (quantity − returned_quantity) when returns apply
+charges             = sum(charge lines)                -- customer extras (not courier)
+discounts           = sum(discount lines + coupon lines)
+customer_delivery   = orders.delivery_charge           -- what buyer pays us for delivery
+courier_cost        = orders.courier_charge             -- what courier charges us
 
-net_revenue  = revenue − cogs + charges − discounts
+net_revenue = revenue − cogs + charges − discounts
+            + customer_delivery − courier_cost
+```
+
+Delivery margin (shown in breakdown):
+
+```
+delivery_margin = customer_delivery − courier_cost
 ```
 
 Notes:
 - **Do not clamp** to zero — lossy orders should show negative net revenue in admin.
-- **Not** equivalent to `total − delivery_charge` once COGS is included.
-- Delivery is shown in the breakdown for ops, but never enters `net_revenue`.
+- Customer delivery and courier cost are **independent**; changing one must not silently rewrite the other.
+- `orders.charge` (adjustment charges) ≠ `orders.courier_charge` (merchant courier fee).
 
-Admin UI must show both:
+Admin UI must show:
 - **Net revenue** (primary business figure on list cards / rows)
 - **COD / Total** (what to collect — keep for ops / print / courier)
 - **Breakdown** expandable or always-visible:
@@ -84,7 +101,9 @@ Admin UI must show both:
   - Each charge line
   - Each discount line
   - Each coupon line (code + amount)
-  - Delivery (separate; not in net)
+  - **Customer delivery** (`delivery_charge`)
+  - **Courier cost** (`courier_charge`)
+  - Delivery margin (optional derived line)
   - **Net revenue**
   - **COD total**
 
@@ -94,9 +113,52 @@ Cached on `orders` for compat:
 - `discount` = sum of discount + coupon lines  
 - `coupon_id` = primary/first coupon (compat until readers migrate)  
 - `total` / COD fields recomputed whenever lines change  
+- `delivery_charge` / `courier_charge` updated via their own paths (not via adjustment sync)  
 
 Optional later: persist `net_revenue` and/or `cogs` as cached columns if list queries need them without loading items/adjustments; until then derive in the calculator / model accessor (eager-load `items` + `adjustments` on admin list).
+
 ---
+
+## Customer delivery vs courier cost (detail)
+
+### A. What we charge the customer — `orders.delivery_charge`
+
+| Source | Behavior |
+|---|---|
+| Defaults | `areas.delivery_charge_upto_5` / `delivery_charge_over_5` via `CheckoutPricing` |
+| Checkout | Auto from city/area + item count; buyer sees it in total |
+| Admin | Editable on order form; may override default |
+| Audit | Any change → money audit log (`field=delivery_charge`, actor, before/after, note) |
+
+Still **not** an `order_adjustments` row. Still included in customer `total` / COD.
+
+Legacy `couriers.customer_charge` / `customer_osd_charge` remain catalog leftovers — **do not** reintroduce as the live customer path (areas already own defaults). Optional later cleanup.
+
+### B. What the courier charges us — `orders.courier_charge` (new)
+
+| Phase | When | How value is chosen | Audit if changed |
+|---|---|---|---|
+| **1. API entry / dispatch** | `OrderDispatchService` creates consignment | Prefer fee from API response if present; else estimate from `couriers.charge` / `osd_charge` (Dhaka vs OSD from order city/area); store phase=`dispatch` | Yes |
+| **2. Courier notification** | Webhook / tracking payload | Parse fee from provider payload when available; update only if parsed value present and differs | Yes (`phase=webhook` / `tracking`) |
+| **3. Deliver / cancel** | Delivered webhook or admin deliver; cancel / C/R | Final fee from courier if provided; on cancel/return apply policy (keep fee, zero, or partial — see open questions) | Yes (`phase=delivered` / `cancelled`) |
+| **4. Manual** | Admin edit on order | Staff override with reason | Yes (`phase=manual`) |
+
+Implementation notes:
+- Single writer service, e.g. `OrderCourierChargeSync::set(Order $order, Money $amount, string $phase, ?User $actor, array $meta)` — compares to current, writes order column, appends audit only on change.
+- Keep raw evidence in `courier_data.api_data`; audit `meta` should reference `courier_data.id` / event type when possible.
+- **Do not** put courier delivery fees into `courier_balance_entries` (that ledger is COD book balance).
+- Rate catalog `couriers.charge` / `osd_charge` remains the **fallback estimate** at dispatch when API does not return a fee.
+
+### Naming map (avoid collisions)
+
+| Field | Means |
+|---|---|
+| `orders.delivery_charge` | Customer pays us for delivery |
+| `orders.courier_charge` | Courier charges us for delivery (new) |
+| `orders.charge` | Customer extra charges (adjustments sum) |
+| `couriers.charge` / `osd_charge` | Default rates courier bills us (catalog) |
+| `couriers.customer_*` | Legacy unused customer defaults |
+| `courier_balance_entries` | COD held at courier (not delivery fee) |
 
 ## Proposed schema
 
@@ -142,6 +204,17 @@ Append-only. Never update/delete rows in app code.
 | `created_at` | timestamp | No `updated_at` |
 
 Also continue writing a short summary into `order_status_history` when totals change (existing UX), pointing operators to the money audit for detail.
+
+Extend the same audit table (or allow `order_adjustment_id` null) for **non-adjustment money fields**:
+- `field` column (nullable string): `delivery_charge` \| `courier_charge` \| `adjustment` \| …
+- `phase` column (nullable string): `dispatch` \| `webhook` \| `tracking` \| `delivered` \| `cancelled` \| `manual` \| `checkout` \| `admin_edit`
+- `source_courier_data_id` nullable FK/ref for API evidence
+
+### `orders.courier_charge` (new column)
+
+| Column | Type | Notes |
+|---|---|---|
+| `courier_charge` | decimal(12,2) default 0 | What courier charges **us**; independent of `delivery_charge` |
 
 ### Keep on `orders` (phase 1–2)
 
@@ -215,10 +288,12 @@ When resolving stacked coupons:
 ### A. Decisions / product rules (resolve before or during phase 2)
 
 - [x] Coupons stack: yes
-- [x] Delivery separate: yes
-- [x] Full money audit log: yes
+- [x] Delivery separate from adjustments: yes
+- [x] Customer delivery (`delivery_charge`) vs courier cost (`courier_charge`): separate fields, never conflated
+- [x] Courier cost refreshed on API entry / notification / deliver-cancel; audit on change
+- [x] Full money audit log: yes (includes delivery + courier cost)
 - [x] Percent → resolved taka + meta: yes
-- [x] Admin Orders: show net revenue + breakdown using `Revenue − COGS + Charges − Discounts/coupons` (delivery excluded)
+- [x] Admin Orders net revenue = Revenue − COGS + Charges − Discounts/coupons + Customer delivery − Courier cost
 - [x] Product max allowed discount (per unit) caps coupon stacks
 - [ ] Confirm percent base: remaining merchandise after prior discount/coupon lines (proposed)
 - [ ] Confirm `min_order` check: against original subtotal vs remaining after prior coupons
@@ -229,11 +304,14 @@ When resolving stacked coupons:
 - [ ] Confirm rounding: integer taka for display/admin vs 2-decimal storefront percent (align to one rule)
 - [ ] Confirm admin freeform discounts also respect product max caps (proposed **yes**, with audited override)
 - [ ] Confirm default for existing products: `max_discount = null` (uncapped) vs seed to `price − purchase_price`
+- [ ] Confirm cancel/return policy for `courier_charge` (keep / zero / partial)
+- [ ] Per-courier: which API/webhook fields carry the actual fee (Steadfast / Pathao / Redx / CarryBee)
 
 ### B. Schema & migrations
 
 - [ ] Migration: create `order_adjustments`
-- [ ] Migration: create `order_adjustment_logs`
+- [ ] Migration: create `order_adjustment_logs` (with `field` + `phase` for delivery/courier cost too)
+- [ ] Migration: add `orders.courier_charge` decimal(12,2) default 0
 - [ ] Migration: add `products.max_discount` (nullable decimal)
 - [ ] Migration: add `order_products.max_discount` snapshot (nullable decimal)
 - [ ] Unique index: one row per `(order_id, coupon_id)` where `type = coupon`
@@ -249,14 +327,18 @@ When resolving stacked coupons:
 
 ### C. Domain services
 
-- [ ] `OrderTotalCalculator` — single formula used by checkout + admin + sync; exposes `total`, `cogs()`, `netRevenue()` (`revenue − cogs + charges − discounts`), and breakdown DTO (subtotal/revenue, cogs, delivery, charge/discount/coupon lines)
-- [ ] `Order::netRevenue()` / `Order::cogs()` helpers using calculator (COGS from snapshotted `order_products.purchase_price × quantity`)
+- [ ] `OrderTotalCalculator` — single formula used by checkout + admin + sync; exposes `total`, `cogs()`, `netRevenue()` (`revenue − cogs + charges − discounts + delivery_charge − courier_charge`), and breakdown DTO (incl. customer delivery + courier cost)
+- [ ] `Order::netRevenue()` / `Order::cogs()` / `Order::deliveryMargin()` helpers
 - [ ] `OrderAdjustmentSync` — replace/set lines → recompute `charge`/`discount`/`total`/`cod_amount`/`due_amount` as needed
 - [ ] `OrderAdjustmentAuditor` — write full log entries on every mutation (including batch replace)
+- [ ] `OrderCourierChargeSync` — set/compare `courier_charge` by phase; audit only on change; never touch `delivery_charge`
+- [ ] `OrderDeliveryChargeAudit` — log customer `delivery_charge` edits (checkout/admin) without treating them as adjustments
+- [ ] Wire dispatch / webhook / tracking / deliver / cancel paths to `OrderCourierChargeSync`
+- [ ] Provider fee parsers (Steadfast, Pathao, Redx, CarryBee) — extract fee from payload when present; else leave unchanged (dispatch may use catalog estimate)
 - [ ] `CouponStackingService` — validate stack, compute resolved amounts, build meta for percent
 - [ ] `ProductDiscountCap` helper — per-line / order coupon room from `max_discount × qty`; allocate & clamp coupon amounts
 - [ ] Stop diverging storefront vs admin formulas (both include `charge` sum)
-- [ ] Keep `delivery_charge` updates independent of adjustment sync
+- [ ] Keep `delivery_charge` updates independent of adjustment sync **and** of `courier_charge`
 - [ ] On admin order edit: if lines exist, prefer lines as source of truth; sync scalars from lines
 - [ ] On legacy path that only sets scalars: optional “materialize lines from scalars” helper for safety
 
@@ -276,8 +358,8 @@ When resolving stacked coupons:
 ### E. Admin UI
 
 - [ ] **Orders list (`Admin → Orders`)**: for each order show
-  - **Net revenue** = Revenue − COGS + Charges − Discounts/coupons (excludes delivery; may be negative)
-  - Compact **breakdown** (inline expand or secondary lines): revenue, COGS, +charges, −discounts, −coupons (with codes), delivery (separate), COD total
+  - **Net revenue** = Revenue − COGS + Charges − Discounts/coupons + Customer delivery − Courier cost (may be negative)
+  - Compact **breakdown** (inline expand or secondary lines): revenue, COGS, +charges, −discounts, −coupons (with codes), **customer delivery**, **courier cost**, COD total
   - Keep COD/total visible for ops; do not replace it silently with net revenue
   - Eager-load `items` + `adjustments` (or cached scalars) so list pagination stays fast
 - [ ] Order form: replace single charge/discount inputs with adjustment list editor
@@ -285,17 +367,20 @@ When resolving stacked coupons:
   - Add discount (label + amount)
   - Add coupon (search/select → resolved amount + meta)
   - Edit / remove line with reason (feeds audit `note`)
-- [ ] Live preview: net revenue (with COGS) **and** COD total from calculator
+- [ ] Order form: **Customer delivery** editor (defaults from area; override allowed; audited)
+- [ ] Order form / show: **Courier cost** display (read-mostly; manual override with reason); show last phase source
+- [ ] Live preview: net revenue (with COGS + delivery margin) **and** COD total from calculator
 - [ ] Order show: full money panel
   - Revenue (subtotal)
   - COGS (order-level sum; optional per-line purchase cost)
   - Each charge line (label + amount)
   - Each discount line (label + amount)
   - Each coupon line (code + resolved amount; show % from meta when present)
-  - Delivery (separate; not in net)
+  - **Customer delivery** (`delivery_charge`)
+  - **Courier cost** (`courier_charge`) + phase history snippet
   - **Net revenue**
   - **COD / Total**
-- [ ] Order show: **Money history** panel from `order_adjustment_logs`
+- [ ] Order show: **Money history** panel from `order_adjustment_logs` (adjustments + delivery_charge + courier_charge)
 - [ ] Keep print label on `collectableAmount()` (no change required if scalars synced)
 - [ ] Moderator list/show: same net revenue + breakdown (read-only)
 - [ ] Moderator permissions: who can add charges vs discounts vs coupons
@@ -319,23 +404,30 @@ When resolving stacked coupons:
 
 ### G. Integrations & reports
 
-- [ ] Courier dispatch / Steadfast: still pass synced collectable amount
-- [ ] Dashboard/report queries: document that `orders.charge`/`discount` remain sum caches
+- [ ] Courier dispatch / Steadfast: still pass synced collectable amount (customer COD — unaffected by `courier_charge`)
+- [ ] On dispatch success: set initial `courier_charge` (API fee or catalog estimate) + audit
+- [ ] On webhook / tracking: parse fee; update + audit only when value changes
+- [ ] On delivered / cancelled (webhook or admin): apply final fee policy + audit if changed
+- [ ] Dashboard/report queries: document that `orders.charge`/`discount` remain sum caches; add delivery margin = `delivery_charge − courier_charge`
 - [ ] Optional later: report “discount given by coupon X” via `order_adjustments`
-- [ ] Legacy `import:legacy`: map single legacy charge/discount into one line each + scalars
+- [ ] Legacy `import:legacy`: map single legacy charge/discount into one line each + scalars; map legacy courier fee fields if present into `courier_charge`
 
 ### H. Audit & status history
 
 - [ ] Every create/update/delete of a line → `order_adjustment_logs` row
 - [ ] Batch recalculation → `replaced_set` (or per-line logs — prefer per-line + one totals snapshot)
-- [ ] Mirror short note on `order_status_history` when `total` changes (“Total ৳A → ৳B (money adjustments)”)
-- [ ] Actor always set when admin; null/system for checkout/backfill
-- [ ] Admin filter/search money logs by order (and later by coupon)
+- [ ] Every `delivery_charge` change → audit (`field=delivery_charge`, phase=`checkout`/`admin_edit`)
+- [ ] Every `courier_charge` change → audit (`field=courier_charge`, phase=`dispatch`/`webhook`/`tracking`/`delivered`/`cancelled`/`manual`)
+- [ ] Mirror short note on `order_status_history` when `total` or courier fee changes materially
+- [ ] Actor always set when admin; null/system for checkout/backfill/API
+- [ ] Admin filter/search money logs by order (and later by coupon / phase)
 
 ### I. Tests
 
 - [ ] Unit: calculator with mixed charges/discounts/coupons + delivery
-- [ ] Unit: `netRevenue` = revenue − cogs + charges − discounts; excludes delivery; can be negative
+- [ ] Unit: `netRevenue` = revenue − cogs + charges − discounts + delivery_charge − courier_charge; can be negative
+- [ ] Unit: changing `delivery_charge` does not alter `courier_charge` (and vice versa)
+- [ ] Unit: `OrderCourierChargeSync` audits only when value changes; records phase
 - [ ] Unit: COGS from `purchase_price × quantity` on order lines
 - [ ] Unit: product `max_discount` clamps stacked coupons per line and order-wide
 - [ ] Unit: coupon auto-caps when partial room remains; rejects when room is 0
@@ -345,8 +437,9 @@ When resolving stacked coupons:
 - [ ] Unit: sync updates scalars correctly
 - [ ] Unit: auditor writes before/after totals
 - [ ] Feature: admin products list/edit max discount column
-- [ ] Feature: admin orders list shows net revenue + breakdown per order
-- [ ] Feature: admin order show shows full breakdown (incl. COGS) + net revenue + COD total
+- [ ] Feature: admin orders list shows net revenue + breakdown (incl. customer delivery + courier cost)
+- [ ] Feature: admin order show shows full breakdown (incl. COGS + both delivery fields) + net revenue + COD total
+- [ ] Feature: dispatch sets courier_charge; webhook/deliver updates with audit trail
 - [ ] Feature: admin add/remove multiple adjustments
 - [ ] Feature: checkout apply two coupons respects product max discounts
 - [ ] Feature: backfill from scalar-only order
@@ -388,6 +481,8 @@ When resolving stacked coupons:
 7. For returned lines, should COGS use `(quantity − returned_quantity) × purchase_price`? (proposed **yes**)
 8. Do admin freeform discount lines respect product max caps? (proposed **yes**, override with audited note)
 9. Existing products: leave `max_discount` null (uncapped) until staff set values, or backfill to `price − purchase_price`?
+10. On courier cancel / C/R, what happens to `courier_charge` — keep last fee, set 0, or provider-specific?
+11. If webhook has no fee field, leave `courier_charge` unchanged (proposed **yes**) vs re-estimate from catalog?
 
 ---
 
@@ -395,8 +490,10 @@ When resolving stacked coupons:
 
 - Changing product line discounts / per-item promotions
 - Payment gateway fees (`payment_methods.charge`)
-- Merging delivery into adjustments
+- Merging customer delivery or courier cost into `order_adjustments` rows
+- Using `courier_balance_entries` for delivery fees (stays COD ledger)
 - Removing scalar columns in the first production deploy
+- Replacing area-based customer delivery defaults with `couriers.customer_*`
 
 ---
 
@@ -415,7 +512,8 @@ When resolving stacked coupons:
 
 - Existing orders look identical after backfill (same total / COD).
 - Admin can add multiple charges, discounts, and stacked coupons on one order.
-- **Admin → Orders** list and detail each show **net revenue** = Revenue − COGS + Charges − Discounts/coupons, with a clear **breakdown**; delivery shown separately and excluded from net revenue.
+- **Admin → Orders** list and detail each show **net revenue** = Revenue − COGS + Charges − Discounts/coupons + Customer delivery − Courier cost, with a clear **breakdown**.
+- Customer `delivery_charge` and merchant `courier_charge` stay independent; courier fee changes across dispatch / webhook / deliver-cancel are audited.
 - **Admin → Products** supports per-unit **max allowed discount**; coupon stacks cannot exceed line/order caps.
 - Checkout can apply more than one coupon.
 - Every money-component change has a full audit row with actor and before/after totals.

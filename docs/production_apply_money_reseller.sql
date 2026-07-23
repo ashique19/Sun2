@@ -306,11 +306,17 @@ WHERE oa.`source` = 'backfill'
   );
 
 -- 15) Mark Laravel migrations as run (so `php artisan migrate` will not re-apply)
-INSERT IGNORE INTO `migrations` (`migration`, `batch`)
-SELECT '2026_07_23_100000_add_reseller_foundation', IFNULL(MAX(`batch`), 0) + 1 FROM `migrations`;
+INSERT INTO `migrations` (`migration`, `batch`)
+SELECT '2026_07_23_100000_add_reseller_foundation', (SELECT IFNULL(MAX(`batch`), 0) + 1 FROM `migrations` AS m)
+WHERE NOT EXISTS (
+    SELECT 1 FROM `migrations` WHERE `migration` = '2026_07_23_100000_add_reseller_foundation'
+);
 
-INSERT IGNORE INTO `migrations` (`migration`, `batch`)
-SELECT '2026_07_23_110000_add_order_money_adjustments', IFNULL(MAX(`batch`), 0) + 1 FROM `migrations`;
+INSERT INTO `migrations` (`migration`, `batch`)
+SELECT '2026_07_23_110000_add_order_money_adjustments', (SELECT IFNULL(MAX(`batch`), 0) + 1 FROM `migrations` AS m)
+WHERE NOT EXISTS (
+    SELECT 1 FROM `migrations` WHERE `migration` = '2026_07_23_110000_add_order_money_adjustments'
+);
 
 -- COMMIT;
 

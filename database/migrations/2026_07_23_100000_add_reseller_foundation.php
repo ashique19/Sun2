@@ -49,13 +49,7 @@ return new class extends Migration
             }
         });
 
-        // Backfill base_price from existing unit price for historical lines (only where still 0).
-        DB::table('order_products')
-            ->where('base_price', 0)
-            ->whereColumn('price', '!=', 'base_price')
-            ->update(['base_price' => DB::raw('price')]);
-
-        // Also set base_price = price for any row still at default 0.
+        // Backfill base_price from existing unit price for historical lines still at default 0.
         DB::statement('UPDATE order_products SET base_price = price WHERE base_price = 0 AND price <> 0');
 
         Schema::table('users', function (Blueprint $table) {

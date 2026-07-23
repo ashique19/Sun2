@@ -96,6 +96,10 @@ Preserve legacy `id` as the new `id` (+ `legacy_id`). Transforms below.
 1. **Order `status` values** actually used in production (to complete the enum).
 2. **`all_images` storage format** in legacy `products` (JSON / PHP-serialized / comma-separated) — determines the image parser.
 3. Admin polish: fold in any remaining real-admin screenshots if needed before cutover.
+4. **Order adjustments (multi charge / discount / stacked coupons + money audit)** — planning in
+   [`docs/ORDER-ADJUSTMENTS-PLAN.md`](ORDER-ADJUSTMENTS-PLAN.md). Locked: coupons stack; delivery
+   stays on `orders.delivery_charge`; full adjustment change log; percent coupons store resolved
+   taka + meta. Remaining product rules listed as open questions in that doc.
 
 ## 8. Mockups
 

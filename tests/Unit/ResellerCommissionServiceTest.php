@@ -56,4 +56,19 @@ class ResellerCommissionServiceTest extends TestCase
 
         $this->assertSame(50.0, $service->lineCommission($item));
     }
+
+    public function test_line_commission_rounds_to_whole_taka(): void
+    {
+        $service = $this->service();
+        $item = new OrderProduct([
+            'quantity' => 1,
+            'returned_quantity' => 0,
+            'base_price' => 1000.4,
+            'price' => 1100.7,
+            'commission_rate' => 10.4,
+        ]);
+
+        // (10.4 + 100.3) * 1 = 110.7 → 111
+        $this->assertSame(111.0, $service->lineCommission($item));
+    }
 }

@@ -41,7 +41,7 @@ class ResellerCommissionService
                 $total += $earned;
             }
 
-            $total = round($total, 2);
+            $total = (float) (int) round($total);
             if ($total <= 0) {
                 return;
             }
@@ -75,7 +75,7 @@ class ResellerCommissionService
             ->where('type', 'reversal')
             ->sum('amount');
 
-        $net = round((float) $prior + $alreadyReversed, 2);
+        $net = (float) (int) round((float) $prior + $alreadyReversed);
         if ($net <= 0) {
             return;
         }
@@ -101,7 +101,8 @@ class ResellerCommissionService
         $rate = (float) $item->commission_rate;
         $markup = max(0, $sell - $base);
 
-        return round(($rate + $markup) * $qty, 2);
+        // Integer taka only — no fractional commission.
+        return (float) (int) round(($rate + $markup) * $qty);
     }
 
     private function credit(int $userId, float $amount, string $type, ?int $orderId, string $note): void

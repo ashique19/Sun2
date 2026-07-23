@@ -23,7 +23,8 @@ class ResellerWalletService
         return DB::transaction(function () use ($userId, $amount, $type, $orderId, $note, $createdBy) {
             /** @var User $user */
             $user = User::query()->lockForUpdate()->findOrFail($userId);
-            $balance = round((float) $user->reseller_balance + $amount, 2);
+            $amount = (float) (int) round($amount);
+            $balance = (float) (int) round((float) $user->reseller_balance + $amount);
             $user->reseller_balance = $balance;
             $user->save();
 
@@ -44,7 +45,7 @@ class ResellerWalletService
      */
     public function recordPayout(int $userId, float $amount, ?string $note = null, ?int $createdBy = null): ResellerWalletEntry
     {
-        $amount = round($amount, 2);
+        $amount = (float) (int) round($amount);
 
         if ($amount <= 0) {
             throw new RuntimeException('Payout amount must be greater than zero.');

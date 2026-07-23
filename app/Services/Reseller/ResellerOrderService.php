@@ -119,7 +119,8 @@ class ResellerOrderService
     {
         $markupPerUnit = max(0.0, $sellPrice - $basePrice);
 
-        return ($commissionRate + $markupPerUnit) * $qty;
+        // Integer taka only — match credited commission rounding.
+        return (float) (int) round(($commissionRate + $markupPerUnit) * $qty);
     }
 
     /**

@@ -104,17 +104,25 @@ class Order extends Model
 
     /**
      * Net revenue = subtotal - COGS + charges - discounts + delivery_charge - courier_charge.
-     * Requires items and adjustments to be loaded.
+     * Requires items loaded. Prefer adjustment lines; fall back to order scalars when
+     * adjustments are empty (legacy rows / pre-backfill) so admin never shows wrong 0.
      */
     public function netRevenue(): float
     {
         $this->loadMissing(['items', 'adjustments']);
 
+        $adjustments = $this->adjustments->isNotEmpty()
+            ? $this->adjustments
+            : collect([
+                ['type' => 'charge', 'amount' => (float) $this->charge],
+                ['type' => 'discount', 'amount' => (float) $this->discount],
+            ])->filter(fn (array $line) => $line['amount'] > 0)->values();
+
         return app(OrderTotalCalculator::class)->calculate(
             subtotal: (float) $this->subtotal,
             deliveryCharge: (float) $this->delivery_charge,
-            courierCharge: (float) $this->courier_charge,
-            adjustments: $this->adjustments,
+            courierCharge: (float) ($this->courier_charge ?? 0),
+            adjustments: $adjustments,
             items: $this->items,
         )->netRevenue;
     }
@@ -122,7 +130,7 @@ class Order extends Model
     /** Delivery margin = customer delivery_charge - courier_charge. */
     public function deliveryMargin(): float
     {
-        return (float) $this->delivery_charge - (float) $this->courier_charge;
+        return (float) $this->delivery_charge - (float) ($this->courier_charge ?? 0);
     }
 
     public function isDispatchable(): bool

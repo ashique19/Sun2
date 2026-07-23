@@ -27,8 +27,9 @@ class OrderDeliverySettlement
         string $kind = 'settlement',
     ): void {
         $order->refresh();
-        $amount = $amount ?? (float) $order->due_amount;
-        $amount = round(max(0.0, $amount), 2);
+        $due = round(max(0.0, (float) $order->due_amount), 2);
+        $amount = $amount ?? $due;
+        $amount = round(max(0.0, min((float) $amount, $due)), 2);
 
         if ($amount <= 0) {
             $this->paymentSync->sync($order);

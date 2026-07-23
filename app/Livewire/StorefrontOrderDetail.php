@@ -16,7 +16,7 @@ class StorefrontOrderDetail extends Component
 
     public function mount(Order $order): void
     {
-        abort_unless($order->user_id === auth()->id(), 403);
+        abort_unless($this->canViewOrder($order), 403);
 
         $this->order = $order->load([
             'items.product:id,slug,name',
@@ -35,5 +35,20 @@ class StorefrontOrderDetail extends Component
     {
         return view('livewire.storefront-order-detail')
             ->title($this->title());
+    }
+
+    private function canViewOrder(Order $order): bool
+    {
+        $userId = auth()->id();
+
+        if ($userId !== null
+            && $order->user_id !== null
+            && (int) $order->user_id === (int) $userId) {
+            return true;
+        }
+
+        // Allow the just-placed confirmation CTA in this browser session.
+        return $userId !== null
+            && (int) session('checkout.last_order_id') === (int) $order->id;
     }
 }

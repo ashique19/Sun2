@@ -13,8 +13,8 @@ class StorefrontOrderConfirmation extends Component
 
     public function mount(Order $order): void
     {
-        $canView = (auth()->check() && $order->user_id === auth()->id())
-            || session('checkout.last_order_id') === $order->id;
+        $canView = $this->ownsOrder($order)
+            || (int) session('checkout.last_order_id') === (int) $order->id;
 
         abort_unless($canView, 403);
 
@@ -30,5 +30,14 @@ class StorefrontOrderConfirmation extends Component
     {
         return view('livewire.storefront-order-confirmation')
             ->title($this->title());
+    }
+
+    private function ownsOrder(Order $order): bool
+    {
+        $userId = auth()->id();
+
+        return $userId !== null
+            && $order->user_id !== null
+            && (int) $order->user_id === (int) $userId;
     }
 }

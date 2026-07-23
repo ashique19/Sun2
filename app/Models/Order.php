@@ -15,6 +15,10 @@ class Order extends Model
     protected function casts(): array
     {
         return [
+            'user_id' => 'integer',
+            'reseller_id' => 'integer',
+            'coupon_id' => 'integer',
+            'courier_id' => 'integer',
             'subtotal'        => 'decimal:2',
             'delivery_charge' => 'decimal:2',
             'charge'          => 'decimal:2',

@@ -18,6 +18,8 @@ Status: **planning** (not implemented).
 
    Delivery remains listed separately and is **not** included in net revenue.
 
+6. **Product max allowed discount** — Admin → Products gets a **max allowed discount** field (taka **per unit**). Stacked coupons must not discount a product line beyond that cap. Protects margin so coupon stacks cannot erase COGS protection on thin-margin SKUs.
+
 ---
 
 ## Current state (what we must not break)
@@ -145,6 +147,37 @@ Also continue writing a short summary into `order_status_history` when totals ch
 
 Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines.
 
+### `products.max_discount` (new)
+
+| Column | Type | Notes |
+|---|---|---|
+| `max_discount` | decimal(12,2) nullable | **Per-unit** max coupon discount in taka. `null` = no cap. `0` = coupons cannot discount this product. |
+
+Also snapshot onto `order_products.max_discount` at order time (same pattern as `price` / `purchase_price`) so later catalog edits do not rewrite historical caps.
+
+### Coupon allocation vs max discount
+
+For each cart/order line:
+
+```
+line_discount_cap = (max_discount ?? ∞) × quantity
+```
+
+Order-level coupon discount capacity:
+
+```
+order_coupon_cap = sum(line_discount_cap) over lines
+```
+
+When resolving stacked coupons:
+1. Compute unconstrained coupon amounts as today (fixed / percent on eligible base).
+2. Allocate each coupon’s resolved taka across lines (propose: **proportional to line_total**, then clamp per line to remaining `line_discount_cap`).
+3. If a coupon cannot apply any amount after caps → reject that coupon with a clear message (checkout) or show warning (admin).
+4. Sum of all coupon lines on the order must stay ≤ `order_coupon_cap`.
+5. Store allocation in coupon line `meta`, e.g. `{ "allocations": [{ "product_id": 1, "amount": 50 }], "capped": true }`.
+
+**Scope of the cap:** applies to **coupon** adjustment lines. Admin freeform `discount` lines — see open questions (propose: also respect caps by default; allow override with audited note).
+
 ---
 
 ## Stacking rules (coupons) — draft to implement
@@ -157,6 +190,8 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 6. `usage_limit` / `used_count`: increment **once per coupon per order** when order is placed/confirmed with that coupon; decrement/compensate on cancel only if we already do similar today (define explicitly).
 7. Same coupon code twice on one order: **reject** (unique `(order_id, coupon_id)` among non-deleted coupon lines).
 8. Admin freeform `discount` lines do **not** consume coupon usage.
+9. **Product max discount:** coupon stacks cannot take more than `max_discount × qty` off any line; total coupon discount ≤ sum of line caps.
+10. Prefer **auto-cap** (apply what fits under remaining room) over hard-fail when a stack partially fits — unless the coupon would apply **0**, then reject.
 
 ---
 
@@ -184,6 +219,7 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 - [x] Full money audit log: yes
 - [x] Percent → resolved taka + meta: yes
 - [x] Admin Orders: show net revenue + breakdown using `Revenue − COGS + Charges − Discounts/coupons` (delivery excluded)
+- [x] Product max allowed discount (per unit) caps coupon stacks
 - [ ] Confirm percent base: remaining merchandise after prior discount/coupon lines (proposed)
 - [ ] Confirm `min_order` check: against original subtotal vs remaining after prior coupons
 - [ ] Confirm max stack count (unlimited vs soft cap, e.g. 5)
@@ -191,13 +227,17 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 - [ ] Confirm cancel/return behavior for `used_count`
 - [ ] Confirm whether charges can be negative (propose: **no**; use discount line instead)
 - [ ] Confirm rounding: integer taka for display/admin vs 2-decimal storefront percent (align to one rule)
+- [ ] Confirm admin freeform discounts also respect product max caps (proposed **yes**, with audited override)
+- [ ] Confirm default for existing products: `max_discount = null` (uncapped) vs seed to `price − purchase_price`
 
 ### B. Schema & migrations
 
 - [ ] Migration: create `order_adjustments`
 - [ ] Migration: create `order_adjustment_logs`
+- [ ] Migration: add `products.max_discount` (nullable decimal)
+- [ ] Migration: add `order_products.max_discount` snapshot (nullable decimal)
 - [ ] Unique index: one row per `(order_id, coupon_id)` where `type = coupon`
-- [ ] Eloquent: `OrderAdjustment`, `OrderAdjustmentLog`
+- [ ] Eloquent: `OrderAdjustment`, `OrderAdjustmentLog`; update `Product`, `OrderProduct`
 - [ ] `Order` relations: `adjustments()`, `adjustmentLogs()`, keep `coupon()` for compat
 - [ ] Factories for tests
 - [ ] Backfill command/migration:  
@@ -214,6 +254,7 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 - [ ] `OrderAdjustmentSync` — replace/set lines → recompute `charge`/`discount`/`total`/`cod_amount`/`due_amount` as needed
 - [ ] `OrderAdjustmentAuditor` — write full log entries on every mutation (including batch replace)
 - [ ] `CouponStackingService` — validate stack, compute resolved amounts, build meta for percent
+- [ ] `ProductDiscountCap` helper — per-line / order coupon room from `max_discount × qty`; allocate & clamp coupon amounts
 - [ ] Stop diverging storefront vs admin formulas (both include `charge` sum)
 - [ ] Keep `delivery_charge` updates independent of adjustment sync
 - [ ] On admin order edit: if lines exist, prefer lines as source of truth; sync scalars from lines
@@ -224,6 +265,8 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 - [ ] Allow applying multiple coupons at checkout (session list, not single code)
 - [ ] UI: add/remove individual coupons; show each resolved amount
 - [ ] Validate each coupon independently (active, dates, min_order, uses remaining)
+- [ ] Enforce product max-discount caps when applying / recalculating coupon stacks (auto-cap; reject if zero room)
+- [ ] Surface checkout/admin message when a coupon was capped or rejected due to max discount
 - [ ] Recalculate all percent lines when subtotal changes (cart edit, admin line edit)
 - [ ] Increment `used_count` once per distinct coupon when order placed
 - [ ] Define & implement cancel/return usage compensation
@@ -258,6 +301,14 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 - [ ] Moderator permissions: who can add charges vs discounts vs coupons
 - [ ] Bangla not required in admin (admin stays English per existing locale split)
 
+### E2. Admin → Products (max discount)
+
+- [ ] Products list: add **Max discount** column (৳ / unit); inline-edit alongside price / cost / stock
+- [ ] Product create/edit form: `max_discount` input (nullable; help text: “Max coupon discount per unit”)
+- [ ] Validation: `max_discount >= 0`; warn in UI if `max_discount > price − purchase_price` (would allow below-COGS selling via coupons)
+- [ ] Optional bulk action later: set max discount = `price − purchase_price` for selected products
+- [ ] Snapshot `max_discount` onto `order_products` in admin + storefront order placers
+
 ### F. Storefront UI
 
 - [ ] Checkout: multi-coupon apply/remove; list stacked discounts
@@ -286,15 +337,18 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 - [ ] Unit: calculator with mixed charges/discounts/coupons + delivery
 - [ ] Unit: `netRevenue` = revenue − cogs + charges − discounts; excludes delivery; can be negative
 - [ ] Unit: COGS from `purchase_price × quantity` on order lines
+- [ ] Unit: product `max_discount` clamps stacked coupons per line and order-wide
+- [ ] Unit: coupon auto-caps when partial room remains; rejects when room is 0
 - [ ] Unit: percent stacking order & rounding
 - [ ] Unit: duplicate coupon rejected
 - [ ] Unit: min_order / inactive / expired per coupon in a stack
 - [ ] Unit: sync updates scalars correctly
 - [ ] Unit: auditor writes before/after totals
+- [ ] Feature: admin products list/edit max discount column
 - [ ] Feature: admin orders list shows net revenue + breakdown per order
 - [ ] Feature: admin order show shows full breakdown (incl. COGS) + net revenue + COD total
 - [ ] Feature: admin add/remove multiple adjustments
-- [ ] Feature: checkout apply two coupons
+- [ ] Feature: checkout apply two coupons respects product max discounts
 - [ ] Feature: backfill from scalar-only order
 - [ ] Feature: print/COD unchanged when scalars synced
 - [ ] Feature: subtotal change recalculates percent coupon lines
@@ -313,11 +367,13 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 
 ### K. Nice-to-haves (later)
 
-- [ ] Named charge presets (“Packaging”, “Gift wrap”, “Remote area fee”)
+- Named charge presets (“Packaging”, “Gift wrap”, “Remote area fee”)
 - [ ] Coupon mutual-exclusion groups (cannot combine with X)
 - [ ] Per-customer coupon claim table
 - [ ] Adjustment templates for common admin edits
 - [ ] Export money audit CSV per date range
+- [ ] Suggest max discount from margin (`price − purchase_price`) on product edit
+- [ ] Category-level default max discount inherited by products
 
 ---
 
@@ -330,6 +386,8 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 5. Rounding rule: always integer taka at persist time?
 6. On order cancel, decrement `used_count` for each coupon line?
 7. For returned lines, should COGS use `(quantity − returned_quantity) × purchase_price`? (proposed **yes**)
+8. Do admin freeform discount lines respect product max caps? (proposed **yes**, override with audited note)
+9. Existing products: leave `max_discount` null (uncapped) until staff set values, or backfill to `price − purchase_price`?
 
 ---
 
@@ -358,6 +416,7 @@ Do **not** drop `charge`, `discount`, or `coupon_id` until all readers use lines
 - Existing orders look identical after backfill (same total / COD).
 - Admin can add multiple charges, discounts, and stacked coupons on one order.
 - **Admin → Orders** list and detail each show **net revenue** = Revenue − COGS + Charges − Discounts/coupons, with a clear **breakdown**; delivery shown separately and excluded from net revenue.
+- **Admin → Products** supports per-unit **max allowed discount**; coupon stacks cannot exceed line/order caps.
 - Checkout can apply more than one coupon.
 - Every money-component change has a full audit row with actor and before/after totals.
 - Print labels & courier COD keep working without code changes beyond scalar sync.

@@ -27,7 +27,8 @@ to **intake the legacy data** (especially products, categories, orders).
 4. Checkout is **COD only** — no bKash / online payment gateway in scope.
 5. RBAC via **spatie/laravel-permission** (replaces legacy `users.role` tinyint +
    custom `Controller@action` permission strings). Roles in use: `dev`, `admin`,
-   `moderator` (New orders view+print only), `customers`.
+   `moderator` (New orders view+print only), `customers`, `reseller` (portal at
+   `/reseller`; renamed from legacy `vendors`).
 6. **Add** reviews, wishlist, and coupons.
 7. Design language: refreshed **gold-on-cream** premium jewelry aesthetic (serif
    headings + clean sans), mobile-first (BD audience). See `docs/mockups/`.
@@ -88,7 +89,8 @@ Preserve legacy `id` as the new `id` (+ `legacy_id`). Transforms below.
 
 ### users → users + spatie roles + addresses
 - Preserve `id`; `contact` → `phone` (unique login); dedupe email.
-- `role` tinyint → spatie role: `1=dev`, `2=admin`, `3=vendors`, `4=customers`, `5=moderator`.
+- `role` tinyint → spatie role: `1=dev`, `2=admin`, `3=reseller` (legacy name `vendors`),
+  `4=customers`, `5=moderator`.
 - Split address fields → `addresses`; keep `referrer_id`/`referral_balance`.
 
 ## 7. Open items (need input)
@@ -96,6 +98,9 @@ Preserve legacy `id` as the new `id` (+ `legacy_id`). Transforms below.
 1. **Order `status` values** actually used in production (to complete the enum).
 2. **`all_images` storage format** in legacy `products` (JSON / PHP-serialized / comma-separated) — determines the image parser.
 3. Admin polish: fold in any remaining real-admin screenshots if needed before cutover.
+4. **Reseller portal** — see [`docs/RESELLER-PLAN.md`](RESELLER-PLAN.md). Foundation shipping: role
+   `reseller` (renamed from legacy `vendors`), product commission, wallet, `/reseller` shell.
+   Still to build: create-order UI, checkout reseller ID/phone, admin reseller CRUD/payouts.
 
 ## 8. Mockups
 

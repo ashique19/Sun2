@@ -3,7 +3,10 @@
         <h1 class="font-serif text-3xl font-semibold">{{ $segmentLabel }}</h1>
         <a href="{{ route('admin.users.create', ['role' => $roleName]) }}" wire:navigate
             class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">
-            Create {{ $segment === 'moderators' ? 'Moderator' : 'Customer' }}
+            @if ($segment === 'moderators') Create Moderator
+            @elseif ($segment === 'resellers') Create Reseller
+            @else Create Customer
+            @endif
         </a>
     </div>
 
@@ -78,7 +81,12 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-4 py-8 text-center text-[#8C8474]">No {{ strtolower($segmentLabel) }} yet.</td>
+                            <td colspan="6" class="px-4 py-8 text-center text-[#8C8474]">
+                                No {{ strtolower($segmentLabel) }} yet.
+                                @if ($segment === 'resellers')
+                                    <a href="{{ route('admin.users.create', ['role' => 'reseller']) }}" wire:navigate class="text-[#C9A227] hover:underline">Create one</a>.
+                                @endif
+                            </td>
                         </tr>
                     @endforelse
                 </tbody>

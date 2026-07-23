@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Orders\OrderTotalCalculator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,30 +15,39 @@ class Order extends Model
     protected function casts(): array
     {
         return [
-            'subtotal' => 'decimal:2',
+            'subtotal'        => 'decimal:2',
             'delivery_charge' => 'decimal:2',
-            'charge' => 'decimal:2',
-            'discount' => 'decimal:2',
-            'total' => 'decimal:2',
-            'cod_amount' => 'decimal:2',
+            'charge'          => 'decimal:2',
+            'courier_charge'  => 'decimal:2',
+            'discount'        => 'decimal:2',
+            'total'           => 'decimal:2',
+            'cod_amount'      => 'decimal:2',
             'collected_amount' => 'decimal:2',
-            'paid_amount' => 'decimal:2',
-            'due_amount' => 'decimal:2',
-            'placed_at' => 'datetime',
-            'dispatch_date' => 'datetime',
+            'paid_amount'     => 'decimal:2',
+            'due_amount'      => 'decimal:2',
+            'placed_at'              => 'datetime',
+            'dispatch_date'          => 'datetime',
             'expected_delivery_date' => 'datetime',
-            'actual_delivery_date' => 'datetime',
-            'payment_date' => 'datetime',
+            'actual_delivery_date'   => 'datetime',
+            'payment_date'           => 'datetime',
             'is_replacement' => 'boolean',
-            'has_return' => 'boolean',
+            'has_return'     => 'boolean',
         ];
     }
+
+    // ── Relations ─────────────────────────────────────────────────────────────
 
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    public function reseller(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reseller_id');
+    }
+
+    /** Primary/legacy coupon. Source of truth is adjustments() for stacked coupons. */
     public function coupon(): BelongsTo
     {
         return $this->belongsTo(Coupon::class);
@@ -53,6 +63,21 @@ class Order extends Model
         return $this->hasMany(OrderProduct::class);
     }
 
+    public function adjustments(): HasMany
+    {
+        return $this->hasMany(OrderAdjustment::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function adjustmentLogs(): HasMany
+    {
+        return $this->hasMany(OrderAdjustmentLog::class)->latest('created_at');
+    }
+
+    public function paymentTransactions(): HasMany
+    {
+        return $this->hasMany(PaymentTransaction::class)->latest('created_at');
+    }
+
     public function statusHistory(): HasMany
     {
         return $this->hasMany(OrderStatusHistory::class)->latest('created_at');
@@ -61,6 +86,51 @@ class Order extends Model
     public function courierLogs(): HasMany
     {
         return $this->hasMany(CourierData::class)->latest('created_at');
+    }
+
+    // ── Money helpers (delegate to OrderTotalCalculator) ──────────────────────
+
+    /**
+     * COGS = sum(purchase_price × effective_quantity) over order lines.
+     * Effective quantity = quantity - returned_quantity when returns apply.
+     * Requires items to be loaded.
+     */
+    public function cogs(): float
+    {
+        $this->loadMissing('items');
+
+        return app(OrderTotalCalculator::class)->cogsFromItems($this->items);
+    }
+
+    /**
+     * Net revenue = subtotal - COGS + charges - discounts + delivery_charge - courier_charge.
+     * Requires items loaded. Prefer adjustment lines; fall back to order scalars when
+     * adjustments are empty (legacy rows / pre-backfill) so admin never shows wrong 0.
+     */
+    public function netRevenue(): float
+    {
+        $this->loadMissing(['items', 'adjustments']);
+
+        $adjustments = $this->adjustments->isNotEmpty()
+            ? $this->adjustments
+            : collect([
+                ['type' => 'charge', 'amount' => (float) $this->charge],
+                ['type' => 'discount', 'amount' => (float) $this->discount],
+            ])->filter(fn (array $line) => $line['amount'] > 0)->values();
+
+        return app(OrderTotalCalculator::class)->calculate(
+            subtotal: (float) $this->subtotal,
+            deliveryCharge: (float) $this->delivery_charge,
+            courierCharge: (float) ($this->courier_charge ?? 0),
+            adjustments: $adjustments,
+            items: $this->items,
+        )->netRevenue;
+    }
+
+    /** Delivery margin = customer delivery_charge - courier_charge. */
+    public function deliveryMargin(): float
+    {
+        return (float) $this->delivery_charge - (float) ($this->courier_charge ?? 0);
     }
 
     public function isDispatchable(): bool
@@ -97,10 +167,11 @@ class Order extends Model
     }
 
     /**
-     * Amount to collect / print as TOTAL DUE.
+     * Amount the courier should collect.
      *
-     * Prefer cod_amount, then due_amount, then total. Compare as floats — Laravel's
-     * decimal cast yields "0.00", which is truthy for ?: and would print 0 forever.
+     * Prefer cod_amount (residual after advances), then due_amount, then total.
+     * Compare as floats — Laravel's decimal cast yields "0.00", which is truthy
+     * for ?: and would incorrectly fall through.
      */
     public function collectableAmount(): float
     {

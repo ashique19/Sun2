@@ -4,6 +4,7 @@ namespace App\Livewire\Admin;
 
 use App\Models\User;
 use App\Rules\BangladeshMobile;
+use App\Services\Reseller\ResellerWalletService;
 use App\Support\AdminAccess;
 use App\Support\PhoneNumber;
 use Illuminate\Validation\Rule;
@@ -35,12 +36,17 @@ class AdminUserEdit extends Component
 
     public ?string $error = null;
 
+    public string $payoutAmount = '';
+
+    public string $payoutNote = '';
+
     public function mount(?User $user = null): void
     {
         AdminAccess::ensureStaffAdmin();
 
         Role::findOrCreate('customers');
         Role::findOrCreate('moderator');
+        Role::findOrCreate('reseller');
 
         if ($user?->exists) {
             if ($user->hasAnyRole(['admin', 'dev'])) {
@@ -52,13 +58,15 @@ class AdminUserEdit extends Component
             $this->phone = (string) $user->phone;
             $this->email = (string) ($user->email ?? '');
             $this->is_active = (bool) $user->is_active;
-            $this->role = $user->hasRole('moderator') ? 'moderator' : 'customers';
+            $this->role = $user->hasRole('moderator')
+                ? 'moderator'
+                : ($user->hasRole('reseller') ? 'reseller' : 'customers');
 
             return;
         }
 
         $requested = request()->query('role');
-        if (in_array($requested, ['customers', 'moderator'], true)) {
+        if (in_array($requested, ['customers', 'moderator', 'reseller'], true)) {
             $this->role = $requested;
         }
     }
@@ -86,7 +94,7 @@ class AdminUserEdit extends Component
             'name' => ['required', 'string', 'max:120'],
             'phone' => ['required', 'string', 'max:32', new BangladeshMobile, $phoneUnique],
             'email' => ['nullable', 'email', 'max:120', $emailUnique],
-            'role' => ['required', 'in:customers,moderator'],
+            'role' => ['required', 'in:customers,moderator,reseller'],
             'is_active' => ['boolean'],
         ];
 
@@ -155,9 +163,45 @@ class AdminUserEdit extends Component
             return;
         }
 
-        $role = $this->user->hasRole('moderator') ? 'moderators' : 'customers';
+        $role = $this->user->hasRole('moderator')
+            ? 'moderators'
+            : ($this->user->hasRole('reseller') ? 'resellers' : 'customers');
         $this->user->delete();
         $this->redirect(route('admin.users.'.$role), navigate: true);
+    }
+
+    public function recordPayout(ResellerWalletService $wallet): void
+    {
+        AdminAccess::ensureStaffAdmin();
+        $this->message = null;
+        $this->error = null;
+
+        if (! $this->user || ! $this->user->hasRole('reseller')) {
+            $this->error = 'Payouts can only be recorded for reseller accounts.';
+
+            return;
+        }
+
+        $validated = $this->validate([
+            'payoutAmount' => ['required', 'numeric', 'min:1', 'integer'],
+            'payoutNote' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        try {
+            $wallet->recordPayout(
+                userId: (int) $this->user->id,
+                amount: (float) (int) $validated['payoutAmount'],
+                note: trim((string) ($validated['payoutNote'] ?? '')) ?: null,
+                createdBy: (int) auth()->id(),
+            );
+
+            $this->user = $this->user->fresh();
+            $this->payoutAmount = '';
+            $this->payoutNote = '';
+            $this->message = 'Payout recorded.';
+        } catch (\Throwable $e) {
+            $this->error = $e->getMessage();
+        }
     }
 
     public function render()
@@ -166,6 +210,8 @@ class AdminUserEdit extends Component
             'canDelete' => $this->user
                 && (int) $this->user->id !== (int) auth()->id()
                 && $this->user->orders()->doesntExist(),
+            'isReseller' => $this->user?->hasRole('reseller') ?? false,
+            'resellerBalance' => $this->user ? (float) $this->user->reseller_balance : 0.0,
         ])->title($this->title());
     }
 }

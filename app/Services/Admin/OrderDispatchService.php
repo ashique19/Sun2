@@ -10,6 +10,7 @@ use App\Services\Couriers\CourierApiRegistry;
 use App\Services\Couriers\PathaoApiClient;
 use App\Services\Couriers\RedxApiClient;
 use App\Services\Couriers\SteadfastApiClient;
+use App\Services\Orders\OrderCourierChargeSync;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -24,6 +25,7 @@ class OrderDispatchService
         private readonly CourierApiRegistry $courierRegistry,
         private readonly OrderStatusService $statusService,
         private readonly CourierBalanceService $courierBalances,
+        private readonly OrderCourierChargeSync $courierChargeSync,
     ) {}
 
     public function dispatchViaApi(Order $order, string $slug, ?int $changedBy = null, bool $markDispatched = true): Order
@@ -97,6 +99,8 @@ class OrderDispatchService
 
             $this->courierBalances->creditOnDispatch($courier, $order, $changedBy);
 
+            $this->syncCourierChargeOnDispatch($order->fresh(), $courier);
+
             return $order;
         });
     }
@@ -137,6 +141,8 @@ class OrderDispatchService
             );
 
             $this->courierBalances->creditOnDispatch($courier, $order, $changedBy);
+
+            $this->syncCourierChargeOnDispatch($order->fresh(), $courier);
 
             return $order;
         });
@@ -250,7 +256,7 @@ class OrderDispatchService
         bool $markDispatched = true,
     ): Order {
         return DB::transaction(function () use ($order, $courier, $response, $trackingCode, $courierName, $changedBy, $markDispatched) {
-            CourierData::query()->create([
+            $courierData = CourierData::query()->create([
                 'order_id' => $order->id,
                 'courier_id' => $courier->id,
                 'api_data' => $response,
@@ -286,10 +292,14 @@ class OrderDispatchService
 
                 $this->courierBalances->creditOnDispatch($courier, $order, $changedBy);
 
+                $this->syncCourierChargeOnDispatch($order->fresh(), $courier, $response, (int) $courierData->id);
+
                 return $order;
             }
 
             $order->update($courierFields);
+
+            $this->syncCourierChargeOnDispatch($order->fresh(), $courier, $response, (int) $courierData->id);
 
             $this->statusService->record(
                 $order,
@@ -325,5 +335,29 @@ class OrderDispatchService
             ->map(fn ($item) => $item->name.' x'.$item->quantity)
             ->take(3)
             ->implode('; ');
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $apiResponse
+     */
+    private function syncCourierChargeOnDispatch(Order $order, Courier $courier, ?array $apiResponse = null, ?int $courierDataId = null): void
+    {
+        $fee = $apiResponse
+            ? $this->courierChargeSync->parseFeeFromPayload($apiResponse)
+            : null;
+        $fee ??= $this->courierChargeSync->estimateFromCatalog($order, $courier);
+
+        if ($fee <= 0) {
+            return;
+        }
+
+        $this->courierChargeSync->sync(
+            order: $order,
+            fee: $fee,
+            actor: auth()->user(),
+            phase: 'dispatch',
+            meta: $apiResponse ? ['source' => 'dispatch_api'] : ['source' => 'catalog_estimate'],
+            courierDataId: $courierDataId,
+        );
     }
 }

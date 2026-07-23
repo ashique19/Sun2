@@ -19,7 +19,7 @@ class EnsureAdminUserCommand extends Command
 
     public function handle(): int
     {
-        foreach (['dev', 'admin', 'moderator', 'customers'] as $role) {
+        foreach (['dev', 'admin', 'moderator', 'customers', 'reseller'] as $role) {
             Role::findOrCreate($role);
         }
 

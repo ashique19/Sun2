@@ -84,7 +84,27 @@
                                         <span>&#2547; {{ number_format($order->charge, 0) }}</span>
                                     </div>
                                 @endif
-                                @if ($order->discount > 0)
+                                @if ($order->relationLoaded('adjustments') && $order->adjustments->isNotEmpty())
+                                    @foreach ($order->adjustments as $adjustment)
+                                        @if (in_array($adjustment->type, ['discount', 'coupon'], true))
+                                            <div class="flex justify-between gap-4 text-emerald-700">
+                                                <span>
+                                                    @if ($adjustment->type === 'coupon')
+                                                        {{ __('storefront.adjustment_coupon', ['code' => $adjustment->label]) }}
+                                                    @else
+                                                        {{ __('storefront.adjustment_discount', ['label' => $adjustment->label]) }}
+                                                    @endif
+                                                </span>
+                                                <span>− &#2547; {{ number_format($adjustment->amount, 0) }}</span>
+                                            </div>
+                                        @elseif ($adjustment->type === 'charge')
+                                            <div class="flex justify-between gap-4">
+                                                <span class="text-[#6B6459]">{{ __('storefront.adjustment_charge', ['label' => $adjustment->label]) }}</span>
+                                                <span>&#2547; {{ number_format($adjustment->amount, 0) }}</span>
+                                            </div>
+                                        @endif
+                                    @endforeach
+                                @elseif ($order->discount > 0)
                                     <div class="flex justify-between gap-4 text-emerald-700">
                                         <span>
                                             @if ($order->coupon)
@@ -99,7 +119,7 @@
                             </div>
                         </div>
 
-                        @if ($order->coupon)
+                        @if ($order->coupon && ! ($order->relationLoaded('adjustments') && $order->adjustments->where('type', 'coupon')->isNotEmpty()))
                             <div class="rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 text-sm space-y-2">
                                 <p class="font-medium text-emerald-900">{{ $order->coupon->code }}</p>
                                 <div class="flex justify-between gap-4">

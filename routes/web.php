@@ -24,6 +24,11 @@ use App\Livewire\Admin\AdminReviews;
 use App\Livewire\Admin\AdminSalesByMonth;
 use App\Livewire\Admin\AdminUserEdit;
 use App\Livewire\Admin\AdminUsers;
+use App\Livewire\Reseller\ResellerDashboard;
+use App\Livewire\Reseller\ResellerOrderCreate;
+use App\Livewire\Reseller\ResellerOrderShow;
+use App\Livewire\Reseller\ResellerOrders;
+use App\Livewire\Reseller\ResellerWallet;
 use App\Livewire\StorefrontWishlist;
 use App\Livewire\StorefrontAccount;
 use App\Livewire\StorefrontCart;
@@ -93,6 +98,15 @@ Route::middleware('auth')->group(function () {
     Route::get('/account/orders', StorefrontOrderHistory::class)->name('account.orders');
     Route::get('/account/orders/{order}', StorefrontOrderDetail::class)->name('account.orders.show');
     Route::get('/account/wishlist', StorefrontWishlist::class)->name('account.wishlist');
+});
+
+Route::middleware(['auth', 'role:reseller'])->prefix('reseller')->name('reseller.')->group(function () {
+    Route::get('/', ResellerDashboard::class)->name('dashboard');
+    Route::get('/orders/progress', ResellerOrders::class)->defaults('segment', 'progress')->name('orders.progress');
+    Route::get('/orders/history', ResellerOrders::class)->defaults('segment', 'history')->name('orders.history');
+    Route::get('/orders/create', ResellerOrderCreate::class)->name('orders.create');
+    Route::get('/orders/{order}', ResellerOrderShow::class)->name('orders.show');
+    Route::get('/wallet', ResellerWallet::class)->name('wallet');
 });
 
 Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('admin.')->group(function () {
@@ -183,6 +197,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::redirect('/users', '/admin/users/customers');
         Route::get('/users/customers', AdminUsers::class)->defaults('segment', 'customers')->name('users.customers');
         Route::get('/users/moderators', AdminUsers::class)->defaults('segment', 'moderators')->name('users.moderators');
+        Route::get('/users/resellers', AdminUsers::class)->defaults('segment', 'resellers')->name('users.resellers');
         Route::get('/users/create', AdminUserEdit::class)->name('users.create');
         Route::get('/customers/{user}', AdminCustomerShow::class)->whereNumber('user')->name('customers.show');
         Route::get('/users/{user}/edit', AdminUserEdit::class)->whereNumber('user')->name('users.edit');

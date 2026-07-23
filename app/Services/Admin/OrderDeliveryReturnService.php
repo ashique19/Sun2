@@ -3,7 +3,10 @@
 namespace App\Services\Admin;
 
 use App\Models\Order;
+use App\Services\Orders\OrderDeliverySettlement;
+use App\Services\Orders\OrderPaymentSync;
 use App\Services\Orders\OrderStockService;
+use App\Services\Reseller\ResellerCommissionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -14,28 +17,39 @@ class OrderDeliveryReturnService
         private readonly OrderStatusService $statusService,
         private readonly CourierBalanceService $courierBalances,
         private readonly OrderStockService $stock,
+        private readonly ResellerCommissionService $resellerCommissions,
+        private readonly OrderDeliverySettlement $deliverySettlement,
+        private readonly OrderPaymentSync $paymentSync,
     ) {}
 
     public function markDelivered(Order $order, ?float $collectedAmount = null, ?int $changedBy = null): Order
     {
         $this->assertDispatched($order);
 
-        $collected = $collectedAmount ?? (float) $order->cod_amount;
+        return DB::transaction(function () use ($order, $collectedAmount, $changedBy) {
+            $order->refresh();
+            $collected = $collectedAmount ?? (float) $order->due_amount;
 
-        return DB::transaction(function () use ($order, $collected, $changedBy) {
-            return $this->statusService->update(
-                $order,
+            $this->deliverySettlement->recordCollection(
+                order: $order,
+                amount: $collected,
+                actor: $changedBy ? \App\Models\User::query()->find($changedBy) : auth()->user(),
+                meta: ['source' => 'admin_deliver'],
+            );
+
+            $updated = $this->statusService->update(
+                $order->fresh(),
                 'delivered',
                 'Marked delivered.',
                 $changedBy,
                 [
-                    'payment_status' => 'paid',
-                    'collected_amount' => $collected,
-                    'paid_amount' => $collected,
-                    'due_amount' => 0,
                     'actual_delivery_date' => $order->actual_delivery_date ?? now(),
                 ],
             );
+
+            $this->resellerCommissions->creditOnDelivered($updated->fresh(['items']));
+
+            return $updated;
         });
     }
 
@@ -62,19 +76,21 @@ class OrderDeliveryReturnService
                 $this->courierBalances->reverseDispatchCredit($order->courier, $order, $changedBy);
             }
 
-            return $this->statusService->update(
+            $updated = $this->statusService->update(
                 $order,
                 'returned',
                 'Cancel and Return (no delivery charge).',
                 $changedBy,
                 [
                     'has_return' => true,
-                    'collected_amount' => 0,
-                    'paid_amount' => 0,
-                    'due_amount' => 0,
-                    'payment_status' => 'unpaid',
                 ],
             );
+
+            $this->paymentSync->sync($updated->fresh());
+
+            $this->resellerCommissions->reverseForOrder($updated->fresh(['items']));
+
+            return $updated;
         });
     }
 
@@ -138,19 +154,22 @@ class OrderDeliveryReturnService
                 $this->courierBalances->settleAfterPartialReturn($order->courier, $order, (int) round($collectedTk), $changedBy);
             }
 
+            $this->deliverySettlement->recordCollection(
+                order: $order,
+                amount: $collectedTk,
+                actor: $changedBy ? \App\Models\User::query()->find($changedBy) : auth()->user(),
+                meta: ['source' => 'admin_partial_return'],
+            );
+
             $extras = [
                 'has_return' => true,
-                'collected_amount' => $collectedTk,
-                'paid_amount' => $collectedTk,
-                'due_amount' => 0,
-                'payment_status' => $collectedTk > 0 ? 'paid' : 'unpaid',
             ];
 
             if ($status === 'delivered') {
                 $extras['actual_delivery_date'] = $order->actual_delivery_date ?? now();
             }
 
-            return $this->statusService->update($order, $status, $note, $changedBy, $extras);
+            return $this->statusService->update($order->fresh(), $status, $note, $changedBy, $extras);
         });
     }
 

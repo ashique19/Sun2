@@ -35,6 +35,7 @@
                         <th class="px-4 py-3 font-medium">Category</th>
                         <th class="px-4 py-3 font-medium">Price</th>
                         <th class="px-4 py-3 font-medium">Cost</th>
+                        <th class="px-4 py-3 font-medium">Max disc.</th>
                         <th class="px-4 py-3 font-medium">Stock</th>
                         <th class="px-4 py-3 font-medium">Published</th>
                         <th class="px-4 py-3 font-medium"></th>
@@ -60,7 +61,6 @@
                             @foreach ([
                                 'price' => ['value' => (string) (int) round((float) $product->price), 'prefix' => '৳ '],
                                 'purchase_price' => ['value' => (string) (int) round((float) $product->purchase_price), 'prefix' => '৳ '],
-                                'stock_quantity' => ['value' => (string) (int) $product->stock_quantity, 'prefix' => ''],
                             ] as $field => $cell)
                                 <td
                                     class="px-4 py-3 tabular-nums {{ $editingProductId === $product->id && $editingField === $field ? '' : 'cursor-pointer select-none' }}"
@@ -91,6 +91,43 @@
                                 </td>
                             @endforeach
 
+                            <td class="px-4 py-3 tabular-nums text-[#6B6459]">
+                                @if ($product->max_discount !== null)
+                                    ৳ {{ number_format((float) $product->max_discount, 0) }}
+                                @else
+                                    <span class="text-[#8C8474]">—</span>
+                                @endif
+                            </td>
+
+                            @php($stockCell = ['value' => (string) (int) $product->stock_quantity, 'prefix' => ''])
+                            <td
+                                class="px-4 py-3 tabular-nums {{ $editingProductId === $product->id && $editingField === 'stock_quantity' ? '' : 'cursor-pointer select-none' }}"
+                                title="Double-click to edit"
+                                @if (! ($editingProductId === $product->id && $editingField === 'stock_quantity'))
+                                    wire:dblclick="startInlineEdit({{ $product->id }}, 'stock_quantity', '{{ $stockCell['value'] }}')"
+                                @endif
+                            >
+                                @if ($editingProductId === $product->id && $editingField === 'stock_quantity')
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        wire:model="editingValue"
+                                        wire:keydown.enter.prevent="saveInlineEdit"
+                                        wire:keydown.escape.prevent="cancelInlineEdit"
+                                        wire:blur="saveInlineEdit"
+                                        x-init="$nextTick(() => { $el.focus(); $el.select() })"
+                                        class="w-24 rounded-lg border border-[#C9A227] bg-white px-2 py-1 text-sm tabular-nums shadow-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
+                                        aria-label="Edit stock quantity"
+                                    >
+                                    @error('editingValue')
+                                        <p class="mt-1 text-[11px] text-rose-600">{{ $message }}</p>
+                                    @enderror
+                                @else
+                                    {{ $stockCell['prefix'] }}{{ number_format((float) $stockCell['value'], 0) }}
+                                @endif
+                            </td>
+
                             <td class="px-4 py-3">
                                 <button type="button" wire:click="togglePublished({{ $product->id }})"
                                     class="text-xs rounded-full px-2.5 py-1 {{ $product->is_published ? 'bg-emerald-50 text-emerald-700' : 'bg-[#FAF6EF] text-[#8C8474]' }}">
@@ -109,7 +146,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="px-4 py-8 text-center text-[#8C8474]">No products found.</td>
+                            <td colspan="8" class="px-4 py-8 text-center text-[#8C8474]">No products found.</td>
                         </tr>
                     @endforelse
                 </tbody>

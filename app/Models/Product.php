@@ -15,13 +15,15 @@ class Product extends Model
     protected function casts(): array
     {
         return [
-            'price' => 'decimal:2',
+            'price'           => 'decimal:2',
             'compare_at_price' => 'decimal:2',
-            'purchase_price' => 'decimal:2',
-            'is_published' => 'boolean',
-            'is_featured' => 'boolean',
-            'is_new' => 'boolean',
-            'is_best_seller' => 'boolean',
+            'purchase_price'  => 'decimal:2',
+            'commission'      => 'decimal:2',
+            'max_discount'    => 'decimal:2',
+            'is_published'    => 'boolean',
+            'is_featured'     => 'boolean',
+            'is_new'          => 'boolean',
+            'is_best_seller'  => 'boolean',
         ];
     }
 

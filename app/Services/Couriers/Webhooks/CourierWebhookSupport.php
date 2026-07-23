@@ -2,10 +2,14 @@
 
 namespace App\Services\Couriers\Webhooks;
 
+use App\Models\Courier;
 use App\Models\CourierData;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
 use App\Services\Admin\OrderStatusService;
+use App\Services\Orders\OrderCourierChargeSync;
+use App\Services\Orders\OrderDeliverySettlement;
+use App\Services\Reseller\ResellerCommissionService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -13,6 +17,9 @@ class CourierWebhookSupport
 {
     public function __construct(
         private readonly OrderStatusService $orderStatus,
+        private readonly ResellerCommissionService $resellerCommissions,
+        private readonly OrderCourierChargeSync $courierChargeSync,
+        private readonly OrderDeliverySettlement $deliverySettlement,
     ) {}
 
     /**
@@ -59,7 +66,7 @@ class CourierWebhookSupport
     public function process(Order $order, ?int $courierId, array $payload, callable $callback): void
     {
         DB::transaction(function () use ($order, $courierId, $payload, $callback) {
-            CourierData::query()->create([
+            $courierData = CourierData::query()->create([
                 'order_id' => $order->id,
                 'courier_id' => $courierId,
                 'api_data' => $payload,
@@ -67,6 +74,16 @@ class CourierWebhookSupport
             ]);
 
             $this->syncTracker($order, $payload, $courierId);
+
+            $phase = $this->phaseFromPayload($payload);
+            $this->courierChargeSync->sync(
+                order: $order->fresh(),
+                fee: $this->courierChargeSync->parseFeeFromPayload($payload),
+                actor: null,
+                phase: $phase,
+                meta: ['source' => 'webhook'],
+                courierDataId: (int) $courierData->id,
+            );
 
             $callback($order->fresh());
         });
@@ -95,13 +112,13 @@ class CourierWebhookSupport
 
         if ($mappedStatus === 'delivered') {
             $cod = $this->codAmount($payload, $order);
-            $extra = array_merge($extra, [
-                'payment_status' => 'paid',
-                'collected_amount' => $cod,
-                'paid_amount' => $cod,
-                'due_amount' => 0,
-                'actual_delivery_date' => $this->parseTimestamp($payload['updated_at'] ?? $payload['timestamp'] ?? null) ?? now(),
-            ]);
+            $this->deliverySettlement->recordCollection(
+                order: $order,
+                amount: $cod,
+                actor: null,
+                meta: ['source' => 'webhook', 'payload_event' => $payload['event'] ?? null],
+            );
+            $extra['actual_delivery_date'] = $this->parseTimestamp($payload['updated_at'] ?? $payload['timestamp'] ?? null) ?? now();
         }
 
         if ($mappedStatus === $order->status && $extra === []) {
@@ -111,6 +128,10 @@ class CourierWebhookSupport
         }
 
         $this->orderStatus->update($order, $mappedStatus, $message, null, $extra);
+
+        if ($mappedStatus === 'delivered') {
+            $this->resellerCommissions->creditOnDelivered($order->fresh(['items']));
+        }
     }
 
     public function recordHistory(Order $order, string $status, string $note): void
@@ -157,6 +178,22 @@ class CourierWebhookSupport
         }
 
         return $order->collectableAmount();
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function phaseFromPayload(array $payload): string
+    {
+        $event = strtolower((string) ($payload['event'] ?? $payload['notification_type'] ?? ''));
+
+        return match (true) {
+            str_contains($event, 'deliver') => 'delivered',
+            str_contains($event, 'cancel') => 'cancelled',
+            str_contains($event, 'return') => 'cancelled',
+            str_contains($event, 'track') => 'tracking',
+            default => 'webhook',
+        };
     }
 
     private function parseTimestamp(mixed $value): ?Carbon

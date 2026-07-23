@@ -332,7 +332,10 @@
             <div class="space-y-4 sm:space-y-6">
                 <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6 space-y-4 text-sm">
                     <h2 class="font-semibold">Totals</h2>
-                    <div class="flex justify-between"><span class="text-[#6B6459]">Subtotal</span><span>&#2547; {{ number_format($this->subtotal(), 0) }}</span></div>
+                    <div class="flex justify-between"><span class="text-[#6B6459]">Subtotal</span><span class="tabular-nums">&#2547; {{ number_format($this->subtotal(), 0) }}</span></div>
+                    @if ($lines !== [])
+                        <div class="flex justify-between"><span class="text-[#6B6459]">COGS</span><span class="tabular-nums">&#2547; {{ number_format($this->previewCogs(), 0) }}</span></div>
+                    @endif
                     <div>
                         <div class="flex items-center justify-between gap-2 mb-1">
                             <label class="text-[#6B6459]">Delivery</label>
@@ -344,6 +347,15 @@
                         <input type="number" min="0" step="1" wire:model.live="deliveryCharge" @disabled($autoDelivery)
                             class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 disabled:bg-[#FAF6EF]">
                     </div>
+                    @if ($order)
+                        <div>
+                            <label class="block text-[#6B6459] mb-1">Courier cost</label>
+                            <p class="rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2 tabular-nums text-[#6B6459]">
+                                &#2547; {{ number_format((float) $order->courier_charge, 0) }}
+                                <span class="block text-xs text-[#8C8474] mt-0.5">Set on dispatch or from order detail.</span>
+                            </p>
+                        </div>
+                    @endif
                     <div>
                         <label class="block text-[#6B6459] mb-1">Charge</label>
                         <input type="number" min="0" step="1" wire:model.live="charge"
@@ -354,9 +366,16 @@
                         <input type="number" min="0" step="1" wire:model.live="discount"
                             class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2">
                     </div>
+                    @if ($this->previewNetRevenue() !== null)
+                        @php($previewNet = $this->previewNetRevenue())
+                        <div class="flex justify-between font-medium">
+                            <span class="text-[#6B6459]">Net revenue</span>
+                            <span @class(['tabular-nums', 'text-rose-600' => $previewNet < 0])>&#2547; {{ number_format($previewNet, 0) }}</span>
+                        </div>
+                    @endif
                     <div class="flex justify-between font-semibold text-base border-t border-[#E7DFCF] pt-3">
                         <span>Total (COD)</span>
-                        <span>&#2547; {{ number_format($this->total(), 0) }}</span>
+                        <span class="tabular-nums">&#2547; {{ number_format($this->total(), 0) }}</span>
                     </div>
                 </div>
 
@@ -389,6 +408,12 @@
                 <div class="min-w-0 flex-1">
                     <p class="text-[11px] uppercase tracking-wide text-[#8C8474]">Total (COD)</p>
                     <p class="font-semibold tabular-nums text-[#1E1E1E]">&#2547; {{ number_format($this->total(), 0) }}</p>
+                    @if ($this->previewNetRevenue() !== null)
+                        @php($stickyNet = $this->previewNetRevenue())
+                        <p class="text-[11px] text-[#8C8474]">Net
+                            <span @class(['tabular-nums font-medium', 'text-rose-600' => $stickyNet < 0, 'text-[#6B6459]' => $stickyNet >= 0])>&#2547;{{ number_format($stickyNet, 0) }}</span>
+                        </p>
+                    @endif
                 </div>
                 <button type="submit"
                     wire:loading.attr="disabled"

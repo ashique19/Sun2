@@ -13,11 +13,15 @@ class OrderProduct extends Model
     protected function casts(): array
     {
         return [
-            'price' => 'decimal:2',
-            'purchase_price' => 'decimal:2',
-            'line_total' => 'decimal:2',
-            'to_be_returned' => 'boolean',
-            'return_received' => 'boolean',
+            'price'             => 'decimal:2',
+            'purchase_price'    => 'decimal:2',
+            'base_price'        => 'decimal:2',
+            'commission_rate'   => 'decimal:2',
+            'commission_earned' => 'decimal:2',
+            'max_discount'      => 'decimal:2',
+            'line_total'        => 'decimal:2',
+            'to_be_returned'    => 'boolean',
+            'return_received'   => 'boolean',
             'returned_quantity' => 'integer',
         ];
     }

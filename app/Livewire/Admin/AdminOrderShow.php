@@ -5,9 +5,12 @@ namespace App\Livewire\Admin;
 use App\Livewire\Concerns\ManagesProductImagePreview;
 use App\Models\Courier;
 use App\Models\Order;
+use App\Models\PaymentMethod;
 use App\Services\Admin\OrderDispatchService;
 use App\Services\Admin\OrderStatusService;
 use App\Services\Couriers\CourierApiRegistry;
+use App\Services\Orders\OrderCourierChargeSync;
+use App\Services\Orders\OrderPaymentRecorder;
 use App\Support\AdminAccess;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -29,6 +32,18 @@ class AdminOrderShow extends Component
 
     public string $manualTracker = '';
 
+    public string $paymentAmount = '';
+
+    public string $paymentMethod = 'cash';
+
+    public string $paymentKind = 'partial';
+
+    public string $paymentNote = '';
+
+    public string $courierChargeOverride = '';
+
+    public string $courierChargeReason = '';
+
     public ?string $message = null;
 
     public ?string $error = null;
@@ -41,6 +56,9 @@ class AdminOrderShow extends Component
             'items.product:id,slug,name',
             'items.product.images:id,product_id,path,is_primary,sort_order',
             'coupon',
+            'adjustments',
+            'adjustmentLogs.actor',
+            'paymentTransactions.receivedBy',
             'courier',
             'statusHistory.changedBy',
             'courierLogs.courier',
@@ -51,6 +69,12 @@ class AdminOrderShow extends Component
             ?? Courier::query()->where('is_active', true)->where('is_default', true)->value('id')
             ?? Courier::query()->where('is_active', true)->where('slug', 'steadfast')->value('id')
             ?? Courier::query()->where('is_active', true)->orderBy('name')->value('id');
+        $this->courierChargeOverride = (string) (int) round((float) $order->courier_charge);
+
+        $defaultPaymentMethod = PaymentMethod::query()->active()->value('code');
+        $this->paymentMethod = is_string($defaultPaymentMethod) && $defaultPaymentMethod !== ''
+            ? $defaultPaymentMethod
+            : 'cash';
 
         $apiCouriers = Courier::query()
             ->where('is_active', true)
@@ -119,7 +143,7 @@ class AdminOrderShow extends Component
         try {
             $this->order = $dispatch->dispatchViaApi($this->order, $this->apiCourierSlug);
             $this->status = $this->order->status;
-            $this->order->load(['courier', 'statusHistory.changedBy', 'courierLogs.courier']);
+            $this->order->load(['courier', 'statusHistory.changedBy', 'courierLogs.courier', 'adjustments', 'adjustmentLogs.actor', 'paymentTransactions.receivedBy']);
             $this->message = 'Dispatched via '.$this->order->courier?->name.'. Tracking: '.$this->order->courier_tracker;
         } catch (\Throwable $e) {
             $this->error = $e->getMessage();
@@ -161,6 +185,69 @@ class AdminOrderShow extends Component
         }
     }
 
+    public function recordPayment(OrderPaymentRecorder $recorder): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        $this->validate([
+            'paymentAmount' => ['required', 'numeric', 'min:0.01'],
+            'paymentMethod' => ['required', 'string', 'max:32', 'exists:payment_methods,code'],
+            'paymentKind' => ['required', 'string', 'in:advance,partial,settlement'],
+            'paymentNote' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $meta = filled($this->paymentNote) ? ['note' => $this->paymentNote] : null;
+
+        $recorder->record(
+            order: $this->order,
+            method: $this->paymentMethod,
+            amount: (float) $this->paymentAmount,
+            kind: $this->paymentKind,
+            reference: null,
+            actor: auth()->user(),
+            meta: $meta,
+        );
+
+        $this->order->refresh()->load(['adjustmentLogs.actor', 'paymentTransactions.receivedBy']);
+        $this->paymentAmount = '';
+        $this->paymentNote = '';
+        $this->message = 'Payment recorded.';
+    }
+
+    public function updateCourierCharge(OrderCourierChargeSync $courierSync): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        $this->validate([
+            'courierChargeOverride' => ['required', 'numeric', 'min:0'],
+            'courierChargeReason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $meta = filled($this->courierChargeReason)
+            ? ['reason' => $this->courierChargeReason]
+            : null;
+
+        $courierSync->set(
+            order: $this->order,
+            amount: (float) $this->courierChargeOverride,
+            phase: 'manual',
+            actor: auth()->user(),
+            meta: $meta,
+        );
+
+        $this->order->refresh()->load(['adjustmentLogs.actor']);
+        $this->courierChargeOverride = (string) (int) round((float) $this->order->courier_charge);
+        $this->courierChargeReason = '';
+        $this->message = 'Courier charge updated.';
+    }
+
+
     public function render(CourierApiRegistry $courierRegistry)
     {
         $apiCouriers = Courier::query()
@@ -172,6 +259,7 @@ class AdminOrderShow extends Component
         return view('livewire.admin.admin-order-show', [
             'couriers' => Courier::query()->where('is_active', true)->orderBy('name')->get(),
             'apiCouriers' => $apiCouriers,
+            'paymentMethods' => PaymentMethod::query()->active()->get(['id', 'name', 'code']),
             'readOnly' => AdminAccess::isModeratorOnly(),
         ])->title($this->title());
     }

@@ -113,6 +113,7 @@ class StorefrontCheckout extends Component
         $this->couponError = null;
         $this->suppressAddressGuess = true;
         $this->addressLocationHint = null;
+        $this->resetErrorBag(['cityId', 'areaId']);
     }
 
     public function updatedAreaId(): void
@@ -120,6 +121,7 @@ class StorefrontCheckout extends Component
         $this->couponError = null;
         $this->suppressAddressGuess = true;
         $this->addressLocationHint = null;
+        $this->resetErrorBag('areaId');
     }
 
     public function updatedAddress(AddressLocationGuesser $guesser): void
@@ -127,10 +129,12 @@ class StorefrontCheckout extends Component
         $guess = $guesser->guess($this->address);
 
         if ($guess) {
-            $this->cityId = $guess['city_id'];
-            $this->areaId = $guess['area_id'];
-            $this->addressLocationHint = 'Detected: '.$guess['label'];
-            $this->suppressAddressGuess = false;
+            // Keep a manual city/area choice; only auto-fill when the customer has not overridden.
+            if (! $this->suppressAddressGuess) {
+                $this->cityId = $guess['city_id'];
+                $this->areaId = $guess['area_id'];
+                $this->addressLocationHint = 'Detected: '.$guess['label'];
+            }
 
             return;
         }
@@ -246,8 +250,8 @@ class StorefrontCheckout extends Component
             }
         }
 
-        $area = Area::query()->with('city')->find($this->areaId);
-        if (! $area || $area->city_id !== $this->cityId) {
+        $area = $this->resolveSelectedArea();
+        if (! $area) {
             $this->addError('areaId', __('storefront.invalid_area'));
 
             return;
@@ -298,8 +302,8 @@ class StorefrontCheckout extends Component
             return;
         }
 
-        $area = Area::query()->with('city')->find($this->areaId);
-        if (! $area || $area->city_id !== $this->cityId) {
+        $area = $this->resolveSelectedArea();
+        if (! $area) {
             $this->otpError = __('storefront.otp_invalid_location');
 
             return;
@@ -382,6 +386,25 @@ class StorefrontCheckout extends Component
             'selectedArea' => $selectedArea,
             'itemCount' => $itemCount,
         ]);
+    }
+
+    /**
+     * Resolve the selected area only when it belongs to the selected city.
+     * Cast IDs before comparing — Eloquent may return city_id as a string.
+     */
+    private function resolveSelectedArea(): ?Area
+    {
+        if (! $this->areaId || ! $this->cityId) {
+            return null;
+        }
+
+        $area = Area::query()->with('city')->find($this->areaId);
+
+        if (! $area || (int) $area->city_id !== (int) $this->cityId) {
+            return null;
+        }
+
+        return $area;
     }
 
     /** @return list<string> */

@@ -13,6 +13,7 @@ class Area extends Model
     protected function casts(): array
     {
         return [
+            'city_id' => 'integer',
             'is_active' => 'boolean',
             'delivery_charge_upto_5' => 'integer',
             'delivery_charge_over_5' => 'integer',

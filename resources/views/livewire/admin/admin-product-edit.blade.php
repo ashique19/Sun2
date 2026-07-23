@@ -56,6 +56,12 @@
                     <input type="number" min="0" step="1" wire:model.live="purchase_price" class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
                 </div>
                 <div>
+                    <label class="block text-sm font-medium mb-1">Reseller commission (&#2547; / unit)</label>
+                    <input type="number" min="0" step="1" wire:model.live="commission" class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                    <p class="mt-1 text-xs text-[#8C8474]">Base commission at catalog price. Reseller markup above price is added on top.</p>
+                    @error('commission') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+                </div>
+                <div>
                     <label class="block text-sm font-medium mb-1">Stock quantity</label>
                     <input type="number" wire:model.live="stock_quantity" class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
                 </div>

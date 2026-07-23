@@ -38,6 +38,11 @@ class Order extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function reseller(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reseller_id');
+    }
+
     public function coupon(): BelongsTo
     {
         return $this->belongsTo(Coupon::class);

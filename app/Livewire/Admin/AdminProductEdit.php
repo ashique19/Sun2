@@ -32,6 +32,8 @@ class AdminProductEdit extends Component
 
     public string $purchase_price = '0';
 
+    public string $commission = '0';
+
     public int $stock_quantity = 0;
 
     public int $display_order = 0;
@@ -71,6 +73,7 @@ class AdminProductEdit extends Component
         $this->description = (string) ($product->description ?? '');
         $this->price = (string) (int) round((float) $product->price);
         $this->purchase_price = (string) (int) round((float) $product->purchase_price);
+        $this->commission = (string) (int) round((float) $product->commission);
         $this->stock_quantity = (int) $product->stock_quantity;
         $this->display_order = (int) $product->display_order;
         $this->is_published = (bool) $product->is_published;
@@ -167,6 +170,7 @@ class AdminProductEdit extends Component
             'description' => ['nullable', 'string'],
             'price' => ['required', 'numeric', 'min:0'],
             'purchase_price' => ['nullable', 'numeric', 'min:0'],
+            'commission' => ['nullable', 'numeric', 'min:0'],
             'stock_quantity' => ['integer', 'min:0'],
             'display_order' => ['integer', 'min:0', 'max:32767'],
             'is_published' => ['boolean'],
@@ -179,6 +183,7 @@ class AdminProductEdit extends Component
 
         $validated['price'] = (int) round((float) $validated['price']);
         $validated['purchase_price'] = (int) round((float) ($validated['purchase_price'] ?? 0));
+        $validated['commission'] = (int) round((float) ($validated['commission'] ?? 0));
         $validated['sku'] = $validated['sku'] !== '' ? $validated['sku'] : null;
         $validated['description'] = $validated['description'] !== '' ? $validated['description'] : null;
 

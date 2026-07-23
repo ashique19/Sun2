@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\AdminAccess;
 use App\Support\PhoneNumber;
+use App\Support\ResellerAccess;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -36,6 +37,11 @@ class User extends Authenticatable
         return AdminAccess::canViewNewOrder($order, $this);
     }
 
+    public function isReseller(): bool
+    {
+        return ResellerAccess::isReseller($this);
+    }
+
     protected $fillable = [
         'name',
         'phone',
@@ -58,6 +64,7 @@ class User extends Authenticatable
             'phone_verified_at' => 'datetime',
             'referral_benefit_expiry_date' => 'datetime',
             'referral_balance' => 'decimal:2',
+            'reseller_balance' => 'decimal:2',
             'password' => 'hashed',
             'is_active' => 'boolean',
         ];
@@ -66,6 +73,16 @@ class User extends Authenticatable
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class);
+    }
+
+    public function resellerOrders(): HasMany
+    {
+        return $this->hasMany(Order::class, 'reseller_id');
+    }
+
+    public function resellerWalletEntries(): HasMany
+    {
+        return $this->hasMany(ResellerWalletEntry::class);
     }
 
     public function addresses(): HasMany

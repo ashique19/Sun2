@@ -6,6 +6,7 @@ use App\Models\CourierData;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
 use App\Services\Admin\OrderStatusService;
+use App\Services\Reseller\ResellerCommissionService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -13,6 +14,7 @@ class CourierWebhookSupport
 {
     public function __construct(
         private readonly OrderStatusService $orderStatus,
+        private readonly ResellerCommissionService $resellerCommissions,
     ) {}
 
     /**
@@ -111,6 +113,10 @@ class CourierWebhookSupport
         }
 
         $this->orderStatus->update($order, $mappedStatus, $message, null, $extra);
+
+        if ($mappedStatus === 'delivered') {
+            $this->resellerCommissions->creditOnDelivered($order->fresh(['items']));
+        }
     }
 
     public function recordHistory(Order $order, string $status, string $note): void

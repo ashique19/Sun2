@@ -18,6 +18,7 @@ class Product extends Model
             'price' => 'decimal:2',
             'compare_at_price' => 'decimal:2',
             'purchase_price' => 'decimal:2',
+            'commission' => 'decimal:2',
             'is_published' => 'boolean',
             'is_featured' => 'boolean',
             'is_new' => 'boolean',

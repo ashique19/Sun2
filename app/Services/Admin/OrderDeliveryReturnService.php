@@ -4,6 +4,7 @@ namespace App\Services\Admin;
 
 use App\Models\Order;
 use App\Services\Orders\OrderStockService;
+use App\Services\Reseller\ResellerCommissionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -14,6 +15,7 @@ class OrderDeliveryReturnService
         private readonly OrderStatusService $statusService,
         private readonly CourierBalanceService $courierBalances,
         private readonly OrderStockService $stock,
+        private readonly ResellerCommissionService $resellerCommissions,
     ) {}
 
     public function markDelivered(Order $order, ?float $collectedAmount = null, ?int $changedBy = null): Order
@@ -23,7 +25,7 @@ class OrderDeliveryReturnService
         $collected = $collectedAmount ?? (float) $order->cod_amount;
 
         return DB::transaction(function () use ($order, $collected, $changedBy) {
-            return $this->statusService->update(
+            $updated = $this->statusService->update(
                 $order,
                 'delivered',
                 'Marked delivered.',
@@ -36,6 +38,10 @@ class OrderDeliveryReturnService
                     'actual_delivery_date' => $order->actual_delivery_date ?? now(),
                 ],
             );
+
+            $this->resellerCommissions->creditOnDelivered($updated->fresh(['items']));
+
+            return $updated;
         });
     }
 
@@ -62,7 +68,7 @@ class OrderDeliveryReturnService
                 $this->courierBalances->reverseDispatchCredit($order->courier, $order, $changedBy);
             }
 
-            return $this->statusService->update(
+            $updated = $this->statusService->update(
                 $order,
                 'returned',
                 'Cancel and Return (no delivery charge).',
@@ -75,6 +81,10 @@ class OrderDeliveryReturnService
                     'payment_status' => 'unpaid',
                 ],
             );
+
+            $this->resellerCommissions->reverseForOrder($updated->fresh(['items']));
+
+            return $updated;
         });
     }
 

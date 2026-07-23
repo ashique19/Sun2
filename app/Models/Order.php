@@ -70,6 +70,15 @@ class Order extends Model
     }
 
     /**
+     * Orders that may be submitted (or re-submitted) to a courier API.
+     * Dispatched orders are included so tracking can be replaced without changing status again.
+     */
+    public function canSendToCourierApi(): bool
+    {
+        return in_array($this->status, ['new', 'confirmed', 'dispatched'], true);
+    }
+
+    /**
      * Parcel / consignment ID for thermal labels (Steadfast Id), not the tracking code.
      */
     public function printParcelId(): ?string

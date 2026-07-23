@@ -10,6 +10,19 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Order extends Model
 {
+    public const PLACED_VIA_STOREFRONT = 'storefront';
+
+    public const PLACED_VIA_ADMIN = 'admin';
+
+    public const PLACED_VIA_RESELLER = 'reseller';
+
+    /** @var list<string> */
+    public const PLACED_VIA_OPTIONS = [
+        self::PLACED_VIA_STOREFRONT,
+        self::PLACED_VIA_ADMIN,
+        self::PLACED_VIA_RESELLER,
+    ];
+
     protected $guarded = [];
 
     protected function casts(): array
@@ -64,15 +77,28 @@ class Order extends Model
     }
 
     /**
-     * Who created the order record: staff/reseller name, or Customer for storefront.
+     * Who placed the order: named user when known, otherwise channel fallback.
      */
-    public function createdByLabel(): string
+    public function placedByLabel(): string
     {
         $this->loadMissing('createdBy');
 
         $name = trim((string) ($this->createdBy?->name ?? ''));
+        if ($name !== '') {
+            return $name;
+        }
 
-        return $name !== '' ? $name : 'Customer';
+        return match ($this->placed_via) {
+            self::PLACED_VIA_ADMIN => 'Admin',
+            self::PLACED_VIA_RESELLER => 'Reseller',
+            default => 'Customer',
+        };
+    }
+
+    /** @deprecated Use placedByLabel() */
+    public function createdByLabel(): string
+    {
+        return $this->placedByLabel();
     }
 
     /** Primary/legacy coupon. Source of truth is adjustments() for stacked coupons. */

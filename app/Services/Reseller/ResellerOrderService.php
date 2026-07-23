@@ -50,6 +50,7 @@ class ResellerOrderService
                 'reseller_id' => $resellerId,
                 'created_by' => $resellerId,
                 'updated_by' => $resellerId,
+                'placed_via' => Order::PLACED_VIA_RESELLER,
             ]));
 
             $order->update(['order_number' => (string) $order->id]);

@@ -40,6 +40,7 @@ class AdminOrderService
                 'order_number' => 'PENDING',
                 'created_by' => auth()->id(),
                 'updated_by' => auth()->id(),
+                'placed_via' => Order::PLACED_VIA_ADMIN,
             ]));
 
             $order->update(['order_number' => (string) $order->id]);

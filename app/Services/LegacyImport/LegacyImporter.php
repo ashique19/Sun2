@@ -2,6 +2,7 @@
 
 namespace App\Services\LegacyImport;
 
+use App\Models\Order;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -461,6 +462,7 @@ class LegacyImporter
                         'payment_date' => $this->validTimestamp($row->payment_date),
                         'created_by' => $this->validUserId($row->created_by),
                         'updated_by' => $this->validUserId($row->updated_by),
+                        'placed_via' => $this->inferPlacedVia($row),
                         'legacy_id' => $row->id,
                         'created_at' => $row->created_at,
                         'updated_at' => $row->updated_at,
@@ -732,6 +734,22 @@ class LegacyImporter
         }
 
         return $string;
+    }
+
+    private function inferPlacedVia(object $row): string
+    {
+        $createdBy = $this->validUserId($row->created_by ?? null);
+        $resellerId = $this->validUserId($row->reseller_id ?? null);
+
+        if ($createdBy && $resellerId && $createdBy === $resellerId) {
+            return Order::PLACED_VIA_RESELLER;
+        }
+
+        if ($createdBy) {
+            return Order::PLACED_VIA_ADMIN;
+        }
+
+        return Order::PLACED_VIA_STOREFRONT;
     }
 
     private function validUserId(mixed $value): ?int

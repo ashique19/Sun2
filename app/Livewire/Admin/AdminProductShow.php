@@ -4,41 +4,51 @@ namespace App\Livewire\Admin;
 
 use App\Models\Product;
 use App\Services\Admin\SalesReportService;
+use App\Support\AdminAccess;
 use Livewire\Attributes\Layout;
-use Livewire\Attributes\Title;
 use Livewire\Component;
 
-#[Title('Product Performance')]
 #[Layout('components.layouts.admin')]
-class AdminProductPerformance extends Component
+class AdminProductShow extends Component
 {
     public Product $product;
 
     public function mount(Product $product): void
     {
+        AdminAccess::ensureStaffAdmin();
+
         $this->product = $product->load([
-            'images' => fn ($q) => $q->orderByDesc('is_primary')->orderBy('sort_order')->limit(1),
             'category:id,name',
+            'images' => fn ($q) => $q->orderByDesc('is_primary')->orderBy('sort_order'),
         ]);
+    }
+
+    public function title(): string
+    {
+        return $this->product->name;
     }
 
     public function render(SalesReportService $reports)
     {
+        $summary = $reports->productSummary($this->product);
+        $channels = $reports->productChannelBreakdown($this->product);
         $rows = $reports->productPerformance($this->product, 48);
 
-        $totals = [
+        $monthTotals = [
             'sales_volume' => array_sum(array_column($rows, 'sales_volume')),
             'sales_value' => array_sum(array_column($rows, 'sales_value')),
             'delivered_volume' => array_sum(array_column($rows, 'delivered_volume')),
             'delivered_value' => array_sum(array_column($rows, 'delivered_value')),
         ];
-        $totals['delivered_pct'] = $totals['sales_volume'] > 0
-            ? round(($totals['delivered_volume'] / $totals['sales_volume']) * 100, 1)
+        $monthTotals['delivered_pct'] = $monthTotals['sales_volume'] > 0
+            ? round(($monthTotals['delivered_volume'] / $monthTotals['sales_volume']) * 100, 1)
             : null;
 
-        return view('livewire.admin.admin-product-performance', [
+        return view('livewire.admin.admin-product-show', [
+            'summary' => $summary,
+            'channels' => $channels,
             'rows' => $rows,
-            'totals' => $totals,
-        ])->title('Performance — '.$this->product->name);
+            'monthTotals' => $monthTotals,
+        ])->title($this->title());
     }
 }

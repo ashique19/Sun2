@@ -35,6 +35,7 @@
                         <th class="px-4 py-3 font-medium">Category</th>
                         <th class="px-4 py-3 font-medium">Price</th>
                         <th class="px-4 py-3 font-medium">Cost</th>
+                        <th class="px-4 py-3 font-medium">Commission</th>
                         <th class="px-4 py-3 font-medium">Max disc.</th>
                         <th class="px-4 py-3 font-medium">Stock</th>
                         <th class="px-4 py-3 font-medium">Published</th>
@@ -51,7 +52,10 @@
                                         <img src="{{ \App\Support\StorefrontAssets::url($thumb) }}" alt="" class="w-10 h-10 rounded object-cover bg-[#FAF6EF]">
                                     @endif
                                     <div>
-                                        <div class="font-medium line-clamp-1">{{ $product->name }}</div>
+                                        <a href="{{ route('admin.products.show', $product) }}" wire:navigate
+                                            class="font-medium line-clamp-1 text-[#C9A227] hover:underline">
+                                            {{ $product->name }}
+                                        </a>
                                         <div class="text-xs text-[#8C8474]">{{ $product->sku ?: $product->slug }}</div>
                                     </div>
                                 </div>
@@ -90,6 +94,10 @@
                                     @endif
                                 </td>
                             @endforeach
+
+                            <td class="px-4 py-3 tabular-nums text-[#6B6459]">
+                                ৳ {{ number_format((float) $product->commission, 0) }}
+                            </td>
 
                             <td class="px-4 py-3 tabular-nums text-[#6B6459]">
                                 @if ($product->max_discount !== null)
@@ -135,8 +143,8 @@
                                 </button>
                             </td>
                             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
-                                <a href="{{ route('admin.products.performance', $product) }}" target="_blank"
-                                    class="text-[#6B6459] hover:text-[#C9A227] hover:underline">Performance</a>
+                                <a href="{{ route('admin.products.show', $product) }}" wire:navigate
+                                    class="text-[#6B6459] hover:text-[#C9A227] hover:underline">View</a>
                                 <a href="{{ route('admin.products.edit', $product) }}" wire:navigate class="text-[#C9A227] hover:underline">Edit</a>
                                 <button type="button"
                                     wire:click="delete({{ $product->id }})"
@@ -146,7 +154,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="px-4 py-8 text-center text-[#8C8474]">No products found.</td>
+                            <td colspan="9" class="px-4 py-8 text-center text-[#8C8474]">No products found.</td>
                         </tr>
                     @endforelse
                 </tbody>

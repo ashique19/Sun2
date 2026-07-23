@@ -18,7 +18,7 @@ use App\Livewire\Admin\AdminOrderForm;
 use App\Livewire\Admin\AdminOrderShow;
 use App\Livewire\Admin\AdminOrders;
 use App\Livewire\Admin\AdminProductEdit;
-use App\Livewire\Admin\AdminProductPerformance;
+use App\Livewire\Admin\AdminProductShow;
 use App\Livewire\Admin\AdminProducts;
 use App\Livewire\Admin\AdminReviews;
 use App\Livewire\Admin\AdminSalesByMonth;
@@ -173,8 +173,11 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/orders/{order}/edit', AdminOrderForm::class)->whereNumber('order')->name('orders.edit');
         Route::get('/products', AdminProducts::class)->name('products');
         Route::get('/products/create', AdminProductEdit::class)->name('products.create');
-        Route::get('/products/{product:id}/performance', AdminProductPerformance::class)->whereNumber('product')->name('products.performance');
+        Route::get('/products/{product:id}/performance', function (\App\Models\Product $product) {
+            return redirect()->route('admin.products.show', $product);
+        })->whereNumber('product')->name('products.performance');
         Route::get('/products/{product:id}/edit', AdminProductEdit::class)->name('products.edit');
+        Route::get('/products/{product:id}', AdminProductShow::class)->whereNumber('product')->name('products.show');
         Route::get('/categories', AdminCategories::class)->name('categories');
         Route::get('/categories/create', AdminCategoryEdit::class)->name('categories.create');
         Route::get('/categories/{category}/edit', AdminCategoryEdit::class)->name('categories.edit');

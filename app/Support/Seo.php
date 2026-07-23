@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Product;
 use Illuminate\Support\Str;
 
 class Seo
@@ -15,6 +16,22 @@ class Seo
         }
 
         return Str::limit($text, 160, '');
+    }
+
+    /**
+     * Title used in WhatsApp / Messenger / Facebook link previews.
+     * Format: "৳ 1,500 (Necklace, earring set…)"
+     */
+    public static function productShareTitle(Product $product): string
+    {
+        $price = '৳ '.number_format((float) $product->price, 0);
+        $name = trim((string) $product->name);
+
+        if ($name === '') {
+            return $price;
+        }
+
+        return $price.' ('.$name.')';
     }
 
     public static function absoluteUrl(?string $pathOrUrl): string

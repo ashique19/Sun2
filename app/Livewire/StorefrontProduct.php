@@ -124,12 +124,16 @@ class StorefrontProduct extends Component
 
     public function render()
     {
-        $image = StorefrontAssets::mediumUrl($this->product->primaryImagePath())
+        // Prefer largest image for Messenger / WhatsApp link previews.
+        $image = StorefrontAssets::largestAvailableUrl($this->product->primaryImagePath())
             ?? StorefrontAssets::url($this->product->primaryImagePath());
+
+        $shareTitle = Seo::productShareTitle($this->product);
 
         return view('livewire.storefront-product')
             ->title($this->title())
             ->layoutData([
+                'seoOgTitle' => $shareTitle,
                 'seoDescription' => Seo::description(
                     $this->product->meta_description
                         ?: (trim((string) $this->product->description_bn) !== '' ? $this->product->description_bn : $this->product->description),
@@ -137,7 +141,10 @@ class StorefrontProduct extends Component
                 ),
                 'seoCanonical' => route('product.show', $this->product),
                 'seoImage' => $image,
+                'seoImageAlt' => $this->product->name,
                 'seoType' => 'product',
+                'seoPriceAmount' => number_format((float) $this->product->price, 2, '.', ''),
+                'seoPriceCurrency' => 'BDT',
             ]);
     }
 }

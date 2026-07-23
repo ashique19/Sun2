@@ -17,6 +17,8 @@ class AdminProducts extends Component
 {
     use WithPagination;
 
+    private const INLINE_FIELDS = ['price', 'purchase_price', 'stock_quantity'];
+
     #[Url]
     public string $search = '';
 
@@ -25,6 +27,12 @@ class AdminProducts extends Component
 
     #[Url]
     public string $published = '';
+
+    public ?int $editingProductId = null;
+
+    public ?string $editingField = null;
+
+    public string $editingValue = '';
 
     public function updatedSearch(): void
     {
@@ -39,6 +47,61 @@ class AdminProducts extends Component
     public function updatedPublished(): void
     {
         $this->resetPage();
+    }
+
+    public function startInlineEdit(int $productId, string $field, string $value = ''): void
+    {
+        if (! in_array($field, self::INLINE_FIELDS, true)) {
+            return;
+        }
+
+        Product::query()->findOrFail($productId);
+
+        $this->editingProductId = $productId;
+        $this->editingField = $field;
+        $this->editingValue = $value;
+        $this->resetValidation();
+    }
+
+    public function cancelInlineEdit(): void
+    {
+        $this->editingProductId = null;
+        $this->editingField = null;
+        $this->editingValue = '';
+        $this->resetValidation();
+    }
+
+    public function saveInlineEdit(): void
+    {
+        if ($this->editingProductId === null || $this->editingField === null) {
+            return;
+        }
+
+        $field = $this->editingField;
+
+        if (! in_array($field, self::INLINE_FIELDS, true)) {
+            $this->cancelInlineEdit();
+
+            return;
+        }
+
+        $this->validate([
+            'editingValue' => match ($field) {
+                'price' => ['required', 'numeric', 'min:0'],
+                'purchase_price' => ['nullable', 'numeric', 'min:0'],
+                'stock_quantity' => ['required', 'integer', 'min:0'],
+            },
+        ]);
+
+        $product = Product::query()->findOrFail($this->editingProductId);
+
+        $value = match ($field) {
+            'price', 'purchase_price' => (int) round((float) ($this->editingValue === '' ? 0 : $this->editingValue)),
+            'stock_quantity' => (int) $this->editingValue,
+        };
+
+        $product->update([$field => $value]);
+        $this->cancelInlineEdit();
     }
 
     public function togglePublished(int $productId): void

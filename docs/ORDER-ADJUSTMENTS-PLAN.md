@@ -1,6 +1,6 @@
-# Order Adjustments — Multiple Charges, Discounts & Coupons
+# Order Adjustments — Charges, Discounts, Coupons & Delivery Costs
 
-Additive redesign so orders support **many charges, discounts, and stacked coupons**, with a **full money change log**, without breaking the running `sun2` app.
+Additive redesign so orders support **many charges, discounts, and stacked coupons**, separate **customer delivery vs courier cost**, and a **full money change log**, without breaking the running `sun2` app.
 
 Status: **planning** (not implemented).
 

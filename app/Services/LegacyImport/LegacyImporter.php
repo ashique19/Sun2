@@ -96,7 +96,7 @@ class LegacyImporter
 
     private function seedRoles(): void
     {
-        foreach (['dev', 'admin', 'vendors', 'customers', 'moderator'] as $role) {
+        foreach (['dev', 'admin', 'reseller', 'customers', 'moderator'] as $role) {
             $this->roleIds[$role] = Role::findOrCreate($role)->id;
         }
     }
@@ -210,7 +210,7 @@ class LegacyImporter
     private function importUsers(Command $output): void
     {
         $count = 0;
-        $roleMap = [1 => 'dev', 2 => 'admin', 3 => 'vendors', 4 => 'customers', 5 => 'moderator'];
+        $roleMap = [1 => 'dev', 2 => 'admin', 3 => 'reseller', 4 => 'customers', 5 => 'moderator'];
 
         DB::connection('legacy')->table('users')->orderBy('id')->chunk(self::CHUNK, function ($rows) use (&$count, $roleMap) {
             $users = [];

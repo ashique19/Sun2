@@ -96,19 +96,29 @@ class AdminOrderService
     }
 
     /**
-     * @param  list<array{product_id:int,name:string,quantity:int,price:float,purchase_price:float,line_total:float,product_image:?string}>  $lines
+     * @param  list<array{product_id:int,name:string,quantity:int,price:float,purchase_price:float,line_total:float,product_image:?string,base_price?:float,commission_rate?:float}>  $lines
      */
     private function persistLines(Order $order, array $lines): void
     {
         foreach ($lines as $line) {
+            $basePrice = array_key_exists('base_price', $line)
+                ? (float) $line['base_price']
+                : (float) $line['price'];
+            $commissionRate = array_key_exists('commission_rate', $line)
+                ? (float) $line['commission_rate']
+                : 0.0;
+
             OrderProduct::query()->create([
                 'order_id' => $order->id,
                 'product_id' => $line['product_id'],
                 'name' => $line['name'],
                 'product_image' => $line['product_image'],
                 'quantity' => $line['quantity'],
+                'base_price' => $basePrice,
                 'price' => $line['price'],
                 'purchase_price' => $line['purchase_price'],
+                'commission_rate' => $commissionRate,
+                'commission_earned' => 0,
                 'line_total' => $line['line_total'],
             ]);
         }

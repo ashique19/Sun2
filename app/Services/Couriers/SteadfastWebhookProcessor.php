@@ -7,6 +7,7 @@ use App\Models\CourierData;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
 use App\Services\Admin\OrderStatusService;
+use App\Services\Reseller\ResellerCommissionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -14,6 +15,7 @@ class SteadfastWebhookProcessor
 {
     public function __construct(
         private readonly OrderStatusService $orderStatus,
+        private readonly ResellerCommissionService $resellerCommissions,
     ) {}
 
     /**
@@ -113,6 +115,10 @@ class SteadfastWebhookProcessor
                 $extra,
             );
 
+            if ($mappedStatus === 'delivered') {
+                $this->resellerCommissions->creditOnDelivered($order->fresh(['items']));
+            }
+
             return;
         }
 
@@ -134,6 +140,8 @@ class SteadfastWebhookProcessor
                 'due_amount' => 0,
                 'actual_delivery_date' => $this->parseTimestamp($payload['updated_at'] ?? null) ?? now(),
             ]);
+
+            $this->resellerCommissions->creditOnDelivered($order->fresh(['items']));
 
             return;
         }

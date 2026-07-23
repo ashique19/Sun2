@@ -15,6 +15,9 @@ class OrderProduct extends Model
         return [
             'price' => 'decimal:2',
             'purchase_price' => 'decimal:2',
+            'base_price' => 'decimal:2',
+            'commission_rate' => 'decimal:2',
+            'commission_earned' => 'decimal:2',
             'line_total' => 'decimal:2',
             'to_be_returned' => 'boolean',
             'return_received' => 'boolean',

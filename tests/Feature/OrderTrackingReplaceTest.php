@@ -53,6 +53,68 @@ class OrderTrackingReplaceTest extends TestCase
         ]);
 
         $this->assertTrue($order->isDispatchable());
+        $this->assertTrue($order->canSendToCourierApi());
+    }
+
+    public function test_dispatched_order_can_be_resent_to_courier_api(): void
+    {
+        $order = $this->order([
+            'courier_tracker' => 'OLDTRACK123',
+            'status' => 'dispatched',
+            'dispatch_date' => now()->subHour(),
+        ]);
+
+        $this->assertFalse($order->isDispatchable());
+        $this->assertTrue($order->canSendToCourierApi());
+    }
+
+    public function test_api_dispatch_replaces_tracking_on_already_dispatched_order_without_status_change(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $courier = Courier::query()->create([
+            'name' => 'Steadfast',
+            'slug' => 'steadfast',
+            'is_active' => true,
+            'is_default' => true,
+        ]);
+
+        $order = $this->order([
+            'courier_id' => $courier->id,
+            'courier_tracker' => 'SFR_OLD_CODE',
+            'courier_consignment_id' => '111',
+            'status' => 'dispatched',
+            'dispatch_date' => now()->subHour(),
+        ]);
+
+        $steadfast = Mockery::mock(SteadfastApiClient::class);
+        $steadfast->shouldReceive('createOrder')->once()->andReturn([
+            'consignment' => [
+                'consignment_id' => 270697677,
+                'tracking_code' => 'SFR_RESEND_CODE',
+            ],
+        ]);
+        $this->app->instance(SteadfastApiClient::class, $steadfast);
+
+        config([
+            'steadfast.api_key' => 'test-key',
+            'steadfast.secret_key' => 'test-secret',
+            'steadfast.base_url' => 'https://example.test',
+        ]);
+
+        $updated = app(OrderDispatchService::class)->dispatchViaApi(
+            $order,
+            'steadfast',
+            markDispatched: false,
+        );
+
+        $this->assertSame('SFR_RESEND_CODE', $updated->courier_tracker);
+        $this->assertSame('270697677', $updated->courier_consignment_id);
+        $this->assertSame('dispatched', $updated->status);
+        $this->assertDatabaseHas('order_status_history', [
+            'order_id' => $order->id,
+            'note' => 'Tracking replaced via Steadfast API. SFR_OLD_CODE → SFR_RESEND_CODE Parcel ID: 270697677',
+        ]);
     }
 
     public function test_manual_assign_replaces_existing_tracking_code(): void

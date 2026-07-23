@@ -507,7 +507,7 @@ class AdminOrders extends Component
     {
         AdminAccess::ensureStaffAdmin();
 
-        if ($this->segment !== 'new' || $this->selected === []) {
+        if (! in_array($this->segment, ['new', 'dispatched'], true) || $this->selected === []) {
             return;
         }
 
@@ -591,7 +591,7 @@ class AdminOrders extends Component
     {
         AdminAccess::ensureStaffAdmin();
 
-        if ($this->segment !== 'new' || $this->selected === []) {
+        if (! in_array($this->segment, ['new', 'dispatched'], true) || $this->selected === []) {
             return;
         }
 
@@ -607,6 +607,7 @@ class AdminOrders extends Component
 
         $orders = Order::query()
             ->whereIn('id', $this->selected)
+            ->whereIn('status', ['new', 'confirmed', 'dispatched'])
             ->orderBy('id')
             ->get(['id', 'order_number', 'name', 'status', 'courier_tracker']);
 
@@ -663,8 +664,8 @@ class AdminOrders extends Component
         try {
             $order = Order::query()->findOrFail($nextId);
 
-            if (! $order->isDispatchable()) {
-                throw new \RuntimeException('Order status does not allow dispatch.');
+            if (! $order->canSendToCourierApi()) {
+                throw new \RuntimeException('Order status does not allow courier API send.');
             }
 
             $order = $dispatch->dispatchViaApi($order, $this->sendToCourierSlug, markDispatched: false);

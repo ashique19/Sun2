@@ -425,6 +425,10 @@
                             </button>
                         @endif
                         @if ($segment === 'dispatched')
+                            <button type="button" wire:click="openSendTo"
+                                class="rounded-full bg-[#C9A227] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#b8931f]">
+                                Send to
+                            </button>
                             <button type="button"
                                 wire:click="markSelectedDelivered"
                                 wire:confirm="Mark {{ $selectedCount }} selected order(s) as delivered?"
@@ -458,8 +462,13 @@
                                 <div>
                                     <h2 class="font-semibold text-lg">Send to courier</h2>
                                     <p class="text-xs text-[#8C8474] mt-1">
-                                        Send {{ number_format($selectedCount) }} selected order(s) to the courier API.
-                                        Status stays unchanged until you mark them dispatched.
+                                        @if ($segment === 'dispatched')
+                                            Re-send {{ number_format($selectedCount) }} selected order(s) to the courier API.
+                                            Tracking codes are replaced; status stays dispatched.
+                                        @else
+                                            Send {{ number_format($selectedCount) }} selected order(s) to the courier API.
+                                            Status stays unchanged until you mark them dispatched.
+                                        @endif
                                     </p>
                                 </div>
                                 <button type="button" wire:click="closeSendModals" class="text-sm text-[#8C8474] hover:text-[#1E1E1E]">Close</button>

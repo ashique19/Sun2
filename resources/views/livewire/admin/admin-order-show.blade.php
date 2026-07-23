@@ -1,15 +1,15 @@
 <div>
-    <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div>
+    <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+        <div class="min-w-0">
             <a href="{{ route('admin.orders.new') }}" wire:navigate class="text-sm text-[#C9A227] hover:underline">&larr; Back to orders</a>
-            <h1 class="font-serif text-3xl font-semibold mt-2">Order #{{ $order->order_number }}</h1>
+            <h1 class="mt-2 font-serif text-2xl font-semibold sm:text-3xl">Order #{{ $order->order_number }}</h1>
             <p class="text-sm text-[#8C8474]">Placed {{ $order->placed_at?->format('d M Y, h:i A') }}</p>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
             <a href="{{ route('admin.orders.print', $order) }}" target="_blank"
                 title="Print label"
                 aria-label="Print label"
-                class="inline-flex items-center opacity-70 hover:opacity-100">
+                class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white opacity-80 hover:bg-[#FAF6EF] hover:opacity-100">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
                     <path fill="#6B6459" d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/>
                 </svg>
@@ -18,17 +18,17 @@
                 <a href="{{ route('admin.orders.create', ['repeat' => $order->id]) }}"
                     title="Repeat order"
                     aria-label="Repeat order"
-                    class="inline-flex items-center opacity-70 hover:opacity-100">
+                    class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white opacity-80 hover:bg-[#FAF6EF] hover:opacity-100">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
                         <path fill="#6B6459" d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
                     </svg>
                 </a>
                 <a href="{{ route('admin.orders.edit', $order) }}"
-                    class="rounded-lg border border-[#E0D6C2] bg-white px-4 py-1.5 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
+                    class="inline-flex h-9 items-center rounded-lg border border-[#E0D6C2] bg-white px-3 text-sm text-[#6B6459] hover:bg-[#FAF6EF] sm:px-4">
                     Edit order
                 </a>
             @endunless
-            <span class="rounded-full border border-[#E7DFCF] px-4 py-1 text-sm capitalize">{{ $order->status }}</span>
+            <span class="inline-flex h-9 items-center rounded-full border border-[#E7DFCF] bg-[#FAF6EF] px-3 text-sm capitalize sm:px-4">{{ $order->status }}</span>
         </div>
     </div>
 
@@ -39,55 +39,58 @@
         <div class="rounded-lg bg-rose-50 text-rose-700 text-sm px-4 py-3 mb-4">{{ $error }}</div>
     @endif
 
-    <div class="grid xl:grid-cols-3 gap-6 items-start">
-        <div class="xl:col-span-2 space-y-6">
-            <div class="rounded-xl border border-[#EFE7D6] bg-white p-6">
-                <h2 class="font-semibold mb-4">Customer &amp; Delivery</h2>
-                <dl class="grid sm:grid-cols-2 gap-4 text-sm">
-                    <div><dt class="text-[#8C8474]">Name</dt><dd class="font-medium">{{ $order->name }}</dd></div>
+    <div class="grid items-start gap-4 sm:gap-6 xl:grid-cols-3">
+        <div class="space-y-4 sm:space-y-6 xl:col-span-2">
+            <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
+                <h2 class="mb-4 font-semibold">Customer &amp; Delivery</h2>
+                <dl class="grid gap-3 text-sm sm:grid-cols-2 sm:gap-4">
+                    <div><dt class="text-[#8C8474]">Name</dt><dd class="font-medium break-words">{{ $order->name }}</dd></div>
                     <div><dt class="text-[#8C8474]">Phone</dt><dd class="font-medium">{{ $order->phone }}</dd></div>
-                    <div><dt class="text-[#8C8474]">Email</dt><dd>{{ $order->email ?: '—' }}</dd></div>
-                    <div><dt class="text-[#8C8474]">City</dt><dd>{{ $order->city }}@if($order->area), {{ $order->area }}@endif</dd></div>
-                    <div class="sm:col-span-2"><dt class="text-[#8C8474]">Address</dt><dd>{{ $order->address }}</dd></div>
+                    <div><dt class="text-[#8C8474]">Email</dt><dd class="break-all">{{ $order->email ?: '—' }}</dd></div>
+                    <div><dt class="text-[#8C8474]">City</dt><dd class="break-words">{{ $order->city }}@if($order->area), {{ $order->area }}@endif</dd></div>
+                    <div class="sm:col-span-2"><dt class="text-[#8C8474]">Address</dt><dd class="break-words">{{ $order->address }}</dd></div>
                     @if ($order->customer_note)
-                        <div class="sm:col-span-2"><dt class="text-[#8C8474]">Customer note</dt><dd>{{ $order->customer_note }}</dd></div>
+                        <div class="sm:col-span-2"><dt class="text-[#8C8474]">Customer note</dt><dd class="break-words whitespace-pre-line">{{ $order->customer_note }}</dd></div>
                     @endif
                 </dl>
             </div>
 
-            <div class="rounded-xl border border-[#EFE7D6] bg-white p-6">
-                <h2 class="font-semibold mb-4">Items</h2>
+            <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
+                <h2 class="mb-4 font-semibold">Items</h2>
                 <div class="space-y-3 text-sm">
                     @foreach ($order->items as $item)
-                        <div class="flex items-center justify-between gap-4">
-                            <div class="flex items-center gap-3 min-w-0">
-                                <x-order-product-thumb :item="$item" size="md" />
-                                <div class="min-w-0">
-                                    <p class="font-medium truncate">{{ $item->displayName() }}</p>
-                                    <p class="text-[#8C8474] {{ $item->quantity > 1 ? 'text-rose-600 font-medium' : '' }}">
-                                        Qty: {{ $item->quantity }}
-                                    </p>
+                        <div class="flex items-start gap-3">
+                            <x-order-product-thumb :item="$item" size="sm" class="mt-0.5" />
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-start justify-between gap-3">
+                                    <p class="font-medium leading-snug break-words">{{ $item->displayName() }}</p>
+                                    <span class="shrink-0 font-medium tabular-nums">&#2547; {{ number_format($item->line_total, 0) }}</span>
                                 </div>
+                                <p class="mt-1 text-[#8C8474] {{ $item->quantity > 1 ? 'text-rose-600 font-medium' : '' }}">
+                                    Qty: {{ $item->quantity }}
+                                    @if ((float) $item->price > 0 && (int) $item->quantity > 1)
+                                        <span class="text-[#8C8474]">&middot; &#2547; {{ number_format($item->price, 0) }} each</span>
+                                    @endif
+                                </p>
                             </div>
-                            <span class="shrink-0 font-medium">&#2547; {{ number_format($item->line_total, 0) }}</span>
                         </div>
                     @endforeach
                 </div>
-                <div class="border-t border-[#E7DFCF] mt-4 pt-4 space-y-2 text-sm">
-                    <div class="flex justify-between"><span class="text-[#6B6459]">Subtotal</span><span>&#2547; {{ number_format($order->subtotal, 0) }}</span></div>
-                    <div class="flex justify-between"><span class="text-[#6B6459]">Delivery</span><span>&#2547; {{ number_format($order->delivery_charge, 0) }}</span></div>
+                <div class="mt-4 space-y-2 border-t border-[#E7DFCF] pt-4 text-sm">
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Subtotal</span><span class="tabular-nums">&#2547; {{ number_format($order->subtotal, 0) }}</span></div>
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Delivery</span><span class="tabular-nums">&#2547; {{ number_format($order->delivery_charge, 0) }}</span></div>
                     @if ($order->charge > 0)
-                        <div class="flex justify-between"><span class="text-[#6B6459]">Charge</span><span>&#2547; {{ number_format($order->charge, 0) }}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Charge</span><span class="tabular-nums">&#2547; {{ number_format($order->charge, 0) }}</span></div>
                     @endif
                     @if ($order->discount > 0)
-                        <div class="flex justify-between text-emerald-700"><span>Discount</span><span>− &#2547; {{ number_format($order->discount, 0) }}</span></div>
+                        <div class="flex justify-between gap-3 text-emerald-700"><span>Discount</span><span class="tabular-nums">− &#2547; {{ number_format($order->discount, 0) }}</span></div>
                     @endif
-                    <div class="flex justify-between font-semibold text-base pt-2"><span>Total (COD)</span><span>&#2547; {{ number_format($order->total, 0) }}</span></div>
+                    <div class="flex justify-between gap-3 pt-2 text-base font-semibold"><span>Total (COD)</span><span class="tabular-nums">&#2547; {{ number_format($order->total, 0) }}</span></div>
                 </div>
             </div>
 
-            <div class="rounded-xl border border-[#EFE7D6] bg-white p-6">
-                <h2 class="font-semibold mb-4">Order Timeline</h2>
+            <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
+                <h2 class="mb-4 font-semibold">Order Timeline</h2>
                 @if ($order->statusHistory->isEmpty())
                     <p class="text-sm text-[#8C8474]">No history recorded.</p>
                 @else
@@ -108,9 +111,9 @@
             </div>
         </div>
 
-        <div class="space-y-6">
+        <div class="space-y-4 sm:space-y-6">
             @unless ($readOnly)
-            <form wire:submit="saveStatus" class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-4">
+            <form wire:submit="saveStatus" class="space-y-4 rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
                 <h2 class="font-semibold">Manage Order</h2>
                 <div>
                     <label class="block text-sm font-medium mb-1">Status</label>
@@ -132,7 +135,7 @@
                 </button>
             </form>
 
-            <div class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-4">
+            <div class="space-y-4 rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
                 <h2 class="font-semibold">Courier Dispatch</h2>
 
                 @if ($order->courier_tracker)
@@ -187,7 +190,7 @@
             </div>
             @else
                 @if (filled($order->admin_note))
-                    <div class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-2">
+                    <div class="space-y-2 rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
                         <h2 class="font-semibold">Admin note</h2>
                         <p class="text-sm text-[#6B6459] whitespace-pre-line">{{ $order->admin_note }}</p>
                     </div>

@@ -105,9 +105,9 @@
                     @if ($adminNote || $courierNote)
                         <div class="mt-3 space-y-2 border-t border-[#EFE7D6] pt-3">
                             @if ($adminNote)
-                                <div class="rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2.5">
-                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Admin</p>
-                                    <p class="mt-1 text-sm leading-relaxed text-[#1E1E1E] whitespace-pre-line break-words">{{ $adminNote }}</p>
+                                <div class="rounded-lg border-2 border-rose-500 bg-rose-50 px-3 py-2.5">
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-rose-700">Admin</p>
+                                    <p class="mt-1 text-sm font-medium leading-relaxed text-rose-800 whitespace-pre-line break-words">{{ $adminNote }}</p>
                                 </div>
                             @endif
                             @if ($courierNote)
@@ -264,9 +264,9 @@
                             @if ($adminNote || $courierNote)
                                 <div class="space-y-2 border-t border-[#EFE7D6] pt-3">
                                     @if ($adminNote)
-                                        <div class="rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2.5">
-                                            <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Admin</p>
-                                            <p class="mt-1 text-sm leading-relaxed text-[#1E1E1E] whitespace-pre-line break-words">{{ $adminNote }}</p>
+                                        <div class="rounded-lg border-2 border-rose-500 bg-rose-50 px-3 py-2.5">
+                                            <p class="text-[11px] font-semibold uppercase tracking-wide text-rose-700">Admin</p>
+                                            <p class="mt-1 text-sm font-medium leading-relaxed text-rose-800 whitespace-pre-line break-words">{{ $adminNote }}</p>
                                         </div>
                                     @endif
                                     @if ($courierNote)

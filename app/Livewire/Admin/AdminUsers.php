@@ -27,6 +27,7 @@ class AdminUsers extends Component
     public const SEGMENTS = [
         'customers' => 'Customers',
         'moderators' => 'Moderators',
+        'resellers' => 'Resellers',
     ];
 
     public function mount(string $segment = 'customers'): void
@@ -37,6 +38,7 @@ class AdminUsers extends Component
 
         Role::findOrCreate('customers');
         Role::findOrCreate('moderator');
+        Role::findOrCreate('reseller');
     }
 
     public function switchSegment(string $segment): void
@@ -109,7 +111,11 @@ class AdminUsers extends Component
 
     public function render()
     {
-        $role = $this->segment === 'moderators' ? 'moderator' : 'customers';
+        $role = match ($this->segment) {
+            'moderators' => 'moderator',
+            'resellers' => 'reseller',
+            default => 'customers',
+        };
 
         $users = User::query()
             ->role($role)
@@ -142,7 +148,11 @@ class AdminUsers extends Component
             return null;
         }
 
-        $expectedRole = $this->segment === 'moderators' ? 'moderator' : 'customers';
+        $expectedRole = match ($this->segment) {
+            'moderators' => 'moderator',
+            'resellers' => 'reseller',
+            default => 'customers',
+        };
 
         if (! $user->hasRole($expectedRole)) {
             $this->error = 'User is not in this list.';

@@ -7,6 +7,8 @@ use App\Models\CourierData;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
 use App\Services\Admin\OrderStatusService;
+use App\Services\Orders\OrderCourierChargeSync;
+use App\Services\Orders\OrderDeliverySettlement;
 use App\Services\Reseller\ResellerCommissionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -16,6 +18,8 @@ class SteadfastWebhookProcessor
     public function __construct(
         private readonly OrderStatusService $orderStatus,
         private readonly ResellerCommissionService $resellerCommissions,
+        private readonly OrderCourierChargeSync $courierChargeSync,
+        private readonly OrderDeliverySettlement $deliverySettlement,
     ) {}
 
     /**
@@ -38,12 +42,21 @@ class SteadfastWebhookProcessor
         $courierId = Courier::query()->where('slug', 'steadfast')->value('id');
 
         DB::transaction(function () use ($order, $payload, $notificationType, $courierId) {
-            CourierData::query()->create([
+            $courierData = CourierData::query()->create([
                 'order_id' => $order->id,
                 'courier_id' => $courierId,
                 'api_data' => $payload,
                 'created_at' => now(),
             ]);
+
+            $this->courierChargeSync->sync(
+                order: $order,
+                fee: $this->courierChargeSync->parseFeeFromPayload($payload),
+                actor: null,
+                phase: $notificationType === 'delivery_status' ? 'delivered' : 'tracking',
+                meta: ['source' => 'steadfast_webhook'],
+                courierDataId: (int) $courierData->id,
+            );
 
             $tracker = $payload['tracking_id'] ?? $payload['tracking_code'] ?? null;
             if ($tracker && ! $order->courier_tracker) {
@@ -92,11 +105,13 @@ class SteadfastWebhookProcessor
         }
 
         if ($mappedStatus === 'delivered') {
-            $cod = isset($payload['cod_amount']) ? (float) $payload['cod_amount'] : (float) $order->cod_amount;
-            $extra['payment_status'] = 'paid';
-            $extra['collected_amount'] = $cod;
-            $extra['paid_amount'] = $cod;
-            $extra['due_amount'] = 0;
+            $cod = isset($payload['cod_amount']) ? (float) $payload['cod_amount'] : $order->collectableAmount();
+            $this->deliverySettlement->recordCollection(
+                order: $order,
+                amount: $cod,
+                actor: null,
+                meta: ['source' => 'steadfast_webhook'],
+            );
             $extra['actual_delivery_date'] = $this->parseTimestamp($payload['updated_at'] ?? null) ?? now();
         }
 
@@ -133,11 +148,14 @@ class SteadfastWebhookProcessor
         $message = (string) ($payload['tracking_message'] ?? 'Steadfast tracking update.');
 
         if (preg_match('/delivered successfully/i', $message) && $order->status !== 'delivered') {
+            $this->deliverySettlement->recordCollection(
+                order: $order,
+                amount: $order->collectableAmount(),
+                actor: null,
+                meta: ['source' => 'steadfast_tracking'],
+            );
+
             $this->orderStatus->update($order, 'delivered', $message, null, [
-                'payment_status' => 'paid',
-                'collected_amount' => $order->cod_amount,
-                'paid_amount' => $order->cod_amount,
-                'due_amount' => 0,
                 'actual_delivery_date' => $this->parseTimestamp($payload['updated_at'] ?? null) ?? now(),
             ]);
 

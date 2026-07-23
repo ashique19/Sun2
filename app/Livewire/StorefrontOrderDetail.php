@@ -22,6 +22,7 @@ class StorefrontOrderDetail extends Component
             'items.product:id,slug,name',
             'items.product.images:id,product_id,path,is_primary,sort_order',
             'coupon',
+            'adjustments',
         ]);
     }
 

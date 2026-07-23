@@ -34,6 +34,8 @@ class AdminProductEdit extends Component
 
     public string $commission = '0';
 
+    public string $max_discount = '';
+
     public int $stock_quantity = 0;
 
     public int $display_order = 0;
@@ -74,6 +76,9 @@ class AdminProductEdit extends Component
         $this->price = (string) (int) round((float) $product->price);
         $this->purchase_price = (string) (int) round((float) $product->purchase_price);
         $this->commission = (string) (int) round((float) $product->commission);
+        $this->max_discount = $product->max_discount !== null
+            ? (string) (int) round((float) $product->max_discount)
+            : '';
         $this->stock_quantity = (int) $product->stock_quantity;
         $this->display_order = (int) $product->display_order;
         $this->is_published = (bool) $product->is_published;
@@ -105,7 +110,9 @@ class AdminProductEdit extends Component
             return;
         }
 
-        $this->message = 'Product saved.';
+        if (! str_starts_with((string) $this->message, 'Warning:')) {
+            $this->message = 'Product saved.';
+        }
     }
 
     /**
@@ -171,6 +178,7 @@ class AdminProductEdit extends Component
             'price' => ['required', 'numeric', 'min:0'],
             'purchase_price' => ['nullable', 'numeric', 'min:0'],
             'commission' => ['nullable', 'numeric', 'min:0'],
+            'max_discount' => ['nullable', 'numeric', 'min:0'],
             'stock_quantity' => ['integer', 'min:0'],
             'display_order' => ['integer', 'min:0', 'max:32767'],
             'is_published' => ['boolean'],
@@ -184,8 +192,16 @@ class AdminProductEdit extends Component
         $validated['price'] = (int) round((float) $validated['price']);
         $validated['purchase_price'] = (int) round((float) ($validated['purchase_price'] ?? 0));
         $validated['commission'] = (int) round((float) ($validated['commission'] ?? 0));
+        $validated['max_discount'] = isset($validated['max_discount']) && $validated['max_discount'] !== ''
+            ? (int) round((float) $validated['max_discount'])
+            : null;
         $validated['sku'] = $validated['sku'] !== '' ? $validated['sku'] : null;
         $validated['description'] = $validated['description'] !== '' ? $validated['description'] : null;
+
+        $marginCap = $validated['price'] - $validated['purchase_price'];
+        if ($validated['max_discount'] !== null && $validated['max_discount'] > $marginCap) {
+            $this->message = 'Warning: max discount (৳'.number_format($validated['max_discount'], 0).') exceeds unit margin (৳'.number_format(max(0, $marginCap), 0).'). Saved anyway.';
+        }
 
         if ($this->product) {
             $this->product->update($validated);

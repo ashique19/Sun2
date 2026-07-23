@@ -807,7 +807,7 @@ class AdminOrders extends Component
 
     public function render(CourierApiRegistry $courierRegistry, CourierTrackingService $tracking)
     {
-        $itemColumns = 'id,order_id,name,quantity,product_image,product_id';
+        $itemColumns = 'id,order_id,name,quantity,product_image,product_id,purchase_price';
 
         if ($this->segment === 'return-pending') {
             $itemColumns .= ',returned_quantity,to_be_returned,return_received';
@@ -816,6 +816,7 @@ class AdminOrders extends Component
         $with = [
             'courier:id,name,slug',
             'items:'.$itemColumns,
+            'adjustments:id,order_id,type,label,amount,sort_order',
         ];
 
         if ($this->segment === 'dispatched') {

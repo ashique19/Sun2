@@ -17,6 +17,7 @@ use App\Services\Admin\ProductImageService;
 use App\Services\Locations\LocationAliasLearner;
 use App\Services\Storefront\AddressLocationGuesser;
 use App\Services\Storefront\CheckoutPricing;
+use App\Services\Orders\OrderTotalCalculator;
 use App\Support\PhoneNumber;
 use App\Support\StorefrontAssets;
 use Illuminate\Support\Str;
@@ -840,7 +841,7 @@ class AdminOrderForm extends Component
             'city' => $city?->name,
             'area' => $area?->name,
             'placed_at' => $this->resolvedPlacedAt(),
-        ]);
+        ], (bool) $this->order);
 
         $lines = array_values(array_map(fn (array $line) => [
             'product_id' => $line['product_id'],
@@ -904,6 +905,54 @@ class AdminOrderForm extends Component
                 + $this->roundedMoney($this->charge)
                 - $this->roundedMoney($this->discount),
         );
+    }
+
+    public function previewCogs(): float
+    {
+        if ($this->lines === []) {
+            return 0.0;
+        }
+
+        $items = array_map(fn (array $line) => [
+            'purchase_price' => $line['purchase_price'],
+            'quantity' => (int) $line['quantity'],
+            'returned_quantity' => 0,
+        ], array_values($this->lines));
+
+        return app(OrderTotalCalculator::class)->cogsFromItems($items);
+    }
+
+    public function previewNetRevenue(): ?float
+    {
+        if ($this->lines === []) {
+            return null;
+        }
+
+        $adjustments = [];
+
+        if ($this->roundedMoney($this->charge) > 0) {
+            $adjustments[] = ['type' => 'charge', 'amount' => $this->roundedMoney($this->charge)];
+        }
+
+        if ($this->roundedMoney($this->discount) > 0) {
+            $adjustments[] = ['type' => 'discount', 'amount' => $this->roundedMoney($this->discount)];
+        }
+
+        $courierCharge = $this->order ? (float) $this->order->courier_charge : 0.0;
+
+        $items = array_map(fn (array $line) => [
+            'purchase_price' => $line['purchase_price'],
+            'quantity' => (int) $line['quantity'],
+            'returned_quantity' => 0,
+        ], array_values($this->lines));
+
+        return app(OrderTotalCalculator::class)->calculate(
+            subtotal: $this->subtotal(),
+            deliveryCharge: (float) $this->roundedMoney($this->deliveryCharge),
+            courierCharge: $courierCharge,
+            adjustments: $adjustments,
+            items: $items,
+        )->netRevenue;
     }
 
     public function updatedDeliveryCharge(mixed $value): void

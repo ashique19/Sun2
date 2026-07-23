@@ -197,6 +197,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::redirect('/users', '/admin/users/customers');
         Route::get('/users/customers', AdminUsers::class)->defaults('segment', 'customers')->name('users.customers');
         Route::get('/users/moderators', AdminUsers::class)->defaults('segment', 'moderators')->name('users.moderators');
+        Route::get('/users/resellers', AdminUsers::class)->defaults('segment', 'resellers')->name('users.resellers');
         Route::get('/users/create', AdminUserEdit::class)->name('users.create');
         Route::get('/customers/{user}', AdminCustomerShow::class)->whereNumber('user')->name('customers.show');
         Route::get('/users/{user}/edit', AdminUserEdit::class)->whereNumber('user')->name('users.edit');

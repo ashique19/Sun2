@@ -105,6 +105,10 @@
             class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.users.moderators') ? $active : $inactive }}">
             Moderators
         </a>
+        <a href="{{ route('admin.users.resellers') }}" wire:navigate {!! $click !!}
+            class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.users.resellers') ? $active : $inactive }}">
+            Resellers
+        </a>
         <p class="{{ $sectionLabel }}">Reports</p>
         <a href="{{ route('admin.reports.sales-by-month') }}" wire:navigate {!! $click !!}
             class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.reports.sales-by-month') ? $active : $inactive }}">
@@ -129,6 +133,10 @@
                 <a href="{{ route('admin.users.moderators') }}" wire:navigate
                     class="block rounded-lg px-3 {{ $linkPadSm }} {{ request()->routeIs('admin.users.moderators') ? $active : $inactive }}">
                     Moderators
+                </a>
+                <a href="{{ route('admin.users.resellers') }}" wire:navigate
+                    class="block rounded-lg px-3 {{ $linkPadSm }} {{ request()->routeIs('admin.users.resellers') ? $active : $inactive }}">
+                    Resellers
                 </a>
             </div>
         </div>

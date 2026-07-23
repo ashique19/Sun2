@@ -77,16 +77,156 @@
                     @endforeach
                 </div>
                 <div class="mt-4 space-y-2 border-t border-[#E7DFCF] pt-4 text-sm">
-                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Subtotal</span><span class="tabular-nums">&#2547; {{ number_format($order->subtotal, 0) }}</span></div>
-                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Delivery</span><span class="tabular-nums">&#2547; {{ number_format($order->delivery_charge, 0) }}</span></div>
-                    @if ($order->charge > 0)
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Subtotal (revenue)</span><span class="tabular-nums">&#2547; {{ number_format($order->subtotal, 0) }}</span></div>
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">COGS</span><span class="tabular-nums">&#2547; {{ number_format($order->cogs(), 0) }}</span></div>
+                    @foreach ($order->adjustments->where('type', 'charge') as $adj)
+                        <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ {{ $adj->label }}</span><span class="tabular-nums">&#2547; {{ number_format($adj->amount, 0) }}</span></div>
+                    @endforeach
+                    @foreach ($order->adjustments->whereIn('type', ['discount', 'coupon']) as $adj)
+                        <div class="flex justify-between gap-3 text-emerald-700"><span>− {{ $adj->label }}</span><span class="tabular-nums">&#2547; {{ number_format($adj->amount, 0) }}</span></div>
+                    @endforeach
+                    @if ($order->adjustments->isEmpty() && (float) $order->charge > 0)
                         <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Charge</span><span class="tabular-nums">&#2547; {{ number_format($order->charge, 0) }}</span></div>
                     @endif
-                    @if ($order->discount > 0)
+                    @if ($order->adjustments->isEmpty() && (float) $order->discount > 0)
                         <div class="flex justify-between gap-3 text-emerald-700"><span>Discount</span><span class="tabular-nums">− &#2547; {{ number_format($order->discount, 0) }}</span></div>
                     @endif
-                    <div class="flex justify-between gap-3 pt-2 text-base font-semibold"><span>Total (COD)</span><span class="tabular-nums">&#2547; {{ number_format($order->total, 0) }}</span></div>
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Customer delivery</span><span class="tabular-nums">&#2547; {{ number_format($order->delivery_charge, 0) }}</span></div>
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Courier cost</span><span class="tabular-nums">&#2547; {{ number_format($order->courier_charge, 0) }}</span></div>
+                    @php($deliveryMargin = $order->deliveryMargin())
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Delivery margin</span><span @class(['tabular-nums', 'text-rose-600' => $deliveryMargin < 0])>&#2547; {{ number_format($deliveryMargin, 0) }}</span></div>
+                    <div class="flex justify-between gap-3 font-medium"><span class="text-[#6B6459]">Net revenue</span><span @class(['tabular-nums', 'text-rose-600' => $order->netRevenue() < 0])>&#2547; {{ number_format($order->netRevenue(), 0) }}</span></div>
+                    <div class="flex justify-between gap-3 pt-2 text-base font-semibold border-t border-[#E7DFCF]"><span>Total (COD)</span><span class="tabular-nums">&#2547; {{ number_format($order->total, 0) }}</span></div>
+                    @if ((float) $order->paid_amount > 0 || (float) $order->due_amount > 0)
+                        <div class="flex justify-between gap-3 text-[#6B6459]"><span>Paid</span><span class="tabular-nums">&#2547; {{ number_format($order->paid_amount, 0) }}</span></div>
+                        <div class="flex justify-between gap-3 text-[#6B6459]"><span>Due</span><span class="tabular-nums">&#2547; {{ number_format($order->due_amount, 0) }}</span></div>
+                        <div class="flex justify-between gap-3 text-[#6B6459] capitalize"><span>Payment</span><span>{{ $order->payment_status }}</span></div>
+                    @endif
                 </div>
+            </div>
+
+            <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
+                <h2 class="mb-4 font-semibold">Payments</h2>
+                @if ($order->paymentTransactions->isNotEmpty())
+                    <div class="space-y-3 text-sm mb-4">
+                        @foreach ($order->paymentTransactions as $txn)
+                            <div class="flex flex-wrap items-start justify-between gap-2 border-b border-[#F0EBE0] pb-3 last:border-0 last:pb-0">
+                                <div>
+                                    <p class="font-medium uppercase">{{ $txn->method }}
+                                        @if ($txn->kind)
+                                            <span class="text-[#8C8474] normal-case">&middot; {{ $txn->kind }}</span>
+                                        @endif
+                                        <span class="text-[#8C8474] normal-case"> &middot; {{ $txn->status }}</span>
+                                    </p>
+                                    <p class="text-xs text-[#8C8474]">{{ ($txn->paid_at ?? $txn->created_at)?->format('d M Y, h:i A') }}
+                                        @if ($txn->receivedBy) &middot; {{ $txn->receivedBy->name }} @endif
+                                    </p>
+                                    @if ($txn->reference)
+                                        <p class="text-xs text-[#8C8474]">Ref: {{ $txn->reference }}</p>
+                                    @endif
+                                    @if (is_array($txn->meta) && filled($txn->meta['note'] ?? null))
+                                        <p class="text-xs text-[#6B6459] mt-0.5">{{ $txn->meta['note'] }}</p>
+                                    @endif
+                                </div>
+                                <span class="font-semibold tabular-nums">&#2547; {{ number_format($txn->amount, 0) }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <p class="text-sm text-[#8C8474] mb-4">No payments recorded yet.</p>
+                @endif
+
+                @unless ($readOnly)
+                    <form wire:submit="recordPayment" class="space-y-3 border-t border-[#E7DFCF] pt-4 text-sm">
+                        <p class="text-xs font-medium uppercase tracking-wide text-[#8C8474]">Record payment</p>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <div>
+                                <label class="block text-[#6B6459] mb-1">Amount (&#2547;)</label>
+                                <input type="number" min="0" step="1" wire:model="paymentAmount"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                @error('paymentAmount') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+                            </div>
+                            <div>
+                                <label class="block text-[#6B6459] mb-1">Method</label>
+                                <select wire:model="paymentMethod"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                    @foreach ($paymentMethods as $method)
+                                        <option value="{{ $method->code }}">{{ $method->name }}</option>
+                                    @endforeach
+                                </select>
+                                @error('paymentMethod') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-[#6B6459] mb-1">Kind</label>
+                            <select wire:model="paymentKind"
+                                class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                <option value="advance">Advance</option>
+                                <option value="partial">Partial</option>
+                                <option value="settlement">Settlement</option>
+                            </select>
+                            @error('paymentKind') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label class="block text-[#6B6459] mb-1">Note (optional)</label>
+                            <input type="text" wire:model="paymentNote" placeholder="Internal note"
+                                class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                        </div>
+                        <button type="submit"
+                            wire:loading.attr="disabled"
+                            wire:target="recordPayment"
+                            class="rounded-full bg-[#1E1E1E] px-5 py-2 text-sm font-semibold text-white hover:bg-black transition disabled:opacity-60">
+                            <span wire:loading.remove wire:target="recordPayment">Record payment</span>
+                            <span wire:loading wire:target="recordPayment">Saving…</span>
+                        </button>
+                    </form>
+                @endunless
+            </div>
+
+            <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
+                <h2 class="mb-4 font-semibold">Money history</h2>
+                @if ($order->adjustmentLogs->isEmpty())
+                    <p class="text-sm text-[#8C8474]">No money changes logged yet.</p>
+                @else
+                    <div class="space-y-3 text-sm max-h-80 overflow-y-auto">
+                        @foreach ($order->adjustmentLogs as $log)
+                            <div class="border-l-2 border-[#E7DFCF] pl-3">
+                                <p class="font-medium text-[#1E1E1E]">
+                                    @if ($log->field === 'courier_charge')
+                                        Courier charge
+                                    @elseif ($log->field === 'delivery_charge')
+                                        Customer delivery
+                                    @elseif ($log->label)
+                                        {{ $log->label }}
+                                    @else
+                                        Adjustment
+                                    @endif
+                                    <span class="font-normal text-[#8C8474]">&middot; {{ str_replace('_', ' ', $log->action) }}</span>
+                                </p>
+                                <p class="text-xs text-[#8C8474]">
+                                    {{ $log->created_at?->format('d M Y, h:i A') }}
+                                    @if ($log->actor) &middot; {{ $log->actor->name }} @endif
+                                    @if ($log->phase) &middot; {{ $log->phase }} @endif
+                                </p>
+                                @if ($log->amount_before !== null || $log->amount_after !== null)
+                                    <p class="text-xs text-[#6B6459] mt-0.5 tabular-nums">
+                                        &#2547; {{ number_format((float) ($log->amount_before ?? 0), 0) }}
+                                        &rarr; &#2547; {{ number_format((float) ($log->amount_after ?? 0), 0) }}
+                                    </p>
+                                @endif
+                                @if ($log->order_total_before !== null || $log->order_total_after !== null)
+                                    <p class="text-xs text-[#8C8474] tabular-nums">
+                                        Order total: &#2547;{{ number_format((float) ($log->order_total_before ?? 0), 0) }}
+                                        &rarr; &#2547;{{ number_format((float) ($log->order_total_after ?? 0), 0) }}
+                                    </p>
+                                @endif
+                                @if ($log->note)
+                                    <p class="text-xs text-[#6B6459] mt-0.5">{{ $log->note }}</p>
+                                @endif
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
             </div>
 
             <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
@@ -137,6 +277,28 @@
 
             <div class="space-y-4 rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
                 <h2 class="font-semibold">Courier Dispatch</h2>
+
+                <form wire:submit="updateCourierCharge" class="space-y-3 border-b border-[#E7DFCF] pb-4 text-sm">
+                    <p class="text-xs font-medium uppercase tracking-wide text-[#8C8474]">Courier cost override</p>
+                    <div>
+                        <label class="block text-[#6B6459] mb-1">Courier charge (&#2547;)</label>
+                        <input type="number" min="0" step="1" wire:model="courierChargeOverride"
+                            class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                        @error('courierChargeOverride') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="block text-[#6B6459] mb-1">Reason (optional)</label>
+                        <input type="text" wire:model="courierChargeReason" placeholder="Why this override?"
+                            class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                    </div>
+                    <button type="submit"
+                        wire:loading.attr="disabled"
+                        wire:target="updateCourierCharge"
+                        class="w-full rounded-full border border-[#C9A227] px-4 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF] transition disabled:opacity-60">
+                        <span wire:loading.remove wire:target="updateCourierCharge">Update courier cost</span>
+                        <span wire:loading wire:target="updateCourierCharge">Saving…</span>
+                    </button>
+                </form>
 
                 @if ($order->courier_tracker)
                     <div class="text-sm space-y-1">

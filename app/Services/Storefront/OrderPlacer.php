@@ -5,6 +5,8 @@ namespace App\Services\Storefront;
 use App\Models\Coupon;
 use App\Models\Order;
 use App\Models\OrderProduct;
+use App\Services\Orders\OrderAdjustmentSync;
+use App\Services\Orders\OrderPaymentSync;
 use App\Services\Orders\OrderStockService;
 use App\Support\PhoneNumber;
 use App\Support\StorefrontAssets;
@@ -12,13 +14,16 @@ use Illuminate\Support\Facades\DB;
 
 class OrderPlacer
 {
+    /**
+     * @param  list<Coupon>  $coupons
+     */
     public function place(
         CartService $cart,
         CheckoutPricing $pricing,
         array $customer,
-        ?Coupon $coupon = null,
+        array $coupons = [],
     ): Order {
-        return DB::transaction(function () use ($cart, $pricing, $customer, $coupon) {
+        return DB::transaction(function () use ($cart, $pricing, $customer, $coupons) {
             $lines = $cart->lines();
 
             if ($lines->isEmpty()) {
@@ -48,6 +53,7 @@ class OrderPlacer
                 'payment_method' => 'cod',
                 'status' => 'new',
                 'customer_note' => $customer['customer_note'] ?? null,
+                'reseller_id' => $customer['reseller_id'] ?? null,
                 'placed_at' => now(),
             ]);
 
@@ -68,19 +74,33 @@ class OrderPlacer
                     'quantity' => $line['quantity'],
                     'price' => $product->price,
                     'purchase_price' => $product->purchase_price,
+                    'max_discount' => $product->max_discount !== null
+                        ? (float) $product->max_discount
+                        : null,
                     'line_total' => $line['line_total'],
                 ]);
             }
 
-            if ($coupon) {
+            $adjustmentSync = app(OrderAdjustmentSync::class);
+
+            if ($pricing->adjustmentLines !== []) {
+                $adjustmentSync->replaceAdjustments($order->fresh(['items']), $pricing->adjustmentLines);
+            } else {
+                $adjustmentSync->materializeFromScalars($order->fresh(['items']));
+            }
+
+            app(OrderPaymentSync::class)->sync($order->fresh());
+
+            foreach (collect($coupons)->unique('id') as $coupon) {
                 $coupon->increment('used_count');
             }
 
             $cart->clear();
             session()->forget('checkout.coupon_code');
+            session()->forget('checkout.coupon_codes');
             session(['checkout.last_order_id' => $order->id]);
 
-            return $order->fresh(['items']);
+            return $order->fresh(['items', 'adjustments', 'paymentTransactions']);
         });
     }
 }

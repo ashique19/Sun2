@@ -5,11 +5,13 @@ namespace App\Services\Reseller;
 use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\ResellerWalletEntry;
-use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 class ResellerCommissionService
 {
+    public function __construct(
+        private ResellerWalletService $wallet,
+    ) {}
     /**
      * Credit reseller wallet for a delivered order (idempotent).
      */
@@ -104,22 +106,12 @@ class ResellerCommissionService
 
     private function credit(int $userId, float $amount, string $type, ?int $orderId, string $note): void
     {
-        DB::transaction(function () use ($userId, $amount, $type, $orderId, $note) {
-            /** @var User $user */
-            $user = User::query()->lockForUpdate()->findOrFail($userId);
-            $balance = round((float) $user->reseller_balance + $amount, 2);
-            $user->reseller_balance = $balance;
-            $user->save();
-
-            ResellerWalletEntry::query()->create([
-                'user_id' => $userId,
-                'type' => $type,
-                'amount' => $amount,
-                'balance_after' => $balance,
-                'order_id' => $orderId,
-                'note' => $note,
-                'created_by' => auth()->id(),
-            ]);
-        });
+        $this->wallet->append(
+            userId: $userId,
+            amount: $amount,
+            type: $type,
+            orderId: $orderId,
+            note: $note,
+        );
     }
 }

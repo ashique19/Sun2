@@ -77,6 +77,13 @@
                                 <textarea wire:model="customerNote" rows="2"
                                     class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"></textarea>
                             </div>
+                            <div class="sm:col-span-2">
+                                <label class="block text-sm font-medium mb-1">{{ __('storefront.reseller_ref_label') }}</label>
+                                <input type="text" wire:model="resellerRef"
+                                    placeholder="{{ __('storefront.reseller_ref_placeholder') }}"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                @error('resellerRef') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+                            </div>
                         </div>
 
                         <div class="border-t border-[#E7DFCF] pt-4">
@@ -88,10 +95,30 @@
                                     class="rounded-full border border-[#C9A227] px-5 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]">
                                     {{ __('storefront.apply') }}
                                 </button>
-                                @if ($appliedCouponId)
-                                    <button type="button" wire:click="removeCoupon" class="text-sm text-[#8C8474] hover:underline">{{ __('storefront.coupon_remove') }}</button>
-                                @endif
                             </div>
+
+                            @if ($appliedCouponCodes !== [])
+                                <ul class="mt-3 space-y-2 text-sm">
+                                    @foreach ($pricing->couponResults as $result)
+                                        @if (! $result['rejected'])
+                                            <li class="flex items-center justify-between gap-3 rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2">
+                                                <div class="min-w-0">
+                                                    <p class="font-medium">{{ $result['code'] }}</p>
+                                                    <p class="text-emerald-700">− &#2547; {{ number_format($result['amount'], 0) }}</p>
+                                                    @if ($result['capped'])
+                                                        <p class="text-xs text-amber-700 mt-1">{{ __('storefront.coupon_capped', ['code' => $result['code'], 'amount' => number_format($result['amount'], 0)]) }}</p>
+                                                    @endif
+                                                </div>
+                                                <button type="button" wire:click="removeCoupon('{{ $result['code'] }}')"
+                                                    class="shrink-0 text-xs text-[#8C8474] hover:underline">
+                                                    {{ __('storefront.coupon_remove') }}
+                                                </button>
+                                            </li>
+                                        @endif
+                                    @endforeach
+                                </ul>
+                            @endif
+
                             @if ($couponMessage)
                                 <p class="text-sm text-emerald-700 mt-2">{{ $couponMessage }}</p>
                             @endif
@@ -175,7 +202,21 @@
                             @endif
                         </span>
                     </div>
-                    @if ($pricing->discount > 0)
+                    @foreach ($pricing->adjustmentLines as $line)
+                        <div class="flex justify-between text-emerald-700">
+                            <span>
+                                @if ($line['type'] === 'coupon')
+                                    {{ __('storefront.adjustment_coupon', ['code' => $line['label']]) }}
+                                @elseif ($line['type'] === 'discount')
+                                    {{ __('storefront.adjustment_discount', ['label' => $line['label']]) }}
+                                @else
+                                    {{ $line['label'] }}
+                                @endif
+                            </span>
+                            <span>− &#2547; {{ number_format($line['amount'], 0) }}</span>
+                        </div>
+                    @endforeach
+                    @if ($pricing->discount > 0 && $pricing->adjustmentLines === [])
                         <div class="flex justify-between text-emerald-700">
                             <span>{{ __('storefront.discount') }}</span>
                             <span>− &#2547; {{ number_format($pricing->discount, 0) }}</span>

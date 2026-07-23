@@ -217,6 +217,14 @@ return [
     'optional' => 'ঐচ্ছিক',
     'no_cities_hint' => 'শহর লোড হয়নি।',
     'coupon_applied' => 'কুপন অ্যাপ্লাই হয়েছে।',
+    'coupon_already_applied' => ':code কুপন ইতিমধ্যে যোগ করা হয়েছে।',
+    'coupon_removed' => ':code কুপন সরানো হয়েছে।',
+    'coupon_capped' => ':code কুপন পণ্যের সর্বোচ্চ ডিসকাউন্ট সীমায় কাটা হয়েছে — ৳:amount প্রয়োগ হয়েছে।',
+    'coupon_rejected' => ':code কুপন প্রয়োগ করা যায়নি।',
+    'coupon_invalid' => 'কুপন কোড সঠিক নয়।',
+    'adjustment_coupon' => 'কুপন (:code)',
+    'adjustment_discount' => 'ডিসকাউন্ট (:label)',
+    'adjustment_charge' => 'অতিরিক্ত চার্জ (:label)',
     'invalid_area' => 'সঠিক শহর ও এলাকা বাছুন।',
     'invalid_mobile' => 'সঠিক বাংলাদেশি মোবাইল নম্বর দিন (০১XXXXXXXXX)।',
     'otp_invalid' => 'কোড ভুল বা মেয়াদ শেষ। আবার চেষ্টা করুন বা নতুন কোড নিন।',
@@ -228,4 +236,8 @@ return [
     'account_not_found' => 'অ্যাকাউন্ট পাওয়া যায়নি।',
     'otp_sent_display' => ':phone নম্বরে কোড পাঠানো হয়েছে।',
     'wishlist_removed' => 'পছন্দ থেকে সরানো হয়েছে।',
+
+    'reseller_ref_label' => 'রিসেলার আইডি বা মোবাইল (ঐচ্ছিক)',
+    'reseller_ref_placeholder' => 'রিসেলার আইডি বা ০১XXXXXXXXX',
+    'reseller_not_found' => 'রিসেলার পাওয়া যায়নি। সঠিক আইডি বা মোবাইল নম্বর দিন।',
 ];

@@ -1,6 +1,6 @@
 # Reseller Portal — Plan & Implementation Notes
 
-Status: **foundation in progress** on branch `cursor/reseller-portal-dd17` (schema, role, wallet, portal shell, deliver→credit).
+Status: **phases 1–6 shipped** on branch `cursor/implement-money-reseller-plans-dd17`.
 
 Production dump with data is local at `database/legacy/legacy_dump.sql` (gitignored, ~38MB). Live DB already has Spatie role **`vendors`** (legacy id map `role=3`) with existing users — we **rename that role to `reseller`** for the product name and keep the same assignments.
 
@@ -141,14 +141,17 @@ Wire `ResellerCommissionService` into `OrderDeliveryReturnService` / webhook del
 
 ## Phased delivery
 
-| Phase | Ship |
-|---|---|
-| **1 — Foundation** | Migrations, role rename, models, product commission admin field, plan doc |
-| **2 — Portal shell** | `/reseller` dashboard + order lists + order show (audit) |
-| **3 — Create order** | Reseller order form (price ≥ base) |
-| **4 — Checkout attach** | Reseller id/phone on storefront |
-| **5 — Commission credit** | Deliver → wallet; dashboard balance/ledger |
-| **6 — Admin payouts** | Pay reseller, status visible to reseller |
+| Phase | Status | Notes |
+|---|---|---|
+| **1 — Foundation** | ✅ Done | Migrations, role rename, models, product commission admin field, plan doc |
+| **2 — Portal shell** | ✅ Done | `/reseller` dashboard + order lists + order show (audit) |
+| **3 — Create order** | ✅ Done | `ResellerOrderCreate` Livewire form + `ResellerOrderService` (price ≥ base enforced, commission snapshot, status history) |
+| **4 — Checkout attach** | ✅ Done | `resellerRef` field in `StorefrontCheckout` → `ResellerResolver` → `OrderPlacer` sets `reseller_id`; Bangla lang key added |
+| **5 — Commission credit** | ✅ Done | `ResellerCommissionService` credits wallet on deliver; `ResellerWalletService` ledger |
+| **6 — Admin payouts** | ✅ Done | Admin records payout on reseller user edit; reseller wallet shows Paid badge |
+
+### Also shipped (unlisted phases)
+- **Admin reseller users** — `admin.users.resellers` route + segment in `AdminUsers` / `AdminUserEdit` + nav link in admin sidebar
 
 ---
 

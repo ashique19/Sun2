@@ -4,13 +4,19 @@ namespace Tests\Unit;
 
 use App\Models\OrderProduct;
 use App\Services\Reseller\ResellerCommissionService;
+use App\Services\Reseller\ResellerWalletService;
 use PHPUnit\Framework\TestCase;
 
 class ResellerCommissionServiceTest extends TestCase
 {
+    private function service(): ResellerCommissionService
+    {
+        return new ResellerCommissionService(new ResellerWalletService);
+    }
+
     public function test_line_commission_adds_markup_above_base(): void
     {
-        $service = new ResellerCommissionService;
+        $service = $this->service();
         $item = new OrderProduct([
             'quantity' => 2,
             'returned_quantity' => 0,
@@ -25,7 +31,7 @@ class ResellerCommissionServiceTest extends TestCase
 
     public function test_line_commission_ignores_price_below_base(): void
     {
-        $service = new ResellerCommissionService;
+        $service = $this->service();
         $item = new OrderProduct([
             'quantity' => 1,
             'returned_quantity' => 0,
@@ -39,7 +45,7 @@ class ResellerCommissionServiceTest extends TestCase
 
     public function test_line_commission_subtracts_returned_quantity(): void
     {
-        $service = new ResellerCommissionService;
+        $service = $this->service();
         $item = new OrderProduct([
             'quantity' => 3,
             'returned_quantity' => 1,

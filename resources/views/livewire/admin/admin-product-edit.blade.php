@@ -62,6 +62,13 @@
                     @error('commission') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                 </div>
                 <div>
+                    <label class="block text-sm font-medium mb-1">Max coupon discount (&#2547; / unit)</label>
+                    <input type="number" min="0" step="1" wire:model.live="max_discount" placeholder="Uncapped"
+                        class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                    <p class="mt-1 text-xs text-[#8C8474]">Caps stacked coupon discounts per unit. Leave blank for no cap.</p>
+                    @error('max_discount') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+                </div>
+                <div>
                     <label class="block text-sm font-medium mb-1">Stock quantity</label>
                     <input type="number" wire:model.live="stock_quantity" class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
                 </div>

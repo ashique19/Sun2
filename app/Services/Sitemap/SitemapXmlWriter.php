@@ -45,7 +45,7 @@ class SitemapXmlWriter
     }
 
     /**
-     * @param  list<array{loc: string, lastmod?: string|null, changefreq?: string|null, priority?: string|null}>  $urls
+     * @param  list<array{loc: string, lastmod?: string|null, changefreq?: string|null, priority?: string|null, images?: list<array{loc: string, title?: string|null}>}>  $urls
      */
     public function writeUrlset(string $filename, array $urls): void
     {

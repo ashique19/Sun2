@@ -72,6 +72,10 @@ class StorefrontCategory extends Component
                 'seoCanonical' => route('category.show', $this->category),
                 'seoImage' => StorefrontAssets::url($this->category->thumb_image),
                 'seoType' => 'website',
+                // Faceted/sort URLs keep a clean canonical; keep them out of the index.
+                'seoRobots' => ($this->sort !== 'featured' || $this->inStockOnly)
+                    ? 'noindex, follow'
+                    : null,
             ]);
     }
 }

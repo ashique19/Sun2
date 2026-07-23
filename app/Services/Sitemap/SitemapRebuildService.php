@@ -7,6 +7,7 @@ use App\Models\Page;
 use App\Models\Product;
 use App\Models\SitemapRun;
 use App\Models\User;
+use App\Support\StorefrontAssets;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
 
@@ -267,10 +268,11 @@ class SitemapRebuildService
 
         $products = Product::query()
             ->published()
+            ->with('listingImage')
             ->orderBy('id')
             ->where('id', '>', $cursor)
             ->limit($chunkSize)
-            ->get(['id', 'slug', 'updated_at']);
+            ->get(['id', 'slug', 'name', 'updated_at']);
 
         if ($products->isEmpty()) {
             if ($productFiles === [] && ((int) ($meta['product_count'] ?? 0)) === 0) {
@@ -294,12 +296,23 @@ class SitemapRebuildService
         $buffer = Cache::get($bufferKey, []);
 
         foreach ($products as $product) {
-            $buffer[] = [
+            $entry = [
                 'loc' => route('product.show', $product),
                 'lastmod' => $product->updated_at?->toAtomString(),
                 'changefreq' => 'weekly',
                 'priority' => '0.7',
             ];
+
+            $imageUrl = StorefrontAssets::url($product->primaryImagePath());
+
+            if ($imageUrl) {
+                $entry['images'] = [[
+                    'loc' => $imageUrl,
+                    'title' => $product->name,
+                ]];
+            }
+
+            $buffer[] = $entry;
             $cursor = (int) $product->id;
         }
 

@@ -26,6 +26,28 @@ class JsonLd
         ];
     }
 
+    /**
+     * Sitewide WebSite entity (no SearchAction: /search is noindex + robots-disallowed).
+     */
+    public static function website(): array
+    {
+        return [
+            '@context' => 'https://schema.org',
+            '@type' => 'WebSite',
+            'name' => config('seo.site_name'),
+            'url' => url('/'),
+            'description' => config('seo.default_description'),
+            'publisher' => [
+                '@type' => 'Organization',
+                'name' => config('seo.site_name'),
+                'logo' => [
+                    '@type' => 'ImageObject',
+                    'url' => Seo::absoluteUrl('/img/settings/logo.png'),
+                ],
+            ],
+        ];
+    }
+
     public static function product(Product $product): array
     {
         $images = $product->images

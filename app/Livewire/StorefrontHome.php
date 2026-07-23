@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\Category;
 use App\Models\HeroSlide;
+use App\Support\JsonLd;
 use App\Support\Seo;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -32,6 +33,8 @@ class StorefrontHome extends Component
                 'seoDescription' => Seo::description(null),
                 'seoCanonical' => route('home'),
                 'seoType' => 'website',
+                'seoImage' => '/img/settings/logo.png',
+                'seoJsonLd' => [JsonLd::website()],
             ]);
     }
 }

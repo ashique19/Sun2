@@ -8,9 +8,11 @@ return [
 
     'default_description' => 'High-quality handmade jewellery from Sundoritoma — German silver, brass, beads, and handcrafted collections. Cash on delivery and home delivery all over Bangladesh.',
 
-    'default_image' => '/img/settings/favicon.png',
+    'default_image' => '/img/settings/logo.png',
 
     'twitter_card' => 'summary_large_image',
+
+    'og_locale' => 'bn_BD',
 
     'organization' => [
         'email' => 'info@sundoritoma.com',

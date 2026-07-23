@@ -6,6 +6,7 @@ use App\Contracts\Sms\SmsSender;
 use App\Models\Category;
 use App\Models\Page;
 use App\Models\Product;
+use App\Models\ProductImage;
 use App\Observers\SitemapInvalidationObserver;
 use App\Services\Sms\LogSmsSender;
 use App\Services\Sms\SslWirelessSmsSender;
@@ -34,6 +35,7 @@ class AppServiceProvider extends ServiceProvider
         Product::observe(SitemapInvalidationObserver::class);
         Category::observe(SitemapInvalidationObserver::class);
         Page::observe(SitemapInvalidationObserver::class);
+        ProductImage::observe(SitemapInvalidationObserver::class);
     }
 
     /**

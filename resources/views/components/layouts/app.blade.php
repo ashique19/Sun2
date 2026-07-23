@@ -15,6 +15,7 @@
         $seoSiteName = config('seo.site_name');
         $seoPriceAmount = $seoPriceAmount ?? null;
         $seoPriceCurrency = $seoPriceCurrency ?? 'BDT';
+        $seoLocale = $seoLocale ?? config('seo.og_locale', 'bn_BD');
     @endphp
     <title>{{ $seoTitle }}</title>
     <meta name="description" content="{{ $seoDescription }}">
@@ -22,6 +23,7 @@
     <link rel="canonical" href="{{ $seoCanonical }}">
 
     <meta property="og:site_name" content="{{ $seoSiteName }}">
+    <meta property="og:locale" content="{{ $seoLocale }}">
     <meta property="og:type" content="{{ $seoType }}">
     <meta property="og:title" content="{{ $seoOgTitle }}">
     <meta property="og:description" content="{{ $seoDescription }}">
@@ -42,6 +44,11 @@
     <link rel="icon" type="image/png" href="/img/settings/favicon.png">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <x-seo.json-ld :data="\App\Support\JsonLd::organization()" />
+    @isset($seoJsonLd)
+        @foreach ((array) $seoJsonLd as $jsonLdBlock)
+            <x-seo.json-ld :data="$jsonLdBlock" />
+        @endforeach
+    @endisset
 </head>
 <body class="min-h-screen bg-[#FAF6EF] text-[#1E1E1E]">
     {{ $slot }}

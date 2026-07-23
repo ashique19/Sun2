@@ -368,6 +368,7 @@ When resolving stacked coupons:
 | **2 — Dual-write** | Service writes lines **and** scalar sums | Old UI still edits scalars *or* new UI edits lines; either path keeps scalars correct |
 | **3 — Dual-read UI** | Admin form/show list lines; storefront detail lists lines | Fallback to scalars if no rows |
 | **4 — Checkout stacking** | Multi-coupon session + apply | Still sync scalars |
+| **4b — Payments ledger** | Activate `payment_transactions`; admin record payment; rewire deliver/webhook to txn+sync | Unpaid COD path unchanged |
 | **5 — Audit UI** | Admin money history panel | Read `order_adjustment_logs` |
 | **6 — Harden** | Totals always from lines; scalars = cache only | Deprecate direct scalar edits |
 | **7 — Cleanup (optional later)** | Drop or ignore `orders.coupon_id` as source of truth | Only after all readers migrated |
@@ -581,6 +582,8 @@ When resolving stacked coupons:
 - [ ] Export money audit CSV per date range
 - [ ] Suggest max discount from margin (`price − purchase_price`) on product edit
 - [ ] Category-level default max discount inherited by products
+- [ ] Automated bKash/Nagad gateway capture + webhook → payment txn
+- [ ] Customer self-serve “pay remaining due” link
 
 ---
 

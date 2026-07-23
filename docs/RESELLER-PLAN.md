@@ -32,12 +32,13 @@ At order time, snapshot:
 
 ```
 markup_per_unit     = max(0, sell_price − base_price)
-line_commission     = (commission_rate + markup_per_unit) × quantity
+line_commission     = round((commission_rate + markup_per_unit) × quantity)  // integer taka
                       // on return, reduce by returned_quantity (same rule as COGS)
 order_commission    = sum(line_commission)
 ```
 
 Rules:
+- All commission and wallet amounts are **whole taka** (no decimals).
 - Reseller **cannot** set `sell_price < base_price` (floor = our price).
 - Admin-created / storefront-without-reseller orders: no reseller commission (even if product has a rate).
 - Storefront with reseller attached: commission uses catalog sell price unless we later allow customer-facing markup (v1: **no markup on storefront**; only base `commission_rate × qty`).

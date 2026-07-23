@@ -183,14 +183,14 @@ class AdminUserEdit extends Component
         }
 
         $validated = $this->validate([
-            'payoutAmount' => ['required', 'numeric', 'min:1'],
+            'payoutAmount' => ['required', 'numeric', 'min:1', 'integer'],
             'payoutNote' => ['nullable', 'string', 'max:255'],
         ]);
 
         try {
             $wallet->recordPayout(
                 userId: (int) $this->user->id,
-                amount: (float) $validated['payoutAmount'],
+                amount: (float) (int) $validated['payoutAmount'],
                 note: trim((string) ($validated['payoutNote'] ?? '')) ?: null,
                 createdBy: (int) auth()->id(),
             );

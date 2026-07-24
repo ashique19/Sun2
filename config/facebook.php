@@ -13,6 +13,9 @@ return [
     |
     */
 
+    // Graph API version used for Messenger / Page API calls (e.g. subscribed_apps, Send API).
+    'graph_version' => env('FACEBOOK_GRAPH_VERSION', 'v25.0'),
+
     'messenger' => [
         'enabled' => (bool) env('FACEBOOK_MESSENGER_WEBHOOK_ENABLED', true),
 

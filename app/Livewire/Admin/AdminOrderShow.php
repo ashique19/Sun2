@@ -8,6 +8,8 @@ use App\Models\Order;
 use App\Models\PaymentMethod;
 use App\Services\Admin\OrderDispatchService;
 use App\Services\Admin\OrderStatusService;
+use App\Services\Channels\ChannelOrderDraftService;
+use App\Services\Channels\ChannelReplyService;
 use App\Services\Couriers\CourierApiRegistry;
 use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderPaymentRecorder;
@@ -48,6 +50,10 @@ class AdminOrderShow extends Component
 
     public ?string $error = null;
 
+    public bool $showConversation = false;
+
+    public string $replyText = '';
+
     public function mount(Order $order, CourierApiRegistry $courierRegistry): void
     {
         AdminAccess::ensureCanViewOrder($order);
@@ -63,6 +69,7 @@ class AdminOrderShow extends Component
             'createdBy:id,name',
             'statusHistory.changedBy',
             'courierLogs.courier',
+            'channelConversation.messages',
         ]);
         $this->status = (string) $order->status;
         $this->adminNote = (string) ($order->admin_note ?? '');
@@ -128,6 +135,68 @@ class AdminOrderShow extends Component
 
         $this->order->refresh()->load(['statusHistory.changedBy']);
         $this->message = 'Order updated.';
+    }
+
+    public function confirmDraft(ChannelOrderDraftService $drafts): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        if (! $this->order->isAiDraft()) {
+            $this->error = 'This order is not an AI draft.';
+
+            return;
+        }
+
+        try {
+            $this->order = $drafts->confirm($this->order, auth()->id());
+            $this->status = $this->order->status;
+            $this->order->load([
+                'items.product:id,slug,name',
+                'items.product.images:id,product_id,path,is_primary,sort_order',
+                'statusHistory.changedBy',
+                'channelConversation.messages',
+                'createdBy:id,name',
+            ]);
+            $this->message = 'Draft confirmed and moved to New.';
+        } catch (\Throwable $e) {
+            $this->error = $e->getMessage();
+        }
+    }
+
+    public function toggleConversation(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+        $this->showConversation = ! $this->showConversation;
+    }
+
+    public function sendConversationReply(ChannelReplyService $replies): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        $conversation = $this->order->channelConversation;
+        if (! $conversation) {
+            $this->error = 'No channel conversation linked to this order.';
+
+            return;
+        }
+
+        $result = $replies->sendText($conversation, $this->replyText);
+        if (! $result['ok']) {
+            $this->error = $result['error'] ?? 'Failed to send reply.';
+
+            return;
+        }
+
+        $this->replyText = '';
+        $this->order->load('channelConversation.messages');
+        $this->showConversation = true;
+        $this->message = 'Reply sent.';
     }
 
     public function dispatchViaApi(OrderDispatchService $dispatch): void

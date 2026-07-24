@@ -19,6 +19,21 @@
                 </svg>
             </a>
             @unless ($readOnly)
+                @if ($order->isAiDraft())
+                    <button type="button"
+                        wire:click="confirmDraft"
+                        wire:confirm="Confirm this AI draft and move it to New for moderators?"
+                        class="inline-flex h-9 items-center rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700 sm:px-4">
+                        Confirm → New
+                    </button>
+                @endif
+                @if ($order->channelConversation)
+                    <button type="button"
+                        wire:click="toggleConversation"
+                        class="inline-flex h-9 items-center rounded-lg border border-[#E0D6C2] bg-white px-3 text-sm text-[#6B6459] hover:bg-[#FAF6EF] sm:px-4">
+                        {{ $showConversation ? 'Hide conversation' : 'Conversation' }}
+                    </button>
+                @endif
                 <a href="{{ route('admin.orders.create', ['repeat' => $order->id]) }}"
                     title="Repeat order"
                     aria-label="Repeat order"
@@ -32,7 +47,11 @@
                     Edit order
                 </a>
             @endunless
-            <span class="inline-flex h-9 items-center rounded-full border border-[#E7DFCF] bg-[#FAF6EF] px-3 text-sm capitalize sm:px-4">{{ $order->status }}</span>
+            <span @class([
+                'inline-flex h-9 items-center rounded-full border px-3 text-sm capitalize sm:px-4',
+                'border-amber-200 bg-amber-50 text-amber-800' => $order->status === 'draft',
+                'border-[#E7DFCF] bg-[#FAF6EF]' => $order->status !== 'draft',
+            ])>{{ $order->status === 'draft' ? 'Draft by AI' : $order->status }}</span>
         </div>
     </div>
 
@@ -41,6 +60,53 @@
     @endif
     @if ($error)
         <div class="rounded-lg bg-rose-50 text-rose-700 text-sm px-4 py-3 mb-4">{{ $error }}</div>
+    @endif
+
+    @if ($showConversation && $order->channelConversation)
+        <div class="mb-6 rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 class="font-semibold">
+                    {{ ucfirst($order->channelConversation->channel) }} conversation
+                </h2>
+                <p class="text-xs text-[#8C8474]">
+                    @if ($order->channelConversation->isWithinMessagingWindow())
+                        Within 24h reply window
+                    @else
+                        Outside 24h window
+                    @endif
+                </p>
+            </div>
+            <div class="mb-4 max-h-80 space-y-3 overflow-y-auto rounded-lg border border-[#EFE7D6] bg-[#FAF6EF]/40 p-3">
+                @forelse ($order->channelConversation->messages as $message)
+                    <div @class([
+                        'max-w-[90%] rounded-lg px-3 py-2 text-sm',
+                        'ml-auto bg-[#C9A227]/15' => $message->direction === 'outbound',
+                        'mr-auto bg-white border border-[#EFE7D6]' => $message->direction !== 'outbound',
+                    ])>
+                        @if (filled($message->body))
+                            <p class="whitespace-pre-wrap break-words">{{ $message->body }}</p>
+                        @endif
+                        @if (filled($message->media_url))
+                            <a href="{{ $message->media_url }}" target="_blank" rel="noopener" class="mt-1 inline-block text-xs text-[#C9A227] hover:underline">View attachment</a>
+                        @endif
+                        <p class="mt-1 text-[10px] text-[#8C8474]">{{ $message->sent_at?->timezone('Asia/Dhaka')->format('d M Y, h:i A') }}</p>
+                    </div>
+                @empty
+                    <p class="text-sm text-[#8C8474]">No messages stored.</p>
+                @endforelse
+            </div>
+            @unless ($readOnly)
+                <div class="flex gap-2">
+                    <input type="text" wire:model="replyText" placeholder="Reply to customer…"
+                        class="min-w-0 flex-1 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
+                        wire:keydown.enter.prevent="sendConversationReply">
+                    <button type="button" wire:click="sendConversationReply"
+                        class="rounded-lg bg-[#C9A227] px-3 py-2 text-sm font-semibold text-white hover:bg-[#b89220]">
+                        Send
+                    </button>
+                </div>
+            @endunless
+        </div>
     @endif
 
     <div class="grid items-start gap-4 sm:gap-6 xl:grid-cols-3">
@@ -263,8 +329,11 @@
                     <label class="block text-sm font-medium mb-1">Status</label>
                     <select wire:model="status"
                         class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
-                        @foreach (['new', 'confirmed', 'dispatched', 'delivered', 'returned', 'cancelled'] as $statusOption)
-                            <option value="{{ $statusOption }}">{{ ucfirst($statusOption) }}</option>
+                        @foreach (['draft', 'new', 'confirmed', 'dispatched', 'delivered', 'returned', 'cancelled'] as $statusOption)
+                            @if ($statusOption === 'draft' && ! $order->isAiDraft())
+                                @continue
+                            @endif
+                            <option value="{{ $statusOption }}">{{ $statusOption === 'draft' ? 'Draft by AI' : ucfirst($statusOption) }}</option>
                         @endforeach
                     </select>
                 </div>

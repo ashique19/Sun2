@@ -16,11 +16,19 @@ class Order extends Model
 
     public const PLACED_VIA_RESELLER = 'reseller';
 
+    public const PLACED_VIA_MESSENGER = 'messenger';
+
+    public const PLACED_VIA_WHATSAPP = 'whatsapp';
+
+    public const STATUS_DRAFT = 'draft';
+
     /** @var list<string> */
     public const PLACED_VIA_OPTIONS = [
         self::PLACED_VIA_STOREFRONT,
         self::PLACED_VIA_ADMIN,
         self::PLACED_VIA_RESELLER,
+        self::PLACED_VIA_MESSENGER,
+        self::PLACED_VIA_WHATSAPP,
     ];
 
     protected $guarded = [];
@@ -34,6 +42,8 @@ class Order extends Model
             'courier_id' => 'integer',
             'created_by' => 'integer',
             'updated_by' => 'integer',
+            'channel_conversation_id' => 'integer',
+            'ai_parse_meta' => 'array',
             'subtotal'        => 'decimal:2',
             'delivery_charge' => 'decimal:2',
             'charge'          => 'decimal:2',
@@ -91,8 +101,20 @@ class Order extends Model
         return match ($this->placed_via) {
             self::PLACED_VIA_ADMIN => 'Admin',
             self::PLACED_VIA_RESELLER => 'Reseller',
+            self::PLACED_VIA_MESSENGER => 'Messenger',
+            self::PLACED_VIA_WHATSAPP => 'WhatsApp',
             default => 'Customer',
         };
+    }
+
+    public function isAiDraft(): bool
+    {
+        return $this->status === self::STATUS_DRAFT;
+    }
+
+    public function channelConversation(): BelongsTo
+    {
+        return $this->belongsTo(ChannelConversation::class);
     }
 
     /** @deprecated Use placedByLabel() */

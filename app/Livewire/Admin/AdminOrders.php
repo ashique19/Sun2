@@ -8,6 +8,8 @@ use App\Models\Order;
 use App\Services\Admin\AdminOrderService;
 use App\Services\Admin\OrderDeliveryReturnService;
 use App\Services\Admin\OrderDispatchService;
+use App\Services\Channels\ChannelOrderDraftService;
+use App\Services\Channels\ChannelReplyService;
 use App\Services\Admin\ProductShareListService;
 use App\Services\Couriers\CourierApiRegistry;
 use App\Services\Couriers\CourierTrackingService;
@@ -72,6 +74,21 @@ class AdminOrders extends Component
 
     /** @var list<array{id:int,name:string,quantity:int,image:?string}> */
     public array $partialItems = [];
+
+    public bool $showConversationModal = false;
+
+    public ?int $conversationOrderId = null;
+
+    public string $conversationTitle = '';
+
+    /** @var list<array{id:int,direction:string,body:?string,media_url:?string,sent_at:?string}> */
+    public array $conversationMessages = [];
+
+    public string $replyText = '';
+
+    public ?string $conversationError = null;
+
+    public bool $conversationWithinWindow = false;
 
     public function mount(string $segment = 'new'): void
     {
@@ -229,6 +246,91 @@ class AdminOrders extends Component
 
         $orders->delete($order);
         $this->selected = array_values(array_diff($this->selected, [(int) $orderId]));
+    }
+
+    public function confirmDraft(int $orderId, ChannelOrderDraftService $drafts): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $order = Order::query()->find($orderId);
+
+        if (! $order || ! $order->isAiDraft()) {
+            return;
+        }
+
+        $drafts->confirm($order, auth()->id());
+        $this->listRevision++;
+    }
+
+    public function openConversation(int $orderId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $order = Order::query()
+            ->with(['channelConversation.messages'])
+            ->find($orderId);
+
+        if (! $order || ! $order->channelConversation) {
+            return;
+        }
+
+        $conversation = $order->channelConversation;
+        $this->conversationOrderId = $order->id;
+        $this->conversationTitle = ucfirst((string) $conversation->channel).' · '.($conversation->customer_name ?: $order->name);
+        $this->conversationWithinWindow = $conversation->isWithinMessagingWindow();
+        $this->conversationError = null;
+        $this->replyText = '';
+        $this->conversationMessages = $conversation->messages->map(fn ($message) => [
+            'id' => (int) $message->id,
+            'direction' => (string) $message->direction,
+            'body' => $message->body,
+            'media_url' => $message->media_url,
+            'sent_at' => $message->sent_at?->timezone('Asia/Dhaka')->format('d M Y, h:i A'),
+        ])->all();
+        $this->showConversationModal = true;
+    }
+
+    public function closeConversation(): void
+    {
+        $this->showConversationModal = false;
+        $this->conversationOrderId = null;
+        $this->conversationTitle = '';
+        $this->conversationMessages = [];
+        $this->replyText = '';
+        $this->conversationError = null;
+        $this->conversationWithinWindow = false;
+    }
+
+    public function sendConversationReply(ChannelReplyService $replies): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->conversationError = null;
+
+        if (! $this->conversationOrderId) {
+            return;
+        }
+
+        $order = Order::query()
+            ->with('channelConversation')
+            ->find($this->conversationOrderId);
+
+        if (! $order?->channelConversation) {
+            $this->conversationError = 'Conversation not found.';
+
+            return;
+        }
+
+        $result = $replies->sendText($order->channelConversation, $this->replyText);
+
+        if (! $result['ok']) {
+            $this->conversationError = $result['error'] ?? 'Failed to send reply.';
+
+            return;
+        }
+
+        $this->replyText = '';
+        $this->openConversation((int) $order->id);
     }
 
     public function deleteSelected(AdminOrderService $orders): void
@@ -816,6 +918,7 @@ class AdminOrders extends Component
         $with = [
             'courier:id,name,slug',
             'createdBy:id,name',
+            'channelConversation:id,channel,customer_name,last_inbound_at',
             'items:'.$itemColumns,
             'adjustments:id,order_id,type,label,amount,sort_order',
         ];

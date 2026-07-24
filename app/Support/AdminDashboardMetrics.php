@@ -53,6 +53,7 @@ class AdminDashboardMetrics
 
         $ordersByDay = Order::query()
             ->where('placed_at', '>=', $start)
+            ->where('status', '!=', Order::STATUS_DRAFT)
             ->selectRaw('DATE(placed_at) as day')
             ->selectRaw('COUNT(*) as order_qty')
             ->selectRaw('COALESCE(SUM(total), 0) as order_value')
@@ -64,6 +65,7 @@ class AdminDashboardMetrics
         $itemsByDay = DB::table('order_products')
             ->join('orders', 'orders.id', '=', 'order_products.order_id')
             ->where('orders.placed_at', '>=', $start)
+            ->where('orders.status', '!=', Order::STATUS_DRAFT)
             ->selectRaw('DATE(orders.placed_at) as day')
             ->selectRaw('COALESCE(SUM(order_products.quantity), 0) as delivery_qty')
             ->groupByRaw('DATE(orders.placed_at)')

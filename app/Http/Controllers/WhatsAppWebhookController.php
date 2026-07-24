@@ -2,22 +2,22 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\Channels\MessengerInboundService;
+use App\Services\Channels\WhatsAppInboundService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Throwable;
 
-class FacebookMessengerWebhookController extends Controller
+class WhatsAppWebhookController extends Controller
 {
     /**
-     * Meta webhook verification (GET) + event receiver (POST).
+     * Meta WhatsApp Cloud API webhook verification (GET) + event receiver (POST).
      */
-    public function __invoke(Request $request, MessengerInboundService $inbound): Response|SymfonyResponse
+    public function __invoke(Request $request, WhatsAppInboundService $inbound): Response|SymfonyResponse
     {
-        if (! config('facebook.messenger.enabled', true)) {
-            return response('Messenger webhook disabled', 503);
+        if (! config('whatsapp.enabled', true)) {
+            return response('WhatsApp webhook disabled', 503);
         }
 
         if ($request->isMethod('get')) {
@@ -33,10 +33,10 @@ class FacebookMessengerWebhookController extends Controller
         $token = (string) $request->query('hub_verify_token', $request->query('hub.verify_token', ''));
         $challenge = (string) $request->query('hub_challenge', $request->query('hub.challenge', ''));
 
-        $expected = (string) config('facebook.messenger.verify_token', '');
+        $expected = (string) config('whatsapp.verify_token', '');
 
         if ($expected === '') {
-            Log::warning('Facebook Messenger webhook verify attempted but FACEBOOK_MESSENGER_VERIFY_TOKEN is not set.');
+            Log::warning('WhatsApp webhook verify attempted but WHATSAPP_VERIFY_TOKEN is not set.');
 
             return response('Verify token not configured', 503);
         }
@@ -45,7 +45,7 @@ class FacebookMessengerWebhookController extends Controller
             return response($challenge, 200)->header('Content-Type', 'text/plain');
         }
 
-        Log::warning('Facebook Messenger webhook verification failed.', [
+        Log::warning('WhatsApp webhook verification failed.', [
             'mode' => $mode,
             'token_match' => $expected !== '' && hash_equals($expected, $token),
         ]);
@@ -53,7 +53,7 @@ class FacebookMessengerWebhookController extends Controller
         return response('Forbidden', 403);
     }
 
-    private function receive(Request $request, MessengerInboundService $inbound): Response
+    private function receive(Request $request, WhatsAppInboundService $inbound): Response
     {
         if (! $this->signatureIsValid($request)) {
             return response('Invalid signature', 401);
@@ -61,7 +61,7 @@ class FacebookMessengerWebhookController extends Controller
 
         $payload = $request->all();
 
-        Log::info('Facebook Messenger webhook event received.', [
+        Log::info('WhatsApp webhook event received.', [
             'object' => $payload['object'] ?? null,
             'entry_count' => is_array($payload['entry'] ?? null) ? count($payload['entry']) : 0,
         ]);
@@ -69,8 +69,7 @@ class FacebookMessengerWebhookController extends Controller
         try {
             $inbound->handleWebhookPayload($payload);
         } catch (Throwable $e) {
-            // Always ACK to Meta so retries do not storm; log for ops.
-            Log::error('Messenger webhook processing error.', [
+            Log::error('WhatsApp webhook processing error.', [
                 'message' => $e->getMessage(),
             ]);
         }
@@ -80,12 +79,11 @@ class FacebookMessengerWebhookController extends Controller
 
     private function signatureIsValid(Request $request): bool
     {
-        $appSecret = (string) config('facebook.messenger.app_secret', '');
+        $appSecret = (string) config('whatsapp.app_secret', '');
 
-        // Allow local/dev receive without signature when app secret is not configured yet.
         if ($appSecret === '') {
             if (app()->environment('production')) {
-                Log::warning('Facebook Messenger webhook POST rejected: FACEBOOK_APP_SECRET missing in production.');
+                Log::warning('WhatsApp webhook POST rejected: WHATSAPP_APP_SECRET missing in production.');
 
                 return false;
             }

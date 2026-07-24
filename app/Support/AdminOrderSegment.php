@@ -10,6 +10,7 @@ class AdminOrderSegment
 {
     public const SEGMENTS = [
         'new' => 'New',
+        'draft-ai' => 'Draft by AI',
         'dispatched' => 'Dispatched',
         'delivered' => 'Delivered',
         'cancel-return' => 'Cancel & Return',
@@ -17,7 +18,7 @@ class AdminOrderSegment
         'all' => 'All',
     ];
 
-    public const COUNTS_CACHE_KEY = 'admin.order_segment_counts.v2';
+    public const COUNTS_CACHE_KEY = 'admin.order_segment_counts.v3';
 
     public const COUNTS_CACHE_TTL = 60;
 
@@ -25,11 +26,12 @@ class AdminOrderSegment
     {
         return match ($segment) {
             'new' => $query->whereIn('status', ['new', 'confirmed']),
+            'draft-ai' => $query->where('status', Order::STATUS_DRAFT),
             'dispatched' => $query->where('status', 'dispatched'),
             'delivered' => $query->where('status', 'delivered'),
             'cancel-return' => $query->whereIn('status', ['cancelled', 'returned']),
-            'return-pending' => $query->where('has_return', true),
-            'all' => $query,
+            'return-pending' => $query->where('has_return', true)->where('status', '!=', Order::STATUS_DRAFT),
+            'all' => $query->where('status', '!=', Order::STATUS_DRAFT),
             default => $query,
         };
     }
@@ -64,16 +66,22 @@ class AdminOrderSegment
                 ->groupBy('status')
                 ->pluck('aggregate', 'status');
 
-            $returnPending = (int) Order::query()->where('has_return', true)->count();
-            $all = (int) $statusCounts->sum();
+            $returnPending = (int) Order::query()
+                ->where('has_return', true)
+                ->where('status', '!=', Order::STATUS_DRAFT)
+                ->count();
+
+            $draft = (int) ($statusCounts[Order::STATUS_DRAFT] ?? 0);
+            $all = (int) $statusCounts->sum() - $draft;
 
             return [
                 'new' => (int) ($statusCounts['new'] ?? 0) + (int) ($statusCounts['confirmed'] ?? 0),
+                'draft-ai' => $draft,
                 'dispatched' => (int) ($statusCounts['dispatched'] ?? 0),
                 'delivered' => (int) ($statusCounts['delivered'] ?? 0),
                 'cancel-return' => (int) ($statusCounts['cancelled'] ?? 0) + (int) ($statusCounts['returned'] ?? 0),
                 'return-pending' => $returnPending,
-                'all' => $all,
+                'all' => max(0, $all),
             ];
         });
     }

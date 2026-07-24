@@ -5,6 +5,7 @@ use App\Http\Controllers\FacebookMessengerWebhookController;
 use App\Http\Controllers\PathaoWebhookController;
 use App\Http\Controllers\RedxWebhookController;
 use App\Http\Controllers\SteadfastWebhookController;
+use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
 
 // Steadfast portal callback: /api/steadfast/webhook
@@ -28,3 +29,8 @@ Route::post('/webhooks/carrybee', CarryBeeWebhookController::class)
 // Callback URL: {APP_URL}/api/webhooks/messenger
 Route::match(['get', 'post'], '/webhooks/messenger', FacebookMessengerWebhookController::class)
     ->name('webhooks.messenger');
+
+// Meta WhatsApp Cloud API: GET verify + POST events
+// Callback URL: {APP_URL}/api/webhooks/whatsapp
+Route::match(['get', 'post'], '/webhooks/whatsapp', WhatsAppWebhookController::class)
+    ->name('webhooks.whatsapp');

@@ -19,8 +19,28 @@ class GeminiClient
      */
     public function generateJson(string $systemPrompt, string $userPrompt, array $generationConfig = []): array
     {
+        return $this->generateJsonFromParts($systemPrompt, [
+            ['text' => $userPrompt],
+        ], $generationConfig);
+    }
+
+    /**
+     * Multimodal JSON generation. Each part is either:
+     * - ['text' => string]
+     * - ['inline_data' => ['mime_type' => string, 'data' => base64-string]]
+     *
+     * @param  list<array<string, mixed>>  $parts
+     * @param  array<string, mixed>  $generationConfig
+     * @return array<string, mixed>
+     */
+    public function generateJsonFromParts(string $systemPrompt, array $parts, array $generationConfig = []): array
+    {
         if (! $this->isConfigured()) {
             throw new RuntimeException('Gemini API key is not configured (GEMINI_API_KEY).');
+        }
+
+        if ($parts === []) {
+            throw new RuntimeException('Gemini request parts cannot be empty.');
         }
 
         $model = config('gemini.model', 'gemini-2.0-flash');
@@ -37,7 +57,7 @@ class GeminiClient
                 'contents' => [
                     [
                         'role' => 'user',
-                        'parts' => [['text' => $userPrompt]],
+                        'parts' => $parts,
                     ],
                 ],
                 'generationConfig' => array_merge([
@@ -57,8 +77,8 @@ class GeminiClient
             throw new RuntimeException('Gemini returned an empty response.');
         }
 
-        if (preg_match('/```(?:json)?\s*(.*?)\s*```/s', $text, $matches)) {
-            $text = $matches[1];
+        if (preg_match('/^```(?:json)?\s*(.*?)\s*```$/s', $text, $matches)) {
+            $text = trim($matches[1]);
         }
 
         $decoded = json_decode($text, true);

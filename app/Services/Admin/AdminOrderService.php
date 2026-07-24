@@ -76,10 +76,13 @@ class AdminOrderService
 
             $oldDeliveryCharge = (float) $order->delivery_charge;
 
-            $oldQuantities = $this->stock->quantitiesFromOrder($order);
-            $newQuantities = $this->stock->quantitiesFromLines($lines);
+            // AI drafts do not reserve stock until staff confirms them to New.
+            if (! $order->isAiDraft()) {
+                $oldQuantities = $this->stock->quantitiesFromOrder($order);
+                $newQuantities = $this->stock->quantitiesFromLines($lines);
 
-            $this->stock->syncQuantities($oldQuantities, $newQuantities);
+                $this->stock->syncQuantities($oldQuantities, $newQuantities);
+            }
 
             $order->update(array_merge($orderData, [
                 'updated_by' => auth()->id(),
@@ -104,7 +107,9 @@ class AdminOrderService
     {
         DB::transaction(function () use ($order) {
             $order->load('items');
-            $this->stock->releaseOrder($order);
+            if (! $order->isAiDraft()) {
+                $this->stock->releaseOrder($order);
+            }
             $order->delete();
         });
     }

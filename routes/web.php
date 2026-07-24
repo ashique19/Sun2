@@ -164,6 +164,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
     Route::get('/orders/{order}', AdminOrderShow::class)->whereNumber('order')->name('orders.show');
 
     Route::middleware('role:admin|dev')->group(function () {
+        Route::get('/orders/draft-ai', AdminOrders::class)->defaults('segment', 'draft-ai')->name('orders.draft-ai');
         Route::get('/orders/dispatched', AdminOrders::class)->defaults('segment', 'dispatched')->name('orders.dispatched');
         Route::get('/orders/delivered', AdminOrders::class)->defaults('segment', 'delivered')->name('orders.delivered');
         Route::get('/orders/cancel-return', AdminOrders::class)->defaults('segment', 'cancel-return')->name('orders.cancel-return');

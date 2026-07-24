@@ -187,7 +187,11 @@
                                                 Exc
                                             </span>
                                         @endif
-                                        <span class="rounded-full bg-[#FAF6EF] px-2 py-0.5 text-[11px] capitalize text-[#6B6459]">{{ $order->status }}</span>
+                                        <span @class([
+                                            'rounded-full px-2 py-0.5 text-[11px] capitalize',
+                                            'bg-amber-50 text-amber-800 border border-amber-200' => $order->status === 'draft',
+                                            'bg-[#FAF6EF] text-[#6B6459]' => $order->status !== 'draft',
+                                        ])>{{ $order->status === 'draft' ? 'Draft by AI' : $order->status }}</span>
                                     </div>
                                     <p class="mt-0.5 text-xs text-[#8C8474]">{{ $order->placed_at?->format('d M Y') }}</p>
                                     <p class="mt-0.5 text-xs text-[#8C8474]">Placed by {{ $order->placedByLabel() }}</p>
@@ -281,6 +285,34 @@
                             @endif
 
                             <div class="flex flex-wrap items-center gap-2 border-t border-[#EFE7D6] pt-3">
+                                @if ($segment === 'draft-ai')
+                                    <button type="button"
+                                        wire:click="confirmDraft({{ $order->id }})"
+                                        wire:confirm="Confirm AI draft #{{ $order->order_number }} and move to New?"
+                                        wire:loading.attr="disabled"
+                                        wire:target="confirmDraft({{ $order->id }})"
+                                        class="inline-flex h-8 items-center justify-center rounded-lg border border-emerald-200 bg-white px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60">
+                                        Confirm → New
+                                    </button>
+                                    @if ($order->channel_conversation_id)
+                                        <button type="button"
+                                            wire:click="openConversation({{ $order->id }})"
+                                            class="inline-flex h-8 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white px-2.5 text-xs font-semibold text-[#6B6459] hover:bg-[#FAF6EF]">
+                                            Conversation
+                                        </button>
+                                    @endif
+                                    <a href="{{ route('admin.orders.edit', $order) }}"
+                                        class="inline-flex h-8 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white px-2.5 text-xs font-semibold text-[#6B6459] hover:bg-[#FAF6EF]">
+                                        Edit
+                                    </a>
+                                    <button type="button"
+                                        wire:click="deleteOrder({{ $order->id }})"
+                                        wire:confirm="Discard AI draft #{{ $order->order_number }}?"
+                                        title="Discard draft"
+                                        class="inline-flex h-8 items-center justify-center rounded-lg border border-rose-200 bg-white px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
+                                        Discard
+                                    </button>
+                                @else
                                 @if ($segment === 'new')
                                     <button type="button"
                                         wire:click="quickDispatch({{ $order->id }})"
@@ -360,6 +392,7 @@
                                     class="inline-flex h-8 items-center justify-center rounded-lg border border-rose-200 bg-white px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
                                     Delete
                                 </button>
+                                @endif
                             </div>
 
                             @if ($segment === 'dispatched')
@@ -703,4 +736,65 @@
             @endunless
         </div>
     @endteleport
+
+    @if ($showConversationModal)
+        <div class="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+            wire:click.self="closeConversation"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Channel conversation">
+            <div class="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl">
+                <div class="flex items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
+                    <div>
+                        <h2 class="font-semibold text-[#1E1E1E]">{{ $conversationTitle }}</h2>
+                        <p class="text-xs text-[#8C8474]">
+                            @if ($conversationWithinWindow)
+                                Within 24h reply window
+                            @else
+                                Outside 24h window — customer must message first
+                            @endif
+                        </p>
+                    </div>
+                    <button type="button" wire:click="closeConversation" class="text-sm text-[#8C8474] hover:text-[#1E1E1E]">Close</button>
+                </div>
+                <div class="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+                    @forelse ($conversationMessages as $message)
+                        <div @class([
+                            'max-w-[90%] rounded-lg px-3 py-2 text-sm',
+                            'ml-auto bg-[#C9A227]/15 text-[#1E1E1E]' => $message['direction'] === 'outbound',
+                            'mr-auto bg-[#FAF6EF] text-[#1E1E1E]' => $message['direction'] !== 'outbound',
+                        ])>
+                            @if (filled($message['body']))
+                                <p class="whitespace-pre-wrap break-words">{{ $message['body'] }}</p>
+                            @endif
+                            @if (filled($message['media_url']))
+                                <a href="{{ $message['media_url'] }}" target="_blank" rel="noopener" class="mt-1 inline-block text-xs text-[#C9A227] hover:underline">View attachment</a>
+                            @endif
+                            @if (filled($message['sent_at']))
+                                <p class="mt-1 text-[10px] text-[#8C8474]">{{ $message['sent_at'] }}</p>
+                            @endif
+                        </div>
+                    @empty
+                        <p class="text-sm text-[#8C8474]">No messages stored for this conversation.</p>
+                    @endforelse
+                </div>
+                <div class="border-t border-[#EFE7D6] px-4 py-3">
+                    @if ($conversationError)
+                        <p class="mb-2 text-xs text-rose-600">{{ $conversationError }}</p>
+                    @endif
+                    <div class="flex gap-2">
+                        <input type="text" wire:model="replyText" placeholder="Reply…"
+                            class="min-w-0 flex-1 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
+                            wire:keydown.enter.prevent="sendConversationReply">
+                        <button type="button"
+                            wire:click="sendConversationReply"
+                            wire:loading.attr="disabled"
+                            class="rounded-lg bg-[#C9A227] px-3 py-2 text-sm font-semibold text-white hover:bg-[#b89220] disabled:opacity-60">
+                            Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 </div>

@@ -23,6 +23,7 @@
         : [
             'admin.orders.create' => 'Create Order',
             'admin.orders.new' => 'New',
+            'admin.orders.draft-ai' => 'Draft by AI',
             'admin.orders.dispatched' => 'Dispatched',
             'admin.orders.delivered' => 'Delivered',
             'admin.orders.cancel-return' => 'Cancel & Return',

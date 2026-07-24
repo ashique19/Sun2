@@ -2,7 +2,7 @@
     <h1 class="font-serif text-3xl font-semibold mb-6">Dashboard</h1>
 
     @php
-        $primaryKeys = ['new', 'dispatched'];
+        $primaryKeys = ['new', 'draft-ai', 'dispatched'];
         $primarySegments = collect($segments)->only($primaryKeys);
         $secondarySegments = collect($segments)->except($primaryKeys);
     @endphp

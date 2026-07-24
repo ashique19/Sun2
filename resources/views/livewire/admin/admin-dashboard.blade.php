@@ -1,12 +1,12 @@
 <div>
     <h1 class="font-serif text-3xl font-semibold mb-6">Dashboard</h1>
 
-    <div class="grid sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4 mb-8">
+    <div class="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-3 sm:gap-4 mb-8">
         @foreach ($segments as $segmentKey => $segmentLabel)
             <a href="{{ route('admin.orders.'.$segmentKey) }}"
-                class="rounded-xl border border-[#EFE7D6] bg-white p-5 hover:border-[#C9A227] hover:bg-[#FAF6EF] transition group">
+                class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-5 hover:border-[#C9A227] hover:bg-[#FAF6EF] transition group">
                 <p class="text-sm text-[#8C8474] group-hover:text-[#6B6459]">{{ $segmentLabel }}</p>
-                <p class="text-3xl font-semibold mt-1 text-[#1E1E1E]">{{ number_format($segmentCounts[$segmentKey] ?? 0) }}</p>
+                <p class="text-2xl sm:text-3xl font-semibold mt-1 text-[#1E1E1E]">{{ number_format($segmentCounts[$segmentKey] ?? 0) }}</p>
                 <p class="text-xs text-[#C9A227] mt-2 font-medium">View orders &rarr;</p>
             </a>
         @endforeach

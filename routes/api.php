@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CarryBeeWebhookController;
+use App\Http\Controllers\FacebookMessengerWebhookController;
 use App\Http\Controllers\PathaoWebhookController;
 use App\Http\Controllers\RedxWebhookController;
 use App\Http\Controllers\SteadfastWebhookController;
@@ -22,3 +23,8 @@ Route::post('/webhooks/redx', RedxWebhookController::class)
 
 Route::post('/webhooks/carrybee', CarryBeeWebhookController::class)
     ->name('webhooks.carrybee');
+
+// Meta Messenger: GET verify + POST events
+// Callback URL: {APP_URL}/api/webhooks/messenger
+Route::match(['get', 'post'], '/webhooks/messenger', FacebookMessengerWebhookController::class)
+    ->name('webhooks.messenger');

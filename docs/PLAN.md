@@ -82,6 +82,8 @@ display price (see §10); `purchase_price` = cost; `commission` / `max_discount`
 elsewhere. Share asset: optional `priced_image_path` + `priced_image_layout` (see §11) —
 composed file separate from gallery `product_images`. Social compose/publish: `social_posts`
 (+ products + per-channel publications) for Meta posts and homepage Latest posts (see §12).
+Channel inbox: `channel_conversations` / `channel_messages` (Messenger + WhatsApp) with staff
+`last_read_*` for unread in Admin → Inbox (see §13).
 
 Note: blogs, pages, costs/payables, settings, and payment-method tables may still exist
 from early migrations but are **not** in active product scope.

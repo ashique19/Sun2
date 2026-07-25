@@ -44,6 +44,10 @@ to **intake the legacy data** (especially products, categories, orders).
     Show storefront as selling `price` + struck-through `compare_at_price` when set and
     greater than `price`. Do **not** add a separate “discounted price” column or swap
     the meaning of `price`. See §10.
+11. **Priced product image (share asset):** each product may have one separately stored
+    **priced image** (source gallery image left untouched). Generated in-browser for
+    preview/layout + server-side with **PHP GD** (no AI). Auto-regenerate when selling
+    or regular price changes. Primary purpose: **sharing**. See §11.
 
 ## 4. Delivery sequence
 
@@ -68,7 +72,8 @@ New tables vs. legacy: `product_images`, `carts`/`cart_items`, `coupons`,
 
 Products money: `price` = selling amount; `compare_at_price` = optional regular / “was”
 display price (see §10); `purchase_price` = cost; `commission` / `max_discount` as documented
-elsewhere.
+elsewhere. Share asset: optional `priced_image_path` + `priced_image_layout` (see §11) —
+composed file separate from gallery `product_images`.
 
 Note: blogs, pages, costs/payables, settings, and payment-method tables may still exist
 from early migrations but are **not** in active product scope.
@@ -175,3 +180,68 @@ Schema already has `compare_at_price` on `products` (`DECIMAL(12,2)` nullable). 
 - Do not rename `price` to “discounted price”.
 - Do not add a second selling-price column.
 - Do not rename the DB column to `regular_price` (choice B rejected).
+
+## 11. Priced product image (price stamped on photo) — locked plan
+
+**Status:** planned / not implemented yet.
+**Purpose:** produce a reusable shareable image with price burned onto the product photo
+(Messenger / WhatsApp / social later). Gallery / PDP images stay clean originals.
+
+### Model
+
+On `products` (not a `product_images` gallery row):
+
+| Column | Role |
+|--------|------|
+| `priced_image_path` | Public path to the composed file (nullable). One per product. |
+| `priced_image_layout` | JSON: position / size (e.g. `x`, `y`, `scale` or font size, optional align). Defaults when null. |
+
+Source image for composition = listing / primary thumb (same as admin products list thumb:
+primary preferred, else first by `sort_order`). **Never mutate** that source file.
+
+Price text on the image follows §10: selling `price`; if valid `compare_at_price` (> price),
+show strikethrough regular + current selling price.
+
+### Behavior (locked)
+
+1. **Admin → Products list:** button **“Put price on image”** — one-click generate with
+   **default layout** (no editor). Requires a source image + price; replaces any existing
+   priced image for that product.
+2. **Admin → Product edit:** same generate action + **editor** to adjust price
+   **position / size** on a live preview; save replaces existing priced image and persists
+   layout. Re-generate uses saved layout when present, else defaults.
+3. **Replace semantics:** create or edit always overwrites the previous priced file and
+   updates `priced_image_path` / layout (at most one priced image per product).
+4. **Auto-regenerate:** if a priced image already exists and admin changes `price` or
+   `compare_at_price`, regenerate server-side with the saved layout (or defaults).
+   Also regenerate when the **source** listing/primary image changes (new primary,
+   replace/delete that affects the source) if a priced image exists.
+5. **Pipeline:** browser Canvas for preview / drag-resize UX; **PHP GD** for the
+   authoritative saved file (deterministic, no AI). Client must not be the only writer of
+   the final pixels for auto-regen paths.
+6. **Tech:** extend existing GD usage (already used for hash / hero / category resize);
+   no Intervention Image / Imagick required for v1.
+
+### Work to implement (when approved) — v1
+
+1. Migration: `priced_image_path`, `priced_image_layout` on `products`.
+2. Service: compose JPEG/PNG from source path + prices + layout; delete old file on replace.
+3. Admin products list: per-row **Put price on image** (defaults).
+4. Admin product edit: preview, position/size controls, generate/save, show current priced image.
+5. Hooks: after price / regular price save and after primary/source image changes → auto-regen
+   when `priced_image_path` is set.
+6. Tests: compose replaces previous path; layout preserved on price-change regen; skip when
+   no source image / no priced image yet.
+
+### Follow-on (explicitly later — not v1)
+
+- Bulk download of many products’ priced images.
+- Share-to-social flows that attach/upload the priced image.
+- Wiring priced image into existing public share-list / channel draft UIs (when those
+  share actions are built).
+
+### Explicit non-goals (v1)
+
+- Do not stamp price onto gallery `product_images` rows or replace PDP media.
+- Do not use AI / external image APIs for composition.
+- Do not build bulk zip download or social posting in v1.

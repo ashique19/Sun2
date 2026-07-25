@@ -41,9 +41,9 @@ to **intake the legacy data** (especially products, categories, orders).
     SEO offer price, reseller base, coupons). Reuse existing nullable
     `products.compare_at_price` as the optional **regular / “was”** display price.
     Admin UI label: **“Regular price”** (DB column stays `compare_at_price` — no rename).
-    Show storefront as selling `price` + struck-through `compare_at_price` when set and
-    greater than `price`. Do **not** add a separate “discounted price” column or swap
-    the meaning of `price`. See §10.
+    Customer-facing price pair order (locked for v1): struck-through **regular** first,
+    then **selling** `price` emphasized (stacked). See §10 presentation. Do **not** add a
+    separate “discounted price” column or swap the meaning of `price`. See §10.
 11. **Priced product image (share asset):** each product may have one separately stored
     **priced image** (source gallery image left untouched). Generated in-browser for
     preview/layout + server-side with **PHP GD** (no AI). Auto-regenerate when selling
@@ -160,17 +160,37 @@ Schema already has `compare_at_price` on `products` (`DECIMAL(12,2)` nullable). 
 - Orders, carts, and historical lines continue to snapshot **`price` only** — do not
   snapshot `compare_at_price` onto order lines unless a future need appears.
 
+### Presentation (locked for v1)
+
+When a valid regular price exists, show **regular first**, then selling price — stacked:
+
+```html
+<s>regular price</s><br /><b>price</b>
+```
+
+Meaning:
+
+1. Line 1: `compare_at_price` with strikethrough (e.g. ~~৳ 2,000~~).
+2. Line 2: selling `price` in bold (e.g. **৳ 1,500**).
+
+When `compare_at_price` is null / invalid: show only bold selling `price` (no empty struck line).
+
+Apply this order consistently on storefront surfaces that show the pair (cards, PDP,
+wishlist, cart unit price, share chrome) and on the **priced image** stamp (§11).
+Inline/single-line layouts may keep the same **order** (regular then selling) even if
+they sit on one row instead of `<br />`.
+
 ### Work to implement (when approved)
 
 1. **Admin product create/edit** — add “Regular price (৳)” field bound to `compare_at_price`;
    validate nullable numeric ≥ 0 and `> price` when present.
 2. **Admin product show** — display regular price alongside price.
 3. **Admin products list** — optional inline edit for regular price (same pattern as price).
-4. **Storefront display** — same pattern everywhere customers see catalog unit price:
-   bold/current `price` + ~~`compare_at_price`~~ when valid.
-   - Already: product card, PDP.
-   - Still needed: wishlist, cart line unit price, share / SEO-facing product chrome if it
-     shows a human-readable price pair (offer/JSON-LD **amount** stays `price`).
+4. **Storefront display** — use the locked presentation above everywhere customers see
+   catalog unit price.
+   - Cards / PDP today may still show selling-first side-by-side; align to regular-first
+     (stacked or same order on one row) when implementing.
+   - Offer/JSON-LD **amount** stays `price`.
 5. **Leave unchanged:** order totals, coupons / `max_discount`, reseller base/sell,
    `purchase_price`, ETL (legacy has no compare-at; keep import as `null` unless a
    legacy source is identified later).
@@ -199,8 +219,14 @@ On `products` (not a `product_images` gallery row):
 Source image for composition = listing / primary thumb (same as admin products list thumb:
 primary preferred, else first by `sort_order`). **Never mutate** that source file.
 
-Price text on the image follows §10: selling `price`; if valid `compare_at_price` (> price),
-show strikethrough regular + current selling price.
+Price stamp on the image follows §10 presentation (locked v1):
+
+```html
+<s>regular price</s><br /><b>price</b>
+```
+
+- If valid `compare_at_price` (> `price`): struck regular on line 1, bold selling `price` on line 2.
+- Else: bold selling `price` only.
 
 ### Behavior (locked)
 

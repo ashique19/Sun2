@@ -66,6 +66,10 @@ New tables vs. legacy: `product_images`, `carts`/`cart_items`, `coupons`,
 `wishlists`, `addresses`. Renamed: legacy `payments` (business payables) → `payables`
 (customer payments now live in `payment_transactions`).
 
+Products money: `price` = selling amount; `compare_at_price` = optional regular / “was”
+display price (see §10); `purchase_price` = cost; `commission` / `max_discount` as documented
+elsewhere.
+
 Note: blogs, pages, costs/payables, settings, and payment-method tables may still exist
 from early migrations but are **not** in active product scope.
 

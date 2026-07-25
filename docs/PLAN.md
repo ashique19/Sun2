@@ -48,6 +48,10 @@ to **intake the legacy data** (especially products, categories, orders).
     **priced image** (source gallery image left untouched). Generated in-browser for
     preview/layout + server-side with **PHP GD** (no AI). Auto-regenerate when selling
     or regular price changes. Primary purpose: **sharing**. See §11.
+12. **Admin social posts (FB + Instagram):** select products → compose post (text, thumb
+    vs priced image, album/carousel vs collage) → publish via existing Meta Graph Page
+    credentials; persist posts for homepage **Latest posts**, on-site post pages, and
+    **Re-publish**. See §12.
 
 ## 4. Delivery sequence
 
@@ -273,15 +277,97 @@ and gold jewelry).
 6. Tests: compose replaces previous path; layout preserved on price-change regen; skip when
    no source image / no priced image yet.
 
-### Follow-on (explicitly later — not v1)
+### Follow-on (explicitly later — not priced-image v1)
 
 - Bulk download of many products’ priced images.
-- Share-to-social flows that attach/upload the priced image.
+- Social compose/publish that **consumes** priced images — see **§12** (separate feature).
 - Wiring priced image into existing public share-list / channel draft UIs (when those
   share actions are built).
 
-### Explicit non-goals (v1)
+### Explicit non-goals (priced-image v1)
 
 - Do not stamp price onto gallery `product_images` rows or replace PDP media.
 - Do not use AI / external image APIs for composition.
-- Do not build bulk zip download or social posting in v1.
+- Do not build bulk zip download or the full social-post admin/homepage flow here (§12).
+
+## 12. Admin social posts + Latest posts — locked plan
+
+**Status:** planned / not implemented yet.
+**Depends on:** §11 for the “images with price” source option (thumbs work without it).
+**v1 channels (locked):** **Facebook Page** + **Instagram** (same Meta Graph app / Page
+token stack; IG Business account linked to the Page — permissions already cover both).
+
+### Admin compose (Products)
+
+1. Multi-select products on **Admin → Products** → **Make post**.
+2. **Post text** (required or strongly encouraged).
+3. **Image source** (radio):
+   - **Product thumb** — listing/primary gallery image per product
+   - **Images with price** — each product’s `priced_image_path` (§11); block or warn per
+     product missing a priced image
+4. **Multi-product layout** (choice at compose time — both options in v1):
+   - **Album / carousel** — one image per selected product; publish as FB multi-photo /
+     IG carousel-capable payload as Graph allows
+   - **Collage** — one composed grid/collage image (PHP GD) used as the share image and
+     as the homepage / on-site post thumbnail
+5. **Publish** to Facebook + Instagram (v1 default: both when configured). Persist the
+   post regardless so homepage / re-publish still work if a channel fails (record per-channel
+   status).
+
+### Data model
+
+| Table / columns | Role |
+|-----------------|------|
+| `social_posts` | `body`, `image_source` (`thumb` \| `priced`), `layout` (`album` \| `collage`), `collage_path` / `thumbnail_path` (homepage card), status, `created_by`, timestamps |
+| `social_post_products` | `social_post_id`, `product_id`, `sort_order`; optional snapshot paths used at publish |
+| `social_post_publications` | `social_post_id`, `channel` (`facebook` \| `instagram`), `external_id`, `external_url`, `status`, `error`, `published_at` |
+
+Re-publish creates a **new** `social_post_publications` row (same post content → push again);
+keep prior external ids/history.
+
+### Homepage + on-site post page (locked)
+
+- Homepage section **Latest posts**: social-style thumbnail (collage path, or first product
+  image / album cover) + short excerpt → links to **on-site post page** (not straight to FB).
+- **On-site post page** includes:
+  - Full post text + media presentation
+  - **Link to Facebook post** when `social_post_publications` has a successful FB
+    `external_url` / id
+  - Each linked **product** → own storefront PDP
+  - **See more similar products** → category listing (derive from post products’ category;
+    if mixed categories, primary/first product’s category or a small set of category links —
+    prefer first product’s category for v1 simplicity unless we later refine)
+
+Optional later: surface Instagram permalink the same way as FB when available.
+
+### Behavior notes
+
+- Publishing uses existing config: `FACEBOOK_PAGE_ACCESS_TOKEN`, `FACEBOOK_PAGE_ID`,
+  `FACEBOOK_GRAPH_VERSION` (and IG user/media endpoints via the linked business account).
+- Do **not** rely on Facebook embed widgets for Latest posts — our DB is source of truth.
+- Single-product posts: album vs collage both allowed; collage of one ≈ framed single image
+  (or treat as single photo publish — implementation detail).
+
+### Work to implement (when approved) — v1
+
+1. Migrations for the three tables above.
+2. Admin products multi-select + compose UI (text, image source, layout choice, publish).
+3. Collage composer (GD) when layout = collage; store thumbnail for homepage.
+4. Meta Graph publish service: Facebook + Instagram; write `social_post_publications`.
+5. Re-publish action on saved post / admin post show.
+6. Storefront: Latest posts on home + on-site post show route (FB link, products, category
+   “see more”).
+7. Feature tests: persist post without channels; publication rows; homepage lists published
+   posts; re-publish adds a new publication attempt.
+
+### Follow-on (not v1)
+
+- TikTok / YouTube / WhatsApp Status-or-Channels as additional `channel` values.
+- Bulk download of priced images only (still §11 follow-on).
+- Advanced mixed-category “see more” UX.
+
+### Explicit non-goals (v1)
+
+- Social **login** for customers (still out of scope per decision #9).
+- Organic posting to TikTok or non-Meta networks.
+- Using Facebook Page plugin / embed as the homepage feed.

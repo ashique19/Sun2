@@ -52,6 +52,9 @@ to **intake the legacy data** (especially products, categories, orders).
     vs priced image, album/carousel vs collage) → publish via existing Meta Graph Page
     credentials; persist posts for homepage **Latest posts**, on-site post pages, and
     **Re-publish**. See §12.
+13. **Admin Inbox (Messenger + WhatsApp):** top-level **Admin → Inbox** unified conversation
+    window to read/reply from the site via existing channel webhooks + `ChannelReplyService`.
+    Track unread; AI suggested replies explicitly **out of v1**. See §13.
 
 ## 4. Delivery sequence
 
@@ -79,6 +82,8 @@ display price (see §10); `purchase_price` = cost; `commission` / `max_discount`
 elsewhere. Share asset: optional `priced_image_path` + `priced_image_layout` (see §11) —
 composed file separate from gallery `product_images`. Social compose/publish: `social_posts`
 (+ products + per-channel publications) for Meta posts and homepage Latest posts (see §12).
+Channel inbox: `channel_conversations` / `channel_messages` (Messenger + WhatsApp) with staff
+`last_read_*` for unread in Admin → Inbox (see §13).
 
 Note: blogs, pages, costs/payables, settings, and payment-method tables may still exist
 from early migrations but are **not** in active product scope.
@@ -372,3 +377,71 @@ Optional later: surface Instagram permalink the same way as FB when available.
 - Social **login** for customers (still out of scope per decision #9).
 - Organic posting to TikTok or non-Meta networks.
 - Using Facebook Page plugin / embed as the homepage feed.
+
+## 13. Admin Inbox (Messenger + WhatsApp) — locked plan
+
+**Status:** planned / not implemented yet.
+**Depends on:** existing `channel_conversations` / `channel_messages`, Messenger + WhatsApp
+webhooks, and `ChannelReplyService` (already used from order-scoped conversation modal).
+
+### Goal
+
+A first-class **combined** inbox so staff reply to **Facebook Messenger** and **WhatsApp**
+from the admin site — not only via the current order-attached conversation modal.
+
+### Locked product choices
+
+1. **Nav:** new top-level **Admin → Inbox** (not nested only under Orders).
+2. **Unread:** track unread using **last staff read** vs **last inbound** (conversation is
+   unread when inbound is newer than staff last-read).
+3. **AI suggest reply:** explicitly **out of v1** for this window (separate later backlog;
+   few-shot Gemini style assist can plug into the same composer later).
+
+### UI (v1)
+
+- **Left:** unified conversation list (Messenger + WhatsApp badges), sorted by latest
+  activity; filters at least: channel, unread, within 24h messaging window, has linked
+  draft/order.
+- **Right:** thread (inbound/outbound, attachments) + text composer + Send.
+- **Context panel / header:** customer identity when known; link to AI draft / order when
+  `draft_order_id` or order relation exists; 24h window indicator (reuse
+  `ChannelConversation::isWithinMessagingWindow()`).
+- **Deep links:** keep “Open chat” from Admin Orders / order show → same Inbox thread
+  (order modal may thin out or become a shortcut; Inbox is canonical).
+- **Refresh:** Livewire poll / refresh-after-send for v1 (no websocket requirement).
+
+### Data / behavior
+
+- Reuse `channel_conversations.channel` = `messenger` | `whatsapp` and message store.
+- Add staff read tracking, e.g. `last_read_at` (and optional `last_read_by` user id) on
+  `channel_conversations`; set on open thread / mark read; unread = `last_inbound_at` >
+  `last_read_at` (or null read).
+- Outbound send continues through `ChannelReplyService` (Graph Messenger + WhatsApp Cloud
+  API); respect 24h window errors already returned to UI.
+- Inbound webhooks unchanged; new messages make threads rise in the list and flip unread
+  until staff opens/read.
+
+### Work to implement (when approved) — v1
+
+1. Migration: `last_read_at` / `last_read_by` (or equivalent) on `channel_conversations`.
+2. Livewire Admin Inbox page + nav item (roles: same staff who can manage channel orders /
+   drafts — align with existing admin/dev access; moderators TBD — default **no** unless
+   we explicitly grant later).
+3. List query with unread + filters; thread load; mark read on open.
+4. Composer → `ChannelReplyService::sendText`; show window/send errors.
+5. Deep-link from order conversation entry points into Inbox.
+6. Feature tests: unread flips on inbound; mark read clears; send messenger + whatsapp
+   paths; outside-window blocked.
+
+### Follow-on (explicitly later — not Inbox v1)
+
+- **AI suggested replies** / learn-from-outbound-style (Gemini few-shot) — separate todo.
+- Websockets / push presence; typing indicators; rich templates / quick-reply chips.
+- Assign conversation to a staff member; snooze / resolved states beyond unread.
+
+### Explicit non-goals (v1)
+
+- Auto-send bot replies or FAQ automation.
+- AI suggest button in the composer.
+- Replacing Meta Business Suite entirely for comments/ads — this inbox is for **Page
+  Messenger + WhatsApp** threads already ingested by our webhooks.

@@ -77,7 +77,8 @@ New tables vs. legacy: `product_images`, `carts`/`cart_items`, `coupons`,
 Products money: `price` = selling amount; `compare_at_price` = optional regular / “was”
 display price (see §10); `purchase_price` = cost; `commission` / `max_discount` as documented
 elsewhere. Share asset: optional `priced_image_path` + `priced_image_layout` (see §11) —
-composed file separate from gallery `product_images`.
+composed file separate from gallery `product_images`. Social compose/publish: `social_posts`
+(+ products + per-channel publications) for Meta posts and homepage Latest posts (see §12).
 
 Note: blogs, pages, costs/payables, settings, and payment-method tables may still exist
 from early migrations but are **not** in active product scope.

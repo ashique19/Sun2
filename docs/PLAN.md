@@ -36,6 +36,14 @@ to **intake the legacy data** (especially products, categories, orders).
    is fast. Production data is loaded later via a dedicated `import:legacy` ETL command.
 9. **Out of scope:** social login, SMS notifications, additional courier APIs beyond
    what is already wired (Steadfast is the primary courier integration).
+10. **Product regular / strikethrough price (locked naming A):** keep `products.price` as
+    the **selling** amount used for all calculations (cart, checkout, order snapshots,
+    SEO offer price, reseller base, coupons). Reuse existing nullable
+    `products.compare_at_price` as the optional **regular / “was”** display price.
+    Admin UI label: **“Regular price”** (DB column stays `compare_at_price` — no rename).
+    Show storefront as selling `price` + struck-through `compare_at_price` when set and
+    greater than `price`. Do **not** add a separate “discounted price” column or swap
+    the meaning of `price`. See §10.
 
 ## 4. Delivery sequence
 
@@ -121,3 +129,45 @@ Approved direction (storefront) and starting point (admin) in `docs/mockups/`:
 - Local setup: see `README.md`. PHP 8.3, `composer install`, `npm install`, `.env`,
   `php artisan migrate`, `npm run dev`, `php artisan serve`.
 - Legacy production dump: place at `database/legacy/legacy_dump.sql` (git-ignored — PII).
+
+## 10. Product regular price (`compare_at_price`) — locked plan
+
+**Status:** planned / not implemented yet (schema + partial storefront display already exist).
+**Locked:** naming choice **A** (keep DB `compare_at_price`; label “Regular price” in admin).
+
+### Model
+
+| Column | Role |
+|--------|------|
+| `price` | What the customer pays. Sole amount for cart, checkout, order line snapshots, SEO/JSON-LD offer, commissions, coupons. |
+| `compare_at_price` | Optional regular / “was” price for **display only**. Nullable. |
+
+Schema already has `compare_at_price` on `products` (`DECIMAL(12,2)` nullable). No migration rename.
+
+### Rules
+
+- `compare_at_price` nullable; empty / null → no strikethrough UI.
+- If set, must be **`>` `price`** (otherwise treat as unset / reject on save).
+- Orders, carts, and historical lines continue to snapshot **`price` only** — do not
+  snapshot `compare_at_price` onto order lines unless a future need appears.
+
+### Work to implement (when approved)
+
+1. **Admin product create/edit** — add “Regular price (৳)” field bound to `compare_at_price`;
+   validate nullable numeric ≥ 0 and `> price` when present.
+2. **Admin product show** — display regular price alongside price.
+3. **Admin products list** — optional inline edit for regular price (same pattern as price).
+4. **Storefront display** — same pattern everywhere customers see catalog unit price:
+   bold/current `price` + ~~`compare_at_price`~~ when valid.
+   - Already: product card, PDP.
+   - Still needed: wishlist, cart line unit price, share / SEO-facing product chrome if it
+     shows a human-readable price pair (offer/JSON-LD **amount** stays `price`).
+5. **Leave unchanged:** order totals, coupons / `max_discount`, reseller base/sell,
+   `purchase_price`, ETL (legacy has no compare-at; keep import as `null` unless a
+   legacy source is identified later).
+
+### Explicit non-goals
+
+- Do not rename `price` to “discounted price”.
+- Do not add a second selling-price column.
+- Do not rename the DB column to `regular_price` (choice B rejected).

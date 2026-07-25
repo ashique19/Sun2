@@ -228,6 +228,20 @@ Price stamp on the image follows §10 presentation (locked v1):
 - If valid `compare_at_price` (> `price`): struck regular on line 1, bold selling `price` on line 2.
 - Else: bold selling `price` only.
 
+### Stamp style (locked for v1)
+
+For readability on jewelry photos (busy / light / dark backgrounds):
+
+- **Text:** black
+- **Backdrop:** semi-transparent white panel behind the price block (rounded optional;
+  padding so text does not sit on the photo edge of the panel)
+- Struck regular + bold selling both sit inside the same panel
+- Exact opacity / padding / corner radius: sensible defaults in code; may be tuned later
+  without changing this locked direction (black on translucent white)
+
+Do **not** use bare white/gold text with no backdrop as the v1 default (fails on light stones
+and gold jewelry).
+
 ### Behavior (locked)
 
 1. **Admin → Products list:** button **“Put price on image”** — one-click generate with

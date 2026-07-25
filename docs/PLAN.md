@@ -55,6 +55,9 @@ to **intake the legacy data** (especially products, categories, orders).
 13. **Admin Inbox (Messenger + WhatsApp):** top-level **Admin → Inbox** unified conversation
     window to read/reply from the site via existing channel webhooks + `ChannelReplyService`.
     Track unread; AI suggested replies explicitly **out of v1**. See §13.
+14. **Needs admin attention:** reusable attention queue when automation cannot safely
+    conclude (first case: Steadfast “delivered” / partial COD mismatch). Surface on
+    **Admin → Dashboard** above the daily order qty table, with review links. See §14.
 
 ## 4. Delivery sequence
 
@@ -83,7 +86,8 @@ elsewhere. Share asset: optional `priced_image_path` + `priced_image_layout` (se
 composed file separate from gallery `product_images`. Social compose/publish: `social_posts`
 (+ products + per-channel publications) for Meta posts and homepage Latest posts (see §12).
 Channel inbox: `channel_conversations` / `channel_messages` (Messenger + WhatsApp) with staff
-`last_read_*` for unread in Admin → Inbox (see §13).
+`last_read_*` for unread in Admin → Inbox (see §13). Ops exceptions: `admin_attentions` (or
+equivalent) for cases automation cannot safely resolve — e.g. Steadfast COD mismatch (see §14).
 
 Note: blogs, pages, costs/payables, settings, and payment-method tables may still exist
 from early migrations but are **not** in active product scope.
@@ -445,3 +449,93 @@ from the admin site — not only via the current order-attached conversation mod
 - AI suggest button in the composer.
 - Replacing Meta Business Suite entirely for comments/ads — this inbox is for **Page
   Messenger + WhatsApp** threads already ingested by our webhooks.
+
+## 14. Needs admin attention (+ Steadfast COD checkpoint) — locked plan
+
+**Status:** planned / not implemented yet.
+**Trigger example:** Steadfast delivery webhook maps both `delivered` and `partial_delivered`
+(and similar) to our `delivered` today in `SteadfastWebhookProcessor::mapDeliveryStatus()`,
+so partial COD collections can look like full delivery.
+
+### Goal
+
+When automation **does not confidently understand** a situation, it must **not silently
+guess**. Instead it opens a **Needs admin attention** item with a clear message and a
+**Review** link. First concrete checkpoint: Steadfast delivery vs COD collected.
+
+### Steadfast delivery checkpoint (first case)
+
+On Steadfast `delivery_status` (and any path that would auto-mark **delivered**, including
+tracking messages that imply delivered):
+
+1. Determine **expected COD** = our order collectable / `cod_amount` (residual courier should
+   collect — same source used when dispatching).
+2. Determine **collected** from webhook payload when present (e.g. `cod_amount` / collected
+   fields Steadfast sends); if Steadfast status is `partial_delivered` (or equivalent) treat
+   as a partial-collection signal even when they also label it delivered.
+3. **Match** (within a small money tolerance, e.g. ৳1): proceed with current delivered
+   settlement flow (record collection, status `delivered`, reseller credit as today).
+4. **Mismatch** (collected ≠ expected, including partial under-collection or over-collection):
+   - **Do not** auto-mark a clean full `delivered` / do not run full delivered side-effects
+     (reseller credit, etc.) as if COD were complete.
+   - Still persist courier payload / `courier_data` + status history note that courier reported
+     delivered/partial.
+   - Create an **admin attention** item, message like:
+     **“COD is ৳xxx but collected ৳yyy, yet courier reported delivered — review.”**
+   - **Review** link → admin order show (and/or deliver/partial-return UI) so staff can
+     apply the correct settlement (full deliver, partial return, adjust collection).
+
+Exact held order status while attention is open (stay `dispatched` vs a dedicated flag) is an
+implementation detail; locked rule is: **no silent full-delivery completion on COD mismatch**.
+
+### Reusable “Needs admin attention” system
+
+Generic queue for this and **future** cases from other areas (inbox parse failures, social
+publish errors, import anomalies, stock conflicts, etc.).
+
+| Field (conceptual) | Role |
+|--------------------|------|
+| `type` / `code` | e.g. `steadfast_cod_mismatch` |
+| `title` / `message` | Human-readable summary (include xxx/yyy amounts) |
+| `severity` | optional: warning / critical |
+| `subject` | polymorphic or `order_id` (+ optional other ids) |
+| `action_url` | Review deep-link |
+| `payload` / `meta` | Raw context (webhook snippet, expected vs collected) |
+| `status` | `open` \| `resolved` \| `dismissed` |
+| `resolved_by` / `resolved_at` | When staff finishes review |
+
+Deduping: avoid flooding — e.g. one open item per order+type until resolved (update message
+if a newer webhook repeats the mismatch).
+
+### Admin → Dashboard placement (locked)
+
+On **Admin → Dashboard**, show a **Needs admin attention** section **above** the existing
+segment cards’ daily table — specifically **before** the **“Last 30 Days”** order qty / value
+table (the daily totals block). Preferred order on the page:
+
+1. (Optional keep) existing segment count cards as today  
+2. **Needs admin attention** (open items: message + Review button/link; empty state hidden or
+   quiet)  
+3. **Last 30 Days** daily order qty table  
+
+List open items newest-first; show count badge. Resolving/dismissing from order review or
+from the dashboard row clears them from this section.
+
+### Work to implement (when approved) — v1
+
+1. Migration + model for attention items; resolve/dismiss API.
+2. Steadfast webhook: COD expected vs collected checkpoint; open attention on mismatch;
+   only auto-complete delivered when amounts match.
+3. Dashboard section above Last 30 Days with Review links.
+4. Tests: match → delivered; mismatch → attention + not clean delivered; dashboard lists open
+   items; resolve removes from open list.
+
+### Follow-on
+
+- More attention types from other subsystems (reuse same table + dashboard section).
+- Optional Admin nav badge / dedicated attentions index page if volume grows.
+
+### Explicit non-goals (v1)
+
+- Fully auto-inferring partial-return line items from Steadfast without admin review.
+- Replacing Steadfast’s own portal UI — we only gate **our** order state + money effects.

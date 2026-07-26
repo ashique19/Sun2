@@ -4,6 +4,7 @@ namespace App\Services\Orders;
 
 use App\Models\Order;
 use App\Models\PaymentTransaction;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * The ONLY place that writes orders.paid_amount / due_amount / payment_status / cod_amount.
@@ -40,9 +41,9 @@ class OrderPaymentSync
         $dueAmount = round(max(0.0, $total - $paidAmount), 2);
 
         $paymentStatus = match (true) {
-            $paidAmount <= 0   => 'unpaid',
+            $paidAmount <= 0 => 'unpaid',
             $paidAmount >= $total => 'paid',
-            default            => 'partial',
+            default => 'partial',
         };
 
         // cod_amount = residual (what the courier should collect)
@@ -51,11 +52,11 @@ class OrderPaymentSync
         // compat payment_method summary
         $paymentMethod = $this->summarizeMethod($transactions);
 
-        $order->paid_amount       = $paidAmount;
-        $order->due_amount        = $dueAmount;
-        $order->payment_status    = $paymentStatus;
-        $order->cod_amount        = $codAmount;
-        $order->collected_amount  = $collectedAmount;
+        $order->paid_amount = $paidAmount;
+        $order->due_amount = $dueAmount;
+        $order->payment_status = $paymentStatus;
+        $order->cod_amount = $codAmount;
+        $order->collected_amount = $collectedAmount;
 
         if ($paymentMethod !== null) {
             $order->payment_method = $paymentMethod;
@@ -65,7 +66,7 @@ class OrderPaymentSync
     }
 
     /**
-     * @param  \Illuminate\Database\Eloquent\Collection<int, PaymentTransaction>  $transactions
+     * @param  Collection<int, PaymentTransaction>  $transactions
      */
     private function summarizeMethod($transactions): ?string
     {

@@ -2,7 +2,6 @@
 
 namespace App\Services\Couriers\Webhooks;
 
-use App\Models\Courier;
 use App\Models\CourierData;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;

@@ -3,6 +3,7 @@
 namespace App\Livewire\Admin;
 
 use App\Models\HeroSlide;
+use App\Services\Admin\HeroSlideImageService;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -21,7 +22,7 @@ class AdminHeroSlides extends Component
 
         $image = $slide->image;
         $slide->delete();
-        app(\App\Services\Admin\HeroSlideImageService::class)->deleteLocalFile($image);
+        app(HeroSlideImageService::class)->deleteLocalFile($image);
     }
 
     public function togglePublished(int $slideId): void

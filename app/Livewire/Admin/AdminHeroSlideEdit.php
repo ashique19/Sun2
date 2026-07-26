@@ -4,6 +4,7 @@ namespace App\Livewire\Admin;
 
 use App\Models\HeroSlide;
 use App\Services\Admin\HeroSlideImageService;
+use App\Support\Fileinfo;
 use App\Support\StorefrontAssets;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -72,11 +73,11 @@ class AdminHeroSlideEdit extends Component
             'link_label' => ['nullable', 'string', 'max:80'],
             'display_order' => ['integer', 'min:0', 'max:32767'],
             'is_published' => ['boolean'],
-            'imageUpload' => \App\Support\Fileinfo::storedImageRules(8192, required: false),
+            'imageUpload' => Fileinfo::storedImageRules(8192, required: false),
         ];
 
         if ($isCreate && ! $this->imageUpload) {
-            $rules['imageUpload'] = \App\Support\Fileinfo::storedImageRules(8192, required: true);
+            $rules['imageUpload'] = Fileinfo::storedImageRules(8192, required: true);
         }
 
         $validated = $this->validate($rules);

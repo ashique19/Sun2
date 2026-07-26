@@ -3,6 +3,7 @@
 namespace App\Services\Admin;
 
 use App\Models\Order;
+use App\Models\User;
 use App\Services\Orders\OrderDeliverySettlement;
 use App\Services\Orders\OrderPaymentSync;
 use App\Services\Orders\OrderStockService;
@@ -33,7 +34,7 @@ class OrderDeliveryReturnService
             $this->deliverySettlement->recordCollection(
                 order: $order,
                 amount: $collected,
-                actor: $changedBy ? \App\Models\User::query()->find($changedBy) : auth()->user(),
+                actor: $changedBy ? User::query()->find($changedBy) : auth()->user(),
                 meta: ['source' => 'admin_deliver'],
             );
 
@@ -157,7 +158,7 @@ class OrderDeliveryReturnService
             $this->deliverySettlement->recordCollection(
                 order: $order,
                 amount: $collectedTk,
-                actor: $changedBy ? \App\Models\User::query()->find($changedBy) : auth()->user(),
+                actor: $changedBy ? User::query()->find($changedBy) : auth()->user(),
                 meta: ['source' => 'admin_partial_return'],
             );
 

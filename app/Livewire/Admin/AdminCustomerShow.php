@@ -2,9 +2,9 @@
 
 namespace App\Livewire\Admin;
 
+use App\Livewire\Concerns\ManagesProductImagePreview;
 use App\Models\Order;
 use App\Models\User;
-use App\Livewire\Concerns\ManagesProductImagePreview;
 use App\Support\AdminAccess;
 use Livewire\Attributes\Layout;
 use Livewire\Component;

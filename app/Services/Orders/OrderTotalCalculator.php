@@ -2,7 +2,8 @@
 
 namespace App\Services\Orders;
 
-use Illuminate\Support\Collection;
+use App\Models\OrderAdjustment;
+use App\Models\OrderProduct;
 
 /**
  * Single authoritative formula for all order money calculations.
@@ -21,8 +22,8 @@ class OrderTotalCalculator
     /**
      * Calculate all order money totals.
      *
-     * @param  iterable<\App\Models\OrderAdjustment|array{type:string,amount:float|int}>  $adjustments
-     * @param  iterable<\App\Models\OrderProduct|array{purchase_price:float|int,quantity:int,returned_quantity?:int}>  $items  Order lines for COGS
+     * @param  iterable<OrderAdjustment|array{type:string,amount:float|int}>  $adjustments
+     * @param  iterable<OrderProduct|array{purchase_price:float|int,quantity:int,returned_quantity?:int}>  $items  Order lines for COGS
      */
     public function calculate(
         float $subtotal,
@@ -53,7 +54,7 @@ class OrderTotalCalculator
     /**
      * Quick total-only calculation (no COGS / net-revenue). Useful at checkout.
      *
-     * @param  iterable<\App\Models\OrderAdjustment|array{type:string,amount:float|int}>  $adjustments
+     * @param  iterable<OrderAdjustment|array{type:string,amount:float|int}>  $adjustments
      */
     public function customerTotal(
         float $subtotal,
@@ -68,7 +69,7 @@ class OrderTotalCalculator
     /**
      * COGS from an iterable of order items.
      *
-     * @param  iterable<\App\Models\OrderProduct|array{purchase_price:float|int,quantity:int,returned_quantity?:int}>  $items
+     * @param  iterable<OrderProduct|array{purchase_price:float|int,quantity:int,returned_quantity?:int}>  $items
      */
     public function cogsFromItems(iterable $items): float
     {
@@ -93,8 +94,8 @@ class OrderTotalCalculator
     }
 
     /**
-     * @param  iterable<\App\Models\OrderAdjustment|array{type:string,amount:float|int}>  $adjustments
-     * @return array{float, float}  [charges, discounts]
+     * @param  iterable<OrderAdjustment|array{type:string,amount:float|int}>  $adjustments
+     * @return array{float, float} [charges, discounts]
      */
     private function sumAdjustments(iterable $adjustments): array
     {

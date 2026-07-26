@@ -11,6 +11,7 @@ use App\Services\Reseller\ResellerOrderService;
 use App\Support\PhoneNumber;
 use App\Support\ResellerAccess;
 use App\Support\StorefrontAssets;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -321,7 +322,7 @@ class ResellerOrderCreate extends Component
             $base = $this->roundedMoney($line['base_price']);
             if ($sell < $base) {
                 $this->addError('lines.'.$productId.'.price', 'Sell price cannot be below catalog price ৳'.number_format($base, 0).'.');
-                throw \Illuminate\Validation\ValidationException::withMessages([
+                throw ValidationException::withMessages([
                     'lines.'.$productId.'.price' => 'Sell price for "'.$line['name'].'" cannot be below catalog price ৳'.number_format($base, 0).'.',
                 ]);
             }

@@ -59,13 +59,13 @@ class OrderCourierChargeSync
         $order->save();
 
         $this->auditor->logField($order, [
-            'field'                  => 'courier_charge',
-            'phase'                  => $phase,
-            'amount_before'          => $before,
-            'amount_after'           => $after,
+            'field' => 'courier_charge',
+            'phase' => $phase,
+            'amount_before' => $before,
+            'amount_after' => $after,
             'source_courier_data_id' => $courierDataId,
-            'meta_after'             => $meta,
-            'note'                   => "Courier charge updated at phase '{$phase}'.",
+            'meta_after' => $meta,
+            'note' => "Courier charge updated at phase '{$phase}'.",
         ], $actor);
     }
 

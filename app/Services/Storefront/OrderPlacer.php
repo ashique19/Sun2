@@ -5,6 +5,7 @@ namespace App\Services\Storefront;
 use App\Models\Coupon;
 use App\Models\Order;
 use App\Models\OrderProduct;
+use App\Services\Admin\OrderStatusService;
 use App\Services\Orders\OrderAdjustmentSync;
 use App\Services\Orders\OrderPaymentSync;
 use App\Services\Orders\OrderStockService;
@@ -61,7 +62,7 @@ class OrderPlacer
 
             $order->update(['order_number' => (string) $order->id]);
 
-            app(\App\Services\Admin\OrderStatusService::class)->recordPlacement($order);
+            app(OrderStatusService::class)->recordPlacement($order);
 
             foreach ($lines as $line) {
                 $product = $line['product'];

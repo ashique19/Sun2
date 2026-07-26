@@ -12,10 +12,10 @@ class OrderAdjustment extends Model
     protected function casts(): array
     {
         return [
-            'amount'     => 'decimal:2',
+            'amount' => 'decimal:2',
             'sort_order' => 'integer',
-            'coupon_id'  => 'integer',
-            'meta'       => 'array',
+            'coupon_id' => 'integer',
+            'meta' => 'array',
         ];
     }
 

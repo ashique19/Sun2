@@ -3,7 +3,7 @@
 namespace App\Services\Orders;
 
 use App\Models\Coupon;
-use App\Models\User;
+use App\Models\OrderProduct;
 use Illuminate\Support\Collection;
 
 /**
@@ -78,8 +78,8 @@ class CouponStackingService
      * Compute the resolved taka amount for a coupon, respecting product max-discount caps.
      *
      * @param  float  $remainingSubtotal  Merchandise subtotal after prior coupon/discount lines (for percent base).
-     * @param  float  $originalSubtotal   Original pre-discount subtotal (not used for amount but available for reference).
-     * @param  Collection<int, \App\Models\OrderProduct|array>  $items  Order lines for cap allocation.
+     * @param  float  $originalSubtotal  Original pre-discount subtotal (not used for amount but available for reference).
+     * @param  Collection<int, OrderProduct|array>  $items  Order lines for cap allocation.
      * @param  array<int, float>  $alreadyAllocated  product_id => prior coupon amounts used (for cap tracking).
      * @return array{
      *     resolved_amount: float,
@@ -103,8 +103,8 @@ class CouponStackingService
             $unconstrained = round($base * ($percent / 100), 2);
             $meta = [
                 'coupon_type' => 'percent',
-                'percent'     => $percent,
-                'base'        => round($base, 2),
+                'percent' => $percent,
+                'base' => round($base, 2),
             ];
         } else {
             $unconstrained = min((float) $coupon->value, max(0.0, $remainingSubtotal));
@@ -113,10 +113,10 @@ class CouponStackingService
 
         if ($unconstrained <= 0) {
             return [
-                'resolved_amount'   => 0.0,
-                'capped'            => false,
-                'meta'              => $meta,
-                'rejected'          => true,
+                'resolved_amount' => 0.0,
+                'capped' => false,
+                'meta' => $meta,
+                'rejected' => true,
                 'rejection_message' => "Coupon '{$coupon->code}' would apply ৳0 (subtotal may be zero or fully discounted).",
             ];
         }
@@ -136,19 +136,19 @@ class CouponStackingService
 
         if ($resolvedAmount <= 0) {
             return [
-                'resolved_amount'   => 0.0,
-                'capped'            => true,
-                'meta'              => $meta,
-                'rejected'          => true,
+                'resolved_amount' => 0.0,
+                'capped' => true,
+                'meta' => $meta,
+                'rejected' => true,
                 'rejection_message' => "Coupon '{$coupon->code}' cannot be applied: product discount caps leave no room.",
             ];
         }
 
         return [
-            'resolved_amount'   => $resolvedAmount,
-            'capped'            => $capped,
-            'meta'              => $meta,
-            'rejected'          => false,
+            'resolved_amount' => $resolvedAmount,
+            'capped' => $capped,
+            'meta' => $meta,
+            'rejected' => false,
             'rejection_message' => null,
         ];
     }
@@ -161,20 +161,19 @@ class CouponStackingService
     public function buildAdjustmentLine(Coupon $coupon, array $resolved, int $sortOrder = 20): array
     {
         return [
-            'type'       => 'coupon',
-            'label'      => $coupon->code,
-            'amount'     => $resolved['resolved_amount'],
-            'coupon_id'  => $coupon->id,
-            'source'     => 'checkout',
+            'type' => 'coupon',
+            'label' => $coupon->code,
+            'amount' => $resolved['resolved_amount'],
+            'coupon_id' => $coupon->id,
+            'source' => 'checkout',
             'sort_order' => $sortOrder,
-            'meta'       => $resolved['meta'],
+            'meta' => $resolved['meta'],
         ];
     }
 
     /**
      * Compute the remaining merchandise subtotal after summing prior discount/coupon lines.
      *
-     * @param  float  $originalSubtotal
      * @param  list<array{type:string,amount:float}>  $priorLines  Already-applied adjustment lines
      */
     public function remainingSubtotal(float $originalSubtotal, array $priorLines): float

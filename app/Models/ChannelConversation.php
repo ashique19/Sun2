@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 class ChannelConversation extends Model
 {
@@ -46,7 +47,7 @@ class ChannelConversation extends Model
             return false;
         }
 
-        $now = \Illuminate\Support\Carbon::parse($now ?? now());
+        $now = Carbon::parse($now ?? now());
 
         return $this->last_inbound_at->greaterThan($now->copy()->subHours(24));
     }

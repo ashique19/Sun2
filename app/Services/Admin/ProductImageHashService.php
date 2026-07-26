@@ -2,7 +2,6 @@
 
 namespace App\Services\Admin;
 
-use App\Models\Product;
 use App\Models\ProductImage;
 use App\Support\StorefrontAssets;
 use Illuminate\Http\UploadedFile;

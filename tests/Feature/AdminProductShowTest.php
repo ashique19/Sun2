@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Livewire\Admin\AdminProductShow;
 use App\Livewire\Admin\AdminProducts;
+use App\Livewire\Admin\AdminProductShow;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;

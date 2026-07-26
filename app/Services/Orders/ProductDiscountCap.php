@@ -2,6 +2,7 @@
 
 namespace App\Services\Orders;
 
+use App\Models\OrderProduct;
 use Illuminate\Support\Collection;
 
 /**
@@ -20,7 +21,7 @@ class ProductDiscountCap
      *
      * Returns null when every item is uncapped (max_discount = null on all lines).
      *
-     * @param  Collection<int, \App\Models\OrderProduct|array{max_discount:float|null,quantity:int,line_total:float}>  $items
+     * @param  Collection<int, OrderProduct|array{max_discount:float|null,quantity:int,line_total:float}>  $items
      */
     public function orderCouponCap(Collection $items): ?float
     {
@@ -48,7 +49,7 @@ class ProductDiscountCap
      * Returns the actually applicable amount (may be less than $couponAmount if capped),
      * plus an allocation breakdown for storage in adjustment meta.
      *
-     * @param  Collection<int, \App\Models\OrderProduct|array{product_id:int,max_discount:float|null,quantity:int,line_total:float}>  $items
+     * @param  Collection<int, OrderProduct|array{product_id:int,max_discount:float|null,quantity:int,line_total:float}>  $items
      * @param  array<int, float>  $alreadyAllocated  product_id => already-discounted amount from prior coupon lines
      * @return array{
      *     net_amount: float,
@@ -110,8 +111,8 @@ class ProductDiscountCap
         }
 
         return [
-            'net_amount'  => round($netAmount, 2),
-            'capped'      => $anyCapped,
+            'net_amount' => round($netAmount, 2),
+            'capped' => $anyCapped,
             'allocations' => $allocations,
         ];
     }

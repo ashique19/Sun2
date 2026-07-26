@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\Orders\OrderTotalCalculator;
+use App\Support\PhoneNumber;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -44,23 +45,23 @@ class Order extends Model
             'updated_by' => 'integer',
             'channel_conversation_id' => 'integer',
             'ai_parse_meta' => 'array',
-            'subtotal'        => 'decimal:2',
+            'subtotal' => 'decimal:2',
             'delivery_charge' => 'decimal:2',
-            'charge'          => 'decimal:2',
-            'courier_charge'  => 'decimal:2',
-            'discount'        => 'decimal:2',
-            'total'           => 'decimal:2',
-            'cod_amount'      => 'decimal:2',
+            'charge' => 'decimal:2',
+            'courier_charge' => 'decimal:2',
+            'discount' => 'decimal:2',
+            'total' => 'decimal:2',
+            'cod_amount' => 'decimal:2',
             'collected_amount' => 'decimal:2',
-            'paid_amount'     => 'decimal:2',
-            'due_amount'      => 'decimal:2',
-            'placed_at'              => 'datetime',
-            'dispatch_date'          => 'datetime',
+            'paid_amount' => 'decimal:2',
+            'due_amount' => 'decimal:2',
+            'placed_at' => 'datetime',
+            'dispatch_date' => 'datetime',
             'expected_delivery_date' => 'datetime',
-            'actual_delivery_date'   => 'datetime',
-            'payment_date'           => 'datetime',
+            'actual_delivery_date' => 'datetime',
+            'payment_date' => 'datetime',
             'is_replacement' => 'boolean',
-            'has_return'     => 'boolean',
+            'has_return' => 'boolean',
         ];
     }
 
@@ -264,7 +265,7 @@ class Order extends Model
 
     public function scopeMatchingPhone(Builder $query, string $phone): Builder
     {
-        return $query->whereIn('phone', \App\Support\PhoneNumber::matchCandidates($phone));
+        return $query->whereIn('phone', PhoneNumber::matchCandidates($phone));
     }
 
     private function consignmentIdFromCourierLogs(): ?string

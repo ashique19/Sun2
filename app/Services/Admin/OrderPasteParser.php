@@ -69,7 +69,7 @@ class OrderPasteParser
             try {
                 $parsed = $this->merge($parsed, $this->parseWithGemini($raw));
                 $parsed['source'] = 'gemini';
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 Log::warning('Order paste Gemini parse failed; using heuristics.', [
                     'message' => $e->getMessage(),
                 ]);

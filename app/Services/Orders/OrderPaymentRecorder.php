@@ -22,8 +22,8 @@ class OrderPaymentRecorder
     /**
      * Record a completed payment and sync order paid/due/status.
      *
-     * @param  string  $method   Payment method code (cod|bkash|nagad|cash|bank|...)
-     * @param  string  $kind     advance|partial|settlement|refund|adjustment
+     * @param  string  $method  Payment method code (cod|bkash|nagad|cash|bank|...)
+     * @param  string  $kind  advance|partial|settlement|refund|adjustment
      * @param  string|null  $reference  External transaction ID / gateway reference
      * @param  array<string,mixed>|null  $meta  Extra evidence (gateway payload snippet, etc.)
      */
@@ -40,17 +40,17 @@ class OrderPaymentRecorder
         $paymentMethod = PaymentMethod::query()->where('code', $method)->first();
 
         $transaction = PaymentTransaction::query()->create([
-            'order_id'          => $order->id,
-            'method'            => $method,
+            'order_id' => $order->id,
+            'method' => $method,
             'payment_method_id' => $paymentMethod?->id,
-            'amount'            => round($amount, 2),
-            'kind'              => $kind,
-            'reference'         => $reference,
-            'external_id'       => $reference, // denormalize for index lookups
-            'status'            => 'completed',
-            'paid_at'           => $paidAt ?? now(),
-            'meta'              => $meta,
-            'received_by'       => $actor?->id,
+            'amount' => round($amount, 2),
+            'kind' => $kind,
+            'reference' => $reference,
+            'external_id' => $reference, // denormalize for index lookups
+            'status' => 'completed',
+            'paid_at' => $paidAt ?? now(),
+            'meta' => $meta,
+            'received_by' => $actor?->id,
         ]);
 
         // Reload transactions relation so sync sees the new row

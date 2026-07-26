@@ -12,6 +12,7 @@ class ResellerCommissionService
     public function __construct(
         private ResellerWalletService $wallet,
     ) {}
+
     /**
      * Credit reseller wallet for a delivered order (idempotent).
      */

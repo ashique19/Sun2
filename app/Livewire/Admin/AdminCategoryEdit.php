@@ -4,6 +4,7 @@ namespace App\Livewire\Admin;
 
 use App\Models\Category;
 use App\Services\Admin\CategoryImageService;
+use App\Support\Fileinfo;
 use App\Support\StorefrontAssets;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
@@ -96,7 +97,7 @@ class AdminCategoryEdit extends Component
             'display_order' => ['integer', 'min:0', 'max:32767'],
             'is_active' => ['boolean'],
             'is_homepage' => ['boolean'],
-            'thumbUpload' => \App\Support\Fileinfo::storedImageRules(5120, required: false),
+            'thumbUpload' => Fileinfo::storedImageRules(5120, required: false),
         ]);
 
         if ($validated['slug'] === '') {

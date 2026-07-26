@@ -2,7 +2,6 @@
 
 namespace App\Services\Storefront;
 
-use App\Models\Product;
 use App\Models\Wishlist;
 
 class WishlistService

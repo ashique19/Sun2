@@ -29,3 +29,4 @@ Thumbs.db
 /database/legacy/*.sql
 /sun.sql
 /sun2_production_ready.sql
+.aider*

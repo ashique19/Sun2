@@ -19,7 +19,7 @@ class StorefrontPage extends Component
 
     public function title(): string
     {
-        return ($this->page->meta_tag_title ?: str($this->page->name)->headline()->toString().' - Sundoritoma');
+        return $this->page->meta_tag_title ?: str($this->page->name)->headline()->toString().' - Sundoritoma';
     }
 
     public function render()

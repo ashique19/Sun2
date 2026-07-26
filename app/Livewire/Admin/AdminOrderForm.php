@@ -15,12 +15,16 @@ use App\Services\Admin\OrderPasteParser;
 use App\Services\Admin\ProductImageHashService;
 use App\Services\Admin\ProductImageService;
 use App\Services\Locations\LocationAliasLearner;
+use App\Services\Orders\OrderTotalCalculator;
 use App\Services\Storefront\AddressLocationGuesser;
 use App\Services\Storefront\CheckoutPricing;
-use App\Services\Orders\OrderTotalCalculator;
+use App\Support\Fileinfo;
 use App\Support\PhoneNumber;
 use App\Support\StorefrontAssets;
+use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -78,7 +82,7 @@ class AdminOrderForm extends Component
 
     public bool $autoDelivery = true;
 
-  /** @var array<int, array{product_id:int,name:string,quantity:int,price:float,purchase_price:float,line_total:float,product_image:?string,stock_quantity:int}> */
+    /** @var array<int, array{product_id:int,name:string,quantity:int,price:float,purchase_price:float,line_total:float,product_image:?string,stock_quantity:int}> */
     public array $lines = [];
 
     public string $productSearch = '';
@@ -518,7 +522,7 @@ class AdminOrderForm extends Component
         $this->showCreateProductModal = false;
 
         $this->validate([
-            'pastedImage' => \App\Support\Fileinfo::storedImageRules(10240),
+            'pastedImage' => Fileinfo::storedImageRules(10240),
         ]);
 
         try {
@@ -569,7 +573,7 @@ class AdminOrderForm extends Component
     public function createProductFromPaste(ProductImageService $images): void
     {
         $this->validate([
-            'pastedImage' => \App\Support\Fileinfo::storedImageRules(10240),
+            'pastedImage' => Fileinfo::storedImageRules(10240),
             'newProductName' => ['required', 'string', 'max:190'],
             'newProductPrice' => ['required', 'numeric', 'min:0'],
             'newProductStock' => ['required', 'integer', 'min:0'],
@@ -865,7 +869,7 @@ class AdminOrderForm extends Component
             }
 
             $this->order = $order->load('items.product');
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e;
         } catch (\Throwable $e) {
             $this->error = $e->getMessage();
@@ -1129,7 +1133,7 @@ class AdminOrderForm extends Component
                 'date_format:Y-m-d',
                 function (string $attribute, mixed $value, \Closure $fail): void {
                     try {
-                        $date = \Carbon\Carbon::createFromFormat('Y-m-d', (string) $value, 'Asia/Dhaka')->startOfDay();
+                        $date = Carbon::createFromFormat('Y-m-d', (string) $value, 'Asia/Dhaka')->startOfDay();
                     } catch (\Throwable) {
                         $fail('Enter a valid order date.');
 
@@ -1156,10 +1160,10 @@ class AdminOrderForm extends Component
         ];
     }
 
-    private function resolvedPlacedAt(): \Carbon\CarbonInterface
+    private function resolvedPlacedAt(): CarbonInterface
     {
         $dhaka = 'Asia/Dhaka';
-        $selected = \Carbon\Carbon::createFromFormat('Y-m-d', $this->orderDate, $dhaka)->startOfDay();
+        $selected = Carbon::createFromFormat('Y-m-d', $this->orderDate, $dhaka)->startOfDay();
         $today = now($dhaka)->startOfDay();
 
         // Today: keep existing timestamp when editing, otherwise now.

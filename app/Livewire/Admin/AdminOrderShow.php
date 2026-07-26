@@ -317,7 +317,6 @@ class AdminOrderShow extends Component
         $this->message = 'Courier charge updated.';
     }
 
-
     public function render(CourierApiRegistry $courierRegistry)
     {
         $apiCouriers = Courier::query()

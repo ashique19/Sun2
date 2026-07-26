@@ -46,10 +46,10 @@ class OrderAdjustmentSync
             // Delete existing adjustment lines and log each deletion
             foreach ($order->adjustments as $existing) {
                 $this->auditor->log($order, $existing, array_merge($beforeSnapshot, [
-                    'action'        => 'deleted',
+                    'action' => 'deleted',
                     'amount_before' => (float) $existing->amount,
-                    'meta_before'   => $existing->meta,
-                    'note'          => 'Removed as part of adjustment set replacement.',
+                    'meta_before' => $existing->meta,
+                    'note' => 'Removed as part of adjustment set replacement.',
                 ]), $actor);
                 $existing->delete();
             }
@@ -60,14 +60,14 @@ class OrderAdjustmentSync
                 $this->validateLine($line);
 
                 $adj = OrderAdjustment::query()->create([
-                    'order_id'   => $order->id,
-                    'type'       => $line['type'],
-                    'label'      => $line['label'],
-                    'amount'     => (float) $line['amount'],
-                    'coupon_id'  => $line['type'] === 'coupon' ? ($line['coupon_id'] ?? null) : null,
-                    'source'     => $line['source'] ?? 'admin',
+                    'order_id' => $order->id,
+                    'type' => $line['type'],
+                    'label' => $line['label'],
+                    'amount' => (float) $line['amount'],
+                    'coupon_id' => $line['type'] === 'coupon' ? ($line['coupon_id'] ?? null) : null,
+                    'source' => $line['source'] ?? 'admin',
                     'sort_order' => $line['sort_order'] ?? ($i * 10),
-                    'meta'       => $line['meta'] ?? null,
+                    'meta' => $line['meta'] ?? null,
                     'created_by' => $actor?->id,
                     'updated_by' => $actor?->id,
                 ]);
@@ -94,10 +94,10 @@ class OrderAdjustmentSync
 
         if ((float) $order->charge > 0) {
             $lines[] = [
-                'type'       => 'charge',
-                'label'      => 'Charge',
-                'amount'     => (float) $order->charge,
-                'source'     => 'system',
+                'type' => 'charge',
+                'label' => 'Charge',
+                'amount' => (float) $order->charge,
+                'source' => 'system',
                 'sort_order' => 10,
             ];
         }
@@ -106,19 +106,19 @@ class OrderAdjustmentSync
             if ($order->coupon_id) {
                 $order->loadMissing('coupon');
                 $lines[] = [
-                    'type'       => 'coupon',
-                    'label'      => $order->coupon?->code ?? 'Coupon',
-                    'amount'     => (float) $order->discount,
-                    'coupon_id'  => $order->coupon_id,
-                    'source'     => 'system',
+                    'type' => 'coupon',
+                    'label' => $order->coupon?->code ?? 'Coupon',
+                    'amount' => (float) $order->discount,
+                    'coupon_id' => $order->coupon_id,
+                    'source' => 'system',
                     'sort_order' => 20,
                 ];
             } else {
                 $lines[] = [
-                    'type'       => 'discount',
-                    'label'      => 'Discount',
-                    'amount'     => (float) $order->discount,
-                    'source'     => 'system',
+                    'type' => 'discount',
+                    'label' => 'Discount',
+                    'amount' => (float) $order->discount,
+                    'source' => 'system',
                     'sort_order' => 20,
                 ];
             }
@@ -171,7 +171,7 @@ class OrderAdjustmentSync
         // Log the batch replace summary with before/after order totals
         $this->auditor->log($order, null, array_merge($beforeSnapshot, $this->auditor->orderSnapshotAfter($order), [
             'action' => 'replaced_set',
-            'note'   => 'Adjustment set replaced; order scalars synced.',
+            'note' => 'Adjustment set replaced; order scalars synced.',
         ]), $actor);
 
         // Recompute payment caches without wiping paid amounts

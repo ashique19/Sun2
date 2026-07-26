@@ -6,7 +6,6 @@ use App\Models\User;
 use App\Rules\BangladeshMobile;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Livewire\Attributes\Layout;

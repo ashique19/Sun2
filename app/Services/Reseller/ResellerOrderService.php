@@ -187,4 +187,3 @@ class ResellerOrderService
         return (float) CheckoutPricing::deliveryCharge($location, $itemCount, $subtotal);
     }
 }
-

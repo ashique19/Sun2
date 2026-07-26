@@ -50,7 +50,7 @@ class ProductImageService
     {
         $path = $image->path;
 
-        DB::transaction(function () use ($image, $path) {
+        DB::transaction(function () use ($image) {
             $wasPrimary = $image->is_primary;
             $productId = $image->product_id;
 

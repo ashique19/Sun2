@@ -10,6 +10,7 @@ use App\Services\Admin\OrderStatusService;
 use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderDeliverySettlement;
 use App\Services\Reseller\ResellerCommissionService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -220,14 +221,14 @@ class SteadfastWebhookProcessor
         ]);
     }
 
-    private function parseTimestamp(?string $value): ?\Illuminate\Support\Carbon
+    private function parseTimestamp(?string $value): ?Carbon
     {
         if (! $value) {
             return null;
         }
 
         try {
-            return \Illuminate\Support\Carbon::parse($value);
+            return Carbon::parse($value);
         } catch (\Throwable) {
             return null;
         }

@@ -12,8 +12,8 @@ class PaymentMethod extends Model
     protected function casts(): array
     {
         return [
-            'charge'        => 'decimal:2',
-            'is_active'     => 'boolean',
+            'charge' => 'decimal:2',
+            'is_active' => 'boolean',
             'display_order' => 'integer',
         ];
     }

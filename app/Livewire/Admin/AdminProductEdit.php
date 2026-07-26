@@ -6,9 +6,11 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Services\Admin\ProductImageService;
+use App\Support\Fileinfo;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 
 #[Layout('components.layouts.admin')]
@@ -44,7 +46,7 @@ class AdminProductEdit extends Component
 
     public bool $is_featured = false;
 
-    /** @var array<int, \Livewire\Features\SupportFileUploads\TemporaryUploadedFile> */
+    /** @var array<int, TemporaryUploadedFile> */
     public array $newImages = [];
 
     /** @var array<int, string> */
@@ -134,7 +136,7 @@ class AdminProductEdit extends Component
 
         $this->validate([
             'newImages' => ['required', 'array', 'min:1'],
-            'newImages.*' => \App\Support\Fileinfo::storedImageItemRules(5120),
+            'newImages.*' => Fileinfo::storedImageItemRules(5120),
         ]);
 
         $count = count($this->newImages);

@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\ProductImageHashRebuildController;
+use App\Http\Controllers\RobotsController;
+use App\Http\Controllers\SitemapController;
 use App\Livewire\Admin\AdminAreaEdit;
 use App\Livewire\Admin\AdminAreas;
 use App\Livewire\Admin\AdminCategories;
@@ -15,21 +18,23 @@ use App\Livewire\Admin\AdminDashboard;
 use App\Livewire\Admin\AdminHeroSlideEdit;
 use App\Livewire\Admin\AdminHeroSlides;
 use App\Livewire\Admin\AdminOrderForm;
-use App\Livewire\Admin\AdminOrderShow;
 use App\Livewire\Admin\AdminOrders;
+use App\Livewire\Admin\AdminOrderShow;
 use App\Livewire\Admin\AdminProductEdit;
-use App\Livewire\Admin\AdminProductShow;
+use App\Livewire\Admin\AdminProductImageHashes;
 use App\Livewire\Admin\AdminProducts;
+use App\Livewire\Admin\AdminProductShow;
 use App\Livewire\Admin\AdminReviews;
 use App\Livewire\Admin\AdminSalesByMonth;
+use App\Livewire\Admin\AdminSitemap;
 use App\Livewire\Admin\AdminUserEdit;
 use App\Livewire\Admin\AdminUsers;
+use App\Livewire\PublicProductShare;
 use App\Livewire\Reseller\ResellerDashboard;
 use App\Livewire\Reseller\ResellerOrderCreate;
-use App\Livewire\Reseller\ResellerOrderShow;
 use App\Livewire\Reseller\ResellerOrders;
+use App\Livewire\Reseller\ResellerOrderShow;
 use App\Livewire\Reseller\ResellerWallet;
-use App\Livewire\StorefrontWishlist;
 use App\Livewire\StorefrontAccount;
 use App\Livewire\StorefrontCart;
 use App\Livewire\StorefrontCategory;
@@ -47,11 +52,11 @@ use App\Livewire\StorefrontProfile;
 use App\Livewire\StorefrontRegister;
 use App\Livewire\StorefrontResetPassword;
 use App\Livewire\StorefrontSearch;
-use App\Http\Controllers\RobotsController;
-use App\Http\Controllers\SitemapController;
-use App\Http\Controllers\ProductImageHashRebuildController;
-use App\Livewire\Admin\AdminSitemap;
-use App\Livewire\Admin\AdminProductImageHashes;
+use App\Livewire\StorefrontWishlist;
+use App\Models\Order;
+use App\Models\Product;
+use App\Support\AdminAccess;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -72,7 +77,7 @@ Route::get('/cart', StorefrontCart::class)->name('cart');
 Route::get('/checkout', StorefrontCheckout::class)->name('checkout');
 Route::get('/checkout/confirmation/{order}', StorefrontOrderConfirmation::class)->name('checkout.confirmation');
 Route::get('/page/{page:slug}', StorefrontPage::class)->name('page.show');
-Route::get('/share/products/{token}', \App\Livewire\PublicProductShare::class)
+Route::get('/share/products/{token}', PublicProductShare::class)
     ->where('token', '[A-Za-z0-9]{32,64}')
     ->name('share.products');
 
@@ -114,7 +119,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
 
     Route::redirect('/orders', '/admin/orders/new');
     Route::get('/orders/new', AdminOrders::class)->defaults('segment', 'new')->name('orders.new');
-    Route::get('/orders/print-selected', function (\Illuminate\Http\Request $request) {
+    Route::get('/orders/print-selected', function (Request $request) {
         $ids = collect(explode(',', (string) $request->query('ids', '')))
             ->map(fn ($id) => (int) trim($id))
             ->filter(fn (int $id) => $id > 0)
@@ -123,16 +128,16 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
 
         abort_if($ids->isEmpty(), 404);
 
-        $orders = \App\Models\Order::query()
+        $orders = Order::query()
             ->whereIn('id', $ids)
             ->get()
-            ->sortBy(fn (\App\Models\Order $order) => $ids->search($order->id))
+            ->sortBy(fn (Order $order) => $ids->search($order->id))
             ->values();
 
         abort_if($orders->isEmpty(), 404);
 
         foreach ($orders as $order) {
-            \App\Support\AdminAccess::ensureCanViewOrder($order);
+            AdminAccess::ensureCanViewOrder($order);
         }
 
         return response()
@@ -141,8 +146,8 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
             ])
             ->header('Cache-Control', 'no-store');
     })->name('orders.print-selected');
-    Route::get('/orders/{order}/print', function (\App\Models\Order $order) {
-        \App\Support\AdminAccess::ensureCanViewOrder($order);
+    Route::get('/orders/{order}/print', function (Order $order) {
+        AdminAccess::ensureCanViewOrder($order);
 
         $shippingAddress = collect([
             $order->address,
@@ -174,7 +179,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/orders/{order}/edit', AdminOrderForm::class)->whereNumber('order')->name('orders.edit');
         Route::get('/products', AdminProducts::class)->name('products');
         Route::get('/products/create', AdminProductEdit::class)->name('products.create');
-        Route::get('/products/{product:id}/performance', function (\App\Models\Product $product) {
+        Route::get('/products/{product:id}/performance', function (Product $product) {
             return redirect()->route('admin.products.show', $product);
         })->whereNumber('product')->name('products.performance');
         Route::get('/products/{product:id}/edit', AdminProductEdit::class)->name('products.edit');

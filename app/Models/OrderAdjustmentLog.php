@@ -20,20 +20,20 @@ class OrderAdjustmentLog extends Model
     protected function casts(): array
     {
         return [
-            'amount_before'          => 'decimal:2',
-            'amount_after'           => 'decimal:2',
-            'order_charge_before'    => 'decimal:2',
-            'order_charge_after'     => 'decimal:2',
-            'order_discount_before'  => 'decimal:2',
-            'order_discount_after'   => 'decimal:2',
-            'order_total_before'     => 'decimal:2',
-            'order_total_after'      => 'decimal:2',
-            'meta_before'            => 'array',
-            'meta_after'             => 'array',
-            'coupon_id'              => 'integer',
-            'order_adjustment_id'    => 'integer',
+            'amount_before' => 'decimal:2',
+            'amount_after' => 'decimal:2',
+            'order_charge_before' => 'decimal:2',
+            'order_charge_after' => 'decimal:2',
+            'order_discount_before' => 'decimal:2',
+            'order_discount_after' => 'decimal:2',
+            'order_total_before' => 'decimal:2',
+            'order_total_after' => 'decimal:2',
+            'meta_before' => 'array',
+            'meta_after' => 'array',
+            'coupon_id' => 'integer',
+            'order_adjustment_id' => 'integer',
             'source_courier_data_id' => 'integer',
-            'created_at'             => 'datetime',
+            'created_at' => 'datetime',
         ];
     }
 

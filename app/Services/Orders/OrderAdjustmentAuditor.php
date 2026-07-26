@@ -40,27 +40,27 @@ class OrderAdjustmentAuditor
         ?User $actor = null,
     ): OrderAdjustmentLog {
         return OrderAdjustmentLog::query()->create([
-            'order_id'               => $order->id,
-            'order_adjustment_id'    => $adjustment?->id,
-            'action'                 => $data['action'],
-            'type'                   => $adjustment?->type ?? null,
-            'label'                  => $adjustment?->label ?? null,
-            'field'                  => $data['field'] ?? null,
-            'phase'                  => $data['phase'] ?? null,
+            'order_id' => $order->id,
+            'order_adjustment_id' => $adjustment?->id,
+            'action' => $data['action'],
+            'type' => $adjustment?->type ?? null,
+            'label' => $adjustment?->label ?? null,
+            'field' => $data['field'] ?? null,
+            'phase' => $data['phase'] ?? null,
             'source_courier_data_id' => $data['source_courier_data_id'] ?? null,
-            'amount_before'          => $data['amount_before'] ?? null,
-            'amount_after'           => $data['amount_after'] ?? null,
-            'coupon_id'              => $adjustment?->coupon_id ?? null,
-            'meta_before'            => $data['meta_before'] ?? null,
-            'meta_after'             => $data['meta_after'] ?? null,
-            'order_charge_before'    => $data['order_charge_before'] ?? null,
-            'order_charge_after'     => $data['order_charge_after'] ?? null,
-            'order_discount_before'  => $data['order_discount_before'] ?? null,
-            'order_discount_after'   => $data['order_discount_after'] ?? null,
-            'order_total_before'     => $data['order_total_before'] ?? null,
-            'order_total_after'      => $data['order_total_after'] ?? null,
-            'note'                   => $data['note'] ?? null,
-            'actor_id'               => $actor?->id,
+            'amount_before' => $data['amount_before'] ?? null,
+            'amount_after' => $data['amount_after'] ?? null,
+            'coupon_id' => $adjustment?->coupon_id ?? null,
+            'meta_before' => $data['meta_before'] ?? null,
+            'meta_after' => $data['meta_after'] ?? null,
+            'order_charge_before' => $data['order_charge_before'] ?? null,
+            'order_charge_after' => $data['order_charge_after'] ?? null,
+            'order_discount_before' => $data['order_discount_before'] ?? null,
+            'order_discount_after' => $data['order_discount_after'] ?? null,
+            'order_total_before' => $data['order_total_before'] ?? null,
+            'order_total_after' => $data['order_total_after'] ?? null,
+            'note' => $data['note'] ?? null,
+            'actor_id' => $actor?->id,
         ]);
     }
 
@@ -88,9 +88,9 @@ class OrderAdjustmentAuditor
     public function orderSnapshot(Order $order): array
     {
         return [
-            'order_charge_before'   => (float) $order->charge,
+            'order_charge_before' => (float) $order->charge,
             'order_discount_before' => (float) $order->discount,
-            'order_total_before'    => (float) $order->total,
+            'order_total_before' => (float) $order->total,
         ];
     }
 
@@ -98,9 +98,9 @@ class OrderAdjustmentAuditor
     public function orderSnapshotAfter(Order $order): array
     {
         return [
-            'order_charge_after'   => (float) $order->charge,
+            'order_charge_after' => (float) $order->charge,
             'order_discount_after' => (float) $order->discount,
-            'order_total_after'    => (float) $order->total,
+            'order_total_after' => (float) $order->total,
         ];
     }
 }

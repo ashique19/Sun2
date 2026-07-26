@@ -52,6 +52,13 @@
                     @error('price') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                 </div>
                 <div>
+                    <label class="block text-sm font-medium mb-1">Regular price (&#2547;)</label>
+                    <input type="number" min="0" step="1" wire:model.live="compare_at_price" placeholder="Optional 'was' price"
+                        class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                    <p class="mt-1 text-xs text-[#8C8474]">Optional "was" price shown with strikethrough. Must be greater than selling price.</p>
+                    @error('compare_at_price') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+                </div>
+                <div>
                     <label class="block text-sm font-medium mb-1">Purchase price (&#2547;)</label>
                     <input type="number" min="0" step="1" wire:model.live="purchase_price" class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
                 </div>

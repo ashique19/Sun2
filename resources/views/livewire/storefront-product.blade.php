@@ -54,11 +54,11 @@
                 @endif
                 <h1 class="font-serif text-3xl font-semibold leading-tight">{{ $product->name }}</h1>
 
-                <div class="mt-4 flex items-baseline gap-3">
-                    <span class="text-2xl font-semibold">&#2547; {{ number_format($product->price, 0) }}</span>
+                <div class="mt-4">
                     @if ($product->compare_at_price && $product->compare_at_price > $product->price)
-                        <span class="text-[#8C8474] line-through">&#2547; {{ number_format($product->compare_at_price, 0) }}</span>
+                        <div class="text-[#8C8474] line-through text-lg">&#2547; {{ number_format($product->compare_at_price, 0) }}</div>
                     @endif
+                    <span class="text-2xl font-semibold">&#2547; {{ number_format($product->price, 0) }}</span>
                 </div>
 
                 @if ($product->review_count > 0)

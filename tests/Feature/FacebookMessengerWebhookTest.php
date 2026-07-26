@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ChannelMessage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
@@ -193,7 +194,7 @@ class FacebookMessengerWebhookTest extends TestCase
         ]);
 
         // The message should have the first valid attachment URL (image)
-        $message = \App\Models\ChannelMessage::where('external_message_id', 'm_attach_test')->first();
+        $message = ChannelMessage::where('external_message_id', 'm_attach_test')->first();
         $this->assertNotNull($message);
         $this->assertEquals('https://example.com/image.jpg', $message->media_url);
         $this->assertEquals('image/png', $message->media_mime);

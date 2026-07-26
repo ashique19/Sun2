@@ -38,6 +38,8 @@ class AdminProductEdit extends Component
 
     public string $max_discount = '';
 
+    public string $compare_at_price = '';
+
     public int $stock_quantity = 0;
 
     public int $display_order = 0;
@@ -80,6 +82,9 @@ class AdminProductEdit extends Component
         $this->commission = (string) (int) round((float) $product->commission);
         $this->max_discount = $product->max_discount !== null
             ? (string) (int) round((float) $product->max_discount)
+            : '';
+        $this->compare_at_price = $product->compare_at_price !== null
+            ? (string) (int) round((float) $product->compare_at_price)
             : '';
         $this->stock_quantity = (int) $product->stock_quantity;
         $this->display_order = (int) $product->display_order;
@@ -181,6 +186,11 @@ class AdminProductEdit extends Component
             'purchase_price' => ['nullable', 'numeric', 'min:0'],
             'commission' => ['nullable', 'numeric', 'min:0'],
             'max_discount' => ['nullable', 'numeric', 'min:0'],
+            'compare_at_price' => ['nullable', 'numeric', 'min:0', function ($attribute, $value, $fail) {
+                if ($value !== null && $value !== '' && (float) $value <= (float) $this->price) {
+                    $fail('Regular price must be greater than selling price.');
+                }
+            }],
             'stock_quantity' => ['integer', 'min:0'],
             'display_order' => ['integer', 'min:0', 'max:32767'],
             'is_published' => ['boolean'],
@@ -196,6 +206,9 @@ class AdminProductEdit extends Component
         $validated['commission'] = (int) round((float) ($validated['commission'] ?? 0));
         $validated['max_discount'] = isset($validated['max_discount']) && $validated['max_discount'] !== ''
             ? (int) round((float) $validated['max_discount'])
+            : null;
+        $validated['compare_at_price'] = isset($validated['compare_at_price']) && $validated['compare_at_price'] !== ''
+            ? (int) round((float) $validated['compare_at_price'])
             : null;
         $validated['sku'] = $validated['sku'] !== '' ? $validated['sku'] : null;
         $validated['description'] = $validated['description'] !== '' ? $validated['description'] : null;

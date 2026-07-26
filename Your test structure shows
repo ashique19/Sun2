@@ -1,0 +1,3 @@
+tests/Feature/* - Integration tests for workflows  
+tests/Unit/*   - Component-level validation
+// When modifying services, I'll check both layers

@@ -1,0 +1,8 @@
+# You provide context in this order:
+1. "Add app/Services/NewCourierProcessor.php"  
+2. Show me the file content you want modified
+3. Request specific changes with business rules
+4. I'll generate complete file listings following your format
+5. Review before committing to production
+
+This approach ensures minimal, targeted changes that respect existing architecture patterns while maintaining test coverage and audit requirements.

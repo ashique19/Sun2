@@ -1,0 +1,10 @@
+// When modifying order-related logic:
+1. Check Order model relationships (items(), paymentTransactions())
+2. Review AdminOrderService for business rules  
+3. Verify migration history for recent schema changes
+4. Consider OrderAdjustmentAuditor logging requirements
+
+// For courier integrations:
+1. Examine existing webhook controllers first
+2. Match API client patterns from CarryBee/Pathao examples
+3. Ensure WebhookProcessor compatibility with new endpoints

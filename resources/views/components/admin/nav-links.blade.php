@@ -38,6 +38,10 @@
         class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.dashboard') ? $active : $inactive }}">
         Dashboard
     </a>
+    <a href="{{ route('admin.issues.index') }}" wire:navigate {!! $click !!}
+        class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.issues*') ? $active : $inactive }}">
+        Issues
+    </a>
 @endunless
 
 @if ($isMobile)

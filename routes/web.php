@@ -17,6 +17,7 @@ use App\Livewire\Admin\AdminCustomerShow;
 use App\Livewire\Admin\AdminDashboard;
 use App\Livewire\Admin\AdminHeroSlideEdit;
 use App\Livewire\Admin\AdminHeroSlides;
+use App\Livewire\Admin\AdminIssues;
 use App\Livewire\Admin\AdminOrderForm;
 use App\Livewire\Admin\AdminOrders;
 use App\Livewire\Admin\AdminOrderShow;
@@ -169,6 +170,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
     Route::get('/orders/{order}', AdminOrderShow::class)->whereNumber('order')->name('orders.show');
 
     Route::middleware('role:admin|dev')->group(function () {
+        Route::get('/issues', AdminIssues::class)->name('issues.index');
         Route::get('/orders/draft-ai', AdminOrders::class)->defaults('segment', 'draft-ai')->name('orders.draft-ai');
         Route::get('/orders/dispatched', AdminOrders::class)->defaults('segment', 'dispatched')->name('orders.dispatched');
         Route::get('/orders/delivered', AdminOrders::class)->defaults('segment', 'delivered')->name('orders.delivered');

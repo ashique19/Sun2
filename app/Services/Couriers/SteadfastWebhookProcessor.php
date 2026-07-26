@@ -6,6 +6,7 @@ use App\Models\Courier;
 use App\Models\CourierData;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
+use App\Services\Admin\AdminAttentionService;
 use App\Services\Admin\OrderStatusService;
 use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderDeliverySettlement;
@@ -21,6 +22,7 @@ class SteadfastWebhookProcessor
         private readonly ResellerCommissionService $resellerCommissions,
         private readonly OrderCourierChargeSync $courierChargeSync,
         private readonly OrderDeliverySettlement $deliverySettlement,
+        private readonly AdminAttentionService $adminAttention,
     ) {}
 
     /**
@@ -105,11 +107,36 @@ class SteadfastWebhookProcessor
             $extra['dispatch_date'] = $this->parseTimestamp($payload['updated_at'] ?? null) ?? now();
         }
 
+        // Handle delivery status with COD validation
         if ($mappedStatus === 'delivered') {
-            $cod = isset($payload['cod_amount']) ? (float) $payload['cod_amount'] : $order->collectableAmount();
+            $collectedAmount = isset($payload['cod_amount']) ? (float) $payload['cod_amount'] : $order->collectableAmount();
+            $expectedAmount = $order->collectableAmount();
+
+            // Check if this is a partial delivery with COD mismatch
+            if ($steadfastStatus === 'partial_delivered' && $this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount)) {
+                // Create admin attention item for COD mismatch
+                $this->adminAttention->createCodMismatch(
+                    order: $order,
+                    expectedAmount: $expectedAmount,
+                    collectedAmount: $collectedAmount,
+                    metadata: [
+                        'steadfast_status' => $steadfastStatus,
+                        'webhook_payload' => $payload,
+                    ]
+                );
+
+                // Log partial delivery but don't mark as delivered
+                $partialMessage = "Partial delivery: Expected ৳{$expectedAmount}, collected ৳{$collectedAmount}. Requires admin attention.";
+                $this->recordHistory($order, $order->status, $partialMessage);
+
+                // Keep order as dispatched, not delivered
+                return;
+            }
+
+            // Full delivery or matching amounts - proceed normally
             $this->deliverySettlement->recordCollection(
                 order: $order,
-                amount: $cod,
+                amount: $collectedAmount,
                 actor: null,
                 meta: ['source' => 'steadfast_webhook'],
             );

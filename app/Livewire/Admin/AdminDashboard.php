@@ -2,6 +2,8 @@
 
 namespace App\Livewire\Admin;
 
+use App\Models\AdminAttentionItem;
+use App\Services\Admin\AdminAttentionService;
 use App\Support\AdminAccess;
 use App\Support\AdminDashboardMetrics;
 use App\Support\AdminOrderSegment;
@@ -20,6 +22,14 @@ class AdminDashboard extends Component
         }
     }
 
+    public function markResolved(int $itemId): void
+    {
+        $item = AdminAttentionItem::findOrFail($itemId);
+        app(AdminAttentionService::class)->markAsResolved($item, 'Resolved from dashboard');
+
+        $this->dispatch('attention-item-resolved');
+    }
+
     public function render()
     {
         if (AdminAccess::isModeratorOnly()) {
@@ -33,11 +43,25 @@ class AdminDashboard extends Component
                     'delivery_qty' => 0,
                     'delivery_value' => 0,
                 ],
+                'attentionSummary' => [
+                    'unresolved_count' => 0,
+                    'unresolved_items' => collect(),
+                    'recent_resolved' => collect(),
+                    'unresolved_by_type' => [],
+                ],
             ]);
         }
 
         $segmentCounts = AdminOrderSegment::counts();
         $dailyTotals = AdminDashboardMetrics::dailyTotals();
+
+        $attentionService = app(AdminAttentionService::class);
+        $attentionSummary = $attentionService->getDashboardSummary();
+        $attentionSummary['unresolved_items'] = AdminAttentionItem::unresolved()
+            ->with('order')
+            ->latest()
+            ->limit(10)
+            ->get();
 
         $periodTotals = [
             'order_qty' => array_sum(array_column($dailyTotals, 'order_qty')),
@@ -51,6 +75,7 @@ class AdminDashboard extends Component
             'segmentCounts' => $segmentCounts,
             'dailyTotals' => $dailyTotals,
             'periodTotals' => $periodTotals,
+            'attentionSummary' => $attentionSummary,
         ]);
     }
 }

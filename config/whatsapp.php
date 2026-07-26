@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'enabled' => (bool) env('WHATSAPP_WEBHOOK_ENABLED', true),
+    'enabled' => filter_var(env('WHATSAPP_WEBHOOK_ENABLED', true), FILTER_VALIDATE_BOOL),
 
     'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
 

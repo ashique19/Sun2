@@ -56,6 +56,12 @@ class FacebookMessengerWebhookController extends Controller
     private function receive(Request $request, MessengerInboundService $inbound): Response
     {
         if (! $this->signatureIsValid($request)) {
+            Log::warning('Facebook Messenger webhook signature validation failed', [
+                'has_app_secret' => config('facebook.messenger.app_secret') !== '',
+                'environment' => app()->environment(),
+                'header_present' => $request->hasHeader('X-Hub-Signature-256'),
+            ]);
+
             return response('Invalid signature', 401);
         }
 
@@ -64,6 +70,7 @@ class FacebookMessengerWebhookController extends Controller
         Log::info('Facebook Messenger webhook event received.', [
             'object' => $payload['object'] ?? null,
             'entry_count' => is_array($payload['entry'] ?? null) ? count($payload['entry']) : 0,
+            'has_messaging' => isset($payload['entry'][0]['messaging']),
         ]);
 
         try {
@@ -72,6 +79,7 @@ class FacebookMessengerWebhookController extends Controller
             // Always ACK to Meta so retries do not storm; log for ops.
             Log::error('Messenger webhook processing error.', [
                 'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
         }
 

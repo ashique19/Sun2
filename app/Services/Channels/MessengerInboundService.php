@@ -130,7 +130,10 @@ class MessengerInboundService
             }
 
             $type = (string) ($attachment['type'] ?? '');
-            if (! in_array($type, ['image', 'file'], true)) {
+
+            // Accept common media types that could contain product images
+            // 'fallback' is used when Meta can't determine exact type but still provides a URL
+            if (! in_array($type, ['image', 'file', 'audio', 'video', 'fallback'], true)) {
                 continue;
             }
 
@@ -139,7 +142,17 @@ class MessengerInboundService
                 continue;
             }
 
-            $mime = $type === 'image' ? 'image/jpeg' : null;
+            // Try to get MIME type from payload if available
+            $mime = data_get($attachment, 'payload.mime_type');
+            if (! is_string($mime) || $mime === '') {
+                // Fallback to reasonable defaults based on type
+                $mime = match ($type) {
+                    'image' => 'image/jpeg',
+                    'audio' => 'audio/mpeg',
+                    'video' => 'video/mp4',
+                    default => null,
+                };
+            }
 
             // Prefer a durable copy when page token can fetch Graph attachments later;
             // for now store the CDN URL Meta provides (time-limited but enough for parse).

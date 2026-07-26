@@ -17,7 +17,7 @@ return [
     'graph_version' => env('FACEBOOK_GRAPH_VERSION', 'v25.0'),
 
     'messenger' => [
-        'enabled' => (bool) env('FACEBOOK_MESSENGER_WEBHOOK_ENABLED', true),
+        'enabled' => filter_var(env('FACEBOOK_MESSENGER_WEBHOOK_ENABLED', true), FILTER_VALIDATE_BOOL),
 
         'verify_token' => env('FACEBOOK_MESSENGER_VERIFY_TOKEN'),
 

@@ -132,9 +132,11 @@ class ChannelInboxDiagnostics
         ];
 
         $checks[] = [
-            'ok' => true,
-            'label' => 'Meta app Live mode / testers',
-            'detail' => 'If the Meta app is still in Development mode, webhooks for real customers usually only fire for Admins/Developers/Testers. Put the app Live (or add each person as a tester) or only your personal Facebook ID will appear in Inbox.',
+            'ok' => $messengerCount > 1,
+            'label' => 'Meta app Live mode / testers (required for other customers)',
+            'detail' => 'Development mode is NOT enough even if you own the Page. Meta only delivers Messenger webhooks/API threads for people with an app role (Admin/Developer/Tester). '
+                .'Your personal Facebook ID works because you are an app Admin. Other customers will NOT appear until you either (1) add each tester Facebook account under App Roles → Roles, or (2) switch the app to Live and get pages_messaging Advanced Access. '
+                .'Use “Sync from Facebook” to pull whatever Graph can currently see.',
         ];
 
         if (! empty($messengerHealth['last_rejection_reason'])) {
@@ -188,8 +190,8 @@ class ChannelInboxDiagnostics
         } elseif ($total === 0) {
             $summary = 'Inbox is empty. Config looks okay so far — waiting for Meta to deliver a Messenger (or WhatsApp) message webhook.';
             $severity = 'info';
-        } elseif ($messengerCount <= 1 && $hasStandby) {
-            $summary = 'Only a few conversations are stored. Customer chats often arrive via Meta standby when Page Inbox is primary — those are now ingested. Ask a second Facebook account to message the Page, and confirm the Meta app is Live with the standby webhook field subscribed.';
+        } elseif ($messengerCount <= 1) {
+            $summary = 'Only your app-role chats can appear while the Meta app is in Development mode. Being Page owner/admin is not enough for other Facebook users — add them as App Testers, or switch the app to Live. Use “Sync from Facebook” to import tester threads Graph can see.';
             $severity = 'warning';
         } else {
             $summary = 'Conversations are loading from the local database (webhook ingest).';

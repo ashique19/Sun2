@@ -76,7 +76,10 @@ class ChannelOrderDraftService
 
             $conversation->forceFill([
                 'draft_order_id' => $order->id,
-                'customer_name' => $order->name !== 'Unknown' ? $order->name : $conversation->customer_name,
+                // Prefer an existing Graph/webhook name over a weak AI guess from message text.
+                'customer_name' => filled($conversation->customer_name)
+                    ? $conversation->customer_name
+                    : ($order->name !== 'Unknown' ? $order->name : $conversation->customer_name),
                 'customer_phone' => filled($parsed['phone'] ?? null) ? $parsed['phone'] : $conversation->customer_phone,
             ])->save();
 

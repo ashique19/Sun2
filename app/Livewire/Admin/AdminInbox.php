@@ -6,6 +6,7 @@ use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Services\Channels\ChannelInboxDiagnostics;
 use App\Services\Channels\ChannelReplyService;
+use App\Services\Channels\MessengerConversationSyncService;
 use App\Support\AdminAccess;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -155,6 +156,34 @@ class AdminInbox extends Component
         $this->markConversationRead($conversation, $replies);
         $this->resetComposer();
         $this->statusMessage = 'Reply sent.';
+    }
+
+
+    public function syncFromFacebook(MessengerConversationSyncService $sync): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
+
+        $result = $sync->sync();
+
+        if (! $result['ok']) {
+            $this->error = $result['message'];
+
+            return;
+        }
+
+        $this->statusMessage = $result['message'];
+
+        if ($this->selectedConversationId === null) {
+            $first = ChannelConversation::query()
+                ->orderByRaw('COALESCE(last_inbound_at, last_outbound_at, created_at) desc')
+                ->value('id');
+            if ($first) {
+                $this->selectedConversationId = (int) $first;
+            }
+        }
     }
 
     public function clearFilters(): void

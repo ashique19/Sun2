@@ -76,8 +76,21 @@
         </div>
     @endif
 
-    <div class="grid gap-6 xl:grid-cols-[22rem_minmax(0,1fr)] xl:items-stretch">
-        <div class="flex h-[min(75vh,720px)] flex-col overflow-hidden rounded-xl border border-[#EFE7D6] bg-white">
+    @if ($diagnostics['filters_active'] && $conversations->count() !== $diagnostics['total_conversations'])
+        <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <p>
+                Showing {{ $conversations->count() }} of {{ $diagnostics['total_conversations'] }} conversations
+                because filters are active.
+            </p>
+            <button type="button" wire:click="clearFilters"
+                class="rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-amber-100">
+                Clear filters
+            </button>
+        </div>
+    @endif
+
+    <div class="grid gap-6 xl:grid-cols-[22rem_minmax(0,1fr)] xl:items-start">
+        <div class="flex max-h-[75vh] flex-col overflow-hidden rounded-xl border border-[#EFE7D6] bg-white">
             <div class="shrink-0 border-b border-[#E7DFCF] px-4 py-3 text-sm font-medium">
                 Conversations
                 <span class="ml-1 text-xs font-normal text-[#8C8474]">
@@ -88,13 +101,14 @@
                     )
                 </span>
             </div>
-            <div class="min-h-0 flex-1 overflow-y-auto divide-y divide-[#E7DFCF]">
+            <div class="overflow-y-auto divide-y divide-[#E7DFCF]" style="max-height: calc(75vh - 3.25rem);">
                 @forelse ($conversations as $conversation)
                     @php
                         $selected = $selectedConversation?->id === $conversation->id;
-                        $latest = $conversation->messages->first();
+                        $latest = $conversation->latestMessage;
                     @endphp
                     <button type="button"
+                        wire:key="inbox-conversation-{{ $conversation->id }}"
                         wire:click="selectConversation({{ $conversation->id }})"
                         class="block w-full px-4 py-3 text-left transition {{ $selected ? 'bg-[#FAF6EF]' : 'hover:bg-[#FAF6EF]/60' }}">
                         <div class="flex items-start justify-between gap-3">
@@ -147,7 +161,7 @@
             </div>
         </div>
 
-        <div class="flex h-[min(75vh,720px)] flex-col overflow-hidden rounded-xl border border-[#EFE7D6] bg-white">
+        <div class="flex h-[75vh] max-h-[75vh] flex-col overflow-hidden rounded-xl border border-[#EFE7D6] bg-white">
             @if ($selectedConversation)
                 <div class="shrink-0 border-b border-[#E7DFCF] px-4 py-3">
                     <div class="flex flex-wrap items-center justify-between gap-3">

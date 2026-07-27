@@ -199,7 +199,7 @@ class AdminInbox extends Component
         $query = ChannelConversation::query()
             ->with([
                 'draftOrder:id,order_number,status',
-                'messages' => fn ($q) => $q->latest('sent_at')->limit(1),
+                'latestMessage',
             ])
             ->orderByRaw('COALESCE(last_inbound_at, last_outbound_at, created_at) desc');
 
@@ -225,10 +225,13 @@ class AdminInbox extends Component
 
         $conversations = $query->limit(100)->get();
 
+        // Keep selection stable; only auto-pick when nothing is selected yet.
         if ($this->selectedConversationId === null && $conversations->isNotEmpty()) {
             $this->selectedConversationId = (int) $conversations->first()->id;
         }
 
+        // If the selected id is outside the filtered list, still load it for the thread,
+        // but never shrink the left list to that single conversation.
         $selectedConversation = $this->selectedConversationId
             ? ChannelConversation::query()
                 ->with([

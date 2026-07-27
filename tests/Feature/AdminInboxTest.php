@@ -355,4 +355,83 @@ class AdminInboxTest extends TestCase
                 && filled($message['attachment']['payload']['url'] ?? null);
         });
     }
+
+    #[Test]
+    public function lists_all_conversations_not_just_one(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $first = $this->conversation([
+            'external_user_id' => 'psid-list-1',
+            'customer_name' => 'Alpha Customer',
+            'last_inbound_at' => now()->subMinutes(3),
+        ]);
+        $second = $this->conversation([
+            'external_user_id' => 'psid-list-2',
+            'customer_name' => 'Beta Customer',
+            'last_inbound_at' => now()->subMinutes(2),
+        ]);
+        $third = $this->conversation([
+            'external_user_id' => 'psid-list-3',
+            'customer_name' => 'Gamma Customer',
+            'last_inbound_at' => now()->subMinute(),
+        ]);
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $first->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Hello from Alpha',
+            'sent_at' => now()->subMinutes(3),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $second->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Hello from Beta',
+            'sent_at' => now()->subMinutes(2),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $third->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Hello from Gamma',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->assertSee('Alpha Customer')
+            ->assertSee('Beta Customer')
+            ->assertSee('Gamma Customer')
+            ->assertSee('Hello from Alpha')
+            ->assertSee('Hello from Beta')
+            ->assertSee('Hello from Gamma')
+            ->assertSee('3 shown');
+    }
+
+    #[Test]
+    public function active_filters_do_not_hide_total_count_and_can_be_cleared_to_restore_list(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $this->conversation([
+            'external_user_id' => 'psid-a',
+            'customer_name' => 'Visible Unread',
+            'last_inbound_at' => now(),
+            'last_read_at' => null,
+        ]);
+        $this->conversation([
+            'external_user_id' => 'psid-b',
+            'customer_name' => 'Already Read',
+            'last_inbound_at' => now()->subHour(),
+            'last_read_at' => now(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->set('unread', '1')
+            ->assertSee('Visible Unread')
+            ->assertDontSee('Already Read')
+            ->assertSee('Showing 1 of 2 conversations')
+            ->call('clearFilters')
+            ->assertSee('Visible Unread')
+            ->assertSee('Already Read')
+            ->assertSee('2 shown');
+    }
 }

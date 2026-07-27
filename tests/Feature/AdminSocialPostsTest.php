@@ -82,7 +82,8 @@ class AdminSocialPostsTest extends TestCase
             ->set('imageSource', 'thumb')
             ->set('layout', 'album')
             ->call('publish')
-            ->assertHasNoErrors();
+            ->assertHasNoErrors()
+            ->assertSet('phase', 'done');
 
         $this->assertDatabaseHas('social_posts', [
             'id' => SocialPost::query()->latest('id')->value('id'),
@@ -93,7 +94,132 @@ class AdminSocialPostsTest extends TestCase
             'product_id' => $product->id,
         ]);
 
-        $this->assertSame(0, \App\Models\SocialPostPublication::query()->count());
+        // Selected channels still get failed rows with a clear reason when Meta is not configured.
+        $this->assertSame(2, \App\Models\SocialPostPublication::query()->count());
+        $this->assertDatabaseHas('social_post_publications', [
+            'channel' => \App\Models\SocialPostPublication::CHANNEL_FACEBOOK,
+            'status' => \App\Models\SocialPostPublication::STATUS_FAILED,
+        ]);
+        $this->assertDatabaseHas('social_post_publications', [
+            'channel' => \App\Models\SocialPostPublication::CHANNEL_INSTAGRAM,
+            'status' => \App\Models\SocialPostPublication::STATUS_FAILED,
+        ]);
+    }
+
+    #[Test]
+    public function publish_requires_at_least_one_social_network(): void
+    {
+        $admin = $this->adminUser();
+        $category = $this->makeCategory();
+        $product = $this->makeProduct($category, 'p1b', 'img/products/p1b.jpg');
+
+        Livewire::actingAs($admin)
+            ->test(AdminSocialPostsCreate::class, ['products' => (string) $product->id])
+            ->set('body', 'Needs a network')
+            ->set('postToFacebook', false)
+            ->set('postToInstagram', false)
+            ->call('createPost')
+            ->assertHasErrors(['postToFacebook']);
+
+        $this->assertSame(0, SocialPost::query()->count());
+    }
+
+    #[Test]
+    public function publish_only_selected_facebook_channel(): void
+    {
+        $admin = $this->adminUser();
+        $category = $this->makeCategory();
+        $product = $this->makeProduct($category, 'p1c', 'img/products/p1c.jpg');
+
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'fb-page-only',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/fb-page-only/photos*' => Http::response([
+                'id' => 'photo-only',
+                'post_id' => 'fbpub-only',
+            ], 200),
+            'https://graph.facebook.com/v25.0/fbpub-only*' => Http::response([
+                'permalink_url' => 'https://www.facebook.com/fbpub-only',
+            ], 200),
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(AdminSocialPostsCreate::class, ['products' => (string) $product->id])
+            ->set('body', 'Facebook only post')
+            ->set('postToFacebook', true)
+            ->set('postToInstagram', false)
+            ->call('publish')
+            ->assertHasNoErrors()
+            ->assertSet('phase', 'done')
+            ->assertSet('channelProgress.facebook.status', 'success');
+
+        $this->assertSame(1, \App\Models\SocialPostPublication::query()->count());
+        $this->assertDatabaseHas('social_post_publications', [
+            'channel' => \App\Models\SocialPostPublication::CHANNEL_FACEBOOK,
+            'status' => \App\Models\SocialPostPublication::STATUS_SUCCESS,
+        ]);
+        $this->assertDatabaseMissing('social_post_publications', [
+            'channel' => \App\Models\SocialPostPublication::CHANNEL_INSTAGRAM,
+        ]);
+    }
+
+    #[Test]
+    public function progressive_publish_shows_posting_then_success_per_channel(): void
+    {
+        $admin = $this->adminUser();
+        $category = $this->makeCategory();
+        $product = $this->makeProduct($category, 'p1d', 'img/products/p1d.jpg');
+
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'fb-page-prog',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/fb-page-prog/photos*' => Http::response([
+                'id' => 'photo-prog',
+                'post_id' => 'fbpub-prog',
+            ], 200),
+            'https://graph.facebook.com/v25.0/fbpub-prog*' => Http::response([
+                'permalink_url' => 'https://www.facebook.com/fbpub-prog',
+            ], 200),
+            'https://graph.facebook.com/v25.0/fb-page-prog*' => Http::response([
+                'instagram_business_account' => ['id' => 'ig-prog'],
+            ], 200),
+            'https://graph.facebook.com/v25.0/ig-prog/media*' => Http::response([
+                'id' => 'creation-prog',
+            ], 200),
+            'https://graph.facebook.com/v25.0/ig-prog/media_publish*' => Http::response([
+                'id' => 'igpub-prog',
+                'permalink_url' => 'https://www.instagram.com/p/igpub-prog',
+            ], 200),
+        ]);
+
+        $component = Livewire::actingAs($admin)
+            ->test(AdminSocialPostsCreate::class, ['products' => (string) $product->id])
+            ->set('body', 'Progressive publish')
+            ->call('createPost')
+            ->assertSet('phase', 'publishing')
+            ->assertSet('channelProgress.facebook.status', 'waiting')
+            ->assertSet('channelProgress.instagram.status', 'waiting')
+            ->call('markChannelPosting', 'facebook')
+            ->assertSet('channelProgress.facebook.status', 'posting')
+            ->call('publishSelectedChannel', 'facebook')
+            ->assertSet('channelProgress.facebook.status', 'success')
+            ->assertSet('phase', 'publishing')
+            ->call('markChannelPosting', 'instagram')
+            ->assertSet('channelProgress.instagram.status', 'posting')
+            ->call('publishSelectedChannel', 'instagram')
+            ->assertSet('channelProgress.instagram.status', 'success')
+            ->assertSet('phase', 'done');
+
+        $this->assertNotNull($component->get('createdPostId'));
+        $this->assertSame(2, \App\Models\SocialPostPublication::query()->count());
     }
 
     #[Test]
@@ -135,7 +261,8 @@ class AdminSocialPostsTest extends TestCase
             ->set('imageSource', 'thumb')
             ->set('layout', 'album')
             ->call('publish')
-            ->assertHasNoErrors();
+            ->assertHasNoErrors()
+            ->assertSet('phase', 'done');
 
         $this->assertSame(2, \App\Models\SocialPostPublication::query()->count());
         $this->assertDatabaseHas('social_post_publications', [
@@ -226,16 +353,20 @@ class AdminSocialPostsTest extends TestCase
         Livewire::actingAs($admin)
             ->test(AdminSocialPostsShow::class, ['socialPost' => $post])
             ->call('republish')
-            ->assertHasNoErrors();
+            ->assertHasNoErrors()
+            ->assertSet('republishPhase', 'done');
 
         $this->assertSame(2, \App\Models\SocialPostPublication::query()->count());
 
         Livewire::actingAs($admin)
             ->test(AdminSocialPostsShow::class, ['socialPost' => $post])
+            ->set('postToFacebook', true)
+            ->set('postToInstagram', false)
             ->call('republish')
-            ->assertHasNoErrors();
+            ->assertHasNoErrors()
+            ->assertSet('republishPhase', 'done');
 
-        $this->assertSame(4, \App\Models\SocialPostPublication::query()->count());
+        $this->assertSame(3, \App\Models\SocialPostPublication::query()->count());
     }
 }
 

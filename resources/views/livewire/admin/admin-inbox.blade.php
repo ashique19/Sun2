@@ -28,9 +28,66 @@
         </div>
     </div>
 
+    @if ($conversations->isEmpty() || $diagnostics['severity'] !== 'ok')
+        @php
+            $box = match ($diagnostics['severity']) {
+                'error' => 'border-rose-200 bg-rose-50 text-rose-900',
+                'warning' => 'border-amber-200 bg-amber-50 text-amber-950',
+                default => 'border-[#E0D6C2] bg-[#FAF6EF] text-[#1E1E1E]',
+            };
+        @endphp
+        <div class="rounded-xl border p-4 sm:p-5 {{ $box }}">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h2 class="font-semibold">
+                        @if ($conversations->isEmpty())
+                            Inbox status
+                        @else
+                            Messenger connection notes
+                        @endif
+                    </h2>
+                    <p class="mt-1 text-sm opacity-90">{{ $diagnostics['summary'] }}</p>
+                    <p class="mt-2 text-xs opacity-80">
+                        Inbox does not pull chat history from Facebook. It only lists conversations Meta already delivered to
+                        <code class="rounded bg-white/70 px-1.5 py-0.5">{{ $diagnostics['webhook_url'] }}</code>.
+                    </p>
+                </div>
+                @if ($diagnostics['filters_active'] && $conversations->isEmpty())
+                    <button type="button" wire:click="clearFilters"
+                        class="rounded-full border border-current/20 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-white/80">
+                        Clear filters
+                    </button>
+                @endif
+            </div>
+
+            <ul class="mt-4 space-y-2 text-sm">
+                @foreach ($diagnostics['checks'] as $check)
+                    <li class="flex gap-2">
+                        <span class="mt-0.5 shrink-0 {{ $check['ok'] ? 'text-emerald-700' : 'text-rose-700' }}">
+                            {{ $check['ok'] ? '✓' : '!' }}
+                        </span>
+                        <div class="min-w-0">
+                            <div class="font-medium">{{ $check['label'] }}</div>
+                            <div class="text-xs opacity-80 break-words">{{ $check['detail'] }}</div>
+                        </div>
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     <div class="grid gap-6 xl:grid-cols-[22rem_minmax(0,1fr)]">
         <div class="overflow-hidden rounded-xl border border-[#EFE7D6] bg-white">
-            <div class="border-b border-[#E7DFCF] px-4 py-3 text-sm font-medium">Conversations</div>
+            <div class="border-b border-[#E7DFCF] px-4 py-3 text-sm font-medium">
+                Conversations
+                <span class="ml-1 text-xs font-normal text-[#8C8474]">
+                    ({{ $conversations->count() }} shown
+                    @if ($diagnostics['total_conversations'] !== $conversations->count())
+                        / {{ $diagnostics['total_conversations'] }} total
+                    @endif
+                    )
+                </span>
+            </div>
             <div class="max-h-[75vh] overflow-y-auto divide-y divide-[#E7DFCF]">
                 @forelse ($conversations as $conversation)
                     @php
@@ -70,7 +127,13 @@
                         </div>
                     </button>
                 @empty
-                    <div class="px-4 py-10 text-center text-sm text-[#8C8474]">No conversations found.</div>
+                    <div class="px-4 py-10 text-center text-sm text-[#8C8474]">
+                        @if ($diagnostics['filtered_out'])
+                            No conversations match the current filters.
+                        @else
+                            No conversations stored yet.
+                        @endif
+                    </div>
                 @endforelse
             </div>
         </div>
@@ -144,7 +207,13 @@
                     </div>
                 </div>
             @else
-                <div class="px-4 py-16 text-center text-sm text-[#8C8474]">Select a conversation to read and reply.</div>
+                <div class="px-4 py-16 text-center text-sm text-[#8C8474]">
+                    @if ($conversations->isEmpty())
+                        Once a Messenger webhook arrives, conversations will appear on the left.
+                    @else
+                        Select a conversation to read and reply.
+                    @endif
+                </div>
             @endif
         </div>
     </div>

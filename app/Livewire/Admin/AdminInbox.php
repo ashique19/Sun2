@@ -3,6 +3,7 @@
 namespace App\Livewire\Admin;
 
 use App\Models\ChannelConversation;
+use App\Services\Channels\ChannelInboxDiagnostics;
 use App\Services\Channels\ChannelReplyService;
 use App\Support\AdminAccess;
 use Livewire\Attributes\Layout;
@@ -82,7 +83,15 @@ class AdminInbox extends Component
         $this->message = 'Reply sent.';
     }
 
-    public function render()
+    public function clearFilters(): void
+    {
+        $this->channel = '';
+        $this->unread = '';
+        $this->window = '';
+        $this->linked = '';
+    }
+
+    public function render(ChannelInboxDiagnostics $diagnostics)
     {
         $query = ChannelConversation::query()
             ->with([
@@ -129,6 +138,12 @@ class AdminInbox extends Component
         return view('livewire.admin.admin-inbox', [
             'conversations' => $conversations,
             'selectedConversation' => $selectedConversation,
+            'diagnostics' => $diagnostics->forInbox([
+                'channel' => $this->channel,
+                'unread' => $this->unread,
+                'window' => $this->window,
+                'linked' => $this->linked,
+            ]),
         ]);
     }
 }

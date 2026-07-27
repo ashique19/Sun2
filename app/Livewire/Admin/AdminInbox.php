@@ -3,6 +3,7 @@
 namespace App\Livewire\Admin;
 
 use App\Models\ChannelConversation;
+use App\Models\ChannelMessage;
 use App\Services\Channels\ChannelInboxDiagnostics;
 use App\Services\Channels\ChannelReplyService;
 use App\Support\AdminAccess;
@@ -10,11 +11,15 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Livewire\WithFileUploads;
 
 #[Title('Admin Inbox')]
 #[Layout('components.layouts.admin')]
 class AdminInbox extends Component
 {
+    use WithFileUploads;
+
     #[Url]
     public string $channel = '';
 
@@ -32,23 +37,57 @@ class AdminInbox extends Component
 
     public string $replyText = '';
 
+    public ?int $replyToMessageId = null;
+
+    /** @var TemporaryUploadedFile|null */
+    public $replyImage = null;
+
     public ?string $error = null;
 
-    public ?string $message = null;
+    public ?string $statusMessage = null;
 
     public function mount(): void
     {
         AdminAccess::ensureStaffAdmin();
     }
 
-    public function selectConversation(int $conversationId): void
+    public function selectConversation(int $conversationId, ChannelReplyService $replies): void
     {
         $conversation = ChannelConversation::query()->findOrFail($conversationId);
-        $conversation->markRead(auth()->id());
+        $this->markConversationRead($conversation, $replies);
         $this->selectedConversationId = $conversation->id;
-        $this->replyText = '';
+        $this->resetComposer();
         $this->error = null;
-        $this->message = null;
+        $this->statusMessage = null;
+    }
+
+    public function setReplyTo(int $messageId): void
+    {
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        $target = ChannelMessage::query()
+            ->where('channel_conversation_id', $this->selectedConversationId)
+            ->whereKey($messageId)
+            ->first();
+
+        if (! $target) {
+            return;
+        }
+
+        $this->replyToMessageId = $target->id;
+        $this->error = null;
+    }
+
+    public function clearReplyTo(): void
+    {
+        $this->replyToMessageId = null;
+    }
+
+    public function clearReplyImage(): void
+    {
+        $this->replyImage = null;
     }
 
     public function sendReply(ChannelReplyService $replies): void
@@ -56,7 +95,7 @@ class AdminInbox extends Component
         AdminAccess::ensureStaffAdmin();
 
         $this->error = null;
-        $this->message = null;
+        $this->statusMessage = null;
 
         if (! $this->selectedConversationId) {
             return;
@@ -70,7 +109,42 @@ class AdminInbox extends Component
             return;
         }
 
-        $result = $replies->sendText($conversation, $this->replyText);
+        $this->validate([
+            'replyText' => ['nullable', 'string', 'max:2000'],
+            'replyImage' => ['nullable', 'image', 'max:5120'],
+            'replyToMessageId' => ['nullable', 'integer'],
+        ]);
+
+        $replyTo = null;
+        if ($this->replyToMessageId) {
+            $replyTo = ChannelMessage::query()
+                ->where('channel_conversation_id', $conversation->id)
+                ->whereKey($this->replyToMessageId)
+                ->first();
+
+            if (! $replyTo) {
+                $this->error = 'The message you are replying to was not found.';
+
+                return;
+            }
+        }
+
+        if ($this->replyImage) {
+            $result = $replies->sendImage(
+                $conversation,
+                $this->replyImage,
+                $this->replyText,
+                false,
+                $replyTo,
+            );
+        } else {
+            $result = $replies->sendText(
+                $conversation,
+                $this->replyText,
+                false,
+                $replyTo,
+            );
+        }
 
         if (! $result['ok']) {
             $this->error = $result['error'] ?? 'Failed to send reply.';
@@ -78,9 +152,9 @@ class AdminInbox extends Component
             return;
         }
 
-        $conversation->markRead(auth()->id());
-        $this->replyText = '';
-        $this->message = 'Reply sent.';
+        $this->markConversationRead($conversation, $replies);
+        $this->resetComposer();
+        $this->statusMessage = 'Reply sent.';
     }
 
     public function clearFilters(): void
@@ -89,6 +163,35 @@ class AdminInbox extends Component
         $this->unread = '';
         $this->window = '';
         $this->linked = '';
+    }
+
+    /**
+     * Lightweight poll refresh for conversation list + open thread.
+     */
+    public function refreshInbox(ChannelReplyService $replies): void
+    {
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+
+        if ($conversation && $conversation->isUnread()) {
+            $this->markConversationRead($conversation, $replies);
+        }
+    }
+
+    private function markConversationRead(ChannelConversation $conversation, ChannelReplyService $replies): void
+    {
+        $conversation->markRead(auth()->id());
+        $replies->markSeen($conversation);
+    }
+
+    private function resetComposer(): void
+    {
+        $this->replyText = '';
+        $this->replyToMessageId = null;
+        $this->replyImage = null;
     }
 
     public function render(ChannelInboxDiagnostics $diagnostics)
@@ -130,14 +233,20 @@ class AdminInbox extends Component
             ? ChannelConversation::query()
                 ->with([
                     'draftOrder:id,order_number,status',
-                    'messages' => fn ($q) => $q->orderBy('sent_at')->orderBy('id'),
+                    'messages' => fn ($q) => $q->with('replyTo')->orderBy('sent_at')->orderBy('id'),
                 ])
                 ->find($this->selectedConversationId)
             : null;
 
+        $replyToMessage = null;
+        if ($selectedConversation && $this->replyToMessageId) {
+            $replyToMessage = $selectedConversation->messages->firstWhere('id', $this->replyToMessageId);
+        }
+
         return view('livewire.admin.admin-inbox', [
             'conversations' => $conversations,
             'selectedConversation' => $selectedConversation,
+            'replyToMessage' => $replyToMessage,
             'diagnostics' => $diagnostics->forInbox([
                 'channel' => $this->channel,
                 'unread' => $this->unread,

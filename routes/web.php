@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ProductImageHashRebuildController;
+use App\Http\Controllers\ChannelMessageMediaController;
 use App\Http\Controllers\RobotsController;
 use App\Http\Controllers\SitemapController;
 use App\Livewire\Admin\AdminAreaEdit;
@@ -178,6 +179,9 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
 
     Route::middleware('role:admin|dev')->group(function () {
         Route::get('/inbox', AdminInbox::class)->name('inbox');
+        Route::get('/inbox/media/{message}', ChannelMessageMediaController::class)
+            ->whereNumber('message')
+            ->name('inbox.media');
         Route::get('/issues', AdminIssues::class)->name('issues.index');
         Route::get('/orders/draft-ai', AdminOrders::class)->defaults('segment', 'draft-ai')->name('orders.draft-ai');
         Route::get('/orders/dispatched', AdminOrders::class)->defaults('segment', 'dispatched')->name('orders.dispatched');

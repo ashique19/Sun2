@@ -49,6 +49,7 @@ class ChannelConversationService
      *     body?: ?string,
      *     media_url?: ?string,
      *     media_mime?: ?string,
+     *     reply_to_message_id?: ?int,
      *     raw_payload?: ?array,
      *     sent_at?: ?\DateTimeInterface|string
      * }  $payload
@@ -76,6 +77,7 @@ class ChannelConversationService
             $message = ChannelMessage::query()->create([
                 'channel_conversation_id' => $conversation->id,
                 'external_message_id' => $externalId,
+                'reply_to_message_id' => $payload['reply_to_message_id'] ?? null,
                 'direction' => $payload['direction'],
                 'body' => $payload['body'] ?? null,
                 'media_url' => $payload['media_url'] ?? null,

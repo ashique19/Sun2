@@ -188,3 +188,10 @@ WHERE NOT EXISTS (
 );
 
 SELECT 'OK: 2026-07-27 feature schema applied (or already present).' AS result;
+
+-- Admin Inbox: reply-to previous message
+ALTER TABLE `channel_messages`
+  ADD COLUMN `reply_to_message_id` BIGINT UNSIGNED NULL AFTER `external_message_id`,
+  ADD CONSTRAINT `channel_messages_reply_to_message_id_foreign`
+    FOREIGN KEY (`reply_to_message_id`) REFERENCES `channel_messages` (`id`)
+    ON DELETE SET NULL;

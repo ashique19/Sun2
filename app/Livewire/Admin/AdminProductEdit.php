@@ -2,16 +2,22 @@
 
 namespace App\Livewire\Admin;
 
+use App\Models\AiImagePrompt;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImage;
+use App\Services\Admin\GeminiClient;
 use App\Services\Admin\ProductImageService;
 use App\Support\Fileinfo;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
+use RuntimeException;
+use Throwable;
 
 #[Layout('components.layouts.admin')]
 class AdminProductEdit extends Component
@@ -62,6 +68,20 @@ class AdminProductEdit extends Component
     /** Set by ensureProductSaved() so uploadImages can redirect after create. */
     public bool $justCreated = false;
 
+    public bool $showAiGenerateModal = false;
+
+    public string $aiPrompt = '';
+
+    /** @var TemporaryUploadedFile|null */
+    public $aiRawImage = null;
+
+    /** @var list<array{id: string, mime: string, base64: string, name: string}> */
+    public array $aiCandidates = [];
+
+    public ?string $aiGenerateError = null;
+
+    public bool $aiGenerating = false;
+
     public function mount(?Product $product = null): void
     {
         if (! $product?->exists) {
@@ -104,6 +124,174 @@ class AdminProductEdit extends Component
         }
 
         $this->slug = Str::slug($value);
+    }
+
+    public function openAiGenerateModal(): void
+    {
+        $this->aiGenerateError = null;
+        $this->ensureProductSaved();
+
+        if ($this->justCreated) {
+            $this->justCreated = false;
+        }
+
+        $this->showAiGenerateModal = true;
+    }
+
+    public function closeAiGenerateModal(): void
+    {
+        $this->showAiGenerateModal = false;
+        $this->aiGenerateError = null;
+        $this->aiGenerating = false;
+        $this->aiRawImage = null;
+        $this->aiCandidates = [];
+        $this->resetValidation(['aiRawImage', 'aiPrompt']);
+    }
+
+    public function useRecentPrompt(string $prompt): void
+    {
+        $this->aiPrompt = $prompt;
+    }
+
+    public function generateAiImage(GeminiClient $gemini): void
+    {
+        $this->aiGenerateError = null;
+        $this->aiGenerating = true;
+
+        try {
+            if (! $this->product) {
+                $this->ensureProductSaved();
+            }
+
+            $this->validate([
+                'aiRawImage' => Fileinfo::storedImageRules(8192, true),
+                'aiPrompt' => ['required', 'string', 'min:3', 'max:4000'],
+            ]);
+
+            if (! $gemini->isConfigured()) {
+                throw new RuntimeException('Gemini API key is not configured (GEMINI_API_KEY).');
+            }
+
+            /** @var TemporaryUploadedFile $raw */
+            $raw = $this->aiRawImage;
+            $binary = file_get_contents($raw->getRealPath());
+
+            if ($binary === false || $binary === '') {
+                throw new RuntimeException('Could not read the raw photo.');
+            }
+
+            $mime = $raw->getMimeType() ?: 'image/jpeg';
+
+            $result = $gemini->generateImage([
+                ['text' => trim($this->aiPrompt)],
+                [
+                    'inline_data' => [
+                        'mime_type' => $mime,
+                        'data' => base64_encode($binary),
+                    ],
+                ],
+            ], 'You enhance product photos for a Bangladeshi jewelry e-commerce catalog. Preserve the product identity from the reference photo. Return one polished product image.');
+
+            $this->aiCandidates[] = [
+                'id' => (string) Str::uuid(),
+                'mime' => $result['mime'],
+                'base64' => $result['base64'],
+                'name' => 'ai-generated-'.(count($this->aiCandidates) + 1).'.jpg',
+            ];
+
+            AiImagePrompt::remember(trim($this->aiPrompt), Auth::id());
+        } catch (Throwable $e) {
+            $this->aiGenerateError = $e->getMessage();
+        } finally {
+            $this->aiGenerating = false;
+        }
+    }
+
+    public function updateAiCandidate(string $id, string $mime, string $base64): void
+    {
+        foreach ($this->aiCandidates as $index => $candidate) {
+            if (($candidate['id'] ?? null) !== $id) {
+                continue;
+            }
+
+            $this->aiCandidates[$index]['mime'] = $mime !== '' ? $mime : 'image/jpeg';
+            $this->aiCandidates[$index]['base64'] = $base64;
+            $this->aiCandidates[$index]['name'] = preg_replace('/\.\w+$/', '.jpg', (string) $candidate['name']) ?: 'ai-edited.jpg';
+
+            return;
+        }
+    }
+
+    public function removeAiCandidate(string $id): void
+    {
+        $this->aiCandidates = array_values(array_filter(
+            $this->aiCandidates,
+            fn (array $candidate) => ($candidate['id'] ?? null) !== $id,
+        ));
+    }
+
+    public function promoteAiCandidate(string $id, ProductImageService $images): void
+    {
+        $this->aiGenerateError = null;
+
+        if (! $this->product) {
+            $this->ensureProductSaved();
+        }
+
+        $candidate = collect($this->aiCandidates)->firstWhere('id', $id);
+
+        if (! is_array($candidate)) {
+            $this->aiGenerateError = 'Generated image not found in this session.';
+
+            return;
+        }
+
+        $binary = base64_decode((string) $candidate['base64'], true);
+
+        if ($binary === false || $binary === '') {
+            $this->aiGenerateError = 'Generated image data is invalid.';
+
+            return;
+        }
+
+        $mime = (string) ($candidate['mime'] ?? 'image/jpeg');
+        $extension = match (true) {
+            str_contains($mime, 'png') => 'png',
+            str_contains($mime, 'webp') => 'webp',
+            default => 'jpg',
+        };
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'aiimg_');
+
+        if ($tempPath === false) {
+            $this->aiGenerateError = 'Could not create a temporary file.';
+
+            return;
+        }
+
+        $pathWithExt = $tempPath.'.'.$extension;
+        rename($tempPath, $pathWithExt);
+        file_put_contents($pathWithExt, $binary);
+
+        try {
+            $upload = new UploadedFile(
+                $pathWithExt,
+                (string) ($candidate['name'] ?? 'ai-generated.'.$extension),
+                $mime,
+                null,
+                true,
+            );
+
+            $images->store($this->product, $upload, $this->product->name);
+            $this->removeAiCandidate($id);
+            $this->refreshImages();
+            $this->syncImageAlts();
+            $this->message = 'AI image added to product gallery.';
+        } finally {
+            if (is_file($pathWithExt)) {
+                @unlink($pathWithExt);
+            }
+        }
     }
 
     public function save(): void
@@ -278,8 +466,14 @@ class AdminProductEdit extends Component
 
     public function render()
     {
+        $recentPrompts = AiImagePrompt::query()
+            ->recent(12)
+            ->get(['id', 'prompt', 'last_used_at', 'use_count']);
+
         return view('livewire.admin.admin-product-edit', [
             'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
+            'recentAiPrompts' => $recentPrompts,
+            'geminiConfigured' => app(GeminiClient::class)->isConfigured(),
         ])->title($this->title());
     }
 

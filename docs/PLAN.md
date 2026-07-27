@@ -549,7 +549,7 @@ from the dashboard row clears them from this section.
 
 ## 15. AI product image generate (Gemini) — locked plan
 
-**Status:** planned / not implemented yet.
+**Status:** implementing / in progress on branch.
 **Entry:** Admin → Products → create/edit.
 
 ### Locked product choices

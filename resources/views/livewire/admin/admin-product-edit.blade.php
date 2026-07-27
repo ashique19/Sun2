@@ -102,7 +102,13 @@
                         Choose images below, then click <strong>{{ $product ? 'Save Product' : 'Create Product' }}</strong> at the bottom to save them with the product.
                     </p>
                 </div>
-                <p class="text-xs text-[#8C8474]">{{ $product?->images->count() ?? 0 }} saved · <span x-text="queue.length"></span> pending</p>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" wire:click="openAiGenerateModal"
+                        class="rounded-full border border-[#C9A227] px-4 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]">
+                        Generate with AI
+                    </button>
+                    <p class="text-xs text-[#8C8474]">{{ $product?->images->count() ?? 0 }} saved · <span x-text="queue.length"></span> pending</p>
+                </div>
             </div>
 
             @if ($product?->images->isNotEmpty())
@@ -228,6 +234,151 @@
                 </div>
             </div>
         </section>
+
+        @if ($showAiGenerateModal)
+            <div class="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+                wire:click.self="closeAiGenerateModal"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Generate product images with AI"
+                x-data="aiImageCandidates()"
+                x-init="syncFromWire()">
+                <div class="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl"
+                    @click.stop>
+                    <div class="flex items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
+                        <div>
+                            <h2 class="font-semibold text-lg">Generate with AI</h2>
+                            <p class="mt-1 text-xs text-[#8C8474]">
+                                Upload a raw photo, write a prompt, then Generate. Candidates stay for this session only until you add them with +.
+                            </p>
+                        </div>
+                        <button type="button" wire:click="closeAiGenerateModal" class="text-sm text-[#8C8474] hover:text-[#1E1E1E]">Close</button>
+                    </div>
+
+                    <div class="flex-1 space-y-5 overflow-y-auto px-4 py-4">
+                        @unless ($geminiConfigured)
+                            <div class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                                Gemini is not configured. Set <code class="font-mono text-xs">GEMINI_API_KEY</code> to enable generation.
+                            </div>
+                        @endunless
+
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Raw photo</label>
+                                <input type="file" wire:model="aiRawImage" accept="image/jpeg,image/png,image/webp"
+                                    class="block w-full text-sm text-[#6B6459] file:mr-3 file:rounded-full file:border-0 file:bg-[#FAF6EF] file:px-4 file:py-2 file:text-sm file:font-medium file:text-[#C9A227] hover:file:bg-[#EFE7D6]">
+                                <div wire:loading wire:target="aiRawImage" class="mt-1 text-xs text-[#8C8474]">Uploading raw photo…</div>
+                                @error('aiRawImage') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                                @if ($aiRawImage)
+                                    <p class="mt-2 text-xs text-[#8C8474]">Selected: {{ method_exists($aiRawImage, 'getClientOriginalName') ? $aiRawImage->getClientOriginalName() : 'raw photo' }}</p>
+                                @endif
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Prompt</label>
+                                <textarea wire:model="aiPrompt" rows="4"
+                                    placeholder="Describe how to improve or restyle the product photo…"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm"></textarea>
+                                @error('aiPrompt') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                            </div>
+                        </div>
+
+                        @if ($recentAiPrompts->isNotEmpty())
+                            <div>
+                                <p class="text-xs font-medium text-[#6B6459] mb-2">Recent prompts</p>
+                                <div class="flex flex-wrap gap-2">
+                                    @foreach ($recentAiPrompts as $recent)
+                                        <button type="button"
+                                            wire:click="useRecentPrompt(@js($recent->prompt))"
+                                            class="max-w-full truncate rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-3 py-1 text-xs text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]"
+                                            title="{{ $recent->prompt }}">
+                                            {{ \Illuminate\Support\Str::limit($recent->prompt, 48) }}
+                                        </button>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
+
+                        <div class="flex flex-wrap items-center gap-3">
+                            <button type="button"
+                                wire:click="generateAiImage"
+                                wire:loading.attr="disabled"
+                                wire:target="generateAiImage"
+                                @disabled(! $geminiConfigured)
+                                class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
+                                <span wire:loading.remove wire:target="generateAiImage">Generate</span>
+                                <span wire:loading wire:target="generateAiImage">Generating…</span>
+                            </button>
+                            <p class="text-xs text-[#8C8474]">Each Generate adds another candidate to this session list.</p>
+                        </div>
+
+                        @if ($aiGenerateError)
+                            <p class="text-sm text-rose-600">{{ $aiGenerateError }}</p>
+                        @endif
+
+                        @if (count($aiCandidates) > 0)
+                            <div>
+                                <h3 class="text-sm font-medium mb-3">Generated this session ({{ count($aiCandidates) }})</h3>
+                                <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                    @foreach ($aiCandidates as $candidate)
+                                        <li wire:key="ai-candidate-{{ $candidate['id'] }}" class="rounded-xl border border-[#EFE7D6] p-3 space-y-3">
+                                            <div class="relative aspect-square overflow-hidden rounded-lg bg-[#FAF6EF]">
+                                                <img src="data:{{ $candidate['mime'] }};base64,{{ $candidate['base64'] }}"
+                                                    alt="{{ $candidate['name'] }}"
+                                                    class="h-full w-full object-cover">
+                                            </div>
+                                            <div class="flex flex-wrap gap-1">
+                                                <button type="button"
+                                                    @click="openAiEditor(@js($candidate['id']))"
+                                                    class="rounded border border-[#C9A227] px-2 py-1 text-xs text-[#C9A227] hover:bg-[#FAF6EF]">
+                                                    Edit
+                                                </button>
+                                                <button type="button"
+                                                    wire:click="promoteAiCandidate(@js($candidate['id']))"
+                                                    wire:loading.attr="disabled"
+                                                    class="rounded border border-emerald-300 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                                                    title="Add to product images">
+                                                    +
+                                                </button>
+                                                <button type="button"
+                                                    wire:click="removeAiCandidate(@js($candidate['id']))"
+                                                    class="rounded border border-rose-200 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50">
+                                                    Discard
+                                                </button>
+                                            </div>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+                    </div>
+
+                    <div x-show="aiEditorOpen" x-cloak
+                        class="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4"
+                        @keydown.escape.window="closeAiEditor()">
+                        <div class="w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-xl" @click.outside="closeAiEditor()">
+                            <div class="flex items-center justify-between border-b border-[#EFE7D6] px-4 py-3">
+                                <h3 class="font-semibold">Edit generated image</h3>
+                                <button type="button" @click="closeAiEditor()" class="text-sm text-[#6B6459] hover:text-[#1E1E1E]">Close</button>
+                            </div>
+                            <div class="max-h-[60vh] bg-[#FAF6EF]">
+                                <img x-ref="aiCropImage" :src="aiEditorSrc" alt="" class="mx-auto block max-h-[60vh] max-w-full">
+                            </div>
+                            <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[#EFE7D6] px-4 py-3">
+                                <div class="flex flex-wrap gap-2">
+                                    <button type="button" @click="rotateAi(-90)" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Rotate left</button>
+                                    <button type="button" @click="rotateAi(90)" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Rotate right</button>
+                                    <button type="button" @click="resetAiCrop()" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Reset</button>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button type="button" @click="closeAiEditor()" class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm">Cancel</button>
+                                    <button type="button" @click="applyAiCrop()" class="rounded-full bg-[#C9A227] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">Apply</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
 
         <div class="rounded-xl border border-[#EFE7D6] bg-white p-6 flex flex-wrap items-center gap-3">
             <button type="submit" class="rounded-full bg-[#C9A227] px-8 py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f]" :disabled="uploading">

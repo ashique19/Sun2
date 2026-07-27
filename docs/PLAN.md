@@ -155,7 +155,7 @@ Approved direction (storefront) and starting point (admin) in `docs/mockups/`:
 
 ## 10. Product regular price (`compare_at_price`) — locked plan
 
-**Status:** planned / not implemented yet (schema + partial storefront display already exist).
+**Status:** mostly done (local). Remaining polish below.
 **Locked:** naming choice **A** (keep DB `compare_at_price`; label “Regular price” in admin).
 
 ### Model
@@ -194,20 +194,20 @@ wishlist, cart unit price, share chrome) and on the **priced image** stamp (§11
 Inline/single-line layouts may keep the same **order** (regular then selling) even if
 they sit on one row instead of `<br />`.
 
-### Work to implement (when approved)
+### Done
 
-1. **Admin product create/edit** — add “Regular price (৳)” field bound to `compare_at_price`;
-   validate nullable numeric ≥ 0 and `> price` when present.
-2. **Admin product show** — display regular price alongside price.
-3. **Admin products list** — optional inline edit for regular price (same pattern as price).
-4. **Storefront display** — use the locked presentation above everywhere customers see
-   catalog unit price.
-   - Cards / PDP today may still show selling-first side-by-side; align to regular-first
-     (stacked or same order on one row) when implementing.
-   - Offer/JSON-LD **amount** stays `price`.
-5. **Leave unchanged:** order totals, coupons / `max_discount`, reseller base/sell,
-   `purchase_price`, ETL (legacy has no compare-at; keep import as `null` unless a
-   legacy source is identified later).
+- [x] Admin product create/edit — “Regular price (৳)” + validation `> price`
+- [x] Storefront product card + PDP — regular-first stacked presentation
+- [x] Feature tests for admin regular-price validation (`AdminProductEditTest`)
+- [x] Leave calculations on `price` unchanged; ETL still imports `compare_at_price` as null
+
+### Still to do
+
+- [ ] Admin product show — display regular price alongside price
+- [ ] Admin products list — optional inline edit for regular price
+- [ ] Wishlist unit price — show regular/selling pair when present
+- [ ] Cart line unit price — show regular/selling pair when present
+- [ ] Share / human-readable price chrome (if any) — same pair order; JSON-LD amount stays `price`
 
 ### Explicit non-goals
 
@@ -278,14 +278,16 @@ and gold jewelry).
 
 ### Work to implement (when approved) — v1
 
-1. Migration: `priced_image_path`, `priced_image_layout` on `products`.
-2. Service: compose JPEG/PNG from source path + prices + layout; delete old file on replace.
-3. Admin products list: per-row **Put price on image** (defaults).
-4. Admin product edit: preview, position/size controls, generate/save, show current priced image.
-5. Hooks: after price / regular price save and after primary/source image changes → auto-regen
-   when `priced_image_path` is set.
-6. Tests: compose replaces previous path; layout preserved on price-change regen; skip when
-   no source image / no priced image yet.
+**Status:** not started — all items still open.
+
+- [ ] Migration: `priced_image_path`, `priced_image_layout` on `products`
+- [ ] Service: compose JPEG/PNG from source path + prices + layout; delete old file on replace
+- [ ] Admin products list: per-row **Put price on image** (defaults)
+- [ ] Admin product edit: preview, position/size controls, generate/save, show current priced image
+- [ ] Hooks: after price / regular price save and after primary/source image changes → auto-regen
+      when `priced_image_path` is set
+- [ ] Tests: compose replaces previous path; layout preserved on price-change regen; skip when
+      no source image / no priced image yet
 
 ### Follow-on (explicitly later — not priced-image v1)
 
@@ -302,7 +304,7 @@ and gold jewelry).
 
 ## 12. Admin social posts + Latest posts — locked plan
 
-**Status:** planned / not implemented yet.
+**Status:** not started.
 **Depends on:** §11 for the “images with price” source option (thumbs work without it).
 **v1 channels (locked):** **Facebook Page** + **Instagram** (same Meta Graph app / Page
 token stack; IG Business account linked to the Page — permissions already cover both).
@@ -360,15 +362,16 @@ Optional later: surface Instagram permalink the same way as FB when available.
 
 ### Work to implement (when approved) — v1
 
-1. Migrations for the three tables above.
-2. Admin products multi-select + compose UI (text, image source, layout choice, publish).
-3. Collage composer (GD) when layout = collage; store thumbnail for homepage.
-4. Meta Graph publish service: Facebook + Instagram; write `social_post_publications`.
-5. Re-publish action on saved post / admin post show.
-6. Storefront: Latest posts on home + on-site post show route (FB link, products, category
-   “see more”).
-7. Feature tests: persist post without channels; publication rows; homepage lists published
-   posts; re-publish adds a new publication attempt.
+**Status:** not started — all items still open.
+
+- [ ] Migrations for `social_posts`, `social_post_products`, `social_post_publications`
+- [ ] Admin products multi-select + compose UI (text, image source, layout choice, publish)
+- [ ] Collage composer (GD) when layout = collage; store thumbnail for homepage
+- [ ] Meta Graph publish service: Facebook + Instagram; write `social_post_publications`
+- [ ] Re-publish action on saved post / admin post show
+- [ ] Storefront: Latest posts on home + on-site post show route (FB link, products, category
+      “see more”)
+- [ ] Feature tests: persist post; publication rows; homepage; re-publish
 
 ### Follow-on (not v1)
 
@@ -384,7 +387,7 @@ Optional later: surface Instagram permalink the same way as FB when available.
 
 ## 13. Admin Inbox (Messenger + WhatsApp) — locked plan
 
-**Status:** planned / not implemented yet.
+**Status:** not started (order-scoped conversation modal already exists as a temporary entry point).
 **Depends on:** existing `channel_conversations` / `channel_messages`, Messenger + WhatsApp
 webhooks, and `ChannelReplyService` (already used from order-scoped conversation modal).
 
@@ -425,17 +428,19 @@ from the admin site — not only via the current order-attached conversation mod
 - Inbound webhooks unchanged; new messages make threads rise in the list and flip unread
   until staff opens/read.
 
-### Work to implement (when approved) — v1
+### Done (foundation only — not the Inbox)
 
-1. Migration: `last_read_at` / `last_read_by` (or equivalent) on `channel_conversations`.
-2. Livewire Admin Inbox page + nav item (roles: same staff who can manage channel orders /
-   drafts — align with existing admin/dev access; moderators TBD — default **no** unless
-   we explicitly grant later).
-3. List query with unread + filters; thread load; mark read on open.
-4. Composer → `ChannelReplyService::sendText`; show window/send errors.
-5. Deep-link from order conversation entry points into Inbox.
-6. Feature tests: unread flips on inbound; mark read clears; send messenger + whatsapp
-   paths; outside-window blocked.
+- [x] Messenger + WhatsApp webhooks store conversations/messages
+- [x] `ChannelReplyService` send from order conversation modal / order show
+
+### Still to do — v1 Inbox
+
+- [ ] Migration: `last_read_at` / `last_read_by` on `channel_conversations`
+- [ ] Livewire **Admin → Inbox** page + nav item (admin/dev; moderators default no)
+- [ ] Unified list + unread filters + thread UI; mark read on open
+- [ ] Composer → `ChannelReplyService::sendText`; show window/send errors
+- [ ] Deep-link from order “Open chat” into Inbox (canonical thread)
+- [ ] Feature tests: unread flips; mark read; messenger + whatsapp send; outside-window blocked
 
 ### Follow-on (explicitly later — not Inbox v1)
 
@@ -452,9 +457,9 @@ from the admin site — not only via the current order-attached conversation mod
 
 ## 14. Needs admin attention (+ Steadfast COD checkpoint) — locked plan
 
-**Status:** planned / not implemented yet.
+**Status:** mostly done (local). Remaining gaps below.
 **Trigger example:** Steadfast delivery webhook maps both `delivered` and `partial_delivered`
-(and similar) to our `delivered` today in `SteadfastWebhookProcessor::mapDeliveryStatus()`,
+(and similar) to our `delivered` in `SteadfastWebhookProcessor::mapDeliveryStatus()`,
 so partial COD collections can look like full delivery.
 
 ### Goal
@@ -521,19 +526,28 @@ table (the daily totals block). Preferred order on the page:
 List open items newest-first; show count badge. Resolving/dismissing from order review or
 from the dashboard row clears them from this section.
 
-### Work to implement (when approved) — v1
+### Done
 
-1. Migration + model for attention items; resolve/dismiss API.
-2. Steadfast webhook: COD expected vs collected checkpoint; open attention on mismatch;
-   only auto-complete delivered when amounts match.
-3. Dashboard section above Last 30 Days with Review links.
-4. Tests: match → delivered; mismatch → attention + not clean delivered; dashboard lists open
-   items; resolve removes from open list.
+- [x] Migration + model `admin_attention_items` (+ production SQL helper)
+- [x] `AdminAttentionService` (COD mismatch, address, payment, generic) + resolve
+- [x] Steadfast `delivery_status`: COD expected vs collected (৳1 tolerance); on mismatch
+      create attention + history note and **do not** auto-deliver (covers both `delivered`
+      and `partial_delivered` payloads)
+- [x] Admin Dashboard attention section with Review + mark resolved
+- [x] Admin → Issues index (filters, search, bulk resolve)
+
+### Still to do
+
+- [ ] Steadfast `tracking_update` “delivered successfully” path — apply the same COD
+      checkpoint (today it can still auto-deliver without comparing collected vs expected)
+- [ ] Dedupe: one open attention per order+type (update message on repeat webhook)
+- [ ] Feature tests: match → delivered; mismatch → attention + not clean delivered;
+      dashboard/issues list + resolve
 
 ### Follow-on
 
 - More attention types from other subsystems (reuse same table + dashboard section).
-- Optional Admin nav badge / dedicated attentions index page if volume grows.
+- Optional Admin nav badge if volume grows (Issues page already exists).
 
 ### Explicit non-goals (v1)
 

@@ -104,13 +104,37 @@ class ChannelInboxDiagnostics
         ];
 
         $lastReceived = $messengerHealth['last_received_at'] ?? null;
+        $hasMessaging = ! empty($messengerHealth['last_has_messaging']);
+        $hasStandby = ! empty($messengerHealth['last_has_standby']);
+        $messagingCount = (int) ($messengerHealth['last_messaging_count'] ?? 0);
+        $standbyCount = (int) ($messengerHealth['last_standby_count'] ?? 0);
+
         $checks[] = [
             'ok' => ! empty($lastReceived),
             'label' => 'Messenger events received',
             'detail' => ! empty($lastReceived)
                 ? 'Last webhook POST: '.$this->formatWhen($lastReceived)
                     .(! empty($messengerHealth['last_entry_count']) ? ' (entries: '.$messengerHealth['last_entry_count'].')' : '')
+                    .($messagingCount > 0 || $standbyCount > 0
+                        ? ' · messaging: '.$messagingCount.', standby: '.$standbyCount
+                        : '')
                 : 'No Messenger webhook POSTs recorded. Inbox only fills when Meta sends message events to this app.',
+        ];
+
+        $checks[] = [
+            'ok' => ! (! empty($lastReceived) && ! $hasMessaging && ! $hasStandby),
+            'label' => 'Message content fields',
+            'detail' => (! empty($lastReceived) && ! $hasMessaging && ! $hasStandby)
+                ? 'Last webhook had no messaging/standby events (delivery/read noise only, or wrong subscription fields). Subscribe to messages and standby in Meta Developer → Webhooks.'
+                : ($hasStandby
+                    ? 'Standby events are present (Page Inbox is likely primary). This app now ingests standby as well as messaging.'
+                    : 'Webhook includes messaging events (or none received yet).'),
+        ];
+
+        $checks[] = [
+            'ok' => true,
+            'label' => 'Meta app Live mode / testers',
+            'detail' => 'If the Meta app is still in Development mode, webhooks for real customers usually only fire for Admins/Developers/Testers. Put the app Live (or add each person as a tester) or only your personal Facebook ID will appear in Inbox.',
         ];
 
         if (! empty($messengerHealth['last_rejection_reason'])) {
@@ -164,6 +188,9 @@ class ChannelInboxDiagnostics
         } elseif ($total === 0) {
             $summary = 'Inbox is empty. Config looks okay so far — waiting for Meta to deliver a Messenger (or WhatsApp) message webhook.';
             $severity = 'info';
+        } elseif ($messengerCount <= 1 && $hasStandby) {
+            $summary = 'Only a few conversations are stored. Customer chats often arrive via Meta standby when Page Inbox is primary — those are now ingested. Ask a second Facebook account to message the Page, and confirm the Meta app is Live with the standby webhook field subscribed.';
+            $severity = 'warning';
         } else {
             $summary = 'Conversations are loading from the local database (webhook ingest).';
             $severity = $failed ? 'warning' : 'ok';
@@ -189,12 +216,20 @@ class ChannelInboxDiagnostics
         ]);
     }
 
-    public function recordMessengerReceived(int $entryCount, bool $hasMessaging): void
-    {
+    public function recordMessengerReceived(
+        int $entryCount,
+        bool $hasMessaging,
+        bool $hasStandby = false,
+        int $messagingCount = 0,
+        int $standbyCount = 0,
+    ): void {
         $this->patchHealth(self::MESSENGER_HEALTH_KEY, [
             'last_received_at' => now()->toIso8601String(),
             'last_entry_count' => $entryCount,
             'last_has_messaging' => $hasMessaging,
+            'last_has_standby' => $hasStandby,
+            'last_messaging_count' => $messagingCount,
+            'last_standby_count' => $standbyCount,
             'last_rejection_reason' => null,
             'last_rejected_at' => null,
         ]);

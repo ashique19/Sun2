@@ -81,15 +81,25 @@ class FacebookMessengerWebhookController extends Controller
 
         $payload = $request->all();
         $entryCount = is_array($payload['entry'] ?? null) ? count($payload['entry']) : 0;
-        $hasMessaging = isset($payload['entry'][0]['messaging']);
+        $messagingCount = 0;
+        $standbyCount = 0;
+
+        foreach (($payload['entry'] ?? []) as $entry) {
+            if (! is_array($entry)) {
+                continue;
+            }
+            $messagingCount += is_array($entry['messaging'] ?? null) ? count($entry['messaging']) : 0;
+            $standbyCount += is_array($entry['standby'] ?? null) ? count($entry['standby']) : 0;
+        }
 
         Log::info('Facebook Messenger webhook event received.', [
             'object' => $payload['object'] ?? null,
             'entry_count' => $entryCount,
-            'has_messaging' => $hasMessaging,
+            'messaging_count' => $messagingCount,
+            'standby_count' => $standbyCount,
         ]);
 
-        $diagnostics->recordMessengerReceived($entryCount, (bool) $hasMessaging);
+        $diagnostics->recordMessengerReceived($entryCount, $messagingCount > 0, $standbyCount > 0, $messagingCount, $standbyCount);
 
         try {
             $inbound->handleWebhookPayload($payload);

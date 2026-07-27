@@ -9,6 +9,9 @@ return [
     | Callback URL for Meta App Dashboard → Messenger → Webhooks:
     |   {APP_URL}/api/webhooks/messenger
     |
+    | Subscribe webhook fields at least: messages, standby
+    | (standby is required when Page Inbox / another app is the primary receiver).
+    |
     | Verify token must match FACEBOOK_MESSENGER_VERIFY_TOKEN exactly.
     |
     */

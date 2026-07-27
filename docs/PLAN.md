@@ -554,8 +554,9 @@ from the dashboard row clears them from this section.
 
 ### Locked product choices
 
-1. **Staging:** generated candidates are **saved as drafts on the product** (not only
-   browser session). They are **not** in the live gallery until staff clicks **+**.
+1. **Staging (corrected):** generated candidates are **session / temp only**. Unused
+   images are discarded when the modal/session ends — they add no lasting value if not
+   promoted. They are **not** in the live gallery until staff clicks **+**.
 2. **Prompts:** saved for reuse. Show **recent prompts** in the modal in **latest-first**
    order; selecting one fills the textarea (still editable). Each Generate that runs
    persists/updates that prompt in history.
@@ -566,18 +567,18 @@ from the dashboard row clears them from this section.
 
 | Control | Behavior |
 |---------|----------|
-| Raw photo upload | Source image for Gemini (one active raw per generate run; replaceable). Prefer persist raw on product while drafts exist so regenerate works after reload. |
+| Raw photo upload | Source for Gemini for this session (replaceable). Held in memory/temp only — not a permanent product column. |
 | Prompt textarea | Editable; can be filled from recent prompt chips/list |
-| Recent prompts | Latest-first list/chips of previously used prompts |
-| **Generate** | Call Gemini with raw + prompt; **append** a new candidate to the draft list (does not replace prior drafts) |
-| Draft list | Thumbnails of generated candidates |
+| Recent prompts | Latest-first list/chips of previously used prompts (DB-backed) |
+| **Generate** | Call Gemini with raw + prompt; **append** a new candidate to the in-session list |
+| Candidate list | Thumbnails of this session’s generations |
 | Edit | Browser Cropper scopes (same idea as existing product image queue editor) |
-| **+** | Promote that (optionally edited) draft into the normal product image gallery / upload queue; draft can be removed from staging after promote |
-| Discard | Optional remove draft / clear raw without affecting gallery |
+| **+** | Promote that (optionally edited) candidate into the normal product image gallery / upload queue; remove from session list after promote |
+| Discard | Remove a candidate or clear raw without affecting gallery |
 
-Create-product flow: if no product id yet, either require save-first before generate, or
-create a draft product / temp holding area then attach on first save — prefer **ensure
-product saved** (existing create pattern) before opening the generate modal when possible.
+Create-product flow: prefer **ensure product saved** (existing create pattern) before
+opening the generate modal when promoting straight to `product_images`; or **+** can push
+into the existing pending `newImages` queue and save with the product.
 
 ### Backend / Gemini
 
@@ -587,31 +588,33 @@ product saved** (existing create pattern) before opening the generate modal when
 - Separate config model e.g. `GEMINI_IMAGE_MODEL` (image-capable, e.g. flash-image family);
   keep existing `GEMINI_MODEL` for JSON parse.
 - Longer timeout for image gen than parse.
-- Store draft files under product-scoped public/storage paths; DB rows for drafts + prompts.
+- Candidates: Livewire temp uploads / in-memory base64 / short-lived temp files — **no**
+  durable `product_image_drafts` table. Clean up temps when modal closes or request ends.
 
 ### Data model (conceptual)
 
 | Store | Role |
 |-------|------|
-| `product_image_drafts` (or `product_images` with `is_draft` / `kind=ai_generated`) | path, product_id, prompt used, sort, timestamps — excluded from storefront until promoted |
+| Session candidates | Ephemeral only (temp disk or Livewire property) until **+** or discard |
 | `ai_image_prompts` | `prompt` text, `last_used_at`, optional `user_id` / use_count — recent list ordered by `last_used_at` desc |
-| Raw source | column/path on product or draft-session row (`raw_source_path`) |
+| Raw source | Session-only with the modal |
 
-Promotion (**+**): copy/move into normal `product_images` (or existing pending queue then save),
+Promotion (**+**): write into normal `product_images` (or existing pending queue then save),
 running the same store pipeline as manual uploads (hash, primary rules, etc.).
 
 ### Work to implement (when approved) — v1
 
-1. Migrations for drafts + prompt history (+ raw path if needed).
+1. Migration for **prompt history only** (`ai_image_prompts`).
 2. `GeminiClient` image-generate method + config for image model/timeout.
-3. Product edit: “Generate images” button → modal (raw, prompt, recent, Generate, drafts,
-   edit, +).
-4. Promote draft → gallery; delete draft; persist across reload.
-5. Tests: generate appends draft; + creates gallery image; prompts ordered latest-first;
-   gallery/storefront ignore drafts.
+3. Product edit: “Generate images” button → modal (raw, prompt, recent, Generate,
+   candidates, edit, +); session cleanup on close.
+4. **+** → gallery / pending queue; unused candidates dropped with session.
+5. Tests: generate appends in-session candidate; + creates gallery (or queue) image;
+   prompts ordered latest-first; closing session does not leave durable draft rows.
 
 ### Explicit non-goals (v1)
 
+- Persisting unused generated images on the product / across reloads.
 - Auto-adding every generation to the live gallery without **+**.
 - Bulk multi-raw generate in one click.
 - Replacing manual upload / Cropper queue (this is an additional path).

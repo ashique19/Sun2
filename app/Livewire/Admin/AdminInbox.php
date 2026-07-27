@@ -47,9 +47,29 @@ class AdminInbox extends Component
 
     public ?string $statusMessage = null;
 
+    /**
+     * On small screens the inbox is a single pane: list or thread.
+     * Desktop (xl+) always shows both columns.
+     */
+    public bool $mobileThreadOpen = false;
+
+    /**
+     * Filter selects stay collapsed behind a toggle on small screens.
+     * Desktop (xl+) always shows them inline.
+     */
+    public bool $mobileFiltersOpen = false;
+
     public function mount(): void
     {
         AdminAccess::ensureStaffAdmin();
+
+        if ($this->selectedConversationId) {
+            $this->mobileThreadOpen = true;
+        }
+
+        if ($this->channel !== '' || $this->unread !== '' || $this->window !== '' || $this->linked !== '') {
+            $this->mobileFiltersOpen = true;
+        }
     }
 
     public function selectConversation(int $conversationId, ChannelReplyService $replies): void
@@ -57,9 +77,20 @@ class AdminInbox extends Component
         $conversation = ChannelConversation::query()->findOrFail($conversationId);
         $this->markConversationRead($conversation, $replies);
         $this->selectedConversationId = $conversation->id;
+        $this->mobileThreadOpen = true;
         $this->resetComposer();
         $this->error = null;
         $this->statusMessage = null;
+    }
+
+    public function closeMobileThread(): void
+    {
+        $this->mobileThreadOpen = false;
+    }
+
+    public function toggleMobileFilters(): void
+    {
+        $this->mobileFiltersOpen = ! $this->mobileFiltersOpen;
     }
 
     public function setReplyTo(int $messageId): void
@@ -157,7 +188,6 @@ class AdminInbox extends Component
         $this->resetComposer();
         $this->statusMessage = 'Reply sent.';
     }
-
 
     public function syncFromFacebook(MessengerConversationSyncService $sync): void
     {

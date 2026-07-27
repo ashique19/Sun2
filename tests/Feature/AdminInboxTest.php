@@ -8,6 +8,7 @@ use App\Models\ChannelMessage;
 use App\Models\User;
 use App\Services\Channels\ChannelReplyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 use Mockery;
@@ -50,6 +51,70 @@ class AdminInboxTest extends TestCase
             ->assertSet('selectedConversationId', $conversation->id);
 
         $this->assertNotNull($conversation->fresh()->last_read_at);
+    }
+
+    #[Test]
+    public function selecting_a_conversation_opens_the_mobile_thread_pane(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        Livewire::test(AdminInbox::class)
+            ->assertSet('mobileThreadOpen', false)
+            ->assertSee('Filters')
+            ->call('selectConversation', $conversation->id)
+            ->assertSet('mobileThreadOpen', true)
+            ->assertSeeHtml('aria-label="Back to conversations"')
+            ->call('closeMobileThread')
+            ->assertSet('mobileThreadOpen', false)
+            ->assertSet('selectedConversationId', $conversation->id);
+    }
+
+    #[Test]
+    public function mobile_filters_toggle_and_stay_open_when_filters_are_active(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->conversation();
+
+        Livewire::test(AdminInbox::class)
+            ->assertSet('mobileFiltersOpen', false)
+            ->call('toggleMobileFilters')
+            ->assertSet('mobileFiltersOpen', true)
+            ->set('unread', '1')
+            ->assertSet('mobileFiltersOpen', true);
+
+        Livewire::withQueryParams(['unread' => '1'])
+            ->test(AdminInbox::class)
+            ->assertSet('mobileFiltersOpen', true)
+            ->assertSet('unread', '1');
+    }
+
+    #[Test]
+    public function deep_linked_conversation_opens_mobile_thread(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        Livewire::withQueryParams(['conversation' => $conversation->id])
+            ->test(AdminInbox::class)
+            ->assertSet('selectedConversationId', $conversation->id)
+            ->assertSet('mobileThreadOpen', true)
+            ->assertSeeHtml('aria-label="Back to conversations"');
+    }
+
+    #[Test]
+    public function conversation_list_uses_compact_channel_labels(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->conversation([
+            'customer_name' => 'Compact Row Customer',
+            'channel' => ChannelConversation::CHANNEL_MESSENGER,
+            'last_read_at' => now(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->assertSee('Compact Row Customer')
+            ->assertSee('MSG');
     }
 
     #[Test]
@@ -326,7 +391,7 @@ class AdminInboxTest extends TestCase
             'sent_at' => now()->subMinute(),
         ]);
 
-        $file = \Illuminate\Http\UploadedFile::fake()->image('reply.jpg', 40, 40);
+        $file = UploadedFile::fake()->image('reply.jpg', 40, 40);
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)

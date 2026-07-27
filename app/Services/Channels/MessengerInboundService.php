@@ -36,16 +36,15 @@ class MessengerInboundService
             }
 
             $pageId = isset($entry['id']) ? (string) $entry['id'] : null;
-            $messaging = $entry['messaging'] ?? [];
-            if (! is_array($messaging)) {
-                continue;
-            }
 
-            foreach ($messaging as $event) {
-                if (! is_array($event)) {
-                    continue;
-                }
+            // When Page Inbox (or another app) is the primary receiver, Meta delivers
+            // customer messages under entry.standby instead of entry.messaging.
+            $events = array_merge(
+                $this->eventList($entry['messaging'] ?? null),
+                $this->eventList($entry['standby'] ?? null),
+            );
 
+            foreach ($events as $event) {
                 try {
                     $this->handleMessagingEvent($event, $pageId);
                 } catch (Throwable $e) {
@@ -56,6 +55,25 @@ class MessengerInboundService
                 }
             }
         }
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function eventList(mixed $events): array
+    {
+        if (! is_array($events)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($events as $event) {
+            if (is_array($event)) {
+                $normalized[] = $event;
+            }
+        }
+
+        return $normalized;
     }
 
     /**

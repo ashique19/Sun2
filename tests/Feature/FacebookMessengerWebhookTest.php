@@ -243,4 +243,93 @@ class FacebookMessengerWebhookTest extends TestCase
             'external_message_id' => 'm_echo_test',
         ]);
     }
+
+    public function test_ingests_standby_messages_when_page_inbox_is_primary(): void
+    {
+        config([
+            'facebook.messenger.enabled' => true,
+            'facebook.messenger.app_secret' => '',
+            'gemini.api_key' => null,
+        ]);
+
+        $body = json_encode([
+            'object' => 'page',
+            'entry' => [[
+                'id' => 'PAGE999',
+                'time' => time(),
+                // No messaging[] — customer traffic arrives on standby while Page Inbox owns the thread.
+                'standby' => [[
+                    'sender' => ['id' => 'PSID_CUSTOMER_2'],
+                    'recipient' => ['id' => 'PAGE999'],
+                    'timestamp' => (int) (microtime(true) * 1000),
+                    'message' => [
+                        'mid' => 'm_standby_customer',
+                        'text' => 'Hi, is this necklace available?',
+                    ],
+                ]],
+            ]],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->call(
+            'POST',
+            '/api/webhooks/messenger',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            $body,
+        )->assertOk()->assertSee('EVENT_RECEIVED', false);
+
+        $this->assertDatabaseHas('channel_conversations', [
+            'channel' => 'messenger',
+            'external_user_id' => 'PSID_CUSTOMER_2',
+        ]);
+        $this->assertDatabaseHas('channel_messages', [
+            'external_message_id' => 'm_standby_customer',
+            'body' => 'Hi, is this necklace available?',
+            'direction' => 'inbound',
+        ]);
+    }
+
+    public function test_dedupes_same_mid_across_messaging_and_standby(): void
+    {
+        config([
+            'facebook.messenger.enabled' => true,
+            'facebook.messenger.app_secret' => '',
+            'gemini.api_key' => null,
+        ]);
+
+        $event = [
+            'sender' => ['id' => 'PSID_DEDUP'],
+            'recipient' => ['id' => 'PAGE1'],
+            'timestamp' => (int) (microtime(true) * 1000),
+            'message' => [
+                'mid' => 'm_shared_mid',
+                'text' => 'Duplicate delivery',
+            ],
+        ];
+
+        $body = json_encode([
+            'object' => 'page',
+            'entry' => [[
+                'id' => 'PAGE1',
+                'time' => time(),
+                'messaging' => [$event],
+                'standby' => [$event],
+            ]],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->call(
+            'POST',
+            '/api/webhooks/messenger',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            $body,
+        )->assertOk();
+
+        $this->assertSame(1, \App\Models\ChannelConversation::query()->where('external_user_id', 'PSID_DEDUP')->count());
+        $this->assertSame(1, ChannelMessage::query()->where('external_message_id', 'm_shared_mid')->count());
+    }
 }

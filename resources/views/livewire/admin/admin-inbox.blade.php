@@ -49,7 +49,11 @@
                     <p class="mt-1 text-sm opacity-90">{{ $diagnostics['summary'] }}</p>
                     <p class="mt-2 text-xs opacity-80">
                         Inbox does not pull chat history from Facebook. It only lists conversations Meta already delivered to
-                        <code class="rounded bg-white/70 px-1.5 py-0.5">{{ $diagnostics['webhook_url'] }}</code>.
+                        <code class="rounded bg-white/70 px-1.5 py-0.5">{{ $diagnostics['webhook_url'] }}</code>
+                        (both <code class="rounded bg-white/70 px-1.5 py-0.5">messaging</code> and
+                        <code class="rounded bg-white/70 px-1.5 py-0.5">standby</code> webhook fields).
+                        If only your personal Facebook ID appears, put the Meta app in Live mode and subscribe the Page to
+                        <strong>messages</strong> + <strong>standby</strong>.
                     </p>
                 </div>
                 @if ($diagnostics['filters_active'] && $conversations->isEmpty())

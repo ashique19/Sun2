@@ -91,6 +91,22 @@ class AdminInbox extends Component
         $this->linked = '';
     }
 
+    /**
+     * Lightweight poll refresh for conversation list + open thread.
+     */
+    public function refreshInbox(): void
+    {
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+
+        if ($conversation && $conversation->isUnread()) {
+            $conversation->markRead(auth()->id());
+        }
+    }
+
     public function render(ChannelInboxDiagnostics $diagnostics)
     {
         $query = ChannelConversation::query()

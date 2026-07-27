@@ -1,4 +1,4 @@
-<div class="space-y-6">
+<div class="space-y-6" wire:poll.5s.visible="refreshInbox">
     <livewire:admin.admin-facebook-token-gate />
 
     <div class="flex flex-wrap items-end justify-between gap-4">
@@ -116,9 +116,18 @@
                                     {{ $conversation->customer_name ?: $conversation->customer_phone ?: $conversation->external_user_id }}
                                 </p>
                                 @if ($latest)
-                                    <p class="mt-1 truncate text-xs text-[#8C8474]">
-                                        {{ $latest->direction === 'outbound' ? 'You: ' : '' }}{{ $latest->body ?: 'Attachment' }}
-                                    </p>
+                                    <div class="mt-1 flex items-center gap-2 min-w-0">
+                                        @if ($latest->isImageAttachment())
+                                            <img
+                                                src="{{ route('admin.inbox.media', $latest) }}"
+                                                alt=""
+                                                class="h-8 w-8 shrink-0 rounded object-cover bg-[#F1EADB]"
+                                                loading="lazy">
+                                        @endif
+                                        <p class="truncate text-xs text-[#8C8474]">
+                                            {{ $latest->direction === 'outbound' ? 'You: ' : '' }}{{ $latest->body ?: ($latest->isImageAttachment() ? 'Photo' : 'Attachment') }}
+                                        </p>
+                                    </div>
                                 @endif
                             </div>
                             <div class="shrink-0 text-[11px] text-[#8C8474]">
@@ -164,7 +173,10 @@
                 </div>
 
                 <div class="flex max-h-[60vh] flex-col">
-                    <div class="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+                    <div
+                        wire:key="thread-{{ $selectedConversation->id }}-{{ $selectedConversation->messages->count() }}-{{ $selectedConversation->messages->max('id') }}"
+                        x-init="$el.scrollTop = $el.scrollHeight"
+                        class="flex-1 space-y-3 overflow-y-auto px-4 py-4">
                         @foreach ($selectedConversation->messages as $messageRow)
                             <div @class([
                                 'max-w-[90%] rounded-lg px-3 py-2 text-sm',
@@ -174,8 +186,20 @@
                                 @if (filled($messageRow->body))
                                     <p class="whitespace-pre-wrap break-words">{{ $messageRow->body }}</p>
                                 @endif
-                                @if (filled($messageRow->media_url))
-                                    <a href="{{ $messageRow->media_url }}" target="_blank" rel="noopener" class="mt-1 inline-block text-xs text-[#C9A227] hover:underline">View attachment</a>
+                                @if ($messageRow->isImageAttachment())
+                                    <a href="{{ route('admin.inbox.media', $messageRow) }}" target="_blank" rel="noopener"
+                                        class="mt-2 block overflow-hidden rounded-lg border border-[#E7DFCF] bg-white">
+                                        <img
+                                            src="{{ route('admin.inbox.media', $messageRow) }}"
+                                            alt="Customer photo"
+                                            class="max-h-64 w-full object-contain bg-[#FAF6EF]"
+                                            loading="lazy">
+                                    </a>
+                                @elseif ($messageRow->hasMedia())
+                                    <a href="{{ route('admin.inbox.media', $messageRow) }}" target="_blank" rel="noopener"
+                                        class="mt-1 inline-block text-xs text-[#C9A227] hover:underline">
+                                        View attachment
+                                    </a>
                                 @endif
                                 @if ($messageRow->sent_at)
                                     <p class="mt-1 text-[10px] text-[#8C8474]">

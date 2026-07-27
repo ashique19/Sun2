@@ -92,6 +92,8 @@ composed file separate from gallery `product_images`. Social compose/publish: `s
 Channel inbox: `channel_conversations` / `channel_messages` (Messenger + WhatsApp) with staff
 `last_read_*` for unread in Admin → Inbox (see §13). Ops exceptions: `admin_attentions` (or
 equivalent) for cases automation cannot safely resolve — e.g. Steadfast COD mismatch (see §14).
+AI image assist: product image **drafts** + saved prompt history until promoted to gallery
+(see §15).
 
 Note: blogs, pages, costs/payables, settings, and payment-method tables may still exist
 from early migrations but are **not** in active product scope.

@@ -5,6 +5,7 @@ namespace App\Livewire\Admin;
 use App\Models\Category;
 use App\Models\Product;
 use App\Services\Admin\ProductImageService;
+use App\Services\Admin\ProductPricedImageService;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -17,7 +18,7 @@ class AdminProducts extends Component
 {
     use WithPagination;
 
-    private const INLINE_FIELDS = ['price', 'purchase_price', 'commission', 'max_discount', 'stock_quantity'];
+    private const INLINE_FIELDS = ['price', 'compare_at_price', 'purchase_price', 'commission', 'max_discount', 'stock_quantity'];
 
     #[Url]
     public string $search = '';
@@ -88,6 +89,7 @@ class AdminProducts extends Component
         $this->validate([
             'editingValue' => match ($field) {
                 'price', 'commission' => ['required', 'numeric', 'min:0'],
+                'compare_at_price' => ['nullable', 'numeric', 'min:0'],
                 'purchase_price', 'max_discount' => ['nullable', 'numeric', 'min:0'],
                 'stock_quantity' => ['required', 'integer', 'min:0'],
             },
@@ -95,8 +97,23 @@ class AdminProducts extends Component
 
         $product = Product::query()->findOrFail($this->editingProductId);
 
+        if ($field === 'compare_at_price') {
+            $compareAtPrice = $this->editingValue === ''
+                ? null
+                : (int) round((float) $this->editingValue);
+
+            if ($compareAtPrice !== null && $compareAtPrice <= (float) $product->price) {
+                $this->addError('editingValue', 'Regular price must be greater than selling price.');
+
+                return;
+            }
+        }
+
         $value = match ($field) {
             'price', 'purchase_price', 'commission' => (int) round((float) ($this->editingValue === '' ? 0 : $this->editingValue)),
+            'compare_at_price' => $this->editingValue === ''
+                ? null
+                : (int) round((float) $this->editingValue),
             'max_discount' => $this->editingValue === ''
                 ? null
                 : (int) round((float) $this->editingValue),
@@ -117,6 +134,12 @@ class AdminProducts extends Component
     {
         $product = Product::query()->findOrFail($productId);
         $images->deleteProduct($product);
+    }
+
+    public function generatePricedImage(int $productId, ProductPricedImageService $pricedImages): void
+    {
+        $product = Product::query()->findOrFail($productId);
+        $pricedImages->generate($product);
     }
 
     public function render()

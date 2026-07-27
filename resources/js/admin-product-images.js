@@ -200,4 +200,122 @@ document.addEventListener('alpine:init', () => {
             }
         },
     }));
+
+    Alpine.data('aiImageCandidates', () => ({
+        aiEditorOpen: false,
+        aiEditorId: null,
+        aiEditorSrc: '',
+        aiCropper: null,
+
+        syncFromWire() {
+            // Livewire re-renders keep Alpine state for the open editor only.
+        },
+
+        openAiEditor(id) {
+            const candidates = this.$wire.aiCandidates ?? [];
+            const candidate = candidates.find((item) => item.id === id);
+
+            if (!candidate) {
+                return;
+            }
+
+            this.aiEditorId = id;
+            this.aiEditorSrc = `data:${candidate.mime};base64,${candidate.base64}`;
+            this.aiEditorOpen = true;
+
+            this.$nextTick(() => {
+                const image = this.$refs.aiCropImage;
+
+                if (!image) {
+                    return;
+                }
+
+                const start = () => this.initAiCropper();
+
+                if (image.complete) {
+                    start();
+                } else {
+                    image.onload = start;
+                }
+            });
+        },
+
+        initAiCropper() {
+            this.destroyAiCropper();
+
+            const image = this.$refs.aiCropImage;
+
+            if (!image) {
+                return;
+            }
+
+            this.aiCropper = new Cropper(image, {
+                viewMode: 1,
+                dragMode: 'move',
+                autoCropArea: 1,
+                responsive: true,
+                background: false,
+            });
+        },
+
+        destroyAiCropper() {
+            if (this.aiCropper) {
+                this.aiCropper.destroy();
+                this.aiCropper = null;
+            }
+        },
+
+        closeAiEditor() {
+            this.destroyAiCropper();
+            this.aiEditorOpen = false;
+            this.aiEditorId = null;
+            this.aiEditorSrc = '';
+        },
+
+        rotateAi(degrees) {
+            this.aiCropper?.rotate(degrees);
+        },
+
+        resetAiCrop() {
+            this.aiCropper?.reset();
+        },
+
+        async applyAiCrop() {
+            if (!this.aiCropper || !this.aiEditorId) {
+                return;
+            }
+
+            const canvas = this.aiCropper.getCroppedCanvas({
+                maxWidth: 2400,
+                maxHeight: 2400,
+                fillColor: '#ffffff',
+            });
+
+            if (!canvas) {
+                return;
+            }
+
+            const blob = await new Promise((resolve) => {
+                canvas.toBlob(resolve, 'image/jpeg', 0.92);
+            });
+
+            if (!blob) {
+                return;
+            }
+
+            const base64 = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const result = String(reader.result || '');
+                    const parts = result.split(',');
+                    resolve(parts[1] || '');
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+
+            await this.$wire.updateAiCandidate(this.aiEditorId, 'image/jpeg', base64);
+            this.closeAiEditor();
+        },
+    }));
 });

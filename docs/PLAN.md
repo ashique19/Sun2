@@ -58,6 +58,11 @@ to **intake the legacy data** (especially products, categories, orders).
 14. **Needs admin attention:** reusable attention queue when automation cannot safely
     conclude (first case: Steadfast “delivered” / partial COD mismatch). Surface on
     **Admin → Dashboard** above the daily order qty table, with review links. See §14.
+15. **AI product image generate (Gemini):** on Admin product create/edit, modal to upload a
+    raw photo + prompt, generate candidate images via Gemini (each Generate appends),
+    browser-edit candidates, **+** to promote into the product gallery. Staging is
+    **session-only** (discard unused candidates when the session ends); **prompt history**
+    is persisted. See §15.
 
 ## 4. Delivery sequence
 
@@ -88,6 +93,8 @@ composed file separate from gallery `product_images`. Social compose/publish: `s
 Channel inbox: `channel_conversations` / `channel_messages` (Messenger + WhatsApp) with staff
 `last_read_*` for unread in Admin → Inbox (see §13). Ops exceptions: `admin_attentions` (or
 equivalent) for cases automation cannot safely resolve — e.g. Steadfast COD mismatch (see §14).
+AI image assist: session-only generated candidates until **+** promotes to gallery; saved
+prompt history for reuse (see §15).
 
 Note: blogs, pages, costs/payables, settings, and payment-method tables may still exist
 from early migrations but are **not** in active product scope.
@@ -539,3 +546,76 @@ from the dashboard row clears them from this section.
 
 - Fully auto-inferring partial-return line items from Steadfast without admin review.
 - Replacing Steadfast’s own portal UI — we only gate **our** order state + money effects.
+
+## 15. AI product image generate (Gemini) — locked plan
+
+**Status:** implemented (session-only candidates + prompt history).
+**Entry:** Admin → Products → create/edit.
+
+### Locked product choices
+
+1. **Staging (corrected):** generated candidates are **session / temp only**. Unused
+   images are discarded when the modal/session ends — they add no lasting value if not
+   promoted. They are **not** in the live gallery until staff clicks **+**.
+2. **Prompts:** saved for reuse. Show **recent prompts** in the modal in **latest-first**
+   order; selecting one fills the textarea (still editable). Each Generate that runs
+   persists/updates that prompt in history.
+3. **Layout:** open via a button into a **modal** (cleanest across screen sizes) — not a
+   permanent side column on the edit page.
+
+### Modal UX
+
+| Control | Behavior |
+|---------|----------|
+| Raw photo upload | Source for Gemini for this session (replaceable). Held in memory/temp only — not a permanent product column. |
+| Prompt textarea | Editable; can be filled from recent prompt chips/list |
+| Recent prompts | Latest-first list/chips of previously used prompts (DB-backed) |
+| **Generate** | Call Gemini with raw + prompt; **append** a new candidate to the in-session list |
+| Candidate list | Thumbnails of this session’s generations |
+| Edit | Browser Cropper scopes (same idea as existing product image queue editor) |
+| **+** | Promote that (optionally edited) candidate into the normal product image gallery / upload queue; remove from session list after promote |
+| Discard | Remove a candidate or clear raw without affecting gallery |
+
+Create-product flow: prefer **ensure product saved** (existing create pattern) before
+opening the generate modal when promoting straight to `product_images`; or **+** can push
+into the existing pending `newImages` queue and save with the product.
+
+### Backend / Gemini
+
+- Today `GeminiClient` is JSON/text oriented (order parse). Add an **image generation**
+  path: multimodal `generateContent` with raw image + prompt and
+  `responseModalities` including `IMAGE`.
+- Separate config model e.g. `GEMINI_IMAGE_MODEL` (image-capable, e.g. flash-image family);
+  keep existing `GEMINI_MODEL` for JSON parse.
+- Longer timeout for image gen than parse.
+- Candidates: Livewire temp uploads / in-memory base64 / short-lived temp files — **no**
+  durable `product_image_drafts` table. Clean up temps when modal closes or request ends.
+
+### Data model (conceptual)
+
+| Store | Role |
+|-------|------|
+| Session candidates | Ephemeral only (temp disk or Livewire property) until **+** or discard |
+| `ai_image_prompts` | `prompt` text, `last_used_at`, optional `user_id` / use_count — recent list ordered by `last_used_at` desc |
+| Raw source | Session-only with the modal |
+
+Promotion (**+**): write into normal `product_images` (or existing pending queue then save),
+running the same store pipeline as manual uploads (hash, primary rules, etc.).
+
+### Work to implement (when approved) — v1
+
+- [x] Migration for **prompt history only** (`ai_image_prompts`).
+- [x] `GeminiClient` image-generate method + config for image model/timeout.
+- [x] Product edit: “Generate images” button → modal (raw, prompt, recent, Generate,
+      candidates, edit, +); session cleanup on close.
+- [x] **+** → gallery; unused candidates dropped with session.
+- [x] Tests: generate appends in-session candidate; + creates gallery image;
+      prompts ordered latest-first; closing session clears candidates.
+
+### Explicit non-goals (v1)
+
+- Persisting unused generated images on the product / across reloads.
+- Auto-adding every generation to the live gallery without **+**.
+- Bulk multi-raw generate in one click.
+- Replacing manual upload / Cropper queue (this is an additional path).
+- Using AI for §11 priced-image stamp (priced stamp stays GD/deterministic).

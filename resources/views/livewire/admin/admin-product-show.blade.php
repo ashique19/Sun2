@@ -38,6 +38,16 @@
                     <dd class="mt-0.5 font-medium tabular-nums">&#2547; {{ number_format((float) $product->price, 0) }}</dd>
                 </div>
                 <div>
+                    <dt class="text-[#8C8474]">Regular price</dt>
+                    <dd class="mt-0.5 font-medium tabular-nums">
+                        @if ($product->compare_at_price !== null)
+                            &#2547; {{ number_format((float) $product->compare_at_price, 0) }}
+                        @else
+                            —
+                        @endif
+                    </dd>
+                </div>
+                <div>
                     <dt class="text-[#8C8474]">Cost</dt>
                     <dd class="mt-0.5 font-medium tabular-nums">&#2547; {{ number_format((float) $product->purchase_price, 0) }}</dd>
                 </div>

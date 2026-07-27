@@ -2,7 +2,7 @@
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
             <h1 class="font-serif text-3xl font-semibold">Products</h1>
-            <p class="mt-1 text-xs text-[#8C8474]">Double-click price, cost, commission, max discount, or stock to edit inline.</p>
+            <p class="mt-1 text-xs text-[#8C8474]">Double-click price, regular price, cost, commission, max discount, or stock to edit inline.</p>
         </div>
         <a href="{{ route('admin.products.create') }}" wire:navigate
             class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">
@@ -34,11 +34,13 @@
                         <th class="px-4 py-3 font-medium">Product</th>
                         <th class="px-4 py-3 font-medium">Category</th>
                         <th class="px-4 py-3 font-medium">Price</th>
+                        <th class="px-4 py-3 font-medium">Regular</th>
                         <th class="px-4 py-3 font-medium">Cost</th>
                         <th class="px-4 py-3 font-medium">Commission</th>
                         <th class="px-4 py-3 font-medium">Max disc.</th>
                         <th class="px-4 py-3 font-medium">Stock</th>
                         <th class="px-4 py-3 font-medium">Published</th>
+                        <th class="px-4 py-3 font-medium">Priced image</th>
                         <th class="px-4 py-3 font-medium"></th>
                     </tr>
                 </thead>
@@ -64,6 +66,11 @@
 
                             @foreach ([
                                 'price' => ['value' => (string) (int) round((float) $product->price), 'prefix' => '৳ ', 'nullable' => false],
+                                'compare_at_price' => [
+                                    'value' => $product->compare_at_price !== null ? (string) (int) round((float) $product->compare_at_price) : '',
+                                    'prefix' => '৳ ',
+                                    'nullable' => true,
+                                ],
                                 'purchase_price' => ['value' => (string) (int) round((float) $product->purchase_price), 'prefix' => '৳ ', 'nullable' => false],
                                 'commission' => ['value' => (string) (int) round((float) $product->commission), 'prefix' => '৳ ', 'nullable' => false],
                                 'max_discount' => [
@@ -139,6 +146,13 @@
                                     {{ $product->is_published ? 'Yes' : 'No' }}
                                 </button>
                             </td>
+                            <td class="px-4 py-3">
+                                <button type="button"
+                                    wire:click="generatePricedImage({{ $product->id }})"
+                                    class="rounded border border-[#C9A227] px-2 py-1 text-xs text-[#C9A227] hover:bg-[#FAF6EF]">
+                                    {{ $product->priced_image_path ? 'Rebuild' : 'Put price on image' }}
+                                </button>
+                            </td>
                             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
                                 <a href="{{ route('admin.products.show', $product) }}" wire:navigate
                                     class="text-[#6B6459] hover:text-[#C9A227] hover:underline">View</a>
@@ -151,7 +165,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="px-4 py-8 text-center text-[#8C8474]">No products found.</td>
+                            <td colspan="11" class="px-4 py-8 text-center text-[#8C8474]">No products found.</td>
                         </tr>
                     @endforelse
                 </tbody>

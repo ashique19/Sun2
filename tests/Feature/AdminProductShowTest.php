@@ -32,6 +32,7 @@ class AdminProductShowTest extends TestCase
             'slug' => 'gold-pendant',
             'sku' => 'GP-1',
             'price' => 1200,
+            'compare_at_price' => 1600,
             'purchase_price' => 500,
             'commission' => 80,
             'max_discount' => 50,
@@ -61,6 +62,8 @@ class AdminProductShowTest extends TestCase
         Livewire::test(AdminProductShow::class, ['product' => $product])
             ->assertSuccessful()
             ->assertSee('Gold Pendant')
+            ->assertSee('Regular price')
+            ->assertSee('1,600')
             ->assertSee('Reseller commission')
             ->assertSee('Analytics')
             ->assertSee('Monthly performance')

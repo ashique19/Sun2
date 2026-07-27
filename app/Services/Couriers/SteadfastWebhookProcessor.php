@@ -178,9 +178,34 @@ class SteadfastWebhookProcessor
         $message = (string) ($payload['tracking_message'] ?? 'Steadfast tracking update.');
 
         if (preg_match('/delivered successfully/i', $message) && $order->status !== 'delivered') {
+            $expectedAmount = $order->collectableAmount();
+            $collectedAmount = isset($payload['cod_amount']) ? (float) $payload['cod_amount'] : $expectedAmount;
+
+            if ($this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount)) {
+                $this->adminAttention->createCodMismatch(
+                    order: $order,
+                    expectedAmount: $expectedAmount,
+                    collectedAmount: $collectedAmount,
+                    metadata: [
+                        'tracking_message' => $message,
+                        'webhook_payload' => $payload,
+                        'reported_status' => 'tracking_delivered',
+                        'source' => 'steadfast_tracking',
+                    ],
+                );
+
+                $this->recordHistory(
+                    $order,
+                    $order->status,
+                    "COD mismatch: Expected ৳{$expectedAmount}, collected ৳{$collectedAmount}. Courier reported delivered via tracking update. Requires admin attention.",
+                );
+
+                return;
+            }
+
             $this->deliverySettlement->recordCollection(
                 order: $order,
-                amount: $order->collectableAmount(),
+                amount: $collectedAmount,
                 actor: null,
                 meta: ['source' => 'steadfast_tracking'],
             );

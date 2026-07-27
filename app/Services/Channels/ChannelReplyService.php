@@ -4,6 +4,7 @@ namespace App\Services\Channels;
 
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
+use App\Services\Facebook\FacebookPageTokenService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -13,6 +14,7 @@ class ChannelReplyService
 {
     public function __construct(
         private ChannelConversationService $conversations,
+        private FacebookPageTokenService $tokens,
     ) {}
 
     /**
@@ -69,10 +71,17 @@ class ChannelReplyService
                 'message' => $e->getMessage(),
             ]);
 
+            $message = $e->getMessage();
+            if (str_contains(strtolower($message), 'access token')
+                || str_contains(strtolower($message), 'oauth')
+                || str_contains(strtolower($message), 'session has expired')) {
+                $this->tokens->invalidateStatusCache();
+            }
+
             return [
                 'ok' => false,
                 'message' => null,
-                'error' => $e->getMessage(),
+                'error' => $message,
                 'outside_window' => false,
             ];
         }
@@ -80,12 +89,12 @@ class ChannelReplyService
 
     private function sendMessenger(ChannelConversation $conversation, string $text): ?string
     {
-        $token = (string) config('facebook.messenger.page_access_token', '');
+        $token = $this->tokens->token();
         if ($token === '') {
             throw new RuntimeException('FACEBOOK_PAGE_ACCESS_TOKEN is not configured.');
         }
 
-        $version = (string) config('facebook.graph_version', 'v25.0');
+        $version = $this->tokens->graphVersion();
         $url = 'https://graph.facebook.com/'.$version.'/me/messages';
 
         $response = Http::timeout(20)

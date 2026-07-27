@@ -1,0 +1,55 @@
+<div>
+    @if ($status && ! $status['valid'])
+        <div class="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 sm:p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h2 class="font-semibold text-rose-800">Facebook Page token needs attention</h2>
+                    <p class="mt-1 text-sm text-rose-700">{{ $status['message'] }}</p>
+                    <p class="mt-2 text-xs text-rose-600/90">
+                        Messenger replies and social publishing use this token. Generate a
+                        <strong>Page</strong> access token (prefer a Business Manager System User token), then paste it below.
+                    </p>
+                </div>
+                <button type="button"
+                    wire:click="recheck"
+                    class="rounded-full border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100">
+                    Recheck
+                </button>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-3 text-sm">
+                <a href="{{ $generateTokenUrl }}" target="_blank" rel="noopener noreferrer"
+                    class="inline-flex items-center rounded-full bg-[#1877F2] px-4 py-2 font-semibold text-white hover:bg-[#166FE5]">
+                    Open Graph API Explorer
+                </a>
+                <a href="{{ $systemUserUrl }}" target="_blank" rel="noopener noreferrer"
+                    class="inline-flex items-center rounded-full border border-rose-300 bg-white px-4 py-2 font-semibold text-rose-800 hover:bg-rose-100">
+                    Business System Users
+                </a>
+            </div>
+
+            <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-start">
+                <input type="password"
+                    wire:model="tokenInput"
+                    autocomplete="off"
+                    placeholder="Paste new FACEBOOK_PAGE_ACCESS_TOKEN"
+                    class="min-w-0 flex-1 rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm text-[#1E1E1E] focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-400">
+                <button type="button"
+                    wire:click="saveToken"
+                    wire:loading.attr="disabled"
+                    class="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-60">
+                    Save token
+                </button>
+            </div>
+
+            @if ($feedback)
+                <p class="mt-2 text-xs {{ $feedbackOk ? 'text-emerald-700' : 'text-rose-700' }}">{{ $feedback }}</p>
+            @endif
+        </div>
+    @elseif ($status && $status['valid'] && $feedback)
+        <div class="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            {{ $feedback }}
+            <span class="text-emerald-700/80"> — {{ $status['message'] }}</span>
+        </div>
+    @endif
+</div>

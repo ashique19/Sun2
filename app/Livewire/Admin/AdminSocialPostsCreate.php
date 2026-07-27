@@ -4,14 +4,15 @@ namespace App\Livewire\Admin;
 
 use App\Models\Product;
 use App\Models\SocialPost;
+use App\Models\SocialPostPublication;
 use App\Services\Social\MetaGraphSocialPublisher;
 use App\Services\Social\SocialPostCollageService;
 use App\Support\AdminAccess;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Component;
-use Illuminate\Validation\ValidationException;
 
 #[Layout('components.layouts.admin')]
 class AdminSocialPostsCreate extends Component
@@ -22,11 +23,28 @@ class AdminSocialPostsCreate extends Component
     public string $body = '';
 
     public string $imageSource = SocialPost::IMAGE_SOURCE_THUMB; // thumb | priced
+
     public string $layout = SocialPost::LAYOUT_ALBUM; // album | collage
+
+    public bool $postToFacebook = true;
+
+    public bool $postToInstagram = true;
 
     public bool $supportsPricedImages = false;
 
     public ?string $message = null;
+
+    /** compose | publishing | done */
+    public string $phase = 'compose';
+
+    public ?int $createdPostId = null;
+
+    /**
+     * Per-channel progress for the active publish run.
+     *
+     * @var array<string, array{label: string, status: string, error: ?string, url: ?string}>
+     */
+    public array $channelProgress = [];
 
     public function mount(): void
     {
@@ -41,28 +59,58 @@ class AdminSocialPostsCreate extends Component
     }
 
     /**
+     * @return list<string>
+     */
+    public function selectedChannels(): array
+    {
+        $channels = [];
+
+        if ($this->postToFacebook) {
+            $channels[] = SocialPostPublication::CHANNEL_FACEBOOK;
+        }
+
+        if ($this->postToInstagram) {
+            $channels[] = SocialPostPublication::CHANNEL_INSTAGRAM;
+        }
+
+        return $channels;
+    }
+
+    /**
      * @return array<int>
      */
     private function selectedProductIds(): array
     {
         $raw = array_filter(array_map('trim', explode(',', (string) $this->products)));
 
-        $ids = array_values(array_unique(array_filter(array_map(
+        return array_values(array_unique(array_filter(array_map(
             static fn (string $v) => (int) $v,
             $raw
         ), static fn (int $id) => $id > 0)));
-
-        return $ids;
     }
 
-    public function publish(MetaGraphSocialPublisher $publisher, SocialPostCollageService $collage): void
+    /**
+     * Create the on-site social post and prepare channel progress rows.
+     * Actual Meta publishing happens via publishSelectedChannel() for live progress.
+     */
+    public function createPost(SocialPostCollageService $collage): void
     {
         $this->message = null;
+
+        if ($this->phase !== 'compose') {
+            return;
+        }
 
         $ids = $this->selectedProductIds();
         if ($ids === []) {
             throw ValidationException::withMessages([
                 'products' => 'Select at least one product.',
+            ]);
+        }
+
+        if ($this->selectedChannels() === []) {
+            throw ValidationException::withMessages([
+                'postToFacebook' => 'Select at least one social network to post to.',
             ]);
         }
 
@@ -124,7 +172,7 @@ class AdminSocialPostsCreate extends Component
         $thumbSnapshotPaths = [];
         $pricedSnapshotPaths = [];
 
-        foreach ($ids as $sortOrder => $productId) {
+        foreach ($ids as $productId) {
             $product = $selectedProducts->get($productId);
             if (! $product) {
                 continue;
@@ -191,10 +239,106 @@ class AdminSocialPostsCreate extends Component
             ]);
         }
 
-        // Publish to channels (per-channel rows are persisted by the service).
-        $publisher->publish($post);
+        $this->createdPostId = $post->id;
+        $this->channelProgress = [];
 
-        $this->redirect(route('admin.social-posts.show', ['socialPost' => $post->id]), navigate: true);
+        foreach ($this->selectedChannels() as $channel) {
+            $this->channelProgress[$channel] = [
+                'label' => $this->channelLabel($channel),
+                'status' => 'waiting',
+                'error' => null,
+                'url' => null,
+            ];
+        }
+
+        $this->phase = 'publishing';
+    }
+
+    public function markChannelPosting(string $channel): void
+    {
+        if ($this->phase !== 'publishing' || ! isset($this->channelProgress[$channel])) {
+            return;
+        }
+
+        if (! in_array($this->channelProgress[$channel]['status'], ['waiting', 'posting'], true)) {
+            return;
+        }
+
+        $this->channelProgress[$channel]['status'] = 'posting';
+        $this->channelProgress[$channel]['error'] = null;
+    }
+
+    public function publishSelectedChannel(string $channel, MetaGraphSocialPublisher $publisher): void
+    {
+        if ($this->phase !== 'publishing' || ! $this->createdPostId || ! isset($this->channelProgress[$channel])) {
+            return;
+        }
+
+        $this->channelProgress[$channel]['status'] = 'posting';
+
+        $post = SocialPost::query()
+            ->with(['products'])
+            ->find($this->createdPostId);
+
+        if (! $post) {
+            $this->channelProgress[$channel] = [
+                'label' => $this->channelLabel($channel),
+                'status' => 'failed',
+                'error' => 'Social post was not found.',
+                'url' => null,
+            ];
+            $this->finishIfComplete();
+
+            return;
+        }
+
+        $publication = $publisher->publishChannel($post, $channel);
+
+        $this->channelProgress[$channel] = [
+            'label' => $this->channelLabel($channel),
+            'status' => $publication->status === SocialPostPublication::STATUS_SUCCESS ? 'success' : 'failed',
+            'error' => $publication->error,
+            'url' => $publication->external_url,
+        ];
+
+        $this->finishIfComplete();
+    }
+
+    private function finishIfComplete(): void
+    {
+        foreach ($this->channelProgress as $row) {
+            if (! in_array($row['status'], ['success', 'failed'], true)) {
+                return;
+            }
+        }
+
+        $this->phase = 'done';
+        $this->message = 'Publishing finished.';
+    }
+
+    private function channelLabel(string $channel): string
+    {
+        return match ($channel) {
+            SocialPostPublication::CHANNEL_FACEBOOK => 'Facebook',
+            SocialPostPublication::CHANNEL_INSTAGRAM => 'Instagram',
+            default => ucfirst($channel),
+        };
+    }
+
+    /**
+     * Backward-compatible entry used by older tests/callers: create + publish all selected channels.
+     */
+    public function publish(MetaGraphSocialPublisher $publisher, SocialPostCollageService $collage): void
+    {
+        $this->createPost($collage);
+
+        if ($this->phase !== 'publishing') {
+            return;
+        }
+
+        foreach (array_keys($this->channelProgress) as $channel) {
+            $this->publishSelectedChannel($channel, $publisher);
+        }
     }
 
     public function render()
@@ -216,4 +360,3 @@ class AdminSocialPostsCreate extends Component
         ]);
     }
 }
-

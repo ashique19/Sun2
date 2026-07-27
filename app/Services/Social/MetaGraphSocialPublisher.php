@@ -16,20 +16,64 @@ class MetaGraphSocialPublisher
     ) {}
 
     /**
-     * Publish (or re-publish) a social post to configured Meta channels.
+     * Publish (or re-publish) a social post to the given Meta channels.
      *
      * Creates new rows in `social_post_publications` for each channel attempt.
+     * When a selected channel is not configured, a failed row is still stored with a reason.
      *
-     * @return array{facebook: ?SocialPostPublication, instagram: ?SocialPostPublication}
+     * @param  list<string>  $channels
+     * @return array<string, SocialPostPublication>
      */
-    public function publish(SocialPost $post): array
+    public function publish(SocialPost $post, array $channels = [
+        SocialPostPublication::CHANNEL_FACEBOOK,
+        SocialPostPublication::CHANNEL_INSTAGRAM,
+    ]): array
     {
         $post->loadMissing(['products', 'publications']);
 
-        return [
-            'facebook' => $this->publishFacebook($post),
-            'instagram' => $this->publishInstagram($post),
+        $results = [];
+
+        foreach ($this->normalizeChannels($channels) as $channel) {
+            $results[$channel] = $this->publishChannel($post, $channel);
+        }
+
+        return $results;
+    }
+
+    /**
+     * Publish a single channel and persist a publication row.
+     */
+    public function publishChannel(SocialPost $post, string $channel): SocialPostPublication
+    {
+        $post->loadMissing(['products', 'publications']);
+
+        return match ($channel) {
+            SocialPostPublication::CHANNEL_FACEBOOK => $this->publishFacebook($post, requireAttempt: true),
+            SocialPostPublication::CHANNEL_INSTAGRAM => $this->publishInstagram($post, requireAttempt: true),
+            default => throw new RuntimeException('Unsupported social channel: '.$channel),
+        };
+    }
+
+    /**
+     * @param  list<string>  $channels
+     * @return list<string>
+     */
+    private function normalizeChannels(array $channels): array
+    {
+        $allowed = [
+            SocialPostPublication::CHANNEL_FACEBOOK,
+            SocialPostPublication::CHANNEL_INSTAGRAM,
         ];
+
+        $normalized = [];
+        foreach ($channels as $channel) {
+            $channel = strtolower(trim((string) $channel));
+            if (in_array($channel, $allowed, true) && ! in_array($channel, $normalized, true)) {
+                $normalized[] = $channel;
+            }
+        }
+
+        return $normalized;
     }
 
     private function fbEnabled(): bool
@@ -89,10 +133,18 @@ class MetaGraphSocialPublisher
         return $urls;
     }
 
-    private function publishFacebook(SocialPost $post): ?SocialPostPublication
+    private function publishFacebook(SocialPost $post, bool $requireAttempt = false): ?SocialPostPublication
     {
         if (! $this->fbEnabled()) {
-            return null;
+            if (! $requireAttempt) {
+                return null;
+            }
+
+            return $this->failedPublication(
+                $post,
+                SocialPostPublication::CHANNEL_FACEBOOK,
+                'Facebook Page access token or Page ID is not configured.',
+            );
         }
 
         $token = $this->pageToken();
@@ -279,10 +331,18 @@ class MetaGraphSocialPublisher
         }
     }
 
-    private function publishInstagram(SocialPost $post): ?SocialPostPublication
+    private function publishInstagram(SocialPost $post, bool $requireAttempt = false): ?SocialPostPublication
     {
         if (! $this->igEnabled()) {
-            return null;
+            if (! $requireAttempt) {
+                return null;
+            }
+
+            return $this->failedPublication(
+                $post,
+                SocialPostPublication::CHANNEL_INSTAGRAM,
+                'Instagram requires a configured Facebook Page access token and Page ID.',
+            );
         }
 
         $token = $this->pageToken();
@@ -370,6 +430,19 @@ class MetaGraphSocialPublisher
             ]);
         }
 
+        $publication->save();
+
+        return $publication;
+    }
+
+    private function failedPublication(SocialPost $post, string $channel, string $error): SocialPostPublication
+    {
+        $publication = new SocialPostPublication([
+            'channel' => $channel,
+            'status' => SocialPostPublication::STATUS_FAILED,
+            'error' => $error,
+        ]);
+        $publication->social_post_id = $post->id;
         $publication->save();
 
         return $publication;

@@ -112,8 +112,8 @@ class SteadfastWebhookProcessor
             $collectedAmount = isset($payload['cod_amount']) ? (float) $payload['cod_amount'] : $order->collectableAmount();
             $expectedAmount = $order->collectableAmount();
 
-            // Check if this is a partial delivery with COD mismatch
-            if ($steadfastStatus === 'partial_delivered' && $this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount)) {
+            // Check for COD mismatch regardless of whether it's partial_delivered or delivered status
+            if ($this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount)) {
                 // Create admin attention item for COD mismatch
                 $this->adminAttention->createCodMismatch(
                     order: $order,
@@ -122,18 +122,20 @@ class SteadfastWebhookProcessor
                     metadata: [
                         'steadfast_status' => $steadfastStatus,
                         'webhook_payload' => $payload,
+                        'reported_status' => $steadfastStatus, // 'delivered' or 'partial_delivered'
                     ]
                 );
 
-                // Log partial delivery but don't mark as delivered
-                $partialMessage = "Partial delivery: Expected ৳{$expectedAmount}, collected ৳{$collectedAmount}. Requires admin attention.";
-                $this->recordHistory($order, $order->status, $partialMessage);
+                // Log the mismatch but don't mark as delivered
+                $mismatchMessage = "COD mismatch: Expected ৳{$expectedAmount}, collected ৳{$collectedAmount}. ";
+                $mismatchMessage .= "Courier reported status: {$steadfastStatus}. Requires admin attention.";
+                $this->recordHistory($order, $order->status, $mismatchMessage);
 
-                // Keep order as dispatched, not delivered
+                // Keep order as dispatched, not delivered when there's a COD mismatch
                 return;
             }
 
-            // Full delivery or matching amounts - proceed normally
+            // Amounts match - proceed normally with delivery
             $this->deliverySettlement->recordCollection(
                 order: $order,
                 amount: $collectedAmount,

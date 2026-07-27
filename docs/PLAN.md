@@ -153,6 +153,19 @@ Approved direction (storefront) and starting point (admin) in `docs/mockups/`:
   `php artisan migrate`, `npm run dev`, `php artisan serve`.
 - Legacy production dump: place at `database/legacy/legacy_dump.sql` (git-ignored — PII).
 
+## Remaining backlog (snapshot 2026-07-27)
+
+Quick view of locked plans §10–§14 after local work landed on `main`:
+
+| Plan | Status | Still open |
+|------|--------|------------|
+| §10 Regular price | Mostly done | Admin show + list inline; wishlist/cart pair display |
+| §11 Priced image | Not started | Full v1 (compose, admin button/editor, auto-regen, tests) |
+| §12 Social posts | Not started | Full v1 (compose, FB+IG publish, Latest posts, re-publish) |
+| §13 Admin Inbox | Not started | Full Inbox UI + unread; order modal is temporary only |
+| §14 Admin attention | Mostly done | `tracking_update` COD gate; dedupe; feature tests |
+| (Later) Reply AI | Deferred | Suggest-reply / style learn — after Inbox |
+
 ## 10. Product regular price (`compare_at_price`) — locked plan
 
 **Status:** mostly done (local). Remaining polish below.

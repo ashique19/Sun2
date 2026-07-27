@@ -1,0 +1,31 @@
+{
+  "name": "Sun2 Laravel 13 PHP 8.4",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "install": "composer install --no-interaction --prefer-dist && npm ci",
+  "agentCanUpdateSnapshot": true,
+  "ports": [
+    {
+      "name": "laravel",
+      "port": 8000
+    },
+    {
+      "name": "vite",
+      "port": 5173
+    }
+  ],
+  "terminals": [
+    {
+      "name": "laravel",
+      "command": "php artisan serve --host=0.0.0.0 --port=8000",
+      "description": "Laravel development server"
+    },
+    {
+      "name": "vite",
+      "command": "npm run dev -- --host 0.0.0.0 --port 5173",
+      "description": "Vite asset watcher"
+    }
+  ]
+}

@@ -34,7 +34,12 @@
                         </a>
                         <div class="p-4">
                             <a href="{{ route('product.show', $product) }}" wire:navigate class="font-medium line-clamp-2 hover:text-[#C9A227]">{{ $product->name }}</a>
-                            <p class="mt-1 font-semibold">&#2547; {{ number_format($product->price, 0) }}</p>
+                            <div class="mt-1">
+                                @if ($product->compare_at_price && $product->compare_at_price > $product->price)
+                                    <div class="text-xs text-[#8C8474] line-through">&#2547; {{ number_format($product->compare_at_price, 0) }}</div>
+                                @endif
+                                <p class="font-semibold">&#2547; {{ number_format($product->price, 0) }}</p>
+                            </div>
                             <div class="mt-4 flex gap-2">
                                 <button type="button" wire:click="addToCart({{ $product->id }})"
                                     class="flex-1 rounded-full bg-[#C9A227] px-4 py-2 text-xs font-semibold text-white hover:bg-[#b8931f]">

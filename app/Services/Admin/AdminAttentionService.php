@@ -22,18 +22,37 @@ class AdminAttentionService
     {
         $discrepancy = abs($expectedAmount - $collectedAmount);
 
-        return AdminAttentionItem::create([
+        $data = array_merge([
+            'expected_amount' => $expectedAmount,
+            'collected_amount' => $collectedAmount,
+            'discrepancy' => $discrepancy,
+            'order_number' => $order->order_number,
+            'source' => 'steadfast_webhook',
+        ], $metadata);
+
+        $existing = AdminAttentionItem::query()
+            ->unresolved()
+            ->where('order_id', $order->id)
+            ->where('issue_type', AdminAttentionItem::ISSUE_TYPE_COD_MISMATCH)
+            ->latest('id')
+            ->first();
+
+        if ($existing) {
+            $existing->update([
+                'title' => "COD Mismatch - Order #{$order->order_number}",
+                'description' => "COD is ৳{$expectedAmount} but collected ৳{$collectedAmount} at courier",
+                'data' => $data,
+            ]);
+
+            return $existing->refresh();
+        }
+
+        return AdminAttentionItem::query()->create([
             'order_id' => $order->id,
             'issue_type' => AdminAttentionItem::ISSUE_TYPE_COD_MISMATCH,
             'title' => "COD Mismatch - Order #{$order->order_number}",
             'description' => "COD is ৳{$expectedAmount} but collected ৳{$collectedAmount} at courier",
-            'data' => array_merge([
-                'expected_amount' => $expectedAmount,
-                'collected_amount' => $collectedAmount,
-                'discrepancy' => $discrepancy,
-                'order_number' => $order->order_number,
-                'source' => 'steadfast_webhook',
-            ], $metadata),
+            'data' => $data,
         ]);
     }
 

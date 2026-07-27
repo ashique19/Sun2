@@ -32,6 +32,7 @@ class AdminProductInlineEditTest extends TestCase
             'slug' => 'gold-plated-jhumka',
             'sku' => 'GPJ-1',
             'price' => 980,
+            'compare_at_price' => 1400,
             'purchase_price' => 400,
             'commission' => 50,
             'max_discount' => 100,
@@ -56,6 +57,20 @@ class AdminProductInlineEditTest extends TestCase
             ->assertSet('editingProductId', null);
 
         $this->assertSame(1250.0, (float) $product->fresh()->price);
+
+        Livewire::test(AdminProducts::class)
+            ->call('startInlineEdit', $product->id, 'compare_at_price', '1400')
+            ->set('editingValue', '1600')
+            ->call('saveInlineEdit');
+
+        $this->assertSame(1600.0, (float) $product->fresh()->compare_at_price);
+
+        Livewire::test(AdminProducts::class)
+            ->call('startInlineEdit', $product->id, 'compare_at_price', '1600')
+            ->set('editingValue', '')
+            ->call('saveInlineEdit');
+
+        $this->assertNull($product->fresh()->compare_at_price);
 
         Livewire::test(AdminProducts::class)
             ->call('startInlineEdit', $product->id, 'purchase_price', '400')
@@ -114,6 +129,14 @@ class AdminProductInlineEditTest extends TestCase
             ->assertHasErrors(['editingValue']);
 
         $this->assertSame(50.0, (float) $product->fresh()->commission);
+
+        Livewire::test(AdminProducts::class)
+            ->call('startInlineEdit', $product->id, 'compare_at_price', '')
+            ->set('editingValue', '900')
+            ->call('saveInlineEdit')
+            ->assertHasErrors(['editingValue']);
+
+        $this->assertSame(1400.0, (float) $product->fresh()->compare_at_price);
 
         Livewire::test(AdminProducts::class)
             ->call('startInlineEdit', $product->id, 'name', 'Nope')

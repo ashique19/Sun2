@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\ProductImage;
 use App\Services\Admin\GeminiClient;
 use App\Services\Admin\ProductImageService;
+use App\Services\Admin\ProductPricedImageService;
 use App\Support\Fileinfo;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
@@ -82,6 +83,14 @@ class AdminProductEdit extends Component
 
     public bool $aiGenerating = false;
 
+    public bool $showPricedImageModal = false;
+
+    public int $pricedImageX = 24;
+
+    public int $pricedImageY = 24;
+
+    public int $pricedImageFont = 5;
+
     public function mount(?Product $product = null): void
     {
         if (! $product?->exists) {
@@ -110,6 +119,7 @@ class AdminProductEdit extends Component
         $this->display_order = (int) $product->display_order;
         $this->is_published = (bool) $product->is_published;
         $this->is_featured = (bool) $product->is_featured;
+        $this->fillPricedImageLayout();
     }
 
     public function title(): string
@@ -151,6 +161,55 @@ class AdminProductEdit extends Component
     public function useRecentPrompt(string $prompt): void
     {
         $this->aiPrompt = $prompt;
+    }
+
+    public function openPricedImageModal(ProductPricedImageService $pricedImages): void
+    {
+        $this->ensureProductSaved();
+        $this->fillPricedImageLayout($pricedImages);
+        $this->showPricedImageModal = true;
+    }
+
+    public function closePricedImageModal(): void
+    {
+        $this->showPricedImageModal = false;
+    }
+
+    public function savePricedImageLayout(): void
+    {
+        $this->validate([
+            'pricedImageX' => ['required', 'integer', 'min:0'],
+            'pricedImageY' => ['required', 'integer', 'min:0'],
+            'pricedImageFont' => ['required', 'integer', 'min:1', 'max:5'],
+        ]);
+
+        if (! $this->product) {
+            $this->ensureProductSaved();
+        }
+
+        $this->product->update([
+            'priced_image_layout' => [
+                'x' => $this->pricedImageX,
+                'y' => $this->pricedImageY,
+                'font' => $this->pricedImageFont,
+            ],
+        ]);
+    }
+
+    public function generatePricedImage(ProductPricedImageService $pricedImages): void
+    {
+        if (! $this->product) {
+            $this->ensureProductSaved();
+        }
+
+        $this->savePricedImageLayout();
+        $pricedImages->generate($this->product->fresh(), [
+            'x' => $this->pricedImageX,
+            'y' => $this->pricedImageY,
+            'font' => $this->pricedImageFont,
+        ]);
+        $this->product->refresh();
+        $this->message = 'Priced image generated.';
     }
 
     public function generateAiImage(GeminiClient $gemini): void
@@ -296,7 +355,15 @@ class AdminProductEdit extends Component
 
     public function save(): void
     {
+        $existingPrice = $this->product?->price;
+        $existingCompareAtPrice = $this->product?->compare_at_price;
         $this->ensureProductSaved();
+
+        if ($this->product?->priced_image_path
+            && ((float) $existingPrice !== (float) $this->product->price
+                || (float) $existingCompareAtPrice !== (float) $this->product->compare_at_price)) {
+            app(ProductPricedImageService::class)->generate($this->product->fresh());
+        }
 
         if ($this->justCreated) {
             $this->justCreated = false;
@@ -345,6 +412,10 @@ class AdminProductEdit extends Component
         $this->pendingAlts = [];
         $this->refreshImages();
         $this->syncImageAlts();
+
+        if ($this->product->priced_image_path) {
+            app(ProductPricedImageService::class)->generate($this->product->fresh());
+        }
 
         if ($shouldRedirect) {
             $this->redirect(route('admin.products.edit', $this->product), navigate: true);
@@ -441,6 +512,11 @@ class AdminProductEdit extends Component
         $images->delete($image);
         $this->refreshImages();
         $this->syncImageAlts();
+
+        if ($this->product->priced_image_path) {
+            app(ProductPricedImageService::class)->generate($this->product->fresh());
+        }
+
         $this->message = 'Image removed.';
     }
 
@@ -449,6 +525,11 @@ class AdminProductEdit extends Component
         $image = $this->findOwnedImage($imageId);
         $images->setPrimary($image);
         $this->refreshImages();
+
+        if ($this->product->priced_image_path) {
+            app(ProductPricedImageService::class)->generate($this->product->fresh());
+        }
+
         $this->message = 'Primary image updated.';
     }
 
@@ -495,5 +576,15 @@ class AdminProductEdit extends Component
         $this->imageAlts = $this->product->images
             ->mapWithKeys(fn (ProductImage $image) => [$image->id => (string) ($image->alt ?? '')])
             ->all();
+    }
+
+    private function fillPricedImageLayout(?ProductPricedImageService $pricedImages = null): void
+    {
+        $layout = $pricedImages?->normalizeLayout($this->product?->priced_image_layout ?? [])
+            ?? app(ProductPricedImageService::class)->normalizeLayout($this->product?->priced_image_layout ?? []);
+
+        $this->pricedImageX = (int) $layout['x'];
+        $this->pricedImageY = (int) $layout['y'];
+        $this->pricedImageFont = (int) $layout['font'];
     }
 }

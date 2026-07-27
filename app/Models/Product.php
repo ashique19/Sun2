@@ -17,6 +17,7 @@ class Product extends Model
         return [
             'price' => 'decimal:2',
             'compare_at_price' => 'decimal:2',
+            'priced_image_layout' => 'array',
             'purchase_price' => 'decimal:2',
             'commission' => 'decimal:2',
             'max_discount' => 'decimal:2',

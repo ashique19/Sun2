@@ -60,8 +60,9 @@ to **intake the legacy data** (especially products, categories, orders).
     **Admin → Dashboard** above the daily order qty table, with review links. See §14.
 15. **AI product image generate (Gemini):** on Admin product create/edit, modal to upload a
     raw photo + prompt, generate candidate images via Gemini (each Generate appends),
-    browser-edit candidates, **+** to promote into the product gallery. Persist drafts and
-    prompt history. See §15.
+    browser-edit candidates, **+** to promote into the product gallery. Staging is
+    **session-only** (discard unused candidates when the session ends); **prompt history**
+    is persisted. See §15.
 
 ## 4. Delivery sequence
 
@@ -92,8 +93,8 @@ composed file separate from gallery `product_images`. Social compose/publish: `s
 Channel inbox: `channel_conversations` / `channel_messages` (Messenger + WhatsApp) with staff
 `last_read_*` for unread in Admin → Inbox (see §13). Ops exceptions: `admin_attentions` (or
 equivalent) for cases automation cannot safely resolve — e.g. Steadfast COD mismatch (see §14).
-AI image assist: product image **drafts** + saved prompt history until promoted to gallery
-(see §15).
+AI image assist: session-only generated candidates until **+** promotes to gallery; saved
+prompt history for reuse (see §15).
 
 Note: blogs, pages, costs/payables, settings, and payment-method tables may still exist
 from early migrations but are **not** in active product scope.

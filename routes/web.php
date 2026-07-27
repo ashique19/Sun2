@@ -30,6 +30,8 @@ use App\Livewire\Admin\AdminSalesByMonth;
 use App\Livewire\Admin\AdminSitemap;
 use App\Livewire\Admin\AdminUserEdit;
 use App\Livewire\Admin\AdminUsers;
+use App\Livewire\Admin\AdminSocialPostsCreate;
+use App\Livewire\Admin\AdminSocialPostsShow;
 use App\Livewire\PublicProductShare;
 use App\Livewire\Reseller\ResellerDashboard;
 use App\Livewire\Reseller\ResellerOrderCreate;
@@ -54,6 +56,7 @@ use App\Livewire\StorefrontRegister;
 use App\Livewire\StorefrontResetPassword;
 use App\Livewire\StorefrontSearch;
 use App\Livewire\StorefrontWishlist;
+use App\Livewire\StorefrontSocialPostShow;
 use App\Models\Order;
 use App\Models\Product;
 use App\Support\AdminAccess;
@@ -81,6 +84,9 @@ Route::get('/page/{page:slug}', StorefrontPage::class)->name('page.show');
 Route::get('/share/products/{token}', PublicProductShare::class)
     ->where('token', '[A-Za-z0-9]{32,64}')
     ->name('share.products');
+Route::get('/social-post/{socialPost}', StorefrontSocialPostShow::class)
+    ->whereNumber('socialPost')
+    ->name('social-post.show');
 
 Route::middleware('guest')->group(function () {
     Route::get('/register', StorefrontRegister::class)->name('register');
@@ -215,5 +221,9 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/reports/sales-by-month', AdminSalesByMonth::class)->name('reports.sales-by-month');
         Route::get('/sitemap', AdminSitemap::class)->name('sitemap');
         Route::get('/image-hashes', AdminProductImageHashes::class)->name('image-hashes');
+        Route::get('/social-posts/create', AdminSocialPostsCreate::class)->name('social-posts.create');
+        Route::get('/social-posts/{socialPost}', AdminSocialPostsShow::class)
+            ->whereNumber('socialPost')
+            ->name('social-posts.show');
     });
 });

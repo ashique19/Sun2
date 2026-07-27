@@ -79,4 +79,41 @@
             </div>
         @endif
     </section>
+
+    <section id="latest-posts" class="mx-auto max-w-6xl px-4 py-12">
+        <div class="flex items-end justify-between gap-4 mb-6">
+            <h2 class="font-serif text-2xl font-semibold">Latest posts</h2>
+        </div>
+
+        @if ($latestSocialPosts->isEmpty())
+            <div class="rounded-xl border border-dashed border-[#D8CDB6] p-10 text-center text-[#6B6459]">
+                No social posts yet.
+            </div>
+        @else
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                @foreach ($latestSocialPosts as $post)
+                    <a href="{{ route('social-post.show', $post->id) }}" wire:navigate
+                        class="group rounded-xl bg-white border border-[#EFE7D6] overflow-hidden hover:shadow-md transition">
+                        @if ($post->thumbnail_path)
+                            <x-storefront.listing-image
+                                :path="$post->thumbnail_path"
+                                :alt="'Social post'"
+                                class="aspect-[4/3] w-full object-cover group-hover:scale-[1.02] transition-transform duration-300 bg-[#F1EADB]"
+                            />
+                        @else
+                            <div class="aspect-[4/3] bg-[#F1EADB] flex items-center justify-center text-4xl text-[#C9A227]">
+                                &#9670;
+                            </div>
+                        @endif
+                        <div class="p-4">
+                            <div class="text-sm font-medium line-clamp-2">
+                                {{ \Illuminate\Support\Str::limit((string) $post->body, 90, '') }}
+                            </div>
+                            <div class="text-xs text-[#C9A227] mt-2 font-semibold">Read more &rarr;</div>
+                        </div>
+                    </a>
+                @endforeach
+            </div>
+        @endif
+    </section>
 </x-storefront.shell>

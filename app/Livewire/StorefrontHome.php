@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\Category;
 use App\Models\HeroSlide;
+use App\Models\SocialPost;
 use App\Support\JsonLd;
 use App\Support\Seo;
 use Livewire\Attributes\Layout;
@@ -21,12 +22,19 @@ class StorefrontHome extends Component
             ->orderBy('display_order')
             ->get();
 
+        $latestSocialPosts = SocialPost::query()
+            ->published()
+            ->orderByDesc('id')
+            ->limit(6)
+            ->get(['id', 'body', 'thumbnail_path', 'created_at', 'layout']);
+
         return view('livewire.storefront-home', [
             'categories' => $categories,
             'heroSlides' => HeroSlide::query()
                 ->published()
                 ->orderBy('display_order')
                 ->get(),
+            'latestSocialPosts' => $latestSocialPosts,
         ])
             ->title(config('seo.default_title'))
             ->layoutData([

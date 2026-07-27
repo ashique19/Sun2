@@ -82,4 +82,41 @@ class AdminInboxTest extends TestCase
             ->assertSet('replyText', '')
             ->assertSet('message', 'Reply sent.');
     }
+
+    #[Test]
+    public function empty_inbox_explains_status_instead_of_silent_blank(): void
+    {
+        config([
+            'facebook.messenger.enabled' => true,
+            'facebook.messenger.verify_token' => '',
+            'facebook.messenger.app_secret' => '',
+            'facebook.messenger.page_access_token' => '',
+            'facebook.messenger.page_id' => '',
+            'app.url' => 'https://example.test',
+        ]);
+
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminInbox::class)
+            ->assertSee('Inbox status')
+            ->assertSee('No conversations stored yet')
+            ->assertSee('/api/webhooks/messenger')
+            ->assertSee('Verify token configured')
+            ->assertSee('does not pull chat history from Facebook');
+    }
+
+    #[Test]
+    public function filtered_empty_inbox_offers_clear_filters_when_rows_exist(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->conversation();
+
+        Livewire::test(AdminInbox::class)
+            ->set('channel', 'whatsapp')
+            ->assertSee('Clear filters')
+            ->assertSee('No conversations match the current filters')
+            ->call('clearFilters')
+            ->assertSet('channel', '')
+            ->assertSee('Karim');
+    }
 }

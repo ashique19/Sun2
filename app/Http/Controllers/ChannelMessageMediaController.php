@@ -23,6 +23,10 @@ class ChannelMessageMediaController extends Controller
         abort_if($url === '', 404);
 
         try {
+            if ($local = $this->localFileResponse($url, $message->media_mime)) {
+                return $local;
+            }
+
             $response = $this->fetchMedia($url, $this->tokenForUrl($url, $tokens));
 
             if ($response === null || ! $response->successful()) {
@@ -44,6 +48,32 @@ class ChannelMessageMediaController extends Controller
         } catch (Throwable) {
             abort(404, 'Attachment could not be fetched.');
         }
+    }
+
+    private function localFileResponse(string $url, ?string $mime): ?Response
+    {
+        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
+            return null;
+        }
+
+        $relative = ltrim(str_replace('\\', '/', $url), '/');
+        if (str_contains($relative, '..')) {
+            return null;
+        }
+
+        $absolute = public_path($relative);
+        if (! is_file($absolute)) {
+            return null;
+        }
+
+        $contentType = $mime ?: (mime_content_type($absolute) ?: 'application/octet-stream');
+        $contentType = explode(';', (string) $contentType)[0];
+
+        return response(file_get_contents($absolute), 200, [
+            'Content-Type' => $contentType,
+            'Cache-Control' => 'private, max-age=300',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     private function tokenForUrl(string $url, FacebookPageTokenService $tokens): string

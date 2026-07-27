@@ -74,6 +74,7 @@ class AdminInboxTest extends TestCase
                 'error' => null,
                 'outside_window' => false,
             ]);
+        $replies->shouldReceive('markSeen')->zeroOrMoreTimes();
         $this->app->instance(ChannelReplyService::class, $replies);
 
         Livewire::test(AdminInbox::class)
@@ -81,7 +82,7 @@ class AdminInboxTest extends TestCase
             ->set('replyText', 'Thanks!')
             ->call('sendReply')
             ->assertSet('replyText', '')
-            ->assertSet('message', 'Reply sent.');
+            ->assertSet('statusMessage', 'Reply sent.');
     }
 
     #[Test]
@@ -213,6 +214,145 @@ class AdminInboxTest extends TestCase
         Http::assertSent(function ($request) {
             return str_contains($request->url(), 'lookaside.fbsbx.com')
                 && $request->hasHeader('Authorization', 'Bearer page-token');
+        });
+    }
+
+    #[Test]
+    public function opening_a_conversation_marks_messenger_seen(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/me/messages*' => Http::response(['recipient_id' => 'psid-1'], 200),
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation(['last_read_at' => null]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSet('selectedConversationId', $conversation->id);
+
+        $this->assertNotNull($conversation->fresh()->last_read_at);
+
+        Http::assertSent(function ($request) {
+            return str_contains($request->url(), '/me/messages')
+                && ($request['sender_action'] ?? null) === 'mark_seen'
+                && ($request['recipient']['id'] ?? null) === 'psid-1';
+        });
+    }
+
+    #[Test]
+    public function it_can_reply_to_a_previous_message(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/me/messages*' => Http::sequence()
+                ->push(['recipient_id' => 'psid-1'], 200)
+                ->push(['message_id' => 'm_out_1'], 200)
+                ->push(['recipient_id' => 'psid-1'], 200),
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $inbound = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_in_1',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Do you have this in gold?',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('setReplyTo', $inbound->id)
+            ->assertSet('replyToMessageId', $inbound->id)
+            ->set('replyText', 'Yes, in stock')
+            ->call('sendReply')
+            ->assertSet('replyText', '')
+            ->assertSet('replyToMessageId', null)
+            ->assertSet('statusMessage', 'Reply sent.');
+
+        $this->assertDatabaseHas('channel_messages', [
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_OUTBOUND,
+            'body' => 'Yes, in stock',
+            'reply_to_message_id' => $inbound->id,
+        ]);
+
+        Http::assertSent(function ($request) {
+            $message = $request['message'] ?? null;
+
+            return is_array($message)
+                && ($message['text'] ?? null) === 'Yes, in stock'
+                && ($message['reply_to']['mid'] ?? null) === 'm_in_1';
+        });
+    }
+
+    #[Test]
+    public function it_can_attach_and_send_an_image_reply(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.graph_version' => 'v25.0',
+            'app.url' => 'https://example.test',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/me/messages*' => Http::sequence()
+                ->push(['recipient_id' => 'psid-1'], 200)
+                ->push(['message_id' => 'm_img_1'], 200)
+                ->push(['message_id' => 'm_caption_1'], 200)
+                ->push(['recipient_id' => 'psid-1'], 200),
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_in_img',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Send photo',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        $file = \Illuminate\Http\UploadedFile::fake()->image('reply.jpg', 40, 40);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->set('replyImage', $file)
+            ->set('replyText', 'Here you go')
+            ->call('sendReply')
+            ->assertHasNoErrors()
+            ->assertSet('statusMessage', 'Reply sent.')
+            ->assertSet('replyImage', null);
+
+        $outbound = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($outbound);
+        $this->assertNotNull($outbound->media_url);
+        $this->assertSame('Here you go', $outbound->body);
+        $this->assertTrue(is_file(public_path($outbound->media_url)));
+
+        Http::assertSent(function ($request) {
+            $message = $request['message'] ?? null;
+
+            return is_array($message)
+                && ($message['attachment']['type'] ?? null) === 'image'
+                && filled($message['attachment']['payload']['url'] ?? null);
         });
     }
 }

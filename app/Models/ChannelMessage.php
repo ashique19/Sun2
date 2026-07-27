@@ -17,6 +17,7 @@ class ChannelMessage extends Model
     {
         return [
             'channel_conversation_id' => 'integer',
+            'reply_to_message_id' => 'integer',
             'raw_payload' => 'array',
             'sent_at' => 'datetime',
         ];
@@ -27,9 +28,32 @@ class ChannelMessage extends Model
         return $this->belongsTo(ChannelConversation::class, 'channel_conversation_id');
     }
 
+    public function replyTo(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'reply_to_message_id');
+    }
+
     public function hasMedia(): bool
     {
         return filled($this->media_url);
+    }
+
+    public function previewText(int $limit = 80): string
+    {
+        $body = trim((string) ($this->body ?? ''));
+        if ($body !== '') {
+            return \Illuminate\Support\Str::limit($body, $limit);
+        }
+
+        if ($this->isImageAttachment()) {
+            return 'Photo';
+        }
+
+        if ($this->hasMedia()) {
+            return 'Attachment';
+        }
+
+        return 'Message';
     }
 
     public function isImageAttachment(): bool

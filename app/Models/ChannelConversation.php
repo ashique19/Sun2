@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 class ChannelConversation extends Model
@@ -46,6 +47,11 @@ class ChannelConversation extends Model
     public function messages(): HasMany
     {
         return $this->hasMany(ChannelMessage::class)->orderBy('sent_at')->orderBy('id');
+    }
+
+    public function latestMessage(): HasOne
+    {
+        return $this->hasOne(ChannelMessage::class)->latestOfMany('id');
     }
 
     public function isWithinMessagingWindow(?\DateTimeInterface $now = null): bool

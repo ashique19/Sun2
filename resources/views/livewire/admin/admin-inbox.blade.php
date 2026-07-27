@@ -7,7 +7,16 @@
             <p class="mt-1 text-sm text-[#8C8474]">Messenger and WhatsApp conversations in one place.</p>
         </div>
 
-        <div class="flex flex-wrap gap-2 text-sm">
+        <div class="flex flex-wrap items-center gap-2 text-sm">
+            <button type="button"
+                wire:click="syncFromFacebook"
+                wire:loading.attr="disabled"
+                wire:target="syncFromFacebook"
+                class="rounded-full border border-[#E0D6C2] bg-white px-4 py-2 text-sm font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60">
+                <span wire:loading.remove wire:target="syncFromFacebook">Sync from Facebook</span>
+                <span wire:loading wire:target="syncFromFacebook">Syncing…</span>
+            </button>
+
             <select wire:model.live="channel" class="rounded-lg border border-[#E0D6C2] px-3 py-2">
                 <option value="">All channels</option>
                 <option value="messenger">Messenger</option>
@@ -27,6 +36,13 @@
             </select>
         </div>
     </div>
+
+    @if ($error)
+        <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{{ $error }}</div>
+    @endif
+    @if ($statusMessage)
+        <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{{ $statusMessage }}</div>
+    @endif
 
     @if ($conversations->isEmpty() || $diagnostics['severity'] !== 'ok')
         @php
@@ -48,12 +64,13 @@
                     </h2>
                     <p class="mt-1 text-sm opacity-90">{{ $diagnostics['summary'] }}</p>
                     <p class="mt-2 text-xs opacity-80">
-                        Inbox does not pull chat history from Facebook. It only lists conversations Meta already delivered to
+                        Webhooks only receive chats Meta delivers to
                         <code class="rounded bg-white/70 px-1.5 py-0.5">{{ $diagnostics['webhook_url'] }}</code>
-                        (both <code class="rounded bg-white/70 px-1.5 py-0.5">messaging</code> and
-                        <code class="rounded bg-white/70 px-1.5 py-0.5">standby</code> webhook fields).
-                        If only your personal Facebook ID appears, put the Meta app in Live mode and subscribe the Page to
-                        <strong>messages</strong> + <strong>standby</strong>.
+                        (<code class="rounded bg-white/70 px-1.5 py-0.5">messages</code> +
+                        <code class="rounded bg-white/70 px-1.5 py-0.5">standby</code>).
+                        <strong>Development mode:</strong> even as Page owner, only Facebook accounts that are App Admins/Developers/Testers will appear.
+                        Add other accounts under Meta App → App Roles → Roles (Testers), or switch the app to <strong>Live</strong>.
+                        Use <strong>Sync from Facebook</strong> to import threads Graph can currently see.
                     </p>
                 </div>
                 @if ($diagnostics['filters_active'] && $conversations->isEmpty())

@@ -104,7 +104,8 @@ class AdminInboxTest extends TestCase
             ->assertSee('No conversations stored yet')
             ->assertSee('/api/webhooks/messenger')
             ->assertSee('Verify token configured')
-            ->assertSee('does not pull chat history from Facebook');
+            ->assertSee('Development mode')
+            ->assertSee('Sync from Facebook');
     }
 
     #[Test]
@@ -433,5 +434,57 @@ class AdminInboxTest extends TestCase
             ->assertSee('Visible Unread')
             ->assertSee('Already Read')
             ->assertSee('2 shown');
+    }
+
+    #[Test]
+    public function sync_from_facebook_imports_graph_conversations(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'PAGE42',
+            'facebook.graph_version' => 'v25.0',
+            'gemini.api_key' => null,
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/PAGE42/conversations*' => Http::response([
+                'data' => [[
+                    'id' => 't_1',
+                    'updated_time' => now()->toIso8601String(),
+                    'participants' => [
+                        'data' => [
+                            ['id' => 'PAGE42', 'name' => 'Sun Page'],
+                            ['id' => 'PSID_SYNC_1', 'name' => 'Synced Customer'],
+                        ],
+                    ],
+                    'messages' => [
+                        'data' => [[
+                            'id' => 'm_sync_1',
+                            'message' => 'Imported hello',
+                            'from' => ['id' => 'PSID_SYNC_1', 'name' => 'Synced Customer'],
+                            'created_time' => now()->subMinute()->toIso8601String(),
+                        ]],
+                    ],
+                ]],
+            ], 200),
+        ]);
+
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminInbox::class)
+            ->call('syncFromFacebook')
+            ->assertSet('error', null)
+            ->assertSee('Imported hello')
+            ->assertSee('Synced 1 conversation');
+
+        $this->assertDatabaseHas('channel_conversations', [
+            'channel' => 'messenger',
+            'external_user_id' => 'PSID_SYNC_1',
+        ]);
+        $this->assertDatabaseHas('channel_messages', [
+            'external_message_id' => 'm_sync_1',
+            'body' => 'Imported hello',
+            'direction' => 'inbound',
+        ]);
     }
 }

@@ -110,8 +110,11 @@ class AdminSocialPostsTest extends TestCase
         ]);
 
         Http::fake([
-            'https://graph.facebook.com/v25.0/fb-page-1/feed*' => Http::response([
-                'id' => 'fbpub-1',
+            'https://graph.facebook.com/v25.0/fb-page-1/photos*' => Http::response([
+                'id' => 'photo-1',
+                'post_id' => 'fbpub-1',
+            ], 200),
+            'https://graph.facebook.com/v25.0/fbpub-1*' => Http::response([
                 'permalink_url' => 'https://www.facebook.com/fbpub-1',
             ], 200),
             'https://graph.facebook.com/v25.0/fb-page-1*' => Http::response([
@@ -187,8 +190,11 @@ class AdminSocialPostsTest extends TestCase
         ]);
 
         Http::fake([
-            'https://graph.facebook.com/v25.0/fb-page-2/feed*' => Http::response([
-                'id' => 'fbpub-2',
+            'https://graph.facebook.com/v25.0/fb-page-2/photos*' => Http::response([
+                'id' => 'photo-2',
+                'post_id' => 'fbpub-2',
+            ], 200),
+            'https://graph.facebook.com/v25.0/fbpub-2*' => Http::response([
                 'permalink_url' => 'https://www.facebook.com/fbpub-2',
             ], 200),
             'https://graph.facebook.com/v25.0/fb-page-2*' => Http::response([

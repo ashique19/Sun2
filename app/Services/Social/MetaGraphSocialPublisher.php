@@ -98,7 +98,6 @@ class MetaGraphSocialPublisher
         $token = $this->pageToken();
         $pageId = $this->pageId();
         $version = $this->graphVersion();
-        $url = 'https://graph.facebook.com/'.$version.'/'.$pageId.'/feed';
 
         $publication = new SocialPostPublication([
             'channel' => SocialPostPublication::CHANNEL_FACEBOOK,
@@ -112,44 +111,24 @@ class MetaGraphSocialPublisher
                 throw new RuntimeException('Post body is empty.');
             }
 
-            $imageUrls = $this->imageUrlsForPost($post);
+            $imageUrls = $this->primaryFacebookImageUrls($post);
             if ($imageUrls === []) {
                 throw new RuntimeException('No images available for publishing.');
             }
 
-            // v1 pragmatic approach:
-            // - collage => publish a single composed image (collage_path) if present, else thumbnail_path
-            // - album   => publish the first image with caption (multi-photo can be added later)
-            $layout = (string) $post->layout;
-            $pictureUrl = null;
-            if ($layout === SocialPost::LAYOUT_COLLAGE) {
-                $collagePath = $post->collage_path ?: $post->thumbnail_path;
-                $pictureUrl = StorefrontAssets::mediumUrl($collagePath) ?? StorefrontAssets::url($collagePath);
+            // Facebook /feed rejects `picture` without `link`. Use Photos API instead.
+            if (count($imageUrls) === 1) {
+                $result = $this->publishFacebookSinglePhoto($pageId, $version, $token, $imageUrls[0], $message);
+            } else {
+                $result = $this->publishFacebookAlbum($pageId, $version, $token, $imageUrls, $message);
             }
 
-            if (! $pictureUrl) {
-                $pictureUrl = $imageUrls[0];
-            }
-
-            $response = Http::timeout(20)
-                ->withToken($token)
-                ->acceptJson()
-                ->asJson()
-                ->post($url, [
-                    'message' => $message,
-                    'picture' => $pictureUrl,
-                ]);
-
-            if (! $response->successful()) {
-                throw new RuntimeException('Facebook publish failed: '.$response->body());
-            }
-
-            $externalId = $response->json('id');
-            $permalink = $response->json('permalink_url');
+            $externalId = $result['id'];
+            $permalink = $result['permalink'] ?? null;
 
             $publication->fill([
-                'external_id' => is_string($externalId) ? $externalId : null,
-                'external_url' => is_string($permalink) ? $permalink : ($externalId ? 'https://www.facebook.com/'.$externalId : null),
+                'external_id' => $externalId,
+                'external_url' => $permalink ?: ($externalId ? 'https://www.facebook.com/'.$externalId : null),
                 'status' => SocialPostPublication::STATUS_SUCCESS,
                 'published_at' => now(),
             ]);
@@ -164,6 +143,140 @@ class MetaGraphSocialPublisher
         $publication->save();
 
         return $publication;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function primaryFacebookImageUrls(SocialPost $post): array
+    {
+        $layout = (string) $post->layout;
+
+        if ($layout === SocialPost::LAYOUT_COLLAGE) {
+            $collagePath = $post->collage_path ?: $post->thumbnail_path;
+            $url = StorefrontAssets::mediumUrl($collagePath) ?? StorefrontAssets::url($collagePath);
+
+            return $url ? [$url] : $this->imageUrlsForPost($post);
+        }
+
+        return $this->imageUrlsForPost($post);
+    }
+
+    /**
+     * @return array{id: string, permalink: ?string}
+     */
+    private function publishFacebookSinglePhoto(
+        string $pageId,
+        string $version,
+        string $token,
+        string $imageUrl,
+        string $caption,
+    ): array {
+        $response = Http::timeout(30)
+            ->withToken($token)
+            ->acceptJson()
+            ->asJson()
+            ->post('https://graph.facebook.com/'.$version.'/'.$pageId.'/photos', [
+                'url' => $imageUrl,
+                'caption' => $caption,
+                'published' => true,
+            ]);
+
+        if (! $response->successful()) {
+            throw new RuntimeException('Facebook publish failed: '.$response->body());
+        }
+
+        $postId = $response->json('post_id') ?? $response->json('id');
+        $postId = is_string($postId) || is_numeric($postId) ? (string) $postId : '';
+
+        if ($postId === '') {
+            throw new RuntimeException('Facebook photo publish response missing id.');
+        }
+
+        return [
+            'id' => $postId,
+            'permalink' => $this->facebookPermalink($pageId, $version, $token, $postId),
+        ];
+    }
+
+    /**
+     * @param  list<string>  $imageUrls
+     * @return array{id: string, permalink: ?string}
+     */
+    private function publishFacebookAlbum(
+        string $pageId,
+        string $version,
+        string $token,
+        array $imageUrls,
+        string $message,
+    ): array {
+        $attachedMedia = [];
+
+        foreach ($imageUrls as $imageUrl) {
+            $upload = Http::timeout(30)
+                ->withToken($token)
+                ->acceptJson()
+                ->asJson()
+                ->post('https://graph.facebook.com/'.$version.'/'.$pageId.'/photos', [
+                    'url' => $imageUrl,
+                    'published' => false,
+                ]);
+
+            if (! $upload->successful()) {
+                throw new RuntimeException('Facebook album photo upload failed: '.$upload->body());
+            }
+
+            $mediaId = $upload->json('id');
+            if (! is_string($mediaId) && ! is_numeric($mediaId)) {
+                throw new RuntimeException('Facebook album photo upload missing id.');
+            }
+
+            $attachedMedia[] = ['media_fbid' => (string) $mediaId];
+        }
+
+        $response = Http::timeout(30)
+            ->withToken($token)
+            ->acceptJson()
+            ->asJson()
+            ->post('https://graph.facebook.com/'.$version.'/'.$pageId.'/feed', [
+                'message' => $message,
+                'attached_media' => $attachedMedia,
+            ]);
+
+        if (! $response->successful()) {
+            throw new RuntimeException('Facebook album publish failed: '.$response->body());
+        }
+
+        $externalId = $response->json('id');
+        $externalId = is_string($externalId) || is_numeric($externalId) ? (string) $externalId : '';
+
+        if ($externalId === '') {
+            throw new RuntimeException('Facebook album publish response missing id.');
+        }
+
+        return [
+            'id' => $externalId,
+            'permalink' => $this->facebookPermalink($pageId, $version, $token, $externalId)
+                ?? (is_string($response->json('permalink_url')) ? $response->json('permalink_url') : null),
+        ];
+    }
+
+    private function facebookPermalink(string $pageId, string $version, string $token, string $objectId): ?string
+    {
+        try {
+            $response = Http::timeout(12)
+                ->withToken($token)
+                ->acceptJson()
+                ->get('https://graph.facebook.com/'.$version.'/'.$objectId, [
+                    'fields' => 'permalink_url',
+                ]);
+
+            $permalink = $response->json('permalink_url');
+
+            return is_string($permalink) && $permalink !== '' ? $permalink : null;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function publishInstagram(SocialPost $post): ?SocialPostPublication

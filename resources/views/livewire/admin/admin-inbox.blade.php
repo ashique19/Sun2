@@ -1,4 +1,6 @@
 <div class="space-y-6">
+    <livewire:admin.admin-facebook-token-gate />
+
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="font-serif text-3xl font-semibold">Inbox</h1>

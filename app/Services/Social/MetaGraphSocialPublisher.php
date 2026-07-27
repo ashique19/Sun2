@@ -4,12 +4,17 @@ namespace App\Services\Social;
 
 use App\Models\SocialPost;
 use App\Models\SocialPostPublication;
+use App\Services\Facebook\FacebookPageTokenService;
 use App\Support\StorefrontAssets;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 class MetaGraphSocialPublisher
 {
+    public function __construct(
+        private FacebookPageTokenService $tokens,
+    ) {}
+
     /**
      * Publish (or re-publish) a social post to configured Meta channels.
      *
@@ -29,10 +34,7 @@ class MetaGraphSocialPublisher
 
     private function fbEnabled(): bool
     {
-        $token = (string) config('facebook.messenger.page_access_token', '');
-        $pageId = (string) config('facebook.messenger.page_id', '');
-
-        return $token !== '' && $pageId !== '';
+        return $this->pageToken() !== '' && $this->pageId() !== '';
     }
 
     private function igEnabled(): bool
@@ -43,17 +45,26 @@ class MetaGraphSocialPublisher
 
     private function graphVersion(): string
     {
-        return (string) config('facebook.graph_version', 'v25.0');
+        return $this->tokens->graphVersion();
     }
 
     private function pageToken(): string
     {
-        return (string) config('facebook.messenger.page_access_token', '');
+        return $this->tokens->token();
     }
 
     private function pageId(): string
     {
-        return (string) config('facebook.messenger.page_id', '');
+        return $this->tokens->pageId();
+    }
+
+    private function noteTokenFailure(string $message): void
+    {
+        if (str_contains(strtolower($message), 'access token')
+            || str_contains(strtolower($message), 'oauth')
+            || str_contains(strtolower($message), 'session has expired')) {
+            $this->tokens->invalidateStatusCache();
+        }
     }
 
     private function imageUrlsForPost(SocialPost $post): array
@@ -143,6 +154,7 @@ class MetaGraphSocialPublisher
                 'published_at' => now(),
             ]);
         } catch (\Throwable $e) {
+            $this->noteTokenFailure($e->getMessage());
             $publication->fill([
                 'status' => SocialPostPublication::STATUS_FAILED,
                 'error' => $e->getMessage(),
@@ -238,6 +250,7 @@ class MetaGraphSocialPublisher
                 'published_at' => now(),
             ]);
         } catch (\Throwable $e) {
+            $this->noteTokenFailure($e->getMessage());
             $publication->fill([
                 'status' => SocialPostPublication::STATUS_FAILED,
                 'error' => $e->getMessage(),

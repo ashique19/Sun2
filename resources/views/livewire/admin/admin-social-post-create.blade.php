@@ -1,4 +1,6 @@
 <div>
+    <livewire:admin.admin-facebook-token-gate />
+
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
             <h1 class="font-serif text-3xl font-semibold">Make Social Post</h1>

@@ -8,11 +8,14 @@ use App\Models\Page;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Observers\SitemapInvalidationObserver;
+use App\Services\Facebook\FacebookPageTokenService;
 use App\Services\Sms\LogSmsSender;
 use App\Services\Sms\SslWirelessSmsSender;
 use App\Support\Fileinfo;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
+use Throwable;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -31,11 +34,25 @@ class AppServiceProvider extends ServiceProvider
         $this->configurePublicUrl();
         $this->configureLivewireUploads();
         $this->ensureLivewireUploadDirectory();
+        $this->applyFacebookTokenOverride();
 
         Product::observe(SitemapInvalidationObserver::class);
         Category::observe(SitemapInvalidationObserver::class);
         Page::observe(SitemapInvalidationObserver::class);
         ProductImage::observe(SitemapInvalidationObserver::class);
+    }
+
+    private function applyFacebookTokenOverride(): void
+    {
+        try {
+            if (! Schema::hasTable('settings')) {
+                return;
+            }
+
+            app(FacebookPageTokenService::class)->applyRuntimeConfig();
+        } catch (Throwable) {
+            // Ignore during early boot / migrate before settings exists.
+        }
     }
 
     /**

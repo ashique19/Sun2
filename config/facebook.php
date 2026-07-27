@@ -24,7 +24,9 @@ return [
         // App Secret from Meta App Dashboard → Settings → Basic (for X-Hub-Signature-256).
         'app_secret' => env('FACEBOOK_APP_SECRET'),
 
-        // Page access token (send replies later). Not required for webhook verify.
+        // Page access token (send replies / publish posts).
+        // Runtime override may also be stored in `settings.facebook.page_access_token`
+        // via Admin Inbox / Social Posts token gate when the env token expires.
         'page_access_token' => env('FACEBOOK_PAGE_ACCESS_TOKEN'),
 
         'page_id' => env('FACEBOOK_PAGE_ID'),

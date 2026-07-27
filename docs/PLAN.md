@@ -549,7 +549,7 @@ from the dashboard row clears them from this section.
 
 ## 15. AI product image generate (Gemini) — locked plan
 
-**Status:** implementing / in progress on branch.
+**Status:** implemented (session-only candidates + prompt history).
 **Entry:** Admin → Products → create/edit.
 
 ### Locked product choices
@@ -604,13 +604,13 @@ running the same store pipeline as manual uploads (hash, primary rules, etc.).
 
 ### Work to implement (when approved) — v1
 
-1. Migration for **prompt history only** (`ai_image_prompts`).
-2. `GeminiClient` image-generate method + config for image model/timeout.
-3. Product edit: “Generate images” button → modal (raw, prompt, recent, Generate,
-   candidates, edit, +); session cleanup on close.
-4. **+** → gallery / pending queue; unused candidates dropped with session.
-5. Tests: generate appends in-session candidate; + creates gallery (or queue) image;
-   prompts ordered latest-first; closing session does not leave durable draft rows.
+- [x] Migration for **prompt history only** (`ai_image_prompts`).
+- [x] `GeminiClient` image-generate method + config for image model/timeout.
+- [x] Product edit: “Generate images” button → modal (raw, prompt, recent, Generate,
+      candidates, edit, +); session cleanup on close.
+- [x] **+** → gallery; unused candidates dropped with session.
+- [x] Tests: generate appends in-session candidate; + creates gallery image;
+      prompts ordered latest-first; closing session clears candidates.
 
 ### Explicit non-goals (v1)
 

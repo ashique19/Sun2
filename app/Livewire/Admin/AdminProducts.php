@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Services\Admin\ProductImageService;
 use App\Services\Admin\ProductPricedImageService;
+use App\Support\AdminAccess;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -28,6 +29,9 @@ class AdminProducts extends Component
 
     #[Url]
     public string $published = '';
+
+    /** @var list<int> */
+    public array $selected = [];
 
     public ?int $editingProductId = null;
 
@@ -70,6 +74,37 @@ class AdminProducts extends Component
         $this->editingField = null;
         $this->editingValue = '';
         $this->resetValidation();
+    }
+
+    public function toggleSelected(int $productId): void
+    {
+        $productId = (int) $productId;
+        if ($productId <= 0) {
+            return;
+        }
+
+        $this->selected = in_array($productId, $this->selected, true)
+            ? array_values(array_diff($this->selected, [$productId]))
+            : [...$this->selected, $productId];
+    }
+
+    public function clearSelected(): void
+    {
+        $this->selected = [];
+    }
+
+    public function makePost(): mixed
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->selected === []) {
+            return null;
+        }
+
+        $ids = array_values(array_unique(array_map('intval', $this->selected)));
+        $productsParam = implode(',', $ids);
+
+        return redirect()->route('admin.social-posts.create', ['products' => $productsParam]);
     }
 
     public function saveInlineEdit(): void

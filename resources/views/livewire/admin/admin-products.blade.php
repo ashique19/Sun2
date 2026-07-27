@@ -4,10 +4,17 @@
             <h1 class="font-serif text-3xl font-semibold">Products</h1>
             <p class="mt-1 text-xs text-[#8C8474]">Double-click price, regular price, cost, commission, max discount, or stock to edit inline.</p>
         </div>
-        <a href="{{ route('admin.products.create') }}" wire:navigate
-            class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">
-            Create Product
-        </a>
+        <div class="flex flex-wrap items-center gap-3">
+            <button type="button" wire:click="makePost" @disabled($selected === [])
+                class="rounded-full px-5 py-2 text-sm font-semibold text-white transition
+                    {{ $selected === [] ? 'bg-[#D8CDB6] cursor-not-allowed' : 'bg-[#C9A227] hover:bg-[#b8931f]' }}">
+                Make post ({{ count($selected) }})
+            </button>
+            <a href="{{ route('admin.products.create') }}" wire:navigate
+                class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">
+                Create Product
+            </a>
+        </div>
     </div>
 
     <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-6 flex flex-wrap gap-3">
@@ -31,6 +38,7 @@
             <table class="w-full text-sm">
                 <thead class="bg-[#FAF6EF] text-left text-[#6B6459]">
                     <tr>
+                        <th class="px-4 py-3 font-medium text-center">Post</th>
                         <th class="px-4 py-3 font-medium">Product</th>
                         <th class="px-4 py-3 font-medium">Category</th>
                         <th class="px-4 py-3 font-medium">Price</th>
@@ -47,6 +55,12 @@
                 <tbody class="divide-y divide-[#E7DFCF]">
                     @forelse ($products as $product)
                         <tr wire:key="product-row-{{ $product->id }}" class="hover:bg-[#FAF6EF]/60">
+                            <td class="px-4 py-3 text-center">
+                                <input type="checkbox"
+                                    wire:click="toggleSelected({{ $product->id }})"
+                                    @checked(in_array($product->id, $selected, true))
+                                    class="h-4 w-4 rounded border-[#E0D6C2] text-[#C9A227] focus:ring-[#C9A227]/40">
+                            </td>
                             <td class="px-4 py-3">
                                 <div class="flex items-center gap-3">
                                     @php $thumb = $product->images->first()?->path @endphp
@@ -165,7 +179,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="11" class="px-4 py-8 text-center text-[#8C8474]">No products found.</td>
+                            <td colspan="12" class="px-4 py-8 text-center text-[#8C8474]">No products found.</td>
                         </tr>
                     @endforelse
                 </tbody>

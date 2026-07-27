@@ -58,6 +58,10 @@ to **intake the legacy data** (especially products, categories, orders).
 14. **Needs admin attention:** reusable attention queue when automation cannot safely
     conclude (first case: Steadfast “delivered” / partial COD mismatch). Surface on
     **Admin → Dashboard** above the daily order qty table, with review links. See §14.
+15. **AI product image generate (Gemini):** on Admin product create/edit, modal to upload a
+    raw photo + prompt, generate candidate images via Gemini (each Generate appends),
+    browser-edit candidates, **+** to promote into the product gallery. Persist drafts and
+    prompt history. See §15.
 
 ## 4. Delivery sequence
 
@@ -539,3 +543,73 @@ from the dashboard row clears them from this section.
 
 - Fully auto-inferring partial-return line items from Steadfast without admin review.
 - Replacing Steadfast’s own portal UI — we only gate **our** order state + money effects.
+
+## 15. AI product image generate (Gemini) — locked plan
+
+**Status:** planned / not implemented yet.
+**Entry:** Admin → Products → create/edit.
+
+### Locked product choices
+
+1. **Staging:** generated candidates are **saved as drafts on the product** (not only
+   browser session). They are **not** in the live gallery until staff clicks **+**.
+2. **Prompts:** saved for reuse. Show **recent prompts** in the modal in **latest-first**
+   order; selecting one fills the textarea (still editable). Each Generate that runs
+   persists/updates that prompt in history.
+3. **Layout:** open via a button into a **modal** (cleanest across screen sizes) — not a
+   permanent side column on the edit page.
+
+### Modal UX
+
+| Control | Behavior |
+|---------|----------|
+| Raw photo upload | Source image for Gemini (one active raw per generate run; replaceable). Prefer persist raw on product while drafts exist so regenerate works after reload. |
+| Prompt textarea | Editable; can be filled from recent prompt chips/list |
+| Recent prompts | Latest-first list/chips of previously used prompts |
+| **Generate** | Call Gemini with raw + prompt; **append** a new candidate to the draft list (does not replace prior drafts) |
+| Draft list | Thumbnails of generated candidates |
+| Edit | Browser Cropper scopes (same idea as existing product image queue editor) |
+| **+** | Promote that (optionally edited) draft into the normal product image gallery / upload queue; draft can be removed from staging after promote |
+| Discard | Optional remove draft / clear raw without affecting gallery |
+
+Create-product flow: if no product id yet, either require save-first before generate, or
+create a draft product / temp holding area then attach on first save — prefer **ensure
+product saved** (existing create pattern) before opening the generate modal when possible.
+
+### Backend / Gemini
+
+- Today `GeminiClient` is JSON/text oriented (order parse). Add an **image generation**
+  path: multimodal `generateContent` with raw image + prompt and
+  `responseModalities` including `IMAGE`.
+- Separate config model e.g. `GEMINI_IMAGE_MODEL` (image-capable, e.g. flash-image family);
+  keep existing `GEMINI_MODEL` for JSON parse.
+- Longer timeout for image gen than parse.
+- Store draft files under product-scoped public/storage paths; DB rows for drafts + prompts.
+
+### Data model (conceptual)
+
+| Store | Role |
+|-------|------|
+| `product_image_drafts` (or `product_images` with `is_draft` / `kind=ai_generated`) | path, product_id, prompt used, sort, timestamps — excluded from storefront until promoted |
+| `ai_image_prompts` | `prompt` text, `last_used_at`, optional `user_id` / use_count — recent list ordered by `last_used_at` desc |
+| Raw source | column/path on product or draft-session row (`raw_source_path`) |
+
+Promotion (**+**): copy/move into normal `product_images` (or existing pending queue then save),
+running the same store pipeline as manual uploads (hash, primary rules, etc.).
+
+### Work to implement (when approved) — v1
+
+1. Migrations for drafts + prompt history (+ raw path if needed).
+2. `GeminiClient` image-generate method + config for image model/timeout.
+3. Product edit: “Generate images” button → modal (raw, prompt, recent, Generate, drafts,
+   edit, +).
+4. Promote draft → gallery; delete draft; persist across reload.
+5. Tests: generate appends draft; + creates gallery image; prompts ordered latest-first;
+   gallery/storefront ignore drafts.
+
+### Explicit non-goals (v1)
+
+- Auto-adding every generation to the live gallery without **+**.
+- Bulk multi-raw generate in one click.
+- Replacing manual upload / Cropper queue (this is an additional path).
+- Using AI for §11 priced-image stamp (priced stamp stays GD/deterministic).

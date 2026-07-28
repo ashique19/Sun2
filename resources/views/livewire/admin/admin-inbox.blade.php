@@ -9,12 +9,25 @@
         Fixed beacon so Graph poll keeps running while the mobile thread sheet is open.
         The sheet is position:fixed (out of document flow), which can collapse in-flow
         layout and pause wire:poll.visible on the page root.
+        When Echo realtime is on, Graph poll is slower (backfill only).
     --}}
     <div
-        wire:poll.10s.visible="pollSyncFromFacebook"
+        wire:poll.{{ $graphPollSeconds }}s.visible="pollSyncFromFacebook"
         class="pointer-events-none fixed bottom-0 left-0 z-[60] h-px w-px opacity-0"
         aria-hidden="true"
+        data-inbox-realtime="{{ $realtimeEnabled ? '1' : '0' }}"
+        data-graph-poll-seconds="{{ $graphPollSeconds }}"
     ></div>
+
+    @script
+    <script>
+        if (window.Echo && @json($realtimeEnabled)) {
+            window.Echo.private('admin.inbox').listen('.InboxMessageStored', (event) => {
+                $wire.refreshFromRealtime(event.conversation_id ?? null);
+            });
+        }
+    </script>
+    @endscript
 
     @if ($syncToast)
         <div
@@ -54,7 +67,11 @@
             <h1 class="font-serif text-2xl font-semibold xl:text-3xl">Inbox</h1>
             <p class="mt-0.5 hidden text-sm text-[#8C8474] sm:block">
                 Messenger and WhatsApp conversations in one place.
-                Syncs from Facebook every 10s while this page is open.
+                @if ($realtimeEnabled)
+                    Live updates when Reverb is running; Graph backfill every {{ $graphPollSeconds }}s.
+                @else
+                    Syncs from Facebook every {{ $graphPollSeconds }}s while this page is open.
+                @endif
             </p>
             @if ($lastSyncedAt)
                 <p class="mt-1 text-[11px] tabular-nums text-[#8C8474]" wire:key="last-synced-{{ $lastSyncedAt }}">

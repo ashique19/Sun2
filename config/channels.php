@@ -63,6 +63,22 @@ return [
         // Open threads initially show only messages with sent_at within this window.
         'thread_lookback_hours' => (int) env('CHANNEL_INBOX_THREAD_LOOKBACK_HOURS', 24),
 
+        // When true (BROADCAST_CONNECTION=reverb|pusher by default), Echo pushes
+        // inbox updates and Graph poll runs on a slower fallback interval.
+        'realtime_enabled' => filter_var(
+            env(
+                'CHANNEL_INBOX_REALTIME',
+                in_array(env('BROADCAST_CONNECTION', 'log'), ['reverb', 'pusher'], true) ? 'true' : 'false',
+            ),
+            FILTER_VALIDATE_BOOL,
+        ),
+
+        // Graph Conversations API poll while /admin/inbox is open.
+        'graph_poll_seconds' => (int) env('CHANNEL_INBOX_GRAPH_POLL_SECONDS', 10),
+
+        // Slower Graph backfill when Echo realtime is enabled.
+        'graph_poll_seconds_realtime' => (int) env('CHANNEL_INBOX_GRAPH_POLL_SECONDS_REALTIME', 60),
+
         // Composer chips — label shown in UI, body inserted into the reply box.
         'quick_replies' => [
             ['label' => 'Salaam', 'body' => 'আসসালামু আলাইকুম'],

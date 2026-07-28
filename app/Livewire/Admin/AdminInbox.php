@@ -534,6 +534,34 @@ class AdminInbox extends Component
         $this->syncToast = null;
     }
 
+    /**
+     * Echo / Livewire listener: re-render list + open thread from DB (no Graph).
+     * When the event targets the open conversation, also mark website read / defer seen.
+     */
+    public function refreshFromRealtime(?int $conversationId = null): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($conversationId && $this->selectedConversationId === $conversationId) {
+            $this->refreshOpenThreadAfterPoll();
+            $this->deferMessengerSeenForOpenThread();
+        }
+    }
+
+    public function realtimeEnabled(): bool
+    {
+        return (bool) config('channels.inbox.realtime_enabled');
+    }
+
+    public function graphPollSeconds(): int
+    {
+        if ($this->realtimeEnabled()) {
+            return max(10, (int) config('channels.inbox.graph_poll_seconds_realtime', 60));
+        }
+
+        return max(5, (int) config('channels.inbox.graph_poll_seconds', 10));
+    }
+
     public function clearFilters(): void
     {
         $this->channel = '';
@@ -756,6 +784,8 @@ class AdminInbox extends Component
             'quickReplies' => $quickReplies,
             'hasOlderMessages' => $hasOlderMessages,
             'threadLookbackHours' => $lookbackHours,
+            'realtimeEnabled' => $this->realtimeEnabled(),
+            'graphPollSeconds' => $this->graphPollSeconds(),
             'diagnostics' => $diagnostics->forInbox([
                 'channel' => $this->channel,
                 'unread' => $this->unread,

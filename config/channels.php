@@ -20,11 +20,26 @@ return [
         'max_inbound_messages' => (int) env('CHANNEL_AI_DRAFT_MAX_MESSAGES', 15),
 
         // Minimum parser confidence (0–1) required to create/update a draft.
-        // Scoring: name/phone/address 0.25 each; matched product_id 0.25.
+        // Local scoring: phone 0.30; name 0.10–0.20; address 0.10–0.25; product 0.15–0.25.
         'min_confidence' => (float) env('CHANNEL_AI_DRAFT_MIN_CONFIDENCE', 0.5),
 
         // Require a valid Bangladesh mobile before creating a draft.
         'require_phone' => filter_var(env('CHANNEL_AI_DRAFT_REQUIRE_PHONE', true), FILTER_VALIDATE_BOOL),
+
+        // Auto-attach catalog product when inbound image dHash match is at least this %.
+        'image_match_auto_percent' => (float) env(
+            'CHANNEL_AI_DRAFT_IMAGE_AUTO_PERCENT',
+            90,
+        ),
+
+        // Keep weaker image matches in ai_parse_meta for staff review.
+        'image_match_min_percent' => (float) env(
+            'CHANNEL_AI_DRAFT_IMAGE_MIN_PERCENT',
+            80,
+        ),
+
+        // Skip tiny attachments (stickers / emoji) below this many bytes.
+        'image_min_bytes' => (int) env('CHANNEL_AI_DRAFT_IMAGE_MIN_BYTES', 5000),
     ],
 
     /*

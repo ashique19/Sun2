@@ -229,14 +229,25 @@ class AdminInbox extends Component
      * Background Graph sync while the Inbox tab is open (wire:poll.visible).
      * Quiet on success so the UI is not spammed every poll.
      */
-    public function pollSyncFromFacebook(
-        MessengerConversationSyncService $sync,
-        ChannelReplyService $replies,
-    ): void {
+    public function pollSyncFromFacebook(MessengerConversationSyncService $sync): void
+    {
         AdminAccess::ensureStaffAdmin();
 
         $sync->sync();
-        $this->refreshInbox($replies);
+
+        // Local read-state only before render. Defer Graph mark_seen so a slow
+        // Facebook call cannot delay Livewire morphing newly synced messages.
+        $this->refreshOpenThreadAfterPoll();
+
+        $conversationId = $this->selectedConversationId;
+        if ($conversationId) {
+            defer(function () use ($conversationId): void {
+                $conversation = ChannelConversation::query()->find($conversationId);
+                if ($conversation?->needsMessengerSeenSync()) {
+                    app(ChannelReplyService::class)->markSeen($conversation);
+                }
+            });
+        }
     }
 
     public function clearFilters(): void
@@ -269,6 +280,27 @@ class AdminInbox extends Component
 
         if ($conversation->needsMessengerSeenSync()) {
             $replies->markSeen($conversation);
+        }
+    }
+
+    /**
+     * After Graph sync, refresh the open thread without waiting on mark_seen.
+     * Poll requests must stay fast so Livewire can morph new messages into the UI.
+     */
+    private function refreshOpenThreadAfterPoll(): void
+    {
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+
+        if (! $conversation) {
+            return;
+        }
+
+        if ($conversation->isUnread()) {
+            $conversation->markRead(auth()->id());
         }
     }
 

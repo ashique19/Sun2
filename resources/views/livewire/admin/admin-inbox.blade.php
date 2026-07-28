@@ -4,10 +4,18 @@
         ->count();
 @endphp
 
-<div
-    class="xl:space-y-6"
-    wire:poll.10s.visible="pollSyncFromFacebook"
->
+<div class="xl:space-y-6">
+    {{--
+        Fixed beacon so Graph poll keeps running while the mobile thread sheet is open.
+        The sheet is position:fixed (out of document flow), which can collapse in-flow
+        layout and pause wire:poll.visible on the page root.
+    --}}
+    <div
+        wire:poll.10s.visible="pollSyncFromFacebook"
+        class="pointer-events-none fixed bottom-0 left-0 z-[60] h-px w-px opacity-0"
+        aria-hidden="true"
+    ></div>
+
     <div @class([
         'px-4 pt-3 xl:px-0 xl:pt-0',
         'hidden xl:block' => $mobileThreadOpen,
@@ -320,6 +328,15 @@
                                 @endif
                             </p>
                         </div>
+                        <button type="button"
+                            wire:click="syncFromFacebook"
+                            wire:loading.attr="disabled"
+                            wire:target="syncFromFacebook"
+                            class="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-3 text-xs font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60 xl:hidden"
+                            aria-label="Sync from Facebook">
+                            <span wire:loading.remove wire:target="syncFromFacebook">Sync</span>
+                            <span wire:loading wire:target="syncFromFacebook">…</span>
+                        </button>
                     </div>
                 </div>
 

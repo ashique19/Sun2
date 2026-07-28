@@ -6,6 +6,7 @@ use App\Events\InboxMessageStored;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Services\Channels\ChannelConversationService;
+use Illuminate\Contracts\Broadcasting\Factory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use PHPUnit\Framework\Attributes\Test;
@@ -77,5 +78,31 @@ class ChannelInboxRealtimeTest extends TestCase
         ]);
 
         Event::assertNotDispatched(InboxMessageStored::class);
+    }
+
+    #[Test]
+    public function store_message_survives_when_reverb_broadcaster_cannot_boot(): void
+    {
+        config(['channels.inbox.realtime_enabled' => true]);
+
+        $factory = \Mockery::mock(Factory::class);
+        $factory->shouldReceive('event')->andThrow(new \RuntimeException(
+            'Failed to create broadcaster for connection "reverb" with error: Class "Pusher\Pusher" not found.',
+        ));
+        $this->app->instance(Factory::class, $factory);
+
+        $service = app(ChannelConversationService::class);
+        $conversation = $service->findOrCreate(ChannelConversation::CHANNEL_MESSENGER, 'U-RT-3');
+
+        $message = $service->storeMessage($conversation, [
+            'external_message_id' => 'mid-rt-fail',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'still stored',
+            'sent_at' => now(),
+        ]);
+
+        $this->assertNotNull($message->id);
+        $this->assertSame('still stored', $message->fresh()->body);
+        $this->assertSame(1, ChannelMessage::query()->where('external_message_id', 'mid-rt-fail')->count());
     }
 }

@@ -7,6 +7,8 @@ use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class ChannelConversationService
 {
@@ -96,7 +98,16 @@ class ChannelConversationService
             if (config('channels.inbox.realtime_enabled')) {
                 $channel = (string) $conversation->channel;
                 $dispatch = function () use ($message, $channel): void {
-                    broadcast(InboxMessageStored::fromMessage($message->fresh() ?? $message, $channel));
+                    try {
+                        broadcast(InboxMessageStored::fromMessage($message->fresh() ?? $message, $channel));
+                    } catch (Throwable $e) {
+                        // Missing Pusher SDK / Reverb misconfig must not fail message ingest or replies.
+                        Log::warning('Inbox realtime broadcast failed.', [
+                            'message_id' => $message->id,
+                            'conversation_id' => $message->channel_conversation_id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
                 };
 
                 // RefreshDatabase keeps an open transaction; afterCommit would never fire in tests.

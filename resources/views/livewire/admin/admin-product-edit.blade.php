@@ -157,6 +157,37 @@
                                         Delete
                                     </button>
                                 </div>
+                                <div class="border-t border-[#EFE7D6] pt-3 space-y-2">
+                                    <p class="text-[11px] font-medium text-[#6B6459]">Resize (max size, keeps aspect)</p>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label class="block text-[10px] text-[#8C8474] mb-0.5">Max width</label>
+                                            <input type="number" min="1" max="4000"
+                                                wire:model="resizeMaxWidths.{{ $image->id }}"
+                                                class="w-full rounded-lg border border-[#E0D6C2] px-2 py-1.5 text-xs tabular-nums">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] text-[#8C8474] mb-0.5">Max height</label>
+                                            <input type="number" min="1" max="4000"
+                                                wire:model="resizeMaxHeights.{{ $image->id }}"
+                                                class="w-full rounded-lg border border-[#E0D6C2] px-2 py-1.5 text-xs tabular-nums">
+                                        </div>
+                                    </div>
+                                    @error('resizeMaxWidths.'.$image->id)
+                                        <p class="text-[11px] text-rose-600">{{ $message }}</p>
+                                    @enderror
+                                    @error('resizeMaxHeights.'.$image->id)
+                                        <p class="text-[11px] text-rose-600">{{ $message }}</p>
+                                    @enderror
+                                    <button type="button"
+                                        wire:click="resizeImage({{ $image->id }})"
+                                        wire:loading.attr="disabled"
+                                        wire:target="resizeImage({{ $image->id }})"
+                                        class="rounded border border-[#1E1E1E] px-2 py-1 text-xs font-medium text-[#1E1E1E] hover:bg-[#FAF6EF] disabled:opacity-60">
+                                        <span wire:loading.remove wire:target="resizeImage({{ $image->id }})">Resize</span>
+                                        <span wire:loading wire:target="resizeImage({{ $image->id }})">Resizing…</span>
+                                    </button>
+                                </div>
                             </li>
                         @endforeach
                     </ul>

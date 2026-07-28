@@ -83,6 +83,101 @@ class ProductImageService
     }
 
     /**
+     * Downscale an existing gallery image to fit within max width/height (aspect preserved, never upscaled).
+     */
+    public function resize(ProductImage $image, int $maxWidth, int $maxHeight): ProductImage
+    {
+        if ($maxWidth < 1 || $maxHeight < 1) {
+            throw new RuntimeException('Max width and height must be at least 1.');
+        }
+
+        $path = $image->path;
+
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            throw new RuntimeException('Remote images cannot be resized here.');
+        }
+
+        $normalized = ltrim(str_replace('\\', '/', $path), '/');
+
+        if (! str_starts_with($normalized, 'img/products/')) {
+            throw new RuntimeException('Invalid product image path.');
+        }
+
+        $source = public_path($normalized);
+
+        if (! is_file($source) || ! is_readable($source)) {
+            throw new RuntimeException('Product image file is not readable.');
+        }
+
+        $info = @getimagesize($source);
+
+        if ($info === false) {
+            throw new RuntimeException('Could not read product image.');
+        }
+
+        [$width, $height, $type] = $info;
+
+        $scale = min(1.0, $maxWidth / max(1, $width), $maxHeight / max(1, $height));
+
+        if ($scale >= 1.0) {
+            return $image;
+        }
+
+        $newWidth = max(1, (int) round($width * $scale));
+        $newHeight = max(1, (int) round($height * $scale));
+
+        $loaded = match ($type) {
+            IMAGETYPE_JPEG => @imagecreatefromjpeg($source),
+            IMAGETYPE_PNG => @imagecreatefrompng($source),
+            IMAGETYPE_WEBP => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($source) : false,
+            IMAGETYPE_GIF => @imagecreatefromgif($source),
+            default => false,
+        };
+
+        if ($loaded === false) {
+            throw new RuntimeException('Unsupported image type for resize.');
+        }
+
+        $canvas = imagecreatetruecolor($newWidth, $newHeight);
+
+        if ($canvas === false) {
+            imagedestroy($loaded);
+            throw new RuntimeException('Could not create resize canvas.');
+        }
+
+        $white = imagecolorallocate($canvas, 255, 255, 255);
+        imagefilledrectangle($canvas, 0, 0, $newWidth, $newHeight, $white);
+        imagecopyresampled($canvas, $loaded, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+        imagedestroy($loaded);
+
+        $directory = $this->productDirectory((int) $image->product_id);
+        File::ensureDirectoryExists($directory);
+
+        $filename = now()->format('YmdHis').'_'.Str::lower(Str::random(6)).'.jpg';
+        $destination = $directory.DIRECTORY_SEPARATOR.$filename;
+        $saved = imagejpeg($canvas, $destination, 85);
+        imagedestroy($canvas);
+
+        if (! $saved) {
+            throw new RuntimeException('Could not save resized image.');
+        }
+
+        $newPath = '/img/products/'.$image->product_id.'/'.$filename;
+        $oldPath = $image->path;
+
+        $image->update([
+            'path' => $newPath,
+            'perceptual_hash' => $this->safeHash($destination),
+        ]);
+
+        if ($oldPath !== $newPath) {
+            $this->deleteLocalFile($oldPath);
+        }
+
+        return $image->refresh();
+    }
+
+    /**
      * @param  list<int>  $orderedIds
      */
     public function reorder(Product $product, array $orderedIds): void

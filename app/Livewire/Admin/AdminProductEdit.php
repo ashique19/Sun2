@@ -64,6 +64,12 @@ class AdminProductEdit extends Component
     /** @var array<int, string> */
     public array $imageAlts = [];
 
+    /** @var array<int, string> */
+    public array $resizeMaxWidths = [];
+
+    /** @var array<int, string> */
+    public array $resizeMaxHeights = [];
+
     public ?string $message = null;
 
     /** Set by ensureProductSaved() so uploadImages can redirect after create. */
@@ -96,9 +102,7 @@ class AdminProductEdit extends Component
         }
 
         $this->product = $product->load(['images' => fn ($q) => $q->orderBy('sort_order')]);
-        $this->imageAlts = $this->product->images
-            ->mapWithKeys(fn (ProductImage $image) => [$image->id => (string) ($image->alt ?? '')])
-            ->all();
+        $this->syncImageAlts();
         $this->category_id = $product->category_id;
         $this->name = $product->name;
         $this->slug = $product->slug;
@@ -566,6 +570,47 @@ class AdminProductEdit extends Component
         $this->refreshImages();
     }
 
+    public function resizeImage(int $imageId, ProductImageService $images): void
+    {
+        $this->validate([
+            "resizeMaxWidths.{$imageId}" => ['required', 'integer', 'min:1', 'max:4000'],
+            "resizeMaxHeights.{$imageId}" => ['required', 'integer', 'min:1', 'max:4000'],
+        ], [], [
+            "resizeMaxWidths.{$imageId}" => 'max width',
+            "resizeMaxHeights.{$imageId}" => 'max height',
+        ]);
+
+        $image = $this->findOwnedImage($imageId);
+        $maxWidth = (int) $this->resizeMaxWidths[$imageId];
+        $maxHeight = (int) $this->resizeMaxHeights[$imageId];
+        $wasPrimary = $image->is_primary;
+        $beforePath = $image->path;
+
+        try {
+            $resized = $images->resize($image, $maxWidth, $maxHeight);
+        } catch (Throwable $e) {
+            $this->addError("resizeMaxWidths.{$imageId}", $e->getMessage());
+
+            return;
+        }
+
+        $this->refreshImages();
+        $this->syncImageAlts();
+
+        if ($resized->path === $beforePath) {
+            $this->message = 'Image already within those dimensions — nothing changed.';
+
+            return;
+        }
+
+        if ($wasPrimary && $this->product->priced_image_path) {
+            app(ProductPricedImageService::class)->generate($this->product->fresh());
+            $this->product->refresh();
+        }
+
+        $this->message = 'Image resized.';
+    }
+
     public function render()
     {
         $recentPrompts = AiImagePrompt::query()
@@ -597,6 +642,11 @@ class AdminProductEdit extends Component
         $this->imageAlts = $this->product->images
             ->mapWithKeys(fn (ProductImage $image) => [$image->id => (string) ($image->alt ?? '')])
             ->all();
+
+        foreach ($this->product->images as $image) {
+            $this->resizeMaxWidths[$image->id] ??= '1200';
+            $this->resizeMaxHeights[$image->id] ??= '1200';
+        }
     }
 
     private function fillPricedImageLayout(?ProductPricedImageService $pricedImages = null): void

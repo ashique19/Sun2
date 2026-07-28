@@ -517,7 +517,14 @@
                                 @touchstart.passive="startLongPress()"
                                 @touchend.passive="cancelLongPress()"
                                 @touchmove.passive="cancelLongPress()"
-                                @click.outside="closeMenu(); if ($wire.mappingMessageId === {{ $messageRow->id }}) { $wire.closeMessageMapMenu(); }"
+                                @click.outside="
+                                    closeMenu();
+                                    // Product mapper is a separate fixed modal outside this bubble —
+                                    // closing on outside click would kill Cropper drag mid-gesture.
+                                    if ($wire.mappingMessageId === {{ $messageRow->id }} && $wire.mappingField !== 'product') {
+                                        $wire.closeMessageMapMenu();
+                                    }
+                                "
                                 @class([
                                     'group relative max-w-[82%] px-3 py-2 text-sm shadow-sm sm:max-w-[70%]',
                                     'rounded-2xl rounded-br-md bg-[#C9A227] text-white' => $isOutbound,
@@ -583,7 +590,7 @@
                                 </div>
 
                                 <div
-                                    x-show="menu || $wire.mappingMessageId === {{ $messageRow->id }}"
+                                    x-show="menu || ($wire.mappingMessageId === {{ $messageRow->id }} && $wire.mappingField !== 'product')"
                                     x-cloak
                                     @click.stop
                                     class="absolute left-0 right-0 top-full z-20 mt-1 min-w-[11rem] rounded-xl border border-[#E7DFCF] bg-white p-1.5 text-left text-[#1E1E1E] shadow-lg"
@@ -604,10 +611,18 @@
                     @endforeach
                 </div>
 
-                @if ($mappingField === 'product' && $mappingMessage)
+                    @if ($mappingField === 'product' && $mappingMessage)
                     <div class="fixed inset-0 z-[80] flex items-end justify-center p-3 sm:items-center sm:p-4" wire:key="product-map-modal-{{ $mappingMessage->id }}">
-                        <button type="button" wire:click="closeMessageMapMenu" class="absolute inset-0 bg-black/40" aria-label="Close product mapper"></button>
-                        <div class="relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[#E7DFCF] bg-white shadow-xl">
+                        <button type="button"
+                            wire:click="closeMessageMapMenu"
+                            class="absolute inset-0 bg-black/40"
+                            aria-label="Close product mapper"></button>
+                        <div
+                            class="relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[#E7DFCF] bg-white shadow-xl"
+                            @click.stop
+                            @mousedown.stop
+                            @touchstart.stop
+                        >
                             <div class="flex items-start justify-between gap-3 border-b border-[#E7DFCF] px-4 py-3">
                                 <div class="min-w-0">
                                     <h3 class="font-semibold text-[#1E1E1E]">Add product to order</h3>

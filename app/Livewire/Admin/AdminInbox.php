@@ -34,7 +34,7 @@ class AdminInbox extends Component
     #[Url]
     public string $linked = '';
 
-    #[Url(as: 'conversation')]
+    #[Url(as: 'conversation', history: true)]
     public ?int $selectedConversationId = null;
 
     public string $replyText = '';
@@ -96,11 +96,69 @@ class AdminInbox extends Component
         $this->statusMessage = null;
     }
 
+    /**
+     * Keep the mobile thread pane in sync when the browser Back/Forward
+     * restores or clears ?conversation= (#[Url(history: true)]).
+     */
+    public function updatedSelectedConversationId(?int $conversationId): void
+    {
+        if ($conversationId === null) {
+            $this->mobileThreadOpen = false;
+            $this->resetComposer();
+            $this->error = null;
+            $this->statusMessage = null;
+
+            return;
+        }
+
+        if (! ChannelConversation::query()->whereKey($conversationId)->exists()) {
+            $this->selectedConversationId = null;
+            $this->mobileThreadOpen = false;
+
+            return;
+        }
+
+        $this->mobileThreadOpen = true;
+    }
+
     public function closeMobileThread(): void
     {
-        $this->mobileThreadOpen = false;
-        // Clear URL ?conversation= so reload stays on the list.
+        if ($this->selectedConversationId === null) {
+            $this->mobileThreadOpen = false;
+            $this->resetComposer();
+            $this->error = null;
+            $this->statusMessage = null;
+
+            return;
+        }
+
+        // Livewire tests have no real history stack — clear synchronously.
+        if (app()->runningUnitTests()) {
+            $this->clearConversationFromUrl();
+
+            return;
+        }
+
+        // Pop the history entry created when the thread was opened (history: true).
+        // Livewire restores selectedConversationId from the previous URL; if back is
+        // a no-op (direct deep link), fall back to clearing the query param.
+        $this->js(<<<'JS'
+            (() => {
+                const before = window.location.href;
+                window.history.back();
+                setTimeout(() => {
+                    if (window.location.href === before) {
+                        $wire.clearConversationFromUrl();
+                    }
+                }, 50);
+            })();
+        JS);
+    }
+
+    public function clearConversationFromUrl(): void
+    {
         $this->selectedConversationId = null;
+        $this->mobileThreadOpen = false;
         $this->resetComposer();
         $this->error = null;
         $this->statusMessage = null;

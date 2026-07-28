@@ -193,36 +193,10 @@ class AdminInbox extends Component
 
     public function closeMobileThread(): void
     {
-        if ($this->selectedConversationId === null) {
-            $this->mobileThreadOpen = false;
-            $this->resetComposer();
-            $this->error = null;
-            $this->statusMessage = null;
-
-            return;
-        }
-
-        // Livewire tests have no real history stack — clear synchronously.
-        if (app()->runningUnitTests()) {
-            $this->clearConversationFromUrl();
-
-            return;
-        }
-
-        // Pop the history entry created when the thread was opened (history: true).
-        // Livewire restores selectedConversationId from the previous URL; if back is
-        // a no-op (direct deep link), fall back to clearing the query param.
-        $this->js(<<<'JS'
-            (() => {
-                const before = window.location.href;
-                window.history.back();
-                setTimeout(() => {
-                    if (window.location.href === before) {
-                        $wire.clearConversationFromUrl();
-                    }
-                }, 50);
-            })();
-        JS);
+        // Always return to the conversation list. Do not use history.back() —
+        // the stack may hold a previous thread, filters, or a page outside Inbox.
+        // Browser Back still works via #[Url(history: true)] + updatedSelectedConversationId.
+        $this->clearConversationFromUrl();
     }
 
     public function clearConversationFromUrl(): void

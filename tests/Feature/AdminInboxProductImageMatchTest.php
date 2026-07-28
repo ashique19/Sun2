@@ -96,7 +96,7 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->assertSeeHtml('data-inbox-product-map-modal')
             ->assertSeeHtml('z-index: 100000')
             ->assertSeeHtml('max-height: calc(100svh - 1rem)')
-            ->assertDontSee('Search older messages…');
+            ->assertDontSee('load older messages');
     }
 
     #[Test]
@@ -121,7 +121,8 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->assertSet('mappingField', 'product')
             ->assertSee('Add product to order')
             ->assertSee('Crop chat image')
-            ->assertDontSee('Search older messages…');
+            ->assertSeeHtml('min(52vh, 26rem)')
+            ->assertDontSee('load older messages');
     }
 
     #[Test]
@@ -155,7 +156,7 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->assertSee('Add product to order')
             ->assertSee('Search products')
             ->assertSeeHtml('data-inbox-product-map-modal')
-            ->assertSeeHtml('max-w-lg')
+            ->assertSeeHtml('max-w-xl')
             ->set('mappingProductSearch', 'Silk Kurti')
             ->assertSee('Silk Kurti Search')
             ->assertSet('mappingField', 'product')

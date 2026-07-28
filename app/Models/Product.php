@@ -66,7 +66,7 @@ class Product extends Model
         return $query->where('is_published', true);
     }
 
-    public function scopeSearchTerm(Builder $query, string $term): Builder
+    public function scopeSearchTerm(Builder $query, string $term, bool $includePrice = true): Builder
     {
         $term = trim($term);
 
@@ -77,11 +77,11 @@ class Product extends Model
         $like = '%'.$term.'%';
         $priceDigits = preg_replace('/[^\d.]/', '', $term);
 
-        return $query->where(function (Builder $q) use ($like, $priceDigits) {
+        return $query->where(function (Builder $q) use ($like, $priceDigits, $includePrice) {
             $q->where('name', 'like', $like)
                 ->orWhere('sku', 'like', $like);
 
-            if ($priceDigits !== '' && is_numeric($priceDigits)) {
+            if ($includePrice && $priceDigits !== '' && is_numeric($priceDigits)) {
                 $price = (float) $priceDigits;
 
                 $q->orWhere('price', $price)

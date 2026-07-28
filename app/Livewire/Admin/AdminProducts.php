@@ -30,6 +30,12 @@ class AdminProducts extends Component
     #[Url]
     public string $published = '';
 
+    #[Url]
+    public string $priceMin = '';
+
+    #[Url]
+    public string $priceMax = '';
+
     /** @var list<int> */
     public array $selected = [];
 
@@ -52,6 +58,16 @@ class AdminProducts extends Component
     }
 
     public function updatedPublished(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedPriceMin(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedPriceMax(): void
     {
         $this->resetPage();
     }
@@ -188,9 +204,18 @@ class AdminProducts extends Component
 
     public function render()
     {
+        $priceMin = $this->normalizedPriceBound($this->priceMin);
+        $priceMax = $this->normalizedPriceBound($this->priceMax);
+
+        if ($priceMin !== null && $priceMax !== null && $priceMin > $priceMax) {
+            [$priceMin, $priceMax] = [$priceMax, $priceMin];
+        }
+
         $products = Product::query()
             ->with(['category:id,name', 'images' => fn ($q) => $q->orderBy('sort_order')->limit(1)])
-            ->when($this->search !== '', fn ($q) => $q->searchTerm($this->search))
+            ->when($this->search !== '', fn ($q) => $q->searchTerm($this->search, includePrice: false))
+            ->when($priceMin !== null, fn ($q) => $q->where('price', '>=', $priceMin))
+            ->when($priceMax !== null, fn ($q) => $q->where('price', '<=', $priceMax))
             ->when($this->category !== '', fn ($q) => $q->where('category_id', $this->category))
             ->when($this->published === '1', fn ($q) => $q->where('is_published', true))
             ->when($this->published === '0', fn ($q) => $q->where('is_published', false))
@@ -202,5 +227,16 @@ class AdminProducts extends Component
             'products' => $products,
             'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
         ]);
+    }
+
+    private function normalizedPriceBound(string $value): ?float
+    {
+        $digits = preg_replace('/[^\d.]/', '', trim($value)) ?? '';
+
+        if ($digits === '' || ! is_numeric($digits)) {
+            return null;
+        }
+
+        return max(0, (float) $digits);
     }
 }

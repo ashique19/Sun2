@@ -249,11 +249,11 @@
                                         <input type="text" x-model="item.alt" class="w-full rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-xs" placeholder="Optional description">
                                     </div>
                                     <div class="flex flex-wrap gap-1">
-                                        <button type="button" @click="openEditor(index)"
+                                        <button type="button" @click.stop="openEditor(index)"
                                             class="rounded border border-[#C9A227] px-2 py-1 text-xs text-[#C9A227] hover:bg-[#FAF6EF]">
                                             Edit
                                         </button>
-                                        <button type="button" @click="removeFromQueue(index)"
+                                        <button type="button" @click.stop="removeFromQueue(index)"
                                             class="rounded border border-rose-200 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50">
                                             Remove
                                         </button>
@@ -261,7 +261,17 @@
                                 </li>
                             </template>
                         </ul>
-                        <p class="text-xs text-[#8C8474]" x-text="`${queue.length} image(s) ready`"></p>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <button type="button"
+                                @click="uploadAll()"
+                                :disabled="uploading"
+                                class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
+                                <span x-show="!uploading" x-text="`Upload ${queue.length} image(s)`"></span>
+                                <span x-show="uploading" x-cloak>Uploading…</span>
+                            </button>
+                            <p class="text-xs text-[#8C8474]" x-text="`${queue.length} image(s) ready — or use Save Product below`"></p>
+                        </div>
+                        <p x-show="uploadError" x-text="uploadError" class="text-xs text-rose-600" x-cloak></p>
                     </div>
                 </template>
 
@@ -277,10 +287,11 @@
                         <div
                             class="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4"
                             @keydown.escape.window="closeEditor()"
+                            @click.self="onEditorOutside()"
                             role="dialog"
                             aria-modal="true"
                             aria-label="Edit image">
-                            <div class="w-full max-w-3xl rounded-xl bg-white shadow-xl overflow-hidden" @click.outside="closeEditor()">
+                            <div class="w-full max-w-3xl rounded-xl bg-white shadow-xl overflow-hidden" @click.stop>
                                 <div class="flex items-center justify-between border-b border-[#EFE7D6] px-4 py-3">
                                     <h3 class="font-semibold">Edit image</h3>
                                     <button type="button" @click="closeEditor()" class="text-sm text-[#6B6459] hover:text-[#1E1E1E]">Close</button>
@@ -429,10 +440,11 @@
                                 <div
                                     class="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4"
                                     @keydown.escape.window="closeAiEditor()"
+                                    @click.self="onAiEditorOutside()"
                                     role="dialog"
                                     aria-modal="true"
                                     aria-label="Edit generated image">
-                                    <div class="w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-xl" @click.outside="closeAiEditor()">
+                                    <div class="w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-xl" @click.stop>
                                         <div class="flex items-center justify-between border-b border-[#EFE7D6] px-4 py-3">
                                             <h3 class="font-semibold">Edit generated image</h3>
                                             <button type="button" @click="closeAiEditor()" class="text-sm text-[#6B6459] hover:text-[#1E1E1E]">Close</button>

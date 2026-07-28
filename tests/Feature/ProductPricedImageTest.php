@@ -171,15 +171,21 @@ class ProductPricedImageTest extends TestCase
     }
 
     #[Test]
-    public function edit_modal_can_be_closed(): void
+    public function edit_priced_image_button_opens_modal_even_with_invalid_draft_fields(): void
     {
         $this->actingAs($this->adminUser());
         $product = $this->productWithPrimaryImage();
 
         Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->assertSeeHtml('wire:key="priced-image-modal-host"')
+            ->assertDontSeeHtml('aria-label="Priced image controls"')
+            ->set('compare_at_price', '100') // invalid vs selling price 650 — must not block open
+            ->set('price', '650')
             ->call('openPricedImageModal')
+            ->assertHasNoErrors()
             ->assertSet('showPricedImageModal', true)
-            ->call('closePricedImageModal')
-            ->assertSet('showPricedImageModal', false);
+            ->assertSeeHtml('aria-label="Priced image controls"')
+            ->assertSee('Text position')
+            ->assertSee('Close');
     }
 }

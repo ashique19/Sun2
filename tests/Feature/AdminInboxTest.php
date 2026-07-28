@@ -10,6 +10,7 @@ use App\Services\Channels\ChannelReplyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Livewire\Attributes\Url;
 use Livewire\Livewire;
 use Mockery;
 use PHPUnit\Framework\Attributes\Test;
@@ -98,6 +99,32 @@ class AdminInboxTest extends TestCase
             ->test(AdminInbox::class)
             ->assertSet('selectedConversationId', $conversation->id)
             ->assertSet('mobileThreadOpen', true);
+    }
+
+    #[Test]
+    public function conversation_url_uses_push_history_so_browser_back_returns_to_list(): void
+    {
+        $attribute = (new \ReflectionProperty(AdminInbox::class, 'selectedConversationId'))
+            ->getAttributes(Url::class)[0] ?? null;
+
+        $this->assertNotNull($attribute);
+        $instance = $attribute->newInstance();
+        $this->assertTrue($instance->history);
+        $this->assertSame('conversation', $instance->as);
+    }
+
+    #[Test]
+    public function clearing_conversation_id_closes_mobile_thread_pane(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSet('mobileThreadOpen', true)
+            // Simulates browser Back restoring /admin/inbox without ?conversation=
+            ->set('selectedConversationId', null)
+            ->assertSet('mobileThreadOpen', false);
     }
 
     #[Test]

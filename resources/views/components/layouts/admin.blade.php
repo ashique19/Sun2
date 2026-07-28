@@ -7,6 +7,9 @@
     <title>{{ $title ?? 'Admin - Sundoritoma' }}</title>
     <meta name="robots" content="noindex, nofollow">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @if (request()->routeIs('admin.inbox'))
+        @vite(['resources/js/inbox-product-crop.js'])
+    @endif
     @livewireStyles
 </head>
 <body class="min-h-screen bg-[#FAF6EF] text-[#1E1E1E] antialiased">

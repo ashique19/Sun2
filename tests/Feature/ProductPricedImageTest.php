@@ -117,6 +117,22 @@ class ProductPricedImageTest extends TestCase
         $product->refresh();
         $this->assertNotNull($product->priced_image_path);
         $this->assertFileExists(public_path(ltrim($product->priced_image_path, '/')));
+
+        Livewire::test(AdminProducts::class)
+            ->assertSeeHtml('alt="Priced image for List Product"')
+            ->assertSeeHtml($product->priced_image_path)
+            ->assertSee('Rebuild');
+    }
+
+    #[Test]
+    public function products_list_priced_image_column_has_no_thumb_when_missing(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->productWithPrimaryImage('No Priced Yet');
+
+        Livewire::test(AdminProducts::class)
+            ->assertSee('Put price on image')
+            ->assertDontSeeHtml('alt="Priced image for No Priced Yet"');
     }
 
     #[Test]

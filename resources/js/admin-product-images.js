@@ -3,31 +3,48 @@ import 'cropperjs/dist/cropper.css';
 
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+const afterPaint = (callback) => {
+    requestAnimationFrame(() => {
+        requestAnimationFrame(callback);
+    });
+};
+
 const registerProductImageAlpineData = () => {
     Alpine.data('productImageUploader', () => ({
         queue: [],
         editorOpen: false,
         editorIndex: null,
+        allowOutsideClose: false,
         cropper: null,
         uploading: false,
         uploadError: null,
 
         addFiles(event) {
             const files = Array.from(event.target.files ?? []);
+            let skipped = 0;
 
             for (const file of files) {
-                if (!file.type.startsWith('image/')) {
+                // Some browsers leave type empty for HEIC/odd files — still allow common image extensions.
+                const looksLikeImage = file.type.startsWith('image/')
+                    || /\.(jpe?g|png|webp|gif)$/i.test(file.name);
+
+                if (!looksLikeImage) {
+                    skipped += 1;
                     continue;
                 }
 
                 this.queue.push({
                     id: makeId(),
                     name: file.name,
-                    mime: file.type,
+                    mime: file.type || 'image/jpeg',
                     alt: '',
                     previewUrl: URL.createObjectURL(file),
                     file,
                 });
+            }
+
+            if (skipped > 0 && this.queue.length === 0) {
+                this.uploadError = 'No supported images were selected. Use JPG, PNG, or WebP.';
             }
 
             event.target.value = '';
@@ -44,27 +61,40 @@ const registerProductImageAlpineData = () => {
 
             if (this.editorOpen && this.editorIndex === index) {
                 this.closeEditor();
+            } else if (this.editorOpen && this.editorIndex !== null && this.editorIndex > index) {
+                this.editorIndex -= 1;
             }
         },
 
         openEditor(index) {
+            this.allowOutsideClose = false;
             this.editorIndex = index;
             this.editorOpen = true;
             this.uploadError = null;
 
+            // Teleport + x-if need a paint cycle before $refs.cropImage exists.
             this.$nextTick(() => {
-                const image = this.$refs.cropImage;
-
-                if (!image) {
-                    return;
-                }
-
-                if (image.complete) {
-                    this.initCropper();
-                } else {
-                    image.onload = () => this.initCropper();
-                }
+                afterPaint(() => {
+                    this.allowOutsideClose = true;
+                    this.bootCropper();
+                });
             });
+        },
+
+        bootCropper() {
+            const image = this.$refs.cropImage;
+
+            if (!image || !this.editorOpen) {
+                return;
+            }
+
+            const start = () => this.initCropper();
+
+            if (image.complete && image.naturalWidth > 0) {
+                start();
+            } else {
+                image.onload = start;
+            }
         },
 
         initCropper() {
@@ -72,7 +102,7 @@ const registerProductImageAlpineData = () => {
 
             const image = this.$refs.cropImage;
 
-            if (!image) {
+            if (!image || !this.editorOpen) {
                 return;
             }
 
@@ -96,6 +126,13 @@ const registerProductImageAlpineData = () => {
             this.destroyCropper();
             this.editorOpen = false;
             this.editorIndex = null;
+            this.allowOutsideClose = false;
+        },
+
+        onEditorOutside() {
+            if (this.allowOutsideClose) {
+                this.closeEditor();
+            }
         },
 
         rotate(degrees) {
@@ -179,7 +216,10 @@ const registerProductImageAlpineData = () => {
                         'newImages',
                         files,
                         () => resolve(),
-                        (error) => reject(error),
+                        (error) => reject(error instanceof Error ? error : new Error(String(error || 'Upload failed'))),
+                        () => {},
+                        () => reject(new Error('Upload cancelled')),
+                        false, // replace property — do not append stale temp files
                     );
                 });
 
@@ -194,9 +234,31 @@ const registerProductImageAlpineData = () => {
                 this.queue = [];
             } catch (error) {
                 console.error(error);
-                this.uploadError = 'Upload failed. Check product details (name, price, slug) and try again.';
+                const livewireMessage = this.firstLivewireError();
+                this.uploadError = livewireMessage
+                    || (error?.message && error.message !== 'Upload failed'
+                        ? error.message
+                        : 'Upload failed. Check product details (name, price, slug) and try again.');
             } finally {
                 this.uploading = false;
+            }
+        },
+
+        firstLivewireError() {
+            try {
+                const errors = this.$wire.$errors;
+                if (!errors || typeof errors.first !== 'function') {
+                    return null;
+                }
+
+                return errors.first('newImages')
+                    || errors.first('newImages.0')
+                    || errors.first('name')
+                    || errors.first('slug')
+                    || errors.first('price')
+                    || null;
+            } catch {
+                return null;
             }
         },
     }));
@@ -205,6 +267,7 @@ const registerProductImageAlpineData = () => {
         aiEditorOpen: false,
         aiEditorId: null,
         aiEditorSrc: '',
+        aiAllowOutsideClose: false,
         aiCropper: null,
 
         syncFromWire() {
@@ -219,25 +282,33 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
+            this.aiAllowOutsideClose = false;
             this.aiEditorId = id;
             this.aiEditorSrc = `data:${candidate.mime};base64,${candidate.base64}`;
             this.aiEditorOpen = true;
 
             this.$nextTick(() => {
-                const image = this.$refs.aiCropImage;
-
-                if (!image) {
-                    return;
-                }
-
-                const start = () => this.initAiCropper();
-
-                if (image.complete) {
-                    start();
-                } else {
-                    image.onload = start;
-                }
+                afterPaint(() => {
+                    this.aiAllowOutsideClose = true;
+                    this.bootAiCropper();
+                });
             });
+        },
+
+        bootAiCropper() {
+            const image = this.$refs.aiCropImage;
+
+            if (!image || !this.aiEditorOpen) {
+                return;
+            }
+
+            const start = () => this.initAiCropper();
+
+            if (image.complete && image.naturalWidth > 0) {
+                start();
+            } else {
+                image.onload = start;
+            }
         },
 
         initAiCropper() {
@@ -245,7 +316,7 @@ const registerProductImageAlpineData = () => {
 
             const image = this.$refs.aiCropImage;
 
-            if (!image) {
+            if (!image || !this.aiEditorOpen) {
                 return;
             }
 
@@ -270,6 +341,13 @@ const registerProductImageAlpineData = () => {
             this.aiEditorOpen = false;
             this.aiEditorId = null;
             this.aiEditorSrc = '';
+            this.aiAllowOutsideClose = false;
+        },
+
+        onAiEditorOutside() {
+            if (this.aiAllowOutsideClose) {
+                this.closeAiEditor();
+            }
         },
 
         rotateAi(degrees) {

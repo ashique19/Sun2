@@ -4,12 +4,20 @@
         ->count();
 @endphp
 
-<div class="space-y-4 xl:space-y-6" wire:poll.10s.visible="pollSyncFromFacebook">
-    <livewire:admin.admin-facebook-token-gate />
+<div
+    class="xl:space-y-6"
+    wire:poll.10s.visible="pollSyncFromFacebook"
+>
+    <div @class([
+        'px-4 pt-3 xl:px-0 xl:pt-0',
+        'hidden xl:block' => $mobileThreadOpen,
+    ])>
+        <livewire:admin.admin-facebook-token-gate />
+    </div>
 
     {{-- Header: compact on mobile, full controls on desktop. Hidden on mobile while reading a thread. --}}
     <div @class([
-        'flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between xl:gap-4',
+        'flex flex-col gap-3 px-4 pt-3 xl:flex-row xl:items-end xl:justify-between xl:gap-4 xl:px-0 xl:pt-0',
         'hidden xl:flex' => $mobileThreadOpen,
     ])>
         <div class="min-w-0">
@@ -44,7 +52,6 @@
                 </button>
             </div>
 
-            {{-- Single filter set: panel on small screens, inline from xl --}}
             <div @class([
                 'grid w-full grid-cols-2 gap-2 rounded-xl border border-[#EFE7D6] bg-white p-3 xl:flex xl:w-auto xl:flex-wrap xl:items-center xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0',
                 'hidden' => ! $mobileFiltersOpen,
@@ -77,10 +84,16 @@
     </div>
 
     @if ($error)
-        <div class="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900 xl:px-4 xl:py-3">{{ $error }}</div>
+        <div @class([
+            'mx-4 mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900 xl:mx-0 xl:mt-0 xl:px-4 xl:py-3',
+            'hidden xl:block' => $mobileThreadOpen,
+        ])>{{ $error }}</div>
     @endif
     @if ($statusMessage)
-        <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900 xl:px-4 xl:py-3">{{ $statusMessage }}</div>
+        <div @class([
+            'mx-4 mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900 xl:mx-0 xl:mt-0 xl:px-4 xl:py-3',
+            'hidden xl:block' => $mobileThreadOpen,
+        ])>{{ $statusMessage }}</div>
     @endif
 
     @if ($conversations->isEmpty() || $diagnostics['severity'] !== 'ok')
@@ -92,7 +105,7 @@
             };
         @endphp
         <div @class([
-            'rounded-xl border p-3 sm:p-4 xl:p-5',
+            'mx-4 mt-3 rounded-xl border p-3 sm:p-4 xl:mx-0 xl:mt-0 xl:p-5',
             $box,
             'hidden xl:block' => $mobileThreadOpen && $conversations->isNotEmpty(),
         ])>
@@ -115,7 +128,7 @@
                             <code class="rounded bg-white/70 px-1.5 py-0.5">standby</code>).
                             <strong>Development mode:</strong> even as Page owner, only Facebook accounts that are App Admins/Developers/Testers will appear.
                             Add other accounts under Meta App → App Roles → Roles (Testers), or switch the app to <strong>Live</strong>.
-                            Use <strong>Sync from Facebook</strong> to import threads Graph can currently see.
+                            Use <strong>Sync from Facebook</strong> (or leave this page open — it syncs every 10s) to import threads Graph can currently see.
                         </p>
                     </details>
                     <p class="mt-2 hidden text-xs opacity-80 xl:block">
@@ -125,7 +138,7 @@
                         <code class="rounded bg-white/70 px-1.5 py-0.5">standby</code>).
                         <strong>Development mode:</strong> even as Page owner, only Facebook accounts that are App Admins/Developers/Testers will appear.
                         Add other accounts under Meta App → App Roles → Roles (Testers), or switch the app to <strong>Live</strong>.
-                        Use <strong>Sync from Facebook</strong> to import threads Graph can currently see.
+                        Use <strong>Sync from Facebook</strong> (or leave this page open — it syncs every 10s) to import threads Graph can currently see.
                     </p>
                 </div>
                 @if ($diagnostics['filters_active'] && $conversations->isEmpty())
@@ -144,7 +157,7 @@
                         </span>
                         <div class="min-w-0">
                             <div class="font-medium">{{ $check['label'] }}</div>
-                            <div class="text-xs opacity-80 break-words">{{ $check['detail'] }}</div>
+                            <div class="break-words text-xs opacity-80">{{ $check['detail'] }}</div>
                         </div>
                     </li>
                 @endforeach
@@ -154,7 +167,7 @@
 
     @if ($diagnostics['filters_active'] && $conversations->count() !== $diagnostics['total_conversations'])
         <div @class([
-            'flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 xl:px-4 xl:py-3',
+            'mx-4 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 xl:mx-0 xl:mt-0 xl:px-4 xl:py-3',
             'hidden xl:flex' => $mobileThreadOpen,
         ])>
             <p>
@@ -168,14 +181,18 @@
         </div>
     @endif
 
-    <div class="grid gap-4 xl:grid-cols-[22rem_minmax(0,1fr)] xl:items-start xl:gap-6">
-        {{-- Conversation list: full-screen on mobile when thread closed --}}
+    <div @class([
+        'mt-3 grid xl:mt-0 xl:grid-cols-[22rem_minmax(0,1fr)] xl:items-stretch xl:gap-6',
+        'min-h-[calc(100dvh-8.5rem)] xl:min-h-0',
+    ])>
+        {{-- Conversation list --}}
         <div @class([
-            'flex flex-col overflow-hidden rounded-xl border border-[#EFE7D6] bg-white',
-            'h-[calc(100dvh-11rem)] max-h-[calc(100dvh-11rem)] xl:h-auto xl:max-h-[75vh]',
+            'flex flex-col overflow-hidden bg-white',
+            'border-y border-[#EFE7D6] xl:rounded-2xl xl:border',
+            'h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] xl:h-[min(75vh,52rem)] xl:max-h-[min(75vh,52rem)]',
             $mobileThreadOpen ? 'hidden xl:flex' : 'flex',
         ])>
-            <div class="shrink-0 border-b border-[#E7DFCF] px-3 py-2.5 text-sm font-medium xl:px-4 xl:py-3">
+            <div class="shrink-0 border-b border-[#E7DFCF] px-4 py-3 text-sm font-medium">
                 Conversations
                 <span class="ml-1 text-xs font-normal text-[#8C8474]">
                     ({{ $conversations->count() }} shown
@@ -185,7 +202,7 @@
                     )
                 </span>
             </div>
-            <div class="min-h-0 flex-1 overflow-y-auto divide-y divide-[#E7DFCF]">
+            <div class="min-h-0 flex-1 overflow-y-auto divide-y divide-[#F0E9DC]">
                 @forelse ($conversations as $conversation)
                     @php
                         $selected = $selectedConversation?->id === $conversation->id;
@@ -199,45 +216,54 @@
                         wire:key="inbox-conversation-{{ $conversation->id }}"
                         wire:click="selectConversation({{ $conversation->id }})"
                         @class([
-                            'block w-full px-3 py-2.5 text-left transition xl:px-4 xl:py-3',
-                            $selected ? 'bg-[#FAF6EF]' : 'hover:bg-[#FAF6EF]/60',
+                            'block w-full px-4 py-3 text-left transition',
+                            $selected ? 'bg-[#FAF6EF]' : 'active:bg-[#FAF6EF] hover:bg-[#FAF6EF]/60',
                         ])>
-                        <div class="flex items-center gap-2">
-                            @if ($conversation->isUnread())
-                                <span class="h-2 w-2 shrink-0 rounded-full bg-rose-500" title="Unread" aria-label="Unread"></span>
-                            @else
-                                <span class="h-2 w-2 shrink-0 rounded-full bg-transparent" aria-hidden="true"></span>
-                            @endif
-                            <p class="min-w-0 flex-1 truncate text-sm font-semibold text-[#1E1E1E]">
-                                {{ $displayName }}
-                            </p>
-                            <span class="shrink-0 text-[10px] tabular-nums text-[#8C8474]">
-                                {{ $timestamp?->format('d M h:i A') }}
-                            </span>
-                        </div>
-                        <div class="mt-0.5 flex items-center gap-1.5 pl-4">
-                            <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#8C8474]">
+                        <div class="flex items-center gap-2.5">
+                            <span @class([
+                                'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold',
+                                $conversation->channel === 'whatsapp' ? 'bg-emerald-100 text-emerald-800' : 'bg-[#E8F0FF] text-[#315AA9]',
+                            ])>
                                 {{ $channelShort }}
                             </span>
-                            @if ($conversation->draftOrder)
-                                <span class="shrink-0 truncate text-[10px] font-semibold text-[#315AA9]">
-                                    {{ $conversation->draftOrder->order_number }}
-                                </span>
-                            @endif
-                            @if ($latest)
-                                @if ($latest->isImageAttachment())
-                                    <img
-                                        src="{{ route('admin.inbox.media', $latest) }}"
-                                        alt=""
-                                        class="h-5 w-5 shrink-0 rounded object-cover bg-[#F1EADB]"
-                                        loading="lazy">
-                                @endif
-                                <p class="min-w-0 flex-1 truncate text-xs text-[#8C8474]">
-                                    {{ $latest->direction === 'outbound' ? 'You: ' : '' }}{{ $latest->body ?: ($latest->isImageAttachment() ? 'Photo' : 'Attachment') }}
-                                </p>
-                            @else
-                                <p class="min-w-0 flex-1 truncate text-xs text-[#8C8474]">No messages yet</p>
-                            @endif
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <p @class([
+                                        'min-w-0 flex-1 truncate text-sm text-[#1E1E1E]',
+                                        'font-semibold' => $conversation->isUnread(),
+                                        'font-medium' => ! $conversation->isUnread(),
+                                    ])>
+                                        {{ $displayName }}
+                                    </p>
+                                    <span class="shrink-0 text-[10px] tabular-nums text-[#8C8474]">
+                                        {{ $timestamp?->format('d M h:i A') }}
+                                    </span>
+                                </div>
+                                <div class="mt-0.5 flex items-center gap-1.5">
+                                    @if ($conversation->isUnread())
+                                        <span class="h-2 w-2 shrink-0 rounded-full bg-[#C9A227]" title="Unread" aria-label="Unread"></span>
+                                    @endif
+                                    @if ($conversation->draftOrder)
+                                        <span class="shrink-0 truncate text-[10px] font-semibold text-[#315AA9]">
+                                            {{ $conversation->draftOrder->order_number }}
+                                        </span>
+                                    @endif
+                                    @if ($latest)
+                                        @if ($latest->isImageAttachment())
+                                            <img
+                                                src="{{ route('admin.inbox.media', $latest) }}"
+                                                alt=""
+                                                class="h-5 w-5 shrink-0 rounded object-cover bg-[#F1EADB]"
+                                                loading="lazy">
+                                        @endif
+                                        <p class="min-w-0 flex-1 truncate text-xs text-[#8C8474]">
+                                            {{ $latest->direction === 'outbound' ? 'You: ' : '' }}{{ $latest->body ?: ($latest->isImageAttachment() ? 'Photo' : 'Attachment') }}
+                                        </p>
+                                    @else
+                                        <p class="min-w-0 flex-1 truncate text-xs text-[#8C8474]">No messages yet</p>
+                                    @endif
+                                </div>
+                            </div>
                         </div>
                         <span class="sr-only">
                             @if ($conversation->isUnread()) Unread @endif
@@ -256,28 +282,29 @@
             </div>
         </div>
 
-        {{-- Thread: full-screen on mobile when open; always visible on desktop --}}
+        {{-- Thread: fullscreen messenger sheet on mobile --}}
         <div @class([
-            'flex flex-col overflow-hidden rounded-xl border border-[#EFE7D6] bg-white',
-            'h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] xl:h-[75vh] xl:max-h-[75vh]',
+            'flex flex-col overflow-hidden bg-[#F7F3EA]',
+            'fixed inset-0 z-30 xl:static xl:z-auto xl:rounded-2xl xl:border xl:border-[#EFE7D6] xl:bg-white',
+            'xl:h-[min(75vh,52rem)] xl:max-h-[min(75vh,52rem)]',
             $mobileThreadOpen ? 'flex' : 'hidden xl:flex',
         ])>
             @if ($selectedConversation)
-                <div class="shrink-0 border-b border-[#E7DFCF] px-3 py-2.5 xl:px-4 xl:py-3">
-                    <div class="flex items-start gap-2">
+                <div class="shrink-0 border-b border-[#E7DFCF] bg-white/95 px-3 py-2.5 backdrop-blur xl:px-4 xl:py-3">
+                    <div class="flex items-center gap-2">
                         <button type="button"
                             wire:click="closeMobileThread"
-                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] xl:hidden"
+                            class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#6B6459] hover:bg-[#FAF6EF] xl:hidden"
                             aria-label="Back to conversations">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
                                 <path fill-rule="evenodd" d="M17 10a.75.75 0 0 1-.75.75H5.56l3.22 3.22a.75.75 0 1 1-1.06 1.06l-4.5-4.5a.75.75 0 0 1 0-1.06l4.5-4.5a.75.75 0 0 1 1.06 1.06L5.56 9.25H16.25A.75.75 0 0 1 17 10Z" clip-rule="evenodd" />
                             </svg>
                         </button>
                         <div class="min-w-0 flex-1">
-                            <h2 class="truncate font-semibold text-[#1E1E1E]">
+                            <h2 class="truncate text-base font-semibold text-[#1E1E1E]">
                                 {{ $selectedConversation->customer_name ?: $selectedConversation->customer_phone ?: $selectedConversation->external_user_id }}
                             </h2>
-                            <p class="mt-0.5 text-xs text-[#8C8474]">
+                            <p class="mt-0.5 truncate text-[11px] text-[#8C8474]">
                                 {{ ucfirst($selectedConversation->channel) }}
                                 ·
                                 @if ($selectedConversation->isWithinMessagingWindow())
@@ -299,57 +326,74 @@
                 <div
                     wire:key="thread-{{ $selectedConversation->id }}-{{ $selectedConversation->messages->count() }}-{{ $selectedConversation->messages->max('id') }}"
                     x-init="$el.scrollTop = $el.scrollHeight"
-                    class="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3 xl:px-4 xl:py-4">
+                    class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3 xl:px-4 xl:py-4">
                     @foreach ($selectedConversation->messages as $messageRow)
+                        @php $isOutbound = $messageRow->direction === 'outbound'; @endphp
                         <div @class([
-                            'group relative max-w-[90%] rounded-lg px-3 py-2 text-sm',
-                            'ml-auto bg-[#C9A227]/15 text-[#1E1E1E]' => $messageRow->direction === 'outbound',
-                            'mr-auto bg-[#FAF6EF] text-[#1E1E1E]' => $messageRow->direction !== 'outbound',
+                            'flex w-full',
+                            'justify-end' => $isOutbound,
+                            'justify-start' => ! $isOutbound,
                         ])>
-                            @if ($messageRow->replyTo)
-                                <div class="mb-2 rounded border border-[#E7DFCF] bg-white/70 px-2 py-1 text-[11px] text-[#6B6459]">
-                                    <span class="font-semibold">Replying to</span>
-                                    <span class="block truncate">{{ $messageRow->replyTo->previewText() }}</span>
-                                </div>
-                            @endif
-
-                            @if (filled($messageRow->body))
-                                <p class="whitespace-pre-wrap break-words">{{ $messageRow->body }}</p>
-                            @endif
-                            @if ($messageRow->isImageAttachment())
-                                <a href="{{ route('admin.inbox.media', $messageRow) }}" target="_blank" rel="noopener"
-                                    class="mt-2 block overflow-hidden rounded-lg border border-[#E7DFCF] bg-white">
-                                    <img
-                                        src="{{ route('admin.inbox.media', $messageRow) }}"
-                                        alt="Photo"
-                                        class="max-h-64 w-full object-contain bg-[#FAF6EF]"
-                                        loading="lazy">
-                                </a>
-                            @elseif ($messageRow->hasMedia())
-                                <a href="{{ route('admin.inbox.media', $messageRow) }}" target="_blank" rel="noopener"
-                                    class="mt-1 inline-block text-xs text-[#C9A227] hover:underline">
-                                    View attachment
-                                </a>
-                            @endif
-                            <div class="mt-1 flex items-center justify-between gap-2">
-                                @if ($messageRow->sent_at)
-                                    <p class="text-[10px] text-[#8C8474]">
-                                        {{ $messageRow->sent_at->timezone('Asia/Dhaka')->format('d M Y, h:i A') }}
-                                    </p>
-                                @else
-                                    <span></span>
+                            <div @class([
+                                'group relative max-w-[82%] px-3 py-2 text-sm shadow-sm sm:max-w-[70%]',
+                                'rounded-2xl rounded-br-md bg-[#C9A227] text-white' => $isOutbound,
+                                'rounded-2xl rounded-bl-md bg-white text-[#1E1E1E] ring-1 ring-[#EBE3D4]' => ! $isOutbound,
+                            ])>
+                                @if ($messageRow->replyTo)
+                                    <div @class([
+                                        'mb-2 rounded-xl px-2 py-1 text-[11px]',
+                                        'bg-black/10 text-white/90' => $isOutbound,
+                                        'border border-[#E7DFCF] bg-[#FAF6EF] text-[#6B6459]' => ! $isOutbound,
+                                    ])>
+                                        <span class="font-semibold">Replying to</span>
+                                        <span class="block truncate">{{ $messageRow->replyTo->previewText() }}</span>
+                                    </div>
                                 @endif
-                                <button type="button"
-                                    wire:click="setReplyTo({{ $messageRow->id }})"
-                                    class="text-[10px] font-medium text-[#C9A227] opacity-80 hover:opacity-100 hover:underline">
-                                    Reply
-                                </button>
+
+                                @if (filled($messageRow->body))
+                                    <p class="whitespace-pre-wrap break-words leading-relaxed">{{ $messageRow->body }}</p>
+                                @endif
+                                @if ($messageRow->isImageAttachment())
+                                    <a href="{{ route('admin.inbox.media', $messageRow) }}" target="_blank" rel="noopener"
+                                        class="mt-2 block overflow-hidden rounded-xl {{ $isOutbound ? 'bg-black/10' : 'bg-[#FAF6EF]' }}">
+                                        <img
+                                            src="{{ route('admin.inbox.media', $messageRow) }}"
+                                            alt="Photo"
+                                            class="max-h-72 w-full object-contain"
+                                            loading="lazy">
+                                    </a>
+                                @elseif ($messageRow->hasMedia())
+                                    <a href="{{ route('admin.inbox.media', $messageRow) }}" target="_blank" rel="noopener"
+                                        class="mt-1 inline-block text-xs {{ $isOutbound ? 'text-white/90 underline' : 'text-[#C9A227] hover:underline' }}">
+                                        View attachment
+                                    </a>
+                                @endif
+                                <div class="mt-1 flex items-center justify-end gap-2">
+                                    @if ($messageRow->sent_at)
+                                        <p @class([
+                                            'text-[10px] tabular-nums',
+                                            'text-white/75' => $isOutbound,
+                                            'text-[#8C8474]' => ! $isOutbound,
+                                        ])>
+                                            {{ $messageRow->sent_at->timezone('Asia/Dhaka')->format('h:i A') }}
+                                        </p>
+                                    @endif
+                                    <button type="button"
+                                        wire:click="setReplyTo({{ $messageRow->id }})"
+                                        @class([
+                                            'text-[10px] font-medium opacity-0 transition group-hover:opacity-100 focus:opacity-100',
+                                            'text-white/90' => $isOutbound,
+                                            'text-[#C9A227]' => ! $isOutbound,
+                                        ])>
+                                        Reply
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     @endforeach
                 </div>
 
-                <div class="shrink-0 border-t border-[#E7DFCF] bg-white px-3 py-2.5 xl:px-4 xl:py-3">
+                <div class="shrink-0 border-t border-[#E7DFCF] bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 xl:px-4 xl:py-3">
                     @if ($error)
                         <p class="mb-2 text-xs text-rose-600">{{ $error }}</p>
                     @endif
@@ -358,7 +402,7 @@
                     @endif
 
                     @if ($replyToMessage)
-                        <div class="mb-2 flex items-start justify-between gap-3 rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2">
+                        <div class="mb-2 flex items-start justify-between gap-3 rounded-2xl border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2">
                             <div class="min-w-0">
                                 <div class="text-[11px] font-semibold text-[#6B6459]">Replying to</div>
                                 <div class="truncate text-xs text-[#1E1E1E]">{{ $replyToMessage->previewText(120) }}</div>
@@ -370,8 +414,8 @@
                     @endif
 
                     @if ($replyImage)
-                        <div class="mb-2 flex items-center gap-3 rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2">
-                            <img src="{{ $replyImage->temporaryUrl() }}" alt="" class="h-12 w-12 rounded object-cover">
+                        <div class="mb-2 flex items-center gap-3 rounded-2xl border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2">
+                            <img src="{{ $replyImage->temporaryUrl() }}" alt="" class="h-12 w-12 rounded-xl object-cover">
                             <div class="min-w-0 flex-1 text-xs text-[#6B6459]">Image ready to send</div>
                             <button type="button" wire:click="clearReplyImage" class="text-xs text-[#8C8474] hover:text-[#1E1E1E]">
                                 Remove
@@ -383,7 +427,7 @@
                     @enderror
 
                     <div class="flex items-end gap-2">
-                        <label class="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#E0D6C2] text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]" title="Attach image">
+                        <label class="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#E0D6C2] bg-[#FAF6EF] text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]" title="Attach image">
                             <input type="file" class="hidden" wire:model="replyImage" accept="image/*">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
                                 <path fill-rule="evenodd" d="M1 5.25A2.25 2.25 0 0 1 3.25 3h13.5A2.25 2.25 0 0 1 19 5.25v9.5A2.25 2.25 0 0 1 16.75 17H3.25A2.25 2.25 0 0 1 1 14.75v-9.5Zm4.78 1.47a.75.75 0 0 0-1.06 1.06l2.5 2.5a.75.75 0 0 0 1.06 0l1.72-1.72 3.22 3.22a.75.75 0 1 0 1.06-1.06l-3.75-3.75a.75.75 0 0 0-1.06 0L7.28 8.72 5.78 7.22Z" clip-rule="evenodd" />
@@ -392,19 +436,22 @@
                         <div class="min-w-0 flex-1">
                             <div wire:loading wire:target="replyImage" class="mb-1 text-[11px] text-[#8C8474]">Uploading image…</div>
                             <input type="text" wire:model="replyText" placeholder="{{ $replyToMessage ? 'Write a reply…' : 'Message…' }}"
-                                class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
+                                class="w-full rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-4 py-2.5 text-sm focus:border-[#C9A227] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
                                 wire:keydown.enter.prevent="sendReply">
                         </div>
                         <button type="button"
                             wire:click="sendReply"
                             wire:loading.attr="disabled"
-                            class="rounded-lg bg-[#C9A227] px-3 py-2 text-sm font-semibold text-white hover:bg-[#b89220] disabled:opacity-60">
-                            Send
+                            class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#C9A227] text-white hover:bg-[#b89220] disabled:opacity-60"
+                            aria-label="Send">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+                                <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.154.75.75 0 0 0 0-1.115A28.897 28.897 0 0 0 3.105 2.288Z" />
+                            </svg>
                         </button>
                     </div>
                 </div>
             @else
-                <div class="flex flex-1 items-center justify-center px-4 py-16 text-center text-sm text-[#8C8474]">
+                <div class="flex flex-1 items-center justify-center bg-white px-4 py-16 text-center text-sm text-[#8C8474] xl:rounded-2xl">
                     @if ($conversations->isEmpty())
                         Once a Messenger webhook arrives, conversations will appear in the list.
                     @else

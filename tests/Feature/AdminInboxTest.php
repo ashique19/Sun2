@@ -65,6 +65,8 @@ class AdminInboxTest extends TestCase
             ->call('selectConversation', $conversation->id)
             ->assertSet('mobileThreadOpen', true)
             ->assertSeeHtml('aria-label="Back to conversations"')
+            ->assertSeeHtml('fixed inset-0 z-30')
+            ->assertSeeHtml('aria-label="Send"')
             ->call('closeMobileThread')
             ->assertSet('mobileThreadOpen', false)
             ->assertSet('selectedConversationId', $conversation->id);

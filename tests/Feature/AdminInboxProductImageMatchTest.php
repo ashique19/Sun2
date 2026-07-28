@@ -67,6 +67,36 @@ class AdminInboxProductImageMatchTest extends TestCase
     }
 
     #[Test]
+    public function opening_map_menu_keeps_field_picker_ready_until_product_modal(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $message = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => null,
+            'media_url' => 'https://example.test/chat-menu.jpg',
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSee('Open full size')
+            ->assertSee('+ Order')
+            ->call('openMessageMapMenu', $message->id)
+            ->assertSet('mappingMessageId', $message->id)
+            ->assertSet('mappingField', null)
+            ->assertSee('Add to order fields')
+            ->assertSee('Products')
+            ->call('beginMapField', 'product')
+            ->assertSet('mappingField', 'product')
+            ->assertSeeHtml('data-inbox-product-map-modal')
+            ->assertSeeHtml('max-w-lg');
+    }
+
+    #[Test]
     public function product_mapping_modal_opens_with_catalog_search(): void
     {
         $this->actingAs($this->adminUser());
@@ -97,7 +127,7 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->assertSee('Add product to order')
             ->assertSee('Search products')
             ->assertSeeHtml('data-inbox-product-map-modal')
-            ->assertSeeHtml('max-w-3xl')
+            ->assertSeeHtml('max-w-lg')
             ->set('mappingProductSearch', 'Silk Kurti')
             ->assertSee('Silk Kurti Search')
             ->assertSet('mappingField', 'product')
@@ -160,6 +190,7 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->call('openMessageMapMenu', $message->id)
             ->call('beginMapField', 'product')
             ->assertSee('Crop chat image')
+            ->assertSee('Open full size')
             ->set('mappingCroppedImage', $upload)
             ->call('matchProductFromCroppedImage')
             ->assertSet('mappingField', 'product')

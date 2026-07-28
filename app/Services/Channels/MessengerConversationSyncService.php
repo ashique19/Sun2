@@ -6,6 +6,7 @@ use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Services\Facebook\FacebookPageTokenService;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -33,6 +34,36 @@ class MessengerConversationSyncService
      * }
      */
     public function sync(int $conversationLimit = 25, int $messagesPerThread = 30): array
+    {
+        $lock = Cache::lock('messenger-conversation-sync', 180);
+
+        if (! $lock->get()) {
+            return [
+                'ok' => true,
+                'message' => 'A Messenger sync is already running.',
+                'conversations' => 0,
+                'messages' => 0,
+                'graph_threads' => 0,
+            ];
+        }
+
+        try {
+            return $this->runSync($conversationLimit, $messagesPerThread);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * @return array{
+     *     ok: bool,
+     *     message: string,
+     *     conversations: int,
+     *     messages: int,
+     *     graph_threads: int
+     * }
+     */
+    private function runSync(int $conversationLimit, int $messagesPerThread): array
     {
         $token = $this->tokens->token();
         $pageId = $this->tokens->pageId();

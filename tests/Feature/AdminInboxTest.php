@@ -288,27 +288,107 @@ class AdminInboxTest extends TestCase
     {
         config([
             'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'PAGE42',
             'facebook.graph_version' => 'v25.0',
         ]);
 
         Http::fake([
-            'https://graph.facebook.com/v25.0/me/messages*' => Http::response(['recipient_id' => 'psid-1'], 200),
+            'https://graph.facebook.com/v25.0/PAGE42/messages*' => Http::response(['recipient_id' => 'psid-1'], 200),
         ]);
 
         $this->actingAs($this->adminUser());
-        $conversation = $this->conversation(['last_read_at' => null]);
+        $conversation = $this->conversation([
+            'last_read_at' => null,
+            'last_inbound_at' => now()->subMinute(),
+            'messenger_seen_at' => null,
+        ]);
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->assertSet('selectedConversationId', $conversation->id);
 
         $this->assertNotNull($conversation->fresh()->last_read_at);
+        $this->assertNotNull($conversation->fresh()->messenger_seen_at);
 
         Http::assertSent(function ($request) {
-            return str_contains($request->url(), '/me/messages')
+            return str_contains($request->url(), '/PAGE42/messages')
                 && ($request['sender_action'] ?? null) === 'mark_seen'
                 && ($request['recipient']['id'] ?? null) === 'psid-1';
         });
+    }
+
+    #[Test]
+    public function refresh_retries_messenger_seen_after_graph_failure(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'PAGE42',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/PAGE42/messages*' => Http::sequence()
+                ->push(['error' => ['message' => 'Thread ownership required', 'code' => 10]], 400)
+                ->push(['error' => ['message' => 'Thread ownership required', 'code' => 10]], 400)
+                ->push(['recipient_id' => 'psid-1'], 200),
+            'https://graph.facebook.com/v25.0/PAGE42/take_thread_control*' => Http::sequence()
+                ->push(['error' => ['message' => 'busy']], 400)
+                ->push(['success' => true], 200),
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation([
+            'last_read_at' => null,
+            'last_inbound_at' => now()->subMinute(),
+            'messenger_seen_at' => null,
+        ]);
+
+        $component = Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id);
+
+        $this->assertNotNull($conversation->fresh()->last_read_at);
+        $this->assertNull($conversation->fresh()->messenger_seen_at);
+
+        $component->call('refreshInbox');
+
+        $this->assertNotNull($conversation->fresh()->messenger_seen_at);
+
+        Http::assertSent(function ($request) {
+            return str_contains($request->url(), '/take_thread_control');
+        });
+        Http::assertSent(function ($request) {
+            return str_contains($request->url(), '/PAGE42/messages')
+                && ($request['sender_action'] ?? null) === 'mark_seen';
+        });
+    }
+
+    #[Test]
+    public function deep_linked_conversation_marks_messenger_seen_on_mount(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'PAGE42',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/PAGE42/messages*' => Http::response(['recipient_id' => 'psid-1'], 200),
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation([
+            'last_read_at' => null,
+            'last_inbound_at' => now()->subMinute(),
+            'messenger_seen_at' => null,
+        ]);
+
+        Livewire::withQueryParams(['conversation' => $conversation->id])
+            ->test(AdminInbox::class)
+            ->assertSet('selectedConversationId', $conversation->id)
+            ->assertSet('mobileThreadOpen', true);
+
+        $this->assertNotNull($conversation->fresh()->last_read_at);
+        $this->assertNotNull($conversation->fresh()->messenger_seen_at);
     }
 
     #[Test]

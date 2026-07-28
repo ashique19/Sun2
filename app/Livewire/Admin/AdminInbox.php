@@ -59,12 +59,16 @@ class AdminInbox extends Component
      */
     public bool $mobileFiltersOpen = false;
 
-    public function mount(): void
+    public function mount(ChannelReplyService $replies): void
     {
         AdminAccess::ensureStaffAdmin();
 
         if ($this->selectedConversationId) {
             $this->mobileThreadOpen = true;
+            $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+            if ($conversation) {
+                $this->markConversationRead($conversation, $replies);
+            }
         }
 
         if ($this->channel !== '' || $this->unread !== '' || $this->window !== '' || $this->linked !== '') {
@@ -240,6 +244,7 @@ class AdminInbox extends Component
 
     /**
      * Lightweight poll refresh for conversation list + open thread.
+     * Also retries Messenger mark_seen until Graph catches up to latest inbound.
      */
     public function refreshInbox(ChannelReplyService $replies): void
     {
@@ -249,8 +254,16 @@ class AdminInbox extends Component
 
         $conversation = ChannelConversation::query()->find($this->selectedConversationId);
 
-        if ($conversation && $conversation->isUnread()) {
-            $this->markConversationRead($conversation, $replies);
+        if (! $conversation) {
+            return;
+        }
+
+        if ($conversation->isUnread()) {
+            $conversation->markRead(auth()->id());
+        }
+
+        if ($conversation->needsMessengerSeenSync()) {
+            $replies->markSeen($conversation);
         }
     }
 

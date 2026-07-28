@@ -171,6 +171,34 @@ class ProductPricedImageTest extends TestCase
     }
 
     #[Test]
+    public function edit_page_shows_priced_image_preview_outside_the_modal(): void
+    {
+        $this->actingAs($this->adminUser());
+        $product = $this->productWithPrimaryImage();
+        $service = app(ProductPricedImageService::class);
+        $path = $service->generate($product, [
+            'position' => 'top-left',
+            'font' => 48,
+        ]);
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product->fresh(['images'])])
+            ->assertSet('showPricedImageModal', false)
+            ->assertSee('Shareable photo with price stamped on it')
+            ->assertSeeHtml('alt="Priced image for Necklace Set"')
+            ->assertSeeHtml($path);
+    }
+
+    #[Test]
+    public function edit_page_shows_empty_priced_image_state_when_missing(): void
+    {
+        $this->actingAs($this->adminUser());
+        $product = $this->productWithPrimaryImage();
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->assertSee('No priced image yet. Use Put price on image to create one.');
+    }
+
+    #[Test]
     public function edit_modal_can_delete_priced_image_and_keeps_layout(): void
     {
         $this->actingAs($this->adminUser());

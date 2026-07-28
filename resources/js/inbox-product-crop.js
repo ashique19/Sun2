@@ -39,6 +39,13 @@ const registerInboxProductCrop = () => {
                 autoCropArea: 0.85,
                 responsive: true,
                 background: false,
+                // Keep Cropper inside the fixed-height wrapper so tall chat
+                // images cannot blow the product modal past the viewport.
+                checkOrientation: false,
+            });
+
+            this.$nextTick(() => {
+                this.cropper?.resize();
             });
         },
 

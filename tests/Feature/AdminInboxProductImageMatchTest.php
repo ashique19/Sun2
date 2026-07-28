@@ -95,6 +95,7 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->assertSet('mappingField', 'product')
             ->assertSeeHtml('data-inbox-product-map-modal')
             ->assertSeeHtml('z-index: 100000')
+            ->assertSeeHtml('max-height: calc(100svh - 1rem)')
             ->assertDontSee('Search older messages…');
     }
 

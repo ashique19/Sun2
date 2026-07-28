@@ -762,17 +762,17 @@
                     data-inbox-product-map-modal
                     wire:key="product-map-modal-{{ $mappingMessage->id }}"
                     wire:click.self="closeMessageMapMenu"
-                    class="fixed inset-0 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+                    class="fixed inset-0 flex items-end justify-center overflow-y-auto overscroll-contain bg-black/50 p-0 sm:items-center sm:p-4"
                     style="z-index: 100000;"
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="inbox-product-map-title"
                 >
                     <div
-                        class="relative flex max-h-[min(88dvh,36rem)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-[#E7DFCF] bg-white shadow-2xl sm:max-h-[min(85vh,36rem)] sm:rounded-2xl"
+                        class="relative flex w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-[#E7DFCF] bg-white shadow-2xl sm:rounded-2xl"
+                        style="max-height: calc(100vh - 1rem); max-height: calc(100dvh - 1rem); max-height: calc(100svh - 1rem); min-height: 0;"
                         @click.stop
                         @mousedown.stop
-                        @touchstart.stop
                     >
                         <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#E7DFCF] px-4 py-3">
                             <div class="min-w-0">
@@ -784,7 +784,7 @@
                             <button type="button" wire:click="closeMessageMapMenu" class="text-2xl leading-none text-[#8C8474] hover:text-[#1E1E1E]" aria-label="Close">&times;</button>
                         </div>
 
-                        <div class="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+                        <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4" style="-webkit-overflow-scrolling: touch;">
                             <div>
                                 <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Search products</label>
                                 <input type="search"
@@ -792,7 +792,7 @@
                                     placeholder="Name, SKU, or price…"
                                     class="w-full rounded-xl border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
                                     aria-label="Search products">
-                                <div class="mt-2 max-h-40 space-y-1.5 overflow-y-auto">
+                                <div class="mt-2 max-h-36 space-y-1.5 overflow-y-auto overscroll-contain sm:max-h-40">
                                     @forelse ($mappingProductSuggestions as $suggestion)
                                         <button type="button"
                                             wire:click="applyMapField('product', {{ $suggestion['id'] }})"
@@ -834,12 +834,15 @@
                                     class="rounded-xl border border-[#E7DFCF] bg-[#FAF6EF] p-3"
                                 >
                                     <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Crop chat image</p>
-                                    <div class="overflow-hidden rounded-lg bg-black/5">
+                                    <div
+                                        class="relative overflow-hidden rounded-lg bg-black/5"
+                                        style="height: min(32vh, 14rem); max-height: min(32vh, 14rem);"
+                                    >
                                         <img
                                             x-ref="cropImage"
                                             src="{{ route('admin.inbox.media', $mappingMessage) }}"
                                             alt="Chat image"
-                                            class="max-h-56 w-full object-contain sm:max-h-64"
+                                            class="block h-full w-full object-contain"
                                         >
                                     </div>
                                     <div class="mt-2 flex flex-wrap gap-2">

@@ -27,4 +27,23 @@ return [
         'require_phone' => filter_var(env('CHANNEL_AI_DRAFT_REQUIRE_PHONE', true), FILTER_VALIDATE_BOOL),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Inbox retention
+    |--------------------------------------------------------------------------
+    |
+    | Conversations with no activity older than retention_days are deleted
+    | (messages cascade; linked AI drafts are discarded). Confirmed orders kept.
+    |
+    */
+    'inbox' => [
+        'retention_days' => (int) env('CHANNEL_INBOX_RETENTION_DAYS', 7),
+
+        // Run purge when staff open /admin/inbox (throttled to once/minute).
+        'purge_on_inbox_load' => filter_var(env('CHANNEL_INBOX_PURGE_ON_LOAD', true), FILTER_VALIDATE_BOOL),
+
+        // Optional daily schedule: php artisan schedule:run
+        'purge_schedule_enabled' => filter_var(env('CHANNEL_INBOX_PURGE_SCHEDULE_ENABLED', true), FILTER_VALIDATE_BOOL),
+    ],
+
 ];

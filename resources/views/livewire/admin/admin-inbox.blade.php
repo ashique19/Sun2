@@ -611,7 +611,7 @@
                     @endforeach
                 </div>
 
-                    @if ($mappingField === 'product' && $mappingMessage)
+                @if ($mappingField === 'product' && $mappingMessage)
                     <div class="fixed inset-0 z-[80] flex items-end justify-center p-3 sm:items-center sm:p-4" wire:key="product-map-modal-{{ $mappingMessage->id }}">
                         <button type="button"
                             wire:click="closeMessageMapMenu"

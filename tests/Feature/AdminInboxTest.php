@@ -160,7 +160,7 @@ class AdminInboxTest extends TestCase
     }
 
     #[Test]
-    public function conversation_list_uses_compact_channel_labels(): void
+    public function conversation_list_shows_customer_without_channel_badge(): void
     {
         $this->actingAs($this->adminUser());
         $this->conversation([
@@ -171,7 +171,8 @@ class AdminInboxTest extends TestCase
 
         Livewire::test(AdminInbox::class)
             ->assertSee('Compact Row Customer')
-            ->assertSee('MSG');
+            ->assertDontSeeHtml('>MSG</span>')
+            ->assertDontSeeHtml('>WA</span>');
     }
 
     #[Test]

@@ -274,7 +274,6 @@
                     @php
                         $selected = $selectedConversation?->id === $conversation->id;
                         $latest = $conversation->latestMessage;
-                        $channelShort = $conversation->channel === 'whatsapp' ? 'WA' : 'MSG';
                         $displayName = $conversation->customer_name ?: $conversation->customer_phone ?: $conversation->external_user_id;
                         $timestamp = optional($conversation->last_inbound_at ?: $conversation->last_outbound_at ?: $conversation->created_at)
                             ->timezone('Asia/Dhaka');
@@ -286,50 +285,42 @@
                             'block w-full px-4 py-3 text-left transition',
                             $selected ? 'bg-[#FAF6EF]' : 'active:bg-[#FAF6EF] hover:bg-[#FAF6EF]/60',
                         ])>
-                        <div class="flex items-center gap-2.5">
-                            <span @class([
-                                'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold',
-                                $conversation->channel === 'whatsapp' ? 'bg-emerald-100 text-emerald-800' : 'bg-[#E8F0FF] text-[#315AA9]',
-                            ])>
-                                {{ $channelShort }}
-                            </span>
-                            <div class="min-w-0 flex-1">
-                                <div class="flex items-center gap-2">
-                                    <p @class([
-                                        'min-w-0 flex-1 truncate text-sm text-[#1E1E1E]',
-                                        'font-semibold' => $conversation->isUnread(),
-                                        'font-medium' => ! $conversation->isUnread(),
-                                    ])>
-                                        {{ $displayName }}
-                                    </p>
-                                    <span class="shrink-0 text-[10px] tabular-nums text-[#8C8474]">
-                                        {{ $timestamp?->format('d M h:i A') }}
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                                <p @class([
+                                    'min-w-0 flex-1 truncate text-sm text-[#1E1E1E]',
+                                    'font-semibold' => $conversation->isUnread(),
+                                    'font-medium' => ! $conversation->isUnread(),
+                                ])>
+                                    {{ $displayName }}
+                                </p>
+                                <span class="shrink-0 text-[10px] tabular-nums text-[#8C8474]">
+                                    {{ $timestamp?->format('d M h:i A') }}
+                                </span>
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-1.5">
+                                @if ($conversation->isUnread())
+                                    <span class="h-2 w-2 shrink-0 rounded-full bg-[#C9A227]" title="Unread" aria-label="Unread"></span>
+                                @endif
+                                @if ($conversation->draftOrder)
+                                    <span class="shrink-0 truncate text-[10px] font-semibold text-[#315AA9]">
+                                        {{ $conversation->draftOrder->order_number }}
                                     </span>
-                                </div>
-                                <div class="mt-0.5 flex items-center gap-1.5">
-                                    @if ($conversation->isUnread())
-                                        <span class="h-2 w-2 shrink-0 rounded-full bg-[#C9A227]" title="Unread" aria-label="Unread"></span>
+                                @endif
+                                @if ($latest)
+                                    @if ($latest->isImageAttachment())
+                                        <img
+                                            src="{{ route('admin.inbox.media', $latest) }}"
+                                            alt=""
+                                            class="h-5 w-5 shrink-0 rounded object-cover bg-[#F1EADB]"
+                                            loading="lazy">
                                     @endif
-                                    @if ($conversation->draftOrder)
-                                        <span class="shrink-0 truncate text-[10px] font-semibold text-[#315AA9]">
-                                            {{ $conversation->draftOrder->order_number }}
-                                        </span>
-                                    @endif
-                                    @if ($latest)
-                                        @if ($latest->isImageAttachment())
-                                            <img
-                                                src="{{ route('admin.inbox.media', $latest) }}"
-                                                alt=""
-                                                class="h-5 w-5 shrink-0 rounded object-cover bg-[#F1EADB]"
-                                                loading="lazy">
-                                        @endif
-                                        <p class="min-w-0 flex-1 truncate text-xs text-[#8C8474]">
-                                            {{ $latest->direction === 'outbound' ? 'You: ' : '' }}{{ $latest->body ?: ($latest->isImageAttachment() ? 'Photo' : 'Attachment') }}
-                                        </p>
-                                    @else
-                                        <p class="min-w-0 flex-1 truncate text-xs text-[#8C8474]">No messages yet</p>
-                                    @endif
-                                </div>
+                                    <p class="min-w-0 flex-1 truncate text-xs text-[#8C8474]">
+                                        {{ $latest->direction === 'outbound' ? 'You: ' : '' }}{{ $latest->body ?: ($latest->isImageAttachment() ? 'Photo' : 'Attachment') }}
+                                    </p>
+                                @else
+                                    <p class="min-w-0 flex-1 truncate text-xs text-[#8C8474]">No messages yet</p>
+                                @endif
                             </div>
                         </div>
                         <span class="sr-only">

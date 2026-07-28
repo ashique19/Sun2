@@ -2,6 +2,7 @@
 
 namespace App\Services\Channels;
 
+use App\Events\InboxMessageStored;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use Illuminate\Support\Carbon;
@@ -90,6 +91,20 @@ class ChannelConversationService
                 $conversation->forceFill(['last_inbound_at' => $sentAt])->save();
             } else {
                 $conversation->forceFill(['last_outbound_at' => $sentAt])->save();
+            }
+
+            if (config('channels.inbox.realtime_enabled')) {
+                $channel = (string) $conversation->channel;
+                $dispatch = function () use ($message, $channel): void {
+                    broadcast(InboxMessageStored::fromMessage($message->fresh() ?? $message, $channel));
+                };
+
+                // RefreshDatabase keeps an open transaction; afterCommit would never fire in tests.
+                if (app()->runningUnitTests() || DB::transactionLevel() === 0) {
+                    $dispatch();
+                } else {
+                    DB::afterCommit($dispatch);
+                }
             }
 
             return $message;

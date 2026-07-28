@@ -163,6 +163,30 @@
                 </div>
             @endif
 
+            <div class="border-t border-[#EFE7D6] pt-6 space-y-3">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <h3 class="text-sm font-medium">Priced image</h3>
+                        <p class="mt-1 text-xs text-[#8C8474]">Shareable photo with price stamped on it. Gallery images stay clean.</p>
+                    </div>
+                    <button type="button" wire:click="openPricedImageModal"
+                        class="rounded-full border border-[#1E1E1E] px-4 py-2 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
+                        {{ $product?->priced_image_path ? 'Edit priced image' : 'Put price on image' }}
+                    </button>
+                </div>
+                @if ($product?->priced_image_path)
+                    <div class="max-w-sm overflow-hidden rounded-xl border border-[#EFE7D6] bg-[#FAF6EF]">
+                        <img src="{{ \App\Support\StorefrontAssets::url($product->priced_image_path) }}"
+                            alt="Priced image for {{ $product->name }}"
+                            class="w-full object-contain">
+                    </div>
+                @else
+                    <p class="rounded-lg bg-[#FAF6EF] px-4 py-6 text-center text-sm text-[#8C8474]">
+                        No priced image yet. Use Put price on image to create one.
+                    </p>
+                @endif
+            </div>
+
             <div class="border-t border-[#EFE7D6] pt-6 space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>

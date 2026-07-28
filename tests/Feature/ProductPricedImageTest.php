@@ -117,6 +117,22 @@ class ProductPricedImageTest extends TestCase
         $product->refresh();
         $this->assertNotNull($product->priced_image_path);
         $this->assertFileExists(public_path(ltrim($product->priced_image_path, '/')));
+
+        Livewire::test(AdminProducts::class)
+            ->assertSeeHtml('alt="Priced image for List Product"')
+            ->assertSeeHtml($product->priced_image_path)
+            ->assertSee('Rebuild');
+    }
+
+    #[Test]
+    public function products_list_priced_image_column_has_no_thumb_when_missing(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->productWithPrimaryImage('No Priced Yet');
+
+        Livewire::test(AdminProducts::class)
+            ->assertSee('Put price on image')
+            ->assertDontSeeHtml('alt="Priced image for No Priced Yet"');
     }
 
     #[Test]
@@ -168,6 +184,34 @@ class ProductPricedImageTest extends TestCase
         $this->assertSame('bottom-left', $product->priced_image_layout['position']);
         $this->assertSame(80, $product->priced_image_layout['font']);
         $this->assertNotNull($product->priced_image_path);
+    }
+
+    #[Test]
+    public function edit_page_shows_priced_image_preview_outside_the_modal(): void
+    {
+        $this->actingAs($this->adminUser());
+        $product = $this->productWithPrimaryImage();
+        $service = app(ProductPricedImageService::class);
+        $path = $service->generate($product, [
+            'position' => 'top-left',
+            'font' => 48,
+        ]);
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product->fresh(['images'])])
+            ->assertSet('showPricedImageModal', false)
+            ->assertSee('Shareable photo with price stamped on it')
+            ->assertSeeHtml('alt="Priced image for Necklace Set"')
+            ->assertSeeHtml($path);
+    }
+
+    #[Test]
+    public function edit_page_shows_empty_priced_image_state_when_missing(): void
+    {
+        $this->actingAs($this->adminUser());
+        $product = $this->productWithPrimaryImage();
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->assertSee('No priced image yet. Use Put price on image to create one.');
     }
 
     #[Test]

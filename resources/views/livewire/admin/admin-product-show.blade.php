@@ -91,6 +91,25 @@
                     <p class="mt-2 text-xs text-[#8C8474]">+{{ $product->images->count() - 6 }} more</p>
                 @endif
             @endif
+
+            <div class="mt-5 border-t border-[#EFE7D6] pt-4">
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h3 class="text-sm font-medium">Priced image</h3>
+                    <a href="{{ route('admin.products.edit', $product) }}" wire:navigate
+                        class="text-xs font-medium text-[#C9A227] hover:underline">
+                        {{ $product->priced_image_path ? 'Edit' : 'Create' }}
+                    </a>
+                </div>
+                @if ($product->priced_image_path)
+                    <div class="overflow-hidden rounded-lg border border-[#E7DFCF] bg-[#FAF6EF]">
+                        <img src="{{ \App\Support\StorefrontAssets::url($product->priced_image_path) }}"
+                            alt="Priced image for {{ $product->name }}"
+                            class="w-full object-contain">
+                    </div>
+                @else
+                    <p class="text-sm text-[#8C8474]">None yet. Create one from Edit product.</p>
+                @endif
+            </div>
         </div>
     </div>
 

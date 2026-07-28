@@ -168,16 +168,27 @@
                                 </button>
                             </td>
                             <td class="px-4 py-3">
-                                <button type="button"
-                                    wire:click="generatePricedImage({{ $product->id }})"
-                                    wire:loading.attr="disabled"
-                                    wire:target="generatePricedImage({{ $product->id }})"
-                                    class="rounded border border-[#C9A227] px-2 py-1 text-xs text-[#C9A227] hover:bg-[#FAF6EF] disabled:opacity-60">
-                                    <span wire:loading.remove wire:target="generatePricedImage({{ $product->id }})">
-                                        {{ $product->priced_image_path ? 'Rebuild' : 'Put price on image' }}
-                                    </span>
-                                    <span wire:loading wire:target="generatePricedImage({{ $product->id }})">Working…</span>
-                                </button>
+                                <div class="flex items-center gap-2">
+                                    @if ($product->priced_image_path)
+                                        <a href="{{ route('admin.products.edit', $product) }}" wire:navigate
+                                            class="shrink-0"
+                                            title="View priced image">
+                                            <img src="{{ \App\Support\StorefrontAssets::url($product->priced_image_path) }}"
+                                                alt="Priced image for {{ $product->name }}"
+                                                class="h-10 w-10 rounded object-cover border border-[#E7DFCF] bg-[#FAF6EF]">
+                                        </a>
+                                    @endif
+                                    <button type="button"
+                                        wire:click="generatePricedImage({{ $product->id }})"
+                                        wire:loading.attr="disabled"
+                                        wire:target="generatePricedImage({{ $product->id }})"
+                                        class="rounded border border-[#C9A227] px-2 py-1 text-xs text-[#C9A227] hover:bg-[#FAF6EF] disabled:opacity-60 whitespace-nowrap">
+                                        <span wire:loading.remove wire:target="generatePricedImage({{ $product->id }})">
+                                            {{ $product->priced_image_path ? 'Rebuild' : 'Put price on image' }}
+                                        </span>
+                                        <span wire:loading wire:target="generatePricedImage({{ $product->id }})">Working…</span>
+                                    </button>
+                                </div>
                             </td>
                             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
                                 <a href="{{ route('admin.products.show', $product) }}" wire:navigate

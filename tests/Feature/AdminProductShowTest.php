@@ -67,7 +67,26 @@ class AdminProductShowTest extends TestCase
             ->assertSee('Reseller commission')
             ->assertSee('Analytics')
             ->assertSee('Monthly performance')
-            ->assertSee('80 / unit');
+            ->assertSee('80 / unit')
+            ->assertSee('Priced image')
+            ->assertSee('None yet. Create one from Edit product.');
+    }
+
+    public function test_product_detail_page_shows_priced_image_preview_when_present(): void
+    {
+        $this->actingAs($this->adminUser());
+        $product = $this->product();
+        $product->update([
+            'priced_image_path' => '/img/products-priced/'.$product->id.'/preview.jpg',
+            'priced_image_layout' => ['position' => 'top-left', 'font' => 48],
+        ]);
+
+        Livewire::test(AdminProductShow::class, ['product' => $product->fresh()])
+            ->assertSuccessful()
+            ->assertSee('Priced image')
+            ->assertSeeHtml('alt="Priced image for Gold Pendant"')
+            ->assertSeeHtml('/img/products-priced/'.$product->id.'/preview.jpg')
+            ->assertDontSee('None yet. Create one from Edit product.');
     }
 
     public function test_legacy_performance_route_redirects_to_show(): void

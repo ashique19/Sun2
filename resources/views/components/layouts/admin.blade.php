@@ -49,7 +49,10 @@
                 </div>
             </header>
 
-            <main class="p-4 sm:p-6">
+            <main @class([
+                'p-4 sm:p-6' => ! request()->routeIs('admin.inbox'),
+                'p-0 xl:p-6' => request()->routeIs('admin.inbox'),
+            ])>
                 {{ $slot }}
             </main>
         </div>

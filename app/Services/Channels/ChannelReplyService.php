@@ -52,42 +52,122 @@ class ChannelReplyService
 
     /**
      * Mark the Messenger conversation as seen on Facebook (blue ticks for the customer).
+     *
+     * Returns true when Graph accepted mark_seen (or there was nothing to sync).
      */
-    public function markSeen(ChannelConversation $conversation): void
+    public function markSeen(ChannelConversation $conversation): bool
     {
         if ($conversation->channel !== ChannelConversation::CHANNEL_MESSENGER) {
-            return;
+            return true;
+        }
+
+        if (! $conversation->needsMessengerSeenSync()) {
+            return true;
         }
 
         $token = $this->tokens->token();
-        if ($token === '' || trim((string) $conversation->external_user_id) === '') {
-            return;
+        $psid = trim((string) $conversation->external_user_id);
+        if ($token === '' || $psid === '') {
+            Log::warning('Messenger mark_seen skipped: missing page token or PSID.', [
+                'conversation_id' => $conversation->id,
+                'has_token' => $token !== '',
+                'psid' => $psid,
+            ]);
+
+            return false;
         }
 
         try {
-            $version = $this->tokens->graphVersion();
+            $ok = $this->postMarkSeen($conversation, $psid, $token);
+
+            if (! $ok && $this->takeThreadControl($conversation, $psid, $token)) {
+                $ok = $this->postMarkSeen($conversation, $psid, $token);
+            }
+
+            if ($ok) {
+                $conversation->forceFill([
+                    'messenger_seen_at' => $conversation->last_inbound_at?->copy() ?? now(),
+                ])->save();
+            }
+
+            return $ok;
+        } catch (Throwable $e) {
+            Log::warning('Messenger mark_seen exception.', [
+                'conversation_id' => $conversation->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    private function postMarkSeen(ChannelConversation $conversation, string $psid, string $token): bool
+    {
+        $version = $this->tokens->graphVersion();
+        $pageId = $this->tokens->pageId();
+        $path = $pageId !== '' ? $pageId.'/messages' : 'me/messages';
+
+        $response = Http::timeout(12)
+            ->withToken($token)
+            ->acceptJson()
+            ->asJson()
+            ->post('https://graph.facebook.com/'.$version.'/'.$path, [
+                'recipient' => ['id' => $psid],
+                'sender_action' => 'mark_seen',
+            ]);
+
+        if ($response->successful()) {
+            return true;
+        }
+
+        Log::warning('Messenger mark_seen failed.', [
+            'conversation_id' => $conversation->id,
+            'status' => $response->status(),
+            'body' => $response->body(),
+        ]);
+
+        return false;
+    }
+
+    /**
+     * When Page Inbox (or another app) owns the thread, sender actions fail until we take control.
+     */
+    private function takeThreadControl(ChannelConversation $conversation, string $psid, string $token): bool
+    {
+        $pageId = $this->tokens->pageId();
+        if ($pageId === '') {
+            return false;
+        }
+
+        $version = $this->tokens->graphVersion();
+
+        try {
             $response = Http::timeout(12)
                 ->withToken($token)
                 ->acceptJson()
                 ->asJson()
-                ->post('https://graph.facebook.com/'.$version.'/me/messages', [
-                    'recipient' => ['id' => $conversation->external_user_id],
-                    'sender_action' => 'mark_seen',
+                ->post('https://graph.facebook.com/'.$version.'/'.$pageId.'/take_thread_control', [
+                    'recipient' => ['id' => $psid],
+                    'metadata' => 'Admin Inbox opened conversation #'.$conversation->id,
                 ]);
 
-            if (! $response->successful()) {
-                Log::info('Messenger mark_seen failed.', [
-                    'conversation_id' => $conversation->id,
-                    'status' => $response->status(),
-                    'body' => $response->body(),
-                ]);
+            if ($response->successful()) {
+                return true;
             }
+
+            Log::warning('Messenger take_thread_control failed.', [
+                'conversation_id' => $conversation->id,
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
         } catch (Throwable $e) {
-            Log::info('Messenger mark_seen exception.', [
+            Log::warning('Messenger take_thread_control exception.', [
                 'conversation_id' => $conversation->id,
                 'message' => $e->getMessage(),
             ]);
         }
+
+        return false;
     }
 
     /**

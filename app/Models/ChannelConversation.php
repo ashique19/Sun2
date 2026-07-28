@@ -25,6 +25,7 @@ class ChannelConversation extends Model
             'last_inbound_at' => 'datetime',
             'last_outbound_at' => 'datetime',
             'last_read_at' => 'datetime',
+            'messenger_seen_at' => 'datetime',
             'meta' => 'array',
         ];
     }
@@ -72,6 +73,23 @@ class ChannelConversation extends Model
         }
 
         return $this->last_read_at === null || $this->last_inbound_at->greaterThan($this->last_read_at);
+    }
+
+    /**
+     * Whether Messenger Graph mark_seen still needs to catch up to the latest inbound.
+     */
+    public function needsMessengerSeenSync(): bool
+    {
+        if ($this->channel !== self::CHANNEL_MESSENGER) {
+            return false;
+        }
+
+        if (! $this->last_inbound_at) {
+            return false;
+        }
+
+        return $this->messenger_seen_at === null
+            || $this->last_inbound_at->greaterThan($this->messenger_seen_at);
     }
 
     public function markRead(?int $userId = null): void

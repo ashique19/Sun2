@@ -450,6 +450,96 @@ class ChannelAiDraftOrdersTest extends TestCase
         $this->assertSame('gemini', $draft->ai_parse_meta['source'] ?? null);
     }
 
+    public function test_draft_truncates_overlong_address_instead_of_failing_sync(): void
+    {
+        $longAddress = str_repeat('valo hobe nk, Parsel pawa pore ki, ', 20)
+            .'Thikana hotse Chittagong, এডভান্স করতে হবে?';
+
+        $this->assertGreaterThan(255, mb_strlen($longAddress));
+
+        $gemini = Mockery::mock(GeminiClient::class);
+        $gemini->shouldReceive('isConfigured')->andReturn(true);
+        $gemini->shouldReceive('generateJsonFromParts')->once()->andReturn([
+            'name' => 'Ei 2ta nite chai',
+            'phone' => '01831066963',
+            'address' => $longAddress,
+            'city' => 'Chittagong',
+            'area' => null,
+            'product_id' => null,
+            'product_name' => null,
+            'quantity' => 1,
+            'missing' => ['product'],
+        ]);
+        $this->app->instance(GeminiClient::class, $gemini);
+
+        $conversation = app(ChannelConversationService::class)->findOrCreate(
+            ChannelConversation::CHANNEL_MESSENGER,
+            'PSID_LONG_ADDR',
+        );
+        app(ChannelConversationService::class)->storeMessage($conversation, [
+            'external_message_id' => 'm_long_addr',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => $longAddress,
+            'sent_at' => now(),
+        ]);
+
+        $draft = app(ChannelOrderDraftService::class)
+            ->syncDraftFromConversation($conversation->fresh(['messages']));
+
+        $this->assertSame(Order::STATUS_DRAFT, $draft->status);
+        $this->assertSame(255, mb_strlen((string) $draft->address));
+        $this->assertSame(mb_substr($longAddress, 0, 255), $draft->address);
+        $this->assertSame('01831066963', $draft->phone);
+    }
+
+    public function test_heuristic_draft_truncates_conversation_dumped_into_address(): void
+    {
+        config(['gemini.api_key' => null]);
+
+        $lines = [
+            'Ei 2ta nite chai',
+            '01831066963',
+            'valo hobe nk',
+            'Parsel pawa pore ki valo na hle ferot pathate pari',
+            'Mane age delivery chars dite hbe nk',
+            'Age niyesi tkhntw ak sathe parsel pawa pore na dite hotse',
+            'Amr diye r ki',
+            'Jii',
+            'Acha',
+            'Confrom kra jabe',
+            'Akhn',
+            'Abar Valo na hole ritan krbo',
+            'Koidin lagte pare',
+            'Apu',
+            'Thikana hotse Chittagong',
+            'এডভান্স করতে হবে?',
+            str_repeat('extra chat line that fills address beyond limit ', 8),
+        ];
+
+        $body = implode("\n", $lines);
+        $this->assertGreaterThan(255, mb_strlen(implode(', ', array_slice($lines, 2))));
+
+        $conversation = app(ChannelConversationService::class)->findOrCreate(
+            ChannelConversation::CHANNEL_MESSENGER,
+            'PSID_HEUR_LONG',
+        );
+        app(ChannelConversationService::class)->storeMessage($conversation, [
+            'external_message_id' => 'm_heur_long',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => $body,
+            'sent_at' => now(),
+        ]);
+
+        $draft = app(ChannelOrderDraftService::class)
+            ->syncDraftFromConversation($conversation->fresh(['messages']));
+
+        $this->assertSame(Order::STATUS_DRAFT, $draft->status);
+        $this->assertSame('heuristic', $draft->ai_parse_meta['source'] ?? null);
+        $this->assertLessThanOrEqual(255, mb_strlen((string) $draft->address));
+        $this->assertSame('01831066963', $draft->phone);
+        $this->assertNotNull($draft->customer_note);
+    }
+
     public function test_discard_draft_does_not_change_stock(): void
     {
         $product = $this->product(['stock_quantity' => 8]);

@@ -163,9 +163,14 @@ class AdminProductEdit extends Component
 
     public function openPricedImageModal(ProductPricedImageService $pricedImages): void
     {
-        $this->ensureProductSaved();
+        // Only persist when creating; dirty invalid fields on edit must not block the modal.
+        if (! $this->product) {
+            $this->ensureProductSaved();
+        }
+
         $this->fillPricedImageLayout($pricedImages);
         $this->showPricedImageModal = true;
+        $this->js('document.body.classList.add("overflow-hidden")');
     }
 
     public function closePricedImageModal(): void

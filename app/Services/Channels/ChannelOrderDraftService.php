@@ -4,6 +4,7 @@ namespace App\Services\Channels;
 
 use App\Models\Area;
 use App\Models\ChannelConversation;
+use App\Models\ChannelMessage;
 use App\Models\City;
 use App\Models\Order;
 use App\Models\OrderProduct;
@@ -23,6 +24,7 @@ class ChannelOrderDraftService
 {
     public function __construct(
         private ChannelOrderParser $parser,
+        private ChannelMessageOrderMapper $mapper,
         private CustomerLookupService $customers,
         private OrderStockService $stock,
         private OrderStatusService $statusService,
@@ -64,9 +66,13 @@ class ChannelOrderDraftService
             $lines = $this->buildLines($parsed);
 
             if ($existing) {
-                $existing->items()->delete();
+                $orderData = $this->preserveStaffLockedFields($existing, $orderData, $lines);
+                $locked = $this->staffLockedFields($existing);
+                if (! in_array(ChannelMessageOrderMapper::FIELD_PRODUCT, $locked, true)) {
+                    $existing->items()->delete();
+                    $this->persistLines($existing, $lines);
+                }
                 $existing->update($orderData);
-                $this->persistLines($existing, $lines);
                 $order = $existing->fresh(['items']);
             } else {
                 $order = Order::query()->create(array_merge($orderData, [
@@ -104,6 +110,199 @@ class ChannelOrderDraftService
     }
 
     /**
+     * Staff-initiated draft: create a minimal linked draft without AI confidence gating.
+     */
+    public function ensureDraftForConversation(ChannelConversation $conversation, ?int $userId = null): Order
+    {
+        return DB::transaction(function () use ($conversation, $userId) {
+            $conversation->refresh();
+
+            if ($conversation->draft_order_id) {
+                $existing = Order::query()
+                    ->whereKey($conversation->draft_order_id)
+                    ->where('status', Order::STATUS_DRAFT)
+                    ->first();
+
+                if ($existing) {
+                    return $existing->loadMissing('items');
+                }
+            }
+
+            $parsed = [
+                'name' => filled($conversation->customer_name) ? $conversation->customer_name : null,
+                'phone' => filled($conversation->customer_phone) ? $conversation->customer_phone : null,
+                'address' => null,
+                'product_id' => null,
+                'product_name' => null,
+                'quantity' => 1,
+                'source' => 'staff',
+                'confidence' => 0,
+                'missing' => ['phone', 'address', 'product'],
+                'weak_points' => [],
+                'image_matches' => [],
+                'raw_text' => null,
+            ];
+
+            if (filled($parsed['name'])) {
+                $parsed['missing'] = array_values(array_diff($parsed['missing'], ['name']));
+            }
+            if (filled($parsed['phone']) && PhoneNumber::isValidBangladeshMobile((string) $parsed['phone'])) {
+                $parsed['missing'] = array_values(array_diff($parsed['missing'], ['phone']));
+            }
+
+            $orderData = $this->buildOrderAttributes($conversation, $parsed);
+            $orderData['admin_note'] = 'Draft started from Inbox by staff.';
+            $orderData['ai_parse_meta'] = array_merge($orderData['ai_parse_meta'] ?? [], [
+                'source' => 'staff',
+                'staff_locked_fields' => [],
+                'staff_mappings' => [],
+            ]);
+
+            $order = Order::query()->create(array_merge($orderData, [
+                'order_number' => 'PENDING',
+                'created_by' => $userId,
+                'updated_by' => $userId,
+            ]));
+            $order->update(['order_number' => (string) $order->id]);
+            $this->persistLines($order, $this->buildLines($parsed));
+
+            OrderStatusHistory::query()->create([
+                'order_id' => $order->id,
+                'status' => Order::STATUS_DRAFT,
+                'note' => 'Staff draft created from '.$conversation->channel.' inbox.',
+                'changed_by' => $userId,
+                'created_at' => now(),
+            ]);
+
+            $conversation->forceFill([
+                'draft_order_id' => $order->id,
+            ])->save();
+
+            Cache::forget(AdminOrderSegment::COUNTS_CACHE_KEY);
+
+            return $order->fresh(['items']);
+        });
+    }
+
+    /**
+     * Map a conversation message onto a draft order field (phone/name/address/product).
+     *
+     * @param  ?int  $productId  Required when field=product and multiple catalog matches exist.
+     */
+    public function applyMessageToField(
+        ChannelConversation $conversation,
+        ChannelMessage $message,
+        string $field,
+        ?int $productId = null,
+        ?int $userId = null,
+    ): Order {
+        $field = $this->mapper->normalizeField($field);
+
+        if ((int) $message->channel_conversation_id !== (int) $conversation->id) {
+            throw new InvalidArgumentException('Message does not belong to this conversation.');
+        }
+
+        return DB::transaction(function () use ($conversation, $message, $field, $productId, $userId) {
+            $order = $this->ensureDraftForConversation($conversation, $userId);
+            $suggestion = $this->mapper->suggest($message, $field);
+            $meta = is_array($order->ai_parse_meta) ? $order->ai_parse_meta : [];
+            $locked = array_values(array_unique(array_merge(
+                array_values($meta['staff_locked_fields'] ?? []),
+                [$field],
+            )));
+            $mappings = array_values($meta['staff_mappings'] ?? []);
+
+            $updates = [];
+
+            if ($field === ChannelMessageOrderMapper::FIELD_PHONE) {
+                $phone = $suggestion['value'];
+                if (! $phone || ! PhoneNumber::isValidBangladeshMobile($phone)) {
+                    throw new InvalidArgumentException('No valid Bangladesh mobile found in that message.');
+                }
+                $updates['phone'] = mb_substr(PhoneNumber::display($phone), 0, 32);
+                $conversation->forceFill(['customer_phone' => $updates['phone']])->save();
+            } elseif ($field === ChannelMessageOrderMapper::FIELD_NAME) {
+                $name = trim((string) ($suggestion['value'] ?? $message->body ?? ''));
+                if ($name === '') {
+                    throw new InvalidArgumentException('Message has no text to use as a name.');
+                }
+                $updates['name'] = mb_substr($name, 0, 255);
+                $conversation->forceFill(['customer_name' => $updates['name']])->save();
+            } elseif ($field === ChannelMessageOrderMapper::FIELD_ADDRESS) {
+                $address = trim((string) ($suggestion['value'] ?? $message->body ?? ''));
+                if ($address === '') {
+                    throw new InvalidArgumentException('Message has no text to use as an address.');
+                }
+                $updates['address'] = mb_substr($address, 0, 255);
+                if ($suggestion['area_id']) {
+                    $areaModel = Area::query()->with('city')->find((int) $suggestion['area_id']);
+                    if ($areaModel) {
+                        $updates['area'] = $areaModel->name;
+                        $updates['city'] = $areaModel->city?->name;
+                    }
+                }
+            } elseif ($field === ChannelMessageOrderMapper::FIELD_PRODUCT) {
+                $resolvedProductId = $productId ?: $suggestion['product_id'];
+                if (! $resolvedProductId && count($suggestion['products']) > 1) {
+                    throw new InvalidArgumentException('Multiple products matched — pick one.');
+                }
+
+                $product = $resolvedProductId
+                    ? Product::query()->find($resolvedProductId)
+                    : null;
+
+                $order->items()->delete();
+                if ($product) {
+                    $this->persistLines($order, $this->buildLines([
+                        'product_id' => $product->id,
+                        'product_name' => $product->name,
+                        'quantity' => 1,
+                    ]));
+                } else {
+                    $label = trim((string) ($suggestion['value'] ?? $message->body ?? '')) ?: 'Unmatched product';
+                    $this->persistLines($order, $this->buildLines([
+                        'product_id' => null,
+                        'product_name' => mb_substr($label, 0, 255),
+                        'quantity' => 1,
+                    ]));
+                }
+                $order = $order->fresh(['items']);
+                $this->recalculateDraftTotals($order);
+            }
+
+            $mappings[] = [
+                'field' => $field,
+                'message_id' => $message->id,
+                'value' => $suggestion['value'],
+                'product_id' => $productId ?: $suggestion['product_id'],
+                'user_id' => $userId,
+                'applied_at' => now()->toIso8601String(),
+            ];
+
+            $meta['staff_locked_fields'] = $locked;
+            $meta['staff_mappings'] = array_slice($mappings, -20);
+            $meta['source'] = ($meta['source'] ?? 'none') === 'none' ? 'staff' : $meta['source'];
+
+            if ($updates !== []) {
+                $order->forceFill($updates);
+            }
+
+            $order->forceFill([
+                'ai_parse_meta' => $meta,
+                'updated_by' => $userId,
+            ])->save();
+
+            if ($field === ChannelMessageOrderMapper::FIELD_ADDRESS || $field === ChannelMessageOrderMapper::FIELD_PHONE) {
+                $this->recalculateDraftTotals($order->fresh(['items']));
+            }
+
+            Cache::forget(AdminOrderSegment::COUNTS_CACHE_KEY);
+
+            return $order->fresh(['items']);
+        });
+    }
+
+    /**
      * @param  array<string, mixed>  $parsed
      */
     private function hasUsefulOrderSignal(array $parsed): bool
@@ -122,6 +321,92 @@ class ChannelOrderDraftService
         $minConfidence = (float) config('channels.ai_draft.min_confidence', 0.5);
 
         return (float) ($parsed['confidence'] ?? 0) >= $minConfidence;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function staffLockedFields(Order $order): array
+    {
+        $meta = is_array($order->ai_parse_meta) ? $order->ai_parse_meta : [];
+
+        return array_values(array_filter(
+            array_map('strval', $meta['staff_locked_fields'] ?? []),
+            fn (string $field) => in_array($field, ChannelMessageOrderMapper::FIELDS, true),
+        ));
+    }
+
+    /**
+     * Keep staff-mapped columns (and product lines) when AI re-syncs an existing draft.
+     *
+     * @param  array<string, mixed>  $orderData
+     * @param  list<array<string, mixed>>  $lines
+     * @return array<string, mixed>
+     */
+    private function preserveStaffLockedFields(Order $existing, array $orderData, array &$lines): array
+    {
+        $locked = $this->staffLockedFields($existing);
+        $meta = is_array($orderData['ai_parse_meta'] ?? null) ? $orderData['ai_parse_meta'] : [];
+        $existingMeta = is_array($existing->ai_parse_meta) ? $existing->ai_parse_meta : [];
+
+        $meta['staff_locked_fields'] = $locked;
+        $meta['staff_mappings'] = array_values($existingMeta['staff_mappings'] ?? []);
+        $orderData['ai_parse_meta'] = $meta;
+
+        if (in_array(ChannelMessageOrderMapper::FIELD_NAME, $locked, true)) {
+            $orderData['name'] = $existing->name;
+        }
+        if (in_array(ChannelMessageOrderMapper::FIELD_PHONE, $locked, true)) {
+            $orderData['phone'] = $existing->phone;
+        }
+        if (in_array(ChannelMessageOrderMapper::FIELD_ADDRESS, $locked, true)) {
+            $orderData['address'] = $existing->address;
+            $orderData['area'] = $existing->area;
+            $orderData['city'] = $existing->city;
+        }
+        if (in_array(ChannelMessageOrderMapper::FIELD_PRODUCT, $locked, true)) {
+            // Keep existing lines; totals already recalculated on the draft.
+            $lines = [];
+            $orderData['subtotal'] = $existing->subtotal;
+            $orderData['delivery_charge'] = $existing->delivery_charge;
+            $orderData['total'] = $existing->total;
+            $orderData['cod_amount'] = $existing->cod_amount;
+            $orderData['due_amount'] = $existing->due_amount;
+        }
+
+        return $orderData;
+    }
+
+    private function recalculateDraftTotals(Order $order): void
+    {
+        $order->loadMissing('items');
+        $subtotal = (int) round($order->items->sum(fn (OrderProduct $item) => (float) $item->line_total));
+        $itemCount = (int) $order->items->sum('quantity');
+
+        $location = null;
+        if (filled($order->area) && filled($order->city)) {
+            $location = Area::query()
+                ->where('name', $order->area)
+                ->whereHas('city', fn ($q) => $q->where('name', $order->city))
+                ->first();
+        }
+        if (! $location && filled($order->city)) {
+            $location = City::query()->where('name', $order->city)->first() ?? (string) $order->city;
+        }
+
+        $deliveryCharge = 0;
+        if ($itemCount > 0 && $subtotal > 0 && $location) {
+            $deliveryCharge = (int) round(CheckoutPricing::deliveryCharge($location, $itemCount, $subtotal));
+        }
+
+        $total = max(0, $subtotal + $deliveryCharge);
+        $order->forceFill([
+            'subtotal' => $subtotal,
+            'delivery_charge' => $deliveryCharge,
+            'total' => $total,
+            'cod_amount' => $total,
+            'due_amount' => $total,
+        ])->save();
     }
 
     public function confirm(Order $order, ?int $confirmedBy = null): Order

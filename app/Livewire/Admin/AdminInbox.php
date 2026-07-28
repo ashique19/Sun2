@@ -4,11 +4,15 @@ namespace App\Livewire\Admin;
 
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
+use App\Models\Product;
 use App\Services\Channels\ChannelInboxDiagnostics;
 use App\Services\Channels\ChannelInboxPurgeService;
+use App\Services\Channels\ChannelMessageOrderMapper;
+use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
 use App\Services\Channels\MessengerConversationSyncService;
 use App\Support\AdminAccess;
+use InvalidArgumentException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -75,6 +79,23 @@ class AdminInbox extends Component
      */
     public ?string $syncToast = null;
 
+    /** Compact draft strip under the thread header. */
+    public bool $orderPanelOpen = false;
+
+    /** Message currently targeted by the “Add to order fields” menu. */
+    public ?int $mappingMessageId = null;
+
+    /** Active mapping field: phone|name|address|product|null */
+    public ?string $mappingField = null;
+
+    /** Product search when mapping a message to Products. */
+    public string $mappingProductSearch = '';
+
+    /**
+     * @var list<array{id: int, name: string, price: float}>
+     */
+    public array $mappingProductSuggestions = [];
+
     public function mount(ChannelInboxPurgeService $purge, ChannelReplyService $replies): void
     {
         AdminAccess::ensureStaffAdmin();
@@ -106,6 +127,7 @@ class AdminInbox extends Component
         $this->selectedConversationId = $conversation->id;
         $this->mobileThreadOpen = true;
         $this->resetComposer();
+        $this->resetOrderMapping();
         $this->error = null;
         $this->statusMessage = null;
         $this->markConversationRead($conversation, $replies);
@@ -121,6 +143,7 @@ class AdminInbox extends Component
         if ($conversationId === null) {
             $this->mobileThreadOpen = false;
             $this->resetComposer();
+            $this->resetOrderMapping();
             $this->error = null;
             $this->statusMessage = null;
 
@@ -138,6 +161,7 @@ class AdminInbox extends Component
 
         $this->mobileThreadOpen = true;
         $this->resetComposer();
+        $this->resetOrderMapping();
         $this->error = null;
         $this->statusMessage = null;
         $this->markConversationRead($conversation, app(ChannelReplyService::class));
@@ -182,6 +206,7 @@ class AdminInbox extends Component
         $this->selectedConversationId = null;
         $this->mobileThreadOpen = false;
         $this->resetComposer();
+        $this->resetOrderMapping();
         $this->error = null;
         $this->statusMessage = null;
     }
@@ -189,6 +214,170 @@ class AdminInbox extends Component
     public function toggleMobileFilters(): void
     {
         $this->mobileFiltersOpen = ! $this->mobileFiltersOpen;
+    }
+
+    public function toggleOrderPanel(ChannelOrderDraftService $drafts): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        $this->orderPanelOpen = ! $this->orderPanelOpen;
+
+        if ($this->orderPanelOpen) {
+            $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+            if ($conversation) {
+                $drafts->ensureDraftForConversation($conversation, auth()->id());
+            }
+        }
+    }
+
+    public function openMessageMapMenu(int $messageId): void
+    {
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        $exists = ChannelMessage::query()
+            ->where('channel_conversation_id', $this->selectedConversationId)
+            ->whereKey($messageId)
+            ->exists();
+
+        if (! $exists) {
+            return;
+        }
+
+        $this->mappingMessageId = $messageId;
+        $this->mappingField = null;
+        $this->mappingProductSearch = '';
+        $this->mappingProductSuggestions = [];
+        $this->error = null;
+    }
+
+    public function closeMessageMapMenu(): void
+    {
+        $this->mappingMessageId = null;
+        $this->mappingField = null;
+        $this->mappingProductSearch = '';
+        $this->mappingProductSuggestions = [];
+    }
+
+    public function beginMapField(string $field, ChannelMessageOrderMapper $mapper): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->selectedConversationId || ! $this->mappingMessageId) {
+            return;
+        }
+
+        try {
+            $field = $mapper->normalizeField($field);
+        } catch (InvalidArgumentException) {
+            $this->error = 'Unknown order field.';
+
+            return;
+        }
+
+        $message = ChannelMessage::query()
+            ->where('channel_conversation_id', $this->selectedConversationId)
+            ->whereKey($this->mappingMessageId)
+            ->first();
+
+        if (! $message) {
+            $this->error = 'Message not found.';
+
+            return;
+        }
+
+        $this->mappingField = $field;
+        $suggestion = $mapper->suggest($message, $field);
+        $this->mappingProductSuggestions = $suggestion['products'];
+        $this->mappingProductSearch = (string) ($suggestion['value'] ?? '');
+
+        if ($field !== ChannelMessageOrderMapper::FIELD_PRODUCT) {
+            $this->applyMapField($field);
+        }
+    }
+
+    public function applyMapField(string $field, ?int $productId = null): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $drafts = app(ChannelOrderDraftService::class);
+        $mapper = app(ChannelMessageOrderMapper::class);
+
+        if (! $this->selectedConversationId || ! $this->mappingMessageId) {
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+        $message = ChannelMessage::query()
+            ->where('channel_conversation_id', $this->selectedConversationId)
+            ->whereKey($this->mappingMessageId)
+            ->first();
+
+        if (! $conversation || ! $message) {
+            $this->error = 'Conversation or message not found.';
+
+            return;
+        }
+
+        try {
+            $field = $mapper->normalizeField($field);
+            $drafts->applyMessageToField($conversation, $message, $field, $productId, auth()->id());
+        } catch (InvalidArgumentException $e) {
+            $this->error = $e->getMessage();
+
+            return;
+        }
+
+        $this->orderPanelOpen = true;
+        $this->statusMessage = 'Added to order '.$field.'.';
+        $this->error = null;
+        $this->closeMessageMapMenu();
+    }
+
+    public function updatedMappingProductSearch(): void
+    {
+        $term = trim($this->mappingProductSearch);
+        if (mb_strlen($term) < 2) {
+            $this->mappingProductSuggestions = [];
+
+            return;
+        }
+
+        $this->mappingProductSuggestions = Product::query()
+            ->searchTerm($term)
+            ->orderBy('name')
+            ->limit(8)
+            ->get(['id', 'name', 'price'])
+            ->map(fn (Product $product) => [
+                'id' => (int) $product->id,
+                'name' => (string) $product->name,
+                'price' => (float) $product->price,
+            ])
+            ->all();
+    }
+
+    public function insertQuickReply(int $index): void
+    {
+        $replies = config('channels.inbox.quick_replies', []);
+        $reply = $replies[$index] ?? null;
+        if (! is_array($reply) || ! isset($reply['body'])) {
+            return;
+        }
+
+        $body = trim((string) $reply['body']);
+        if ($body === '') {
+            return;
+        }
+
+        $this->replyText = $this->replyText === ''
+            ? $body
+            : rtrim($this->replyText)."\n".$body;
+        $this->error = null;
     }
 
     public function setReplyTo(int $messageId): void
@@ -434,11 +623,20 @@ class AdminInbox extends Component
         $this->replyImage = null;
     }
 
+    private function resetOrderMapping(): void
+    {
+        $this->orderPanelOpen = false;
+        $this->mappingMessageId = null;
+        $this->mappingField = null;
+        $this->mappingProductSearch = '';
+        $this->mappingProductSuggestions = [];
+    }
+
     public function render(ChannelInboxDiagnostics $diagnostics)
     {
         $query = ChannelConversation::query()
             ->with([
-                'draftOrder:id,order_number,status',
+                'draftOrder:id,order_number,status,name,phone,address,total',
                 'latestMessage',
             ])
             ->orderByRaw('COALESCE(last_inbound_at, last_outbound_at, created_at) desc');
@@ -477,7 +675,7 @@ class AdminInbox extends Component
         $selectedConversation = $displayConversationId
             ? ChannelConversation::query()
                 ->with([
-                    'draftOrder:id,order_number,status',
+                    'draftOrder.items',
                     'messages' => fn ($q) => $q->with('replyTo')->orderBy('sent_at')->orderBy('id'),
                 ])
                 ->find($displayConversationId)
@@ -488,10 +686,16 @@ class AdminInbox extends Component
             $replyToMessage = $selectedConversation->messages->firstWhere('id', $this->replyToMessageId);
         }
 
+        $quickReplies = collect(config('channels.inbox.quick_replies', []))
+            ->filter(fn ($row) => is_array($row) && filled($row['label'] ?? null) && filled($row['body'] ?? null))
+            ->values()
+            ->all();
+
         return view('livewire.admin.admin-inbox', [
             'conversations' => $conversations,
             'selectedConversation' => $selectedConversation,
             'replyToMessage' => $replyToMessage,
+            'quickReplies' => $quickReplies,
             'diagnostics' => $diagnostics->forInbox([
                 'channel' => $this->channel,
                 'unread' => $this->unread,

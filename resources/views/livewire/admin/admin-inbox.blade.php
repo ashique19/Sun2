@@ -361,6 +361,13 @@
                             </p>
                         </div>
                         <button type="button"
+                            wire:click="toggleOrderPanel"
+                            class="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-3 text-xs font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]"
+                            aria-label="Order fields"
+                            title="Order fields">
+                            {{ $selectedConversation->draftOrder ? 'Order' : '+ Order' }}
+                        </button>
+                        <button type="button"
                             wire:click="syncFromFacebook"
                             wire:loading.attr="disabled"
                             wire:target="syncFromFacebook"
@@ -371,6 +378,39 @@
                         </button>
                     </div>
                 </div>
+
+                @if ($orderPanelOpen && $selectedConversation->draftOrder)
+                    @php $draft = $selectedConversation->draftOrder; @endphp
+                    <div class="shrink-0 border-b border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2.5 text-xs text-[#6B6459] xl:px-4">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="min-w-0 space-y-0.5">
+                                <p class="font-semibold text-[#1E1E1E]">
+                                    <a href="{{ route('admin.orders.show', $draft) }}" class="text-[#315AA9] hover:underline">
+                                        {{ $draft->order_number }}
+                                    </a>
+                                    <span class="font-normal text-[#8C8474]">draft</span>
+                                </p>
+                                <p class="truncate">{{ $draft->name ?: '—' }} · {{ $draft->phone ?: '—' }}</p>
+                                <p class="truncate">{{ $draft->address ?: 'No address yet' }}</p>
+                                @if ($draft->items->isNotEmpty())
+                                    <p class="truncate">
+                                        {{ $draft->items->pluck('name')->filter()->take(2)->implode(', ') }}
+                                        @if ($draft->items->count() > 2)
+                                            +{{ $draft->items->count() - 2 }}
+                                        @endif
+                                    </p>
+                                @endif
+                            </div>
+                            <a href="{{ route('admin.orders.edit', $draft) }}"
+                                class="shrink-0 font-semibold text-[#C9A227] hover:underline">
+                                Edit
+                            </a>
+                        </div>
+                        <p class="mt-1.5 text-[10px] text-[#8C8474]">
+                            Right-click or long-press a message → Add to order fields.
+                        </p>
+                    </div>
+                @endif
 
                 <div
                     wire:key="thread-{{ $selectedConversation->id }}"
@@ -408,11 +448,29 @@
                             'justify-end' => $isOutbound,
                             'justify-start' => ! $isOutbound,
                         ])>
-                            <div @class([
-                                'group relative max-w-[82%] px-3 py-2 text-sm shadow-sm sm:max-w-[70%]',
-                                'rounded-2xl rounded-br-md bg-[#C9A227] text-white' => $isOutbound,
-                                'rounded-2xl rounded-bl-md bg-white text-[#1E1E1E] ring-1 ring-[#EBE3D4]' => ! $isOutbound,
-                            ])>
+                            <div
+                                x-data="{
+                                    menu: false,
+                                    longPressTimer: null,
+                                    openMenu() { this.menu = true; $wire.openMessageMapMenu({{ $messageRow->id }}); },
+                                    closeMenu() { this.menu = false; },
+                                    startLongPress() {
+                                        this.longPressTimer = setTimeout(() => this.openMenu(), 500);
+                                    },
+                                    cancelLongPress() {
+                                        if (this.longPressTimer) { clearTimeout(this.longPressTimer); this.longPressTimer = null; }
+                                    },
+                                }"
+                                @contextmenu.prevent="openMenu()"
+                                @touchstart.passive="startLongPress()"
+                                @touchend.passive="cancelLongPress()"
+                                @touchmove.passive="cancelLongPress()"
+                                @click.outside="closeMenu(); if ($wire.mappingMessageId === {{ $messageRow->id }}) { $wire.closeMessageMapMenu(); }"
+                                @class([
+                                    'group relative max-w-[82%] px-3 py-2 text-sm shadow-sm sm:max-w-[70%]',
+                                    'rounded-2xl rounded-br-md bg-[#C9A227] text-white' => $isOutbound,
+                                    'rounded-2xl rounded-bl-md bg-white text-[#1E1E1E] ring-1 ring-[#EBE3D4]' => ! $isOutbound,
+                                ])>
                                 @if ($messageRow->replyTo)
                                     <div @class([
                                         'mb-2 rounded-xl px-2 py-1 text-[11px]',
@@ -461,6 +519,58 @@
                                         ])>
                                         Reply
                                     </button>
+                                    <button type="button"
+                                        @click.stop="openMenu()"
+                                        @class([
+                                            'text-[10px] font-medium opacity-0 transition group-hover:opacity-100 focus:opacity-100',
+                                            'text-white/90' => $isOutbound,
+                                            'text-[#C9A227]' => ! $isOutbound,
+                                        ])>
+                                        + Order
+                                    </button>
+                                </div>
+
+                                <div
+                                    x-show="menu || $wire.mappingMessageId === {{ $messageRow->id }}"
+                                    x-cloak
+                                    @click.stop
+                                    class="absolute left-0 right-0 top-full z-20 mt-1 min-w-[11rem] rounded-xl border border-[#E7DFCF] bg-white p-1.5 text-left text-[#1E1E1E] shadow-lg"
+                                >
+                                    <p class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#8C8474]">
+                                        Add to order fields
+                                    </p>
+                                    @foreach (['phone' => 'Phone', 'name' => 'Name', 'address' => 'Address', 'product' => 'Products'] as $fieldKey => $fieldLabel)
+                                        <button type="button"
+                                            wire:click="beginMapField('{{ $fieldKey }}')"
+                                            class="block w-full rounded-lg px-2 py-1.5 text-left text-xs font-medium hover:bg-[#FAF6EF]">
+                                            {{ $fieldLabel }}
+                                        </button>
+                                    @endforeach
+
+                                    @if ($mappingMessageId === $messageRow->id && $mappingField === 'product')
+                                        <div class="mt-1 border-t border-[#EFE7D6] pt-1.5">
+                                            <input type="text"
+                                                wire:model.live.debounce.250ms="mappingProductSearch"
+                                                placeholder="Search products…"
+                                                class="mb-1 w-full rounded-lg border border-[#E0D6C2] px-2 py-1.5 text-xs focus:border-[#C9A227] focus:outline-none">
+                                            <div class="max-h-36 space-y-0.5 overflow-y-auto">
+                                                @forelse ($mappingProductSuggestions as $suggestion)
+                                                    <button type="button"
+                                                        wire:click="applyMapField('product', {{ $suggestion['id'] }})"
+                                                        class="block w-full rounded-lg px-2 py-1.5 text-left text-xs hover:bg-[#FAF6EF]">
+                                                        <span class="font-medium">{{ $suggestion['name'] }}</span>
+                                                        <span class="text-[#8C8474]"> · ৳{{ number_format($suggestion['price']) }}</span>
+                                                    </button>
+                                                @empty
+                                                    <button type="button"
+                                                        wire:click="applyMapField('product')"
+                                                        class="block w-full rounded-lg px-2 py-1.5 text-left text-xs text-[#6B6459] hover:bg-[#FAF6EF]">
+                                                        Use message text as product
+                                                    </button>
+                                                @endforelse
+                                            </div>
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
                         </div>
@@ -499,6 +609,18 @@
                     @error('replyImage')
                         <p class="mb-2 text-xs text-rose-600">{{ $message }}</p>
                     @enderror
+
+                    @if (! empty($quickReplies))
+                        <div class="mb-2 flex gap-1.5 overflow-x-auto pb-0.5">
+                            @foreach ($quickReplies as $index => $quickReply)
+                                <button type="button"
+                                    wire:click="insertQuickReply({{ $index }})"
+                                    class="shrink-0 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-2.5 py-1 text-[11px] font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                                    {{ $quickReply['label'] }}
+                                </button>
+                            @endforeach
+                        </div>
+                    @endif
 
                     <div class="flex items-end gap-2">
                         <label class="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#E0D6C2] bg-[#FAF6EF] text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]" title="Attach image">

@@ -59,6 +59,14 @@ return [
 
         // Optional daily schedule: php artisan schedule:run
         'purge_schedule_enabled' => filter_var(env('CHANNEL_INBOX_PURGE_SCHEDULE_ENABLED', true), FILTER_VALIDATE_BOOL),
+
+        // Composer chips — label shown in UI, body inserted into the reply box.
+        'quick_replies' => [
+            ['label' => 'Salaam', 'body' => 'আসসালামু আলাইকুম'],
+            ['label' => 'Address?', 'body' => 'আপনার সম্পূর্ণ ঠিকানাটা একটু দিবেন?'],
+            ['label' => 'Phone?', 'body' => 'ডেলিভারির জন্য মোবাইল নাম্বারটা একটু কনফার্ম করবেন?'],
+            ['label' => 'Thanks', 'body' => 'ধন্যবাদ, অর্ডার কনফার্ম করা হয়েছে।'],
+        ],
     ],
 
 ];

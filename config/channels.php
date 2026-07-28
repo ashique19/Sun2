@@ -60,6 +60,9 @@ return [
         // Optional daily schedule: php artisan schedule:run
         'purge_schedule_enabled' => filter_var(env('CHANNEL_INBOX_PURGE_SCHEDULE_ENABLED', true), FILTER_VALIDATE_BOOL),
 
+        // Open threads initially show only messages with sent_at within this window.
+        'thread_lookback_hours' => (int) env('CHANNEL_INBOX_THREAD_LOOKBACK_HOURS', 24),
+
         // Composer chips — label shown in UI, body inserted into the reply box.
         'quick_replies' => [
             ['label' => 'Salaam', 'body' => 'আসসালামু আলাইকুম'],

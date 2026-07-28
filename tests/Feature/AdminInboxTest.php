@@ -885,4 +885,117 @@ class AdminInboxTest extends TestCase
             ->call('selectConversation', $conversation->id)
             ->assertSee('Messenger seen pending');
     }
+
+    #[Test]
+    public function open_thread_initially_hides_messages_older_than_lookback_window(): void
+    {
+        config(['channels.inbox.thread_lookback_hours' => 24]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Ancient greeting',
+            'sent_at' => now()->subHours(30),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Recent greeting',
+            'sent_at' => now()->subHour(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSee('Recent greeting')
+            ->assertDontSee('Ancient greeting')
+            ->assertSee('Load messages older than 24h')
+            ->assertSet('threadHistoryExpanded', false);
+    }
+
+    #[Test]
+    public function load_older_thread_history_reveals_messages_beyond_lookback(): void
+    {
+        config(['channels.inbox.thread_lookback_hours' => 24]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Ancient greeting',
+            'sent_at' => now()->subDays(2),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Recent greeting',
+            'sent_at' => now()->subHour(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertDontSee('Ancient greeting')
+            ->call('loadOlderThreadHistory')
+            ->assertSet('threadHistoryExpanded', true)
+            ->assertSee('Ancient greeting')
+            ->assertSee('Recent greeting')
+            ->assertSee('Showing full conversation history')
+            ->assertDontSee('Load messages older than 24h');
+    }
+
+    #[Test]
+    public function thread_message_search_finds_older_messages_without_expanding_history(): void
+    {
+        config(['channels.inbox.thread_lookback_hours' => 24]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Needle in haystack from last week',
+            'sent_at' => now()->subDays(3),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Recent greeting',
+            'sent_at' => now()->subHour(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertDontSee('Needle in haystack from last week')
+            ->set('threadMessageSearch', 'Needle')
+            ->assertSee('Needle in haystack from last week')
+            ->assertSee('Search results in full history')
+            ->assertSeeHtml('>Needle in haystack from last week</p>')
+            ->call('clearThreadMessageSearch')
+            ->assertSet('threadMessageSearch', '')
+            ->assertSee('Recent greeting')
+            ->assertDontSee('Needle in haystack from last week');
+    }
+
+    #[Test]
+    public function switching_conversations_resets_thread_history_and_search(): void
+    {
+        $this->actingAs($this->adminUser());
+        $first = $this->conversation(['external_user_id' => 'psid-a', 'customer_name' => 'First']);
+        $second = $this->conversation(['external_user_id' => 'psid-b', 'customer_name' => 'Second']);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $first->id)
+            ->call('loadOlderThreadHistory')
+            ->set('threadMessageSearch', 'hello')
+            ->assertSet('threadHistoryExpanded', true)
+            ->assertSet('threadMessageSearch', 'hello')
+            ->call('selectConversation', $second->id)
+            ->assertSet('threadHistoryExpanded', false)
+            ->assertSet('threadMessageSearch', '');
+    }
 }

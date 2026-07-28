@@ -441,6 +441,41 @@
                     }"
                     @scroll.passive="onScroll()"
                     class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3 xl:px-4 xl:py-4">
+                    <div class="sticky top-0 z-10 -mx-1 mb-1 space-y-2 bg-[#F7F3EA]/95 px-1 py-1 backdrop-blur xl:bg-white/95">
+                        <div class="flex items-center gap-2">
+                            <input type="search"
+                                wire:model.live.debounce.300ms="threadMessageSearch"
+                                placeholder="Search older messages…"
+                                class="min-w-0 flex-1 rounded-full border border-[#E0D6C2] bg-white px-3 py-1.5 text-xs text-[#1E1E1E] placeholder:text-[#8C8474] focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
+                                aria-label="Search messages in this conversation">
+                            @if (trim($threadMessageSearch) !== '')
+                                <button type="button"
+                                    wire:click="clearThreadMessageSearch"
+                                    class="shrink-0 text-[11px] font-semibold text-[#8C8474] hover:text-[#1E1E1E]">
+                                    Clear
+                                </button>
+                            @endif
+                        </div>
+
+                        @if ($hasOlderMessages && trim($threadMessageSearch) === '' && ! $threadHistoryExpanded)
+                            <button type="button"
+                                wire:click="loadOlderThreadHistory"
+                                class="w-full rounded-full border border-[#E0D6C2] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                                Load messages older than {{ $threadLookbackHours }}h
+                            </button>
+                        @elseif ($threadHistoryExpanded && trim($threadMessageSearch) === '')
+                            <p class="text-center text-[10px] text-[#8C8474]">Showing full conversation history</p>
+                        @elseif (trim($threadMessageSearch) !== '')
+                            <p class="text-center text-[10px] text-[#8C8474]">
+                                @if ($selectedConversation->messages->isEmpty())
+                                    No messages match “{{ trim($threadMessageSearch) }}”
+                                @else
+                                    Search results in full history
+                                @endif
+                            </p>
+                        @endif
+                    </div>
+
                     @foreach ($selectedConversation->messages as $messageRow)
                         @php $isOutbound = $messageRow->direction === 'outbound'; @endphp
                         <div @class([

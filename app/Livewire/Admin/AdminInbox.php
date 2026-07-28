@@ -96,6 +96,12 @@ class AdminInbox extends Component
      */
     public array $mappingProductSuggestions = [];
 
+    /** When false, the open thread only shows recent messages (see thread_lookback_hours). */
+    public bool $threadHistoryExpanded = false;
+
+    /** Search message bodies in the open thread (searches full history). */
+    public string $threadMessageSearch = '';
+
     public function mount(ChannelInboxPurgeService $purge, ChannelReplyService $replies): void
     {
         AdminAccess::ensureStaffAdmin();
@@ -128,6 +134,7 @@ class AdminInbox extends Component
         $this->mobileThreadOpen = true;
         $this->resetComposer();
         $this->resetOrderMapping();
+        $this->resetThreadHistory();
         $this->error = null;
         $this->statusMessage = null;
         $this->markConversationRead($conversation, $replies);
@@ -144,6 +151,7 @@ class AdminInbox extends Component
             $this->mobileThreadOpen = false;
             $this->resetComposer();
             $this->resetOrderMapping();
+            $this->resetThreadHistory();
             $this->error = null;
             $this->statusMessage = null;
 
@@ -162,6 +170,7 @@ class AdminInbox extends Component
         $this->mobileThreadOpen = true;
         $this->resetComposer();
         $this->resetOrderMapping();
+        $this->resetThreadHistory();
         $this->error = null;
         $this->statusMessage = null;
         $this->markConversationRead($conversation, app(ChannelReplyService::class));
@@ -207,6 +216,7 @@ class AdminInbox extends Component
         $this->mobileThreadOpen = false;
         $this->resetComposer();
         $this->resetOrderMapping();
+        $this->resetThreadHistory();
         $this->error = null;
         $this->statusMessage = null;
     }
@@ -378,6 +388,16 @@ class AdminInbox extends Component
             ? $body
             : rtrim($this->replyText)."\n".$body;
         $this->error = null;
+    }
+
+    public function loadOlderThreadHistory(): void
+    {
+        $this->threadHistoryExpanded = true;
+    }
+
+    public function clearThreadMessageSearch(): void
+    {
+        $this->threadMessageSearch = '';
     }
 
     public function setReplyTo(int $messageId): void
@@ -632,6 +652,12 @@ class AdminInbox extends Component
         $this->mappingProductSuggestions = [];
     }
 
+    private function resetThreadHistory(): void
+    {
+        $this->threadHistoryExpanded = false;
+        $this->threadMessageSearch = '';
+    }
+
     public function render(ChannelInboxDiagnostics $diagnostics)
     {
         $query = ChannelConversation::query()
@@ -670,20 +696,52 @@ class AdminInbox extends Component
             $displayConversationId = (int) $conversations->first()->id;
         }
 
+        $threadSearch = trim($this->threadMessageSearch);
+        $lookbackHours = max(1, (int) config('channels.inbox.thread_lookback_hours', 24));
+        $threadSince = now()->subHours($lookbackHours);
+        $hasOlderMessages = false;
+
         // If the selected id is outside the filtered list, still load it for the thread,
         // but never shrink the left list to that single conversation.
         $selectedConversation = $displayConversationId
             ? ChannelConversation::query()
                 ->with([
                     'draftOrder.items',
-                    'messages' => fn ($q) => $q->with('replyTo')->orderBy('sent_at')->orderBy('id'),
+                    'messages' => function ($q) use ($threadSearch, $threadSince) {
+                        $q->with('replyTo')->orderBy('sent_at')->orderBy('id');
+
+                        if ($threadSearch !== '') {
+                            $q->where('body', 'like', '%'.$threadSearch.'%');
+
+                            return;
+                        }
+
+                        if (! $this->threadHistoryExpanded) {
+                            $q->where(function ($window) use ($threadSince) {
+                                $window->where('sent_at', '>=', $threadSince)
+                                    ->orWhereNull('sent_at');
+                            });
+                        }
+                    },
                 ])
                 ->find($displayConversationId)
             : null;
 
+        if ($selectedConversation && $threadSearch === '' && ! $this->threadHistoryExpanded) {
+            $hasOlderMessages = ChannelMessage::query()
+                ->where('channel_conversation_id', $selectedConversation->id)
+                ->whereNotNull('sent_at')
+                ->where('sent_at', '<', $threadSince)
+                ->exists();
+        }
+
         $replyToMessage = null;
         if ($selectedConversation && $this->replyToMessageId) {
-            $replyToMessage = $selectedConversation->messages->firstWhere('id', $this->replyToMessageId);
+            $replyToMessage = $selectedConversation->messages->firstWhere('id', $this->replyToMessageId)
+                ?? ChannelMessage::query()
+                    ->where('channel_conversation_id', $selectedConversation->id)
+                    ->whereKey($this->replyToMessageId)
+                    ->first();
         }
 
         $quickReplies = collect(config('channels.inbox.quick_replies', []))
@@ -696,6 +754,8 @@ class AdminInbox extends Component
             'selectedConversation' => $selectedConversation,
             'replyToMessage' => $replyToMessage,
             'quickReplies' => $quickReplies,
+            'hasOlderMessages' => $hasOlderMessages,
+            'threadLookbackHours' => $lookbackHours,
             'diagnostics' => $diagnostics->forInbox([
                 'channel' => $this->channel,
                 'unread' => $this->unread,

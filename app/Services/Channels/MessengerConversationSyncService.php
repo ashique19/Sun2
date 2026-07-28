@@ -206,18 +206,31 @@ class MessengerConversationSyncService
         // Graph returns newest-first; store oldest-first for chronological drafts.
         $messages = array_reverse($messages);
         $stored = 0;
+        $storedRecentInbound = false;
+        $lookbackHours = max(1, (int) config('channels.ai_draft.lookback_hours', 48));
+        $since = now()->subHours($lookbackHours);
 
         foreach ($messages as $message) {
             if (! is_array($message)) {
                 continue;
             }
 
-            if ($this->storeGraphMessage($conversation, $message, $pageId)) {
-                $stored++;
+            $storedMessage = $this->storeGraphMessage($conversation, $message, $pageId);
+            if ($storedMessage === null) {
+                continue;
+            }
+
+            $stored++;
+
+            if ($storedMessage->direction === ChannelMessage::DIRECTION_INBOUND
+                && $storedMessage->sent_at
+                && $storedMessage->sent_at->greaterThanOrEqualTo($since)) {
+                $storedRecentInbound = true;
             }
         }
 
-        if ($stored > 0) {
+        // Inbox can keep historic messages; AI drafts only from recent inbound.
+        if ($storedRecentInbound) {
             $this->drafts->syncDraftFromConversation($conversation->fresh(['messages']));
         }
 
@@ -227,11 +240,11 @@ class MessengerConversationSyncService
     /**
      * @param  array<string, mixed>  $message
      */
-    private function storeGraphMessage(ChannelConversation $conversation, array $message, string $pageId): bool
+    private function storeGraphMessage(ChannelConversation $conversation, array $message, string $pageId): ?ChannelMessage
     {
         $mid = isset($message['id']) ? (string) $message['id'] : null;
         if ($mid === null || $mid === '') {
-            return false;
+            return null;
         }
 
         $existing = ChannelMessage::query()
@@ -240,7 +253,7 @@ class MessengerConversationSyncService
             ->exists();
 
         if ($existing) {
-            return false;
+            return null;
         }
 
         $fromId = (string) data_get($message, 'from.id', '');
@@ -252,7 +265,7 @@ class MessengerConversationSyncService
         [$mediaUrl, $mediaMime] = $this->extractAttachment($message);
 
         if (($text === null || $text === '') && $mediaUrl === null) {
-            return false;
+            return null;
         }
 
         $sentAt = null;
@@ -264,7 +277,7 @@ class MessengerConversationSyncService
             }
         }
 
-        $this->conversations->storeMessage($conversation, [
+        return $this->conversations->storeMessage($conversation, [
             'external_message_id' => $mid,
             'direction' => $direction,
             'body' => $text !== '' ? $text : null,
@@ -273,8 +286,6 @@ class MessengerConversationSyncService
             'raw_payload' => $message,
             'sent_at' => $sentAt ?? now(),
         ]);
-
-        return true;
     }
 
     /**

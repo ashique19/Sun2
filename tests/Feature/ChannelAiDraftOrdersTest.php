@@ -288,6 +288,7 @@ class ChannelAiDraftOrdersTest extends TestCase
         $draft = app(ChannelOrderDraftService::class)
             ->syncDraftFromConversation($conversation->fresh(['messages']));
 
+        $this->assertNotNull($draft);
         $this->assertTrue($draft->isAiDraft());
         $this->assertSame(10, $product->fresh()->stock_quantity);
 
@@ -443,6 +444,7 @@ class ChannelAiDraftOrdersTest extends TestCase
         $draft = app(ChannelOrderDraftService::class)
             ->syncDraftFromConversation($conversation->fresh(['messages']));
 
+        $this->assertNotNull($draft);
         $this->assertSame('Sajida', $draft->name);
         $this->assertSame('01712345678', $draft->phone);
         $this->assertSame(2, (int) $draft->items->first()->quantity);
@@ -486,6 +488,7 @@ class ChannelAiDraftOrdersTest extends TestCase
         $draft = app(ChannelOrderDraftService::class)
             ->syncDraftFromConversation($conversation->fresh(['messages']));
 
+        $this->assertNotNull($draft);
         $this->assertSame(Order::STATUS_DRAFT, $draft->status);
         $this->assertSame(255, mb_strlen((string) $draft->address));
         $this->assertSame(mb_substr($longAddress, 0, 255), $draft->address);
@@ -533,11 +536,96 @@ class ChannelAiDraftOrdersTest extends TestCase
         $draft = app(ChannelOrderDraftService::class)
             ->syncDraftFromConversation($conversation->fresh(['messages']));
 
+        $this->assertNotNull($draft);
         $this->assertSame(Order::STATUS_DRAFT, $draft->status);
         $this->assertSame('heuristic', $draft->ai_parse_meta['source'] ?? null);
         $this->assertLessThanOrEqual(255, mb_strlen((string) $draft->address));
         $this->assertSame('01831066963', $draft->phone);
         $this->assertNotNull($draft->customer_note);
+    }
+
+    public function test_historic_inbound_messages_do_not_create_ai_draft(): void
+    {
+        config(['gemini.api_key' => null]);
+
+        $conversation = app(ChannelConversationService::class)->findOrCreate(
+            ChannelConversation::CHANNEL_MESSENGER,
+            'PSID_OLD_CHAT',
+        );
+        app(ChannelConversationService::class)->storeMessage($conversation, [
+            'external_message_id' => 'm_old_1',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => "Old Customer\n01627237432\nMirpur, Dhaka\nSilk Kurti",
+            'sent_at' => now()->subYears(2),
+        ]);
+
+        $draft = app(ChannelOrderDraftService::class)
+            ->syncDraftFromConversation($conversation->fresh(['messages']));
+
+        $this->assertNull($draft);
+        $this->assertNull($conversation->fresh()->draft_order_id);
+        $this->assertSame(0, Order::query()->where('status', Order::STATUS_DRAFT)->count());
+    }
+
+    public function test_new_greeting_does_not_rebuild_draft_from_historic_chat(): void
+    {
+        config(['gemini.api_key' => null]);
+
+        $conversation = app(ChannelConversationService::class)->findOrCreate(
+            ChannelConversation::CHANNEL_MESSENGER,
+            'PSID_GREETING',
+            ['customer_name' => 'Historic'],
+        );
+        app(ChannelConversationService::class)->storeMessage($conversation, [
+            'external_message_id' => 'm_hist_order',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => "Historic Buyer\n01627237432\nOld address from 2022\nSilk Kurti",
+            'sent_at' => now()->subYears(1),
+        ]);
+        app(ChannelConversationService::class)->storeMessage($conversation, [
+            'external_message_id' => 'm_hi_now',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'hi',
+            'sent_at' => now(),
+        ]);
+
+        $draft = app(ChannelOrderDraftService::class)
+            ->syncDraftFromConversation($conversation->fresh(['messages']));
+
+        $this->assertNull($draft);
+        $this->assertSame(0, Order::query()->where('status', Order::STATUS_DRAFT)->count());
+    }
+
+    public function test_recent_order_message_still_creates_ai_draft(): void
+    {
+        config(['gemini.api_key' => null]);
+
+        $this->product(['name' => 'Silk Kurti']);
+
+        $conversation = app(ChannelConversationService::class)->findOrCreate(
+            ChannelConversation::CHANNEL_MESSENGER,
+            'PSID_RECENT_ORDER',
+        );
+        app(ChannelConversationService::class)->storeMessage($conversation, [
+            'external_message_id' => 'm_old_noise',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'random old chatter without order details',
+            'sent_at' => now()->subYears(2),
+        ]);
+        app(ChannelConversationService::class)->storeMessage($conversation, [
+            'external_message_id' => 'm_new_order',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => "Nila\n01627237432\nBanani, Dhaka\nSilk Kurti",
+            'sent_at' => now()->subHour(),
+        ]);
+
+        $draft = app(ChannelOrderDraftService::class)
+            ->syncDraftFromConversation($conversation->fresh(['messages']));
+
+        $this->assertNotNull($draft);
+        $this->assertSame('Nila', $draft->name);
+        $this->assertSame('01627237432', $draft->phone);
+        $this->assertStringNotContainsString('random old chatter', (string) $draft->customer_note);
     }
 
     public function test_discard_draft_does_not_change_stock(): void

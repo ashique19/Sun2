@@ -9,6 +9,8 @@ use App\Services\Admin\GeminiClient;
 use App\Services\Admin\OrderPasteParser;
 use App\Services\Storefront\AddressLocationGuesser;
 use App\Support\PhoneNumber;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -43,9 +45,7 @@ class ChannelOrderParser
     {
         $conversation->loadMissing(['messages']);
 
-        $inbound = $conversation->messages
-            ->where('direction', ChannelMessage::DIRECTION_INBOUND)
-            ->values();
+        $inbound = $this->recentInboundMessages($conversation);
 
         $textChunks = [];
         $imageParts = [];
@@ -170,6 +170,34 @@ class ChannelOrderParser
     }
 
     /**
+     * Recent inbound messages only — historic Graph history must not feed AI drafts.
+     *
+     * @return Collection<int, ChannelMessage>
+     */
+    private function recentInboundMessages(ChannelConversation $conversation): Collection
+    {
+        $lookbackHours = max(1, (int) config('channels.ai_draft.lookback_hours', 48));
+        $maxMessages = max(1, (int) config('channels.ai_draft.max_inbound_messages', 15));
+        $since = Carbon::now()->subHours($lookbackHours);
+
+        return $conversation->messages
+            ->where('direction', ChannelMessage::DIRECTION_INBOUND)
+            ->filter(function (ChannelMessage $message) use ($since) {
+                $sentAt = $message->sent_at;
+
+                if (! $sentAt instanceof Carbon) {
+                    return false;
+                }
+
+                return $sentAt->greaterThanOrEqualTo($since);
+            })
+            ->sortBy(fn (ChannelMessage $message) => $message->sent_at?->getTimestamp() ?? 0)
+            ->values()
+            ->take(-$maxMessages)
+            ->values();
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $imageParts
      * @return array<string, mixed>
      */
@@ -184,13 +212,15 @@ class ChannelOrderParser
             ->implode("\n");
 
         $system = <<<'PROMPT'
-You extract Bangladesh e-commerce order details from Messenger/WhatsApp customer messages (Bangla or English) and optional product photos.
+You extract Bangladesh e-commerce order details from recent Messenger/WhatsApp customer messages (Bangla or English) and optional product photos.
 Return ONLY JSON with keys:
 name, phone, address, city, area, product_id, product_name, quantity
 Rules:
+- Only use the customer messages provided below (they are recent). Do not invent older order history.
+- If there is no clear new order intent (just greetings/chitchat), return null for all fields.
 - phone must be Bangladesh mobile 01XXXXXXXXX when possible (convert Bangla digits, ignore spaces).
 - Prefer English city/area names when both Bangla and English appear.
-- address is the delivery address without name/phone.
+- address is the delivery address without name/phone. Keep it short; never dump the whole chat.
 - product_id must be an integer id from the catalog when confident, else null.
 - product_name is the best product label from text or photo.
 - quantity defaults to 1.

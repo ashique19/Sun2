@@ -29,11 +29,25 @@ class ChannelOrderDraftService
     ) {}
 
     /**
-     * Parse conversation and upsert a staff-only AI draft order linked to it.
+     * Parse recent conversation messages and upsert a staff-only AI draft when useful.
+     *
+     * Returns null when there is no recent order signal (historic/weak chats must not
+     * create Draft by AI rows). Existing drafts are left unchanged on weak parses.
      */
-    public function syncDraftFromConversation(ChannelConversation $conversation): Order
+    public function syncDraftFromConversation(ChannelConversation $conversation): ?Order
     {
         $parsed = $this->parser->parseConversation($conversation);
+
+        if (! $this->hasUsefulOrderSignal($parsed)) {
+            if (! $conversation->draft_order_id) {
+                return null;
+            }
+
+            return Order::query()
+                ->whereKey($conversation->draft_order_id)
+                ->where('status', Order::STATUS_DRAFT)
+                ->first();
+        }
 
         return DB::transaction(function () use ($conversation, $parsed) {
             $conversation->refresh();
@@ -87,6 +101,27 @@ class ChannelOrderDraftService
 
             return $order;
         });
+    }
+
+    /**
+     * @param  array<string, mixed>  $parsed
+     */
+    private function hasUsefulOrderSignal(array $parsed): bool
+    {
+        $rawText = trim((string) ($parsed['raw_text'] ?? ''));
+        if ($rawText === '' && empty($parsed['product_id'])) {
+            return false;
+        }
+
+        $phone = isset($parsed['phone']) ? (string) $parsed['phone'] : '';
+        $requirePhone = (bool) config('channels.ai_draft.require_phone', true);
+        if ($requirePhone && ($phone === '' || ! PhoneNumber::isValidBangladeshMobile($phone))) {
+            return false;
+        }
+
+        $minConfidence = (float) config('channels.ai_draft.min_confidence', 0.5);
+
+        return (float) ($parsed['confidence'] ?? 0) >= $minConfidence;
     }
 
     public function confirm(Order $order, ?int $confirmedBy = null): Order

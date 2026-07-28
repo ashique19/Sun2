@@ -216,10 +216,21 @@ class AdminProductEdit extends Component
                 'font' => $this->pricedImageFont,
             ]);
             $this->product->refresh();
-            $this->message = 'Priced image generated.';
+            $this->message = 'Priced image saved.';
         } catch (Throwable $e) {
             $this->addError('pricedImage', $e->getMessage());
         }
+    }
+
+    public function deletePricedImage(ProductPricedImageService $pricedImages): void
+    {
+        if (! $this->product?->priced_image_path) {
+            return;
+        }
+
+        $pricedImages->clear($this->product);
+        $this->product->refresh();
+        $this->message = 'Priced image deleted.';
     }
 
     public function generateAiImage(GeminiClient $gemini): void

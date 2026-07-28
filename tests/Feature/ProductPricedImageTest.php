@@ -162,12 +162,100 @@ class ProductPricedImageTest extends TestCase
             ->set('pricedImageFont', 80)
             ->call('generatePricedImage')
             ->assertHasNoErrors()
-            ->assertSet('message', 'Priced image generated.');
+            ->assertSet('message', 'Priced image saved.');
 
         $product->refresh();
         $this->assertSame('bottom-left', $product->priced_image_layout['position']);
         $this->assertSame(80, $product->priced_image_layout['font']);
         $this->assertNotNull($product->priced_image_path);
+    }
+
+    #[Test]
+    public function edit_modal_can_delete_priced_image_and_keeps_layout(): void
+    {
+        $this->actingAs($this->adminUser());
+        $product = $this->productWithPrimaryImage();
+        $service = app(ProductPricedImageService::class);
+        $service->generate($product, [
+            'position' => 'top-right',
+            'font' => 48,
+        ]);
+        $product->refresh();
+        $path = $product->priced_image_path;
+        $this->assertNotNull($path);
+        $this->assertFileExists(public_path(ltrim($path, '/')));
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product->fresh(['images'])])
+            ->call('openPricedImageModal')
+            ->assertSee('Save & rebuild')
+            ->assertSeeHtml('wire:click="deletePricedImage"')
+            ->assertSee('writes the position, text size, and priced image')
+            ->call('deletePricedImage')
+            ->assertSet('message', 'Priced image deleted.')
+            ->assertDontSeeHtml('wire:click="deletePricedImage"')
+            ->assertSee('Save & generate');
+
+        $product->refresh();
+        $this->assertNull($product->priced_image_path);
+        $this->assertSame('top-right', $product->priced_image_layout['position']);
+        $this->assertSame(48, $product->priced_image_layout['font']);
+        $this->assertFileDoesNotExist(public_path(ltrim($path, '/')));
+    }
+
+    #[Test]
+    public function regular_price_strikethrough_is_drawn_thicker_than_one_pixel(): void
+    {
+        $product = $this->productWithPrimaryImage();
+        $service = app(ProductPricedImageService::class);
+        $path = $service->generate($product, [
+            'position' => 'top-left',
+            'font' => 64,
+        ]);
+
+        $absolute = public_path(ltrim($path, '/'));
+        $image = imagecreatefromjpeg($absolute);
+        $this->assertNotFalse($image);
+
+        $width = imagesx($image);
+        $height = imagesy($image);
+        $wideBlackRows = [];
+
+        for ($y = 16; $y < min(180, $height); $y++) {
+            $blackCount = 0;
+
+            for ($x = 24; $x < min(260, $width); $x++) {
+                $rgb = imagecolorat($image, $x, $y);
+                $r = ($rgb >> 16) & 0xFF;
+                $g = ($rgb >> 8) & 0xFF;
+                $b = $rgb & 0xFF;
+
+                if ($r < 40 && $g < 40 && $b < 40) {
+                    $blackCount++;
+                }
+            }
+
+            // A strike spans most of the price text width; glyph stems do not.
+            if ($blackCount >= 50) {
+                $wideBlackRows[] = $y;
+            }
+        }
+
+        imagedestroy($image);
+
+        $this->assertNotEmpty($wideBlackRows, 'Expected a horizontal strikethrough band.');
+
+        $run = 1;
+        $maxRun = 1;
+        for ($i = 1; $i < count($wideBlackRows); $i++) {
+            if ($wideBlackRows[$i] === $wideBlackRows[$i - 1] + 1) {
+                $run++;
+                $maxRun = max($maxRun, $run);
+            } else {
+                $run = 1;
+            }
+        }
+
+        $this->assertGreaterThanOrEqual(3, $maxRun, 'Expected strikethrough thickness of at least 3px.');
     }
 
     #[Test]

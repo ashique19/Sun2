@@ -5,6 +5,7 @@ namespace App\Livewire\Admin;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Services\Channels\ChannelInboxDiagnostics;
+use App\Services\Channels\ChannelInboxPurgeService;
 use App\Services\Channels\ChannelReplyService;
 use App\Services\Channels\MessengerConversationSyncService;
 use App\Support\AdminAccess;
@@ -59,9 +60,17 @@ class AdminInbox extends Component
      */
     public bool $mobileFiltersOpen = false;
 
-    public function mount(): void
+    public function mount(ChannelInboxPurgeService $purge): void
     {
         AdminAccess::ensureStaffAdmin();
+
+        $purge->purgeOnInboxLoad();
+
+        if ($this->selectedConversationId
+            && ! ChannelConversation::query()->whereKey($this->selectedConversationId)->exists()) {
+            $this->selectedConversationId = null;
+            $this->mobileThreadOpen = false;
+        }
 
         if ($this->selectedConversationId) {
             $this->mobileThreadOpen = true;

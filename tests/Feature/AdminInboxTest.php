@@ -228,7 +228,10 @@ class AdminInboxTest extends TestCase
             ->assertSee('/api/webhooks/messenger')
             ->assertSee('Verify token configured')
             ->assertSee('Development mode')
-            ->assertSee('Sync from Facebook');
+            ->assertSee('Sync from Facebook')
+            ->assertSee('Facebook Page token needs attention')
+            ->assertSee('Paste new FACEBOOK_PAGE_ACCESS_TOKEN')
+            ->assertSee('Save token');
     }
 
     #[Test]
@@ -764,6 +767,7 @@ class AdminInboxTest extends TestCase
             ->assertSet('lastSyncedAt', null)
             ->assertSet('syncToast', 'Facebook Page access token or Page ID is not configured.')
             ->assertSee('Sync failed:')
+            ->assertSee('Facebook Page token needs attention')
             ->call('dismissSyncToast')
             ->assertSet('syncToast', null);
     }

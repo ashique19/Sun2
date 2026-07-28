@@ -98,10 +98,38 @@ class FacebookPageTokenGateTest extends TestCase
             ->set('tokenInput', 'new-valid-token')
             ->call('saveToken')
             ->assertSet('feedbackOk', true)
-            ->assertDontSee('Facebook Page token needs attention');
+            ->assertDontSee('Facebook Page token needs attention')
+            ->assertSee('Update token')
+            ->assertSee('Facebook Page token');
 
         $this->assertSame('new-valid-token', Setting::getValue(FacebookPageTokenService::SETTING_KEY));
         $this->assertSame('new-valid-token', app(FacebookPageTokenService::class)->token());
+    }
+
+    #[Test]
+    public function valid_token_still_offers_update_form_on_demand(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'good-token',
+            'facebook.messenger.page_id' => 'page-1',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/me*' => Http::response([
+                'id' => 'page-1',
+                'name' => 'Sundoritoma',
+            ], 200),
+        ]);
+
+        Livewire::actingAs($this->adminUser())
+            ->test(AdminFacebookTokenGate::class)
+            ->assertSee('Facebook Page token')
+            ->assertSee('Update token')
+            ->assertDontSee('Paste new FACEBOOK_PAGE_ACCESS_TOKEN')
+            ->call('toggleUpdateForm')
+            ->assertSee('Paste new FACEBOOK_PAGE_ACCESS_TOKEN')
+            ->assertSee('Save token');
     }
 
     #[Test]

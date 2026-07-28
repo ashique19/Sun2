@@ -349,19 +349,21 @@ class ChannelReplyService
             $message['text'] = $text;
         }
 
+        // reply_to is a top-level Send API field (sibling of message), not inside message.
+        $payload = [
+            'recipient' => ['id' => $conversation->external_user_id],
+            'messaging_type' => 'RESPONSE',
+            'message' => $message,
+        ];
         if ($replyTo && filled($replyTo->external_message_id)) {
-            $message['reply_to'] = ['mid' => $replyTo->external_message_id];
+            $payload['reply_to'] = ['mid' => $replyTo->external_message_id];
         }
 
         $response = Http::timeout(30)
             ->withToken($token)
             ->acceptJson()
             ->asJson()
-            ->post($url, [
-                'recipient' => ['id' => $conversation->external_user_id],
-                'messaging_type' => 'RESPONSE',
-                'message' => $message,
-            ]);
+            ->post($url, $payload);
 
         if (! $response->successful()) {
             throw new RuntimeException('Messenger Send API error ('.$response->status().'): '.$response->body());
@@ -372,7 +374,11 @@ class ChannelReplyService
 
         // If we sent an image with a caption, follow up with the text (same reply thread).
         if ($imageUrl && $text !== '') {
-            $captionPayload = ['text' => $text];
+            $captionPayload = [
+                'recipient' => ['id' => $conversation->external_user_id],
+                'messaging_type' => 'RESPONSE',
+                'message' => ['text' => $text],
+            ];
             if ($mid) {
                 $captionPayload['reply_to'] = ['mid' => $mid];
             } elseif ($replyTo && filled($replyTo->external_message_id)) {
@@ -383,11 +389,7 @@ class ChannelReplyService
                 ->withToken($token)
                 ->acceptJson()
                 ->asJson()
-                ->post($url, [
-                    'recipient' => ['id' => $conversation->external_user_id],
-                    'messaging_type' => 'RESPONSE',
-                    'message' => $captionPayload,
-                ]);
+                ->post($url, $captionPayload);
 
             if (! $captionResponse->successful()) {
                 Log::warning('Messenger caption follow-up failed.', [

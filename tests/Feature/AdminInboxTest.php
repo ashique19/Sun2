@@ -498,11 +498,66 @@ class AdminInboxTest extends TestCase
         ]);
 
         Http::assertSent(function ($request) {
-            $message = $request['message'] ?? null;
+            $data = $request->data();
+            $message = $data['message'] ?? null;
 
             return is_array($message)
                 && ($message['text'] ?? null) === 'Yes, in stock'
-                && ($message['reply_to']['mid'] ?? null) === 'm_in_1';
+                && ! array_key_exists('reply_to', $message)
+                && ($data['reply_to']['mid'] ?? null) === 'm_in_1';
+        });
+    }
+
+    #[Test]
+    public function it_can_reply_to_an_inbound_image_message(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/me/messages*' => Http::sequence()
+                ->push(['recipient_id' => 'psid-1'], 200)
+                ->push(['message_id' => 'm_out_img_reply'], 200)
+                ->push(['recipient_id' => 'psid-1'], 200),
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $inbound = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_in_image_1',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => null,
+            'media_url' => 'https://example.test/chat.jpg',
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('setReplyTo', $inbound->id)
+            ->set('replyText', 'Got it, checking stock')
+            ->call('sendReply')
+            ->assertSet('statusMessage', 'Reply sent.');
+
+        $this->assertDatabaseHas('channel_messages', [
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_OUTBOUND,
+            'body' => 'Got it, checking stock',
+            'reply_to_message_id' => $inbound->id,
+        ]);
+
+        Http::assertSent(function ($request) {
+            $data = $request->data();
+            $message = $data['message'] ?? null;
+
+            return is_array($message)
+                && ($message['text'] ?? null) === 'Got it, checking stock'
+                && ! array_key_exists('reply_to', $message)
+                && ($data['reply_to']['mid'] ?? null) === 'm_in_image_1';
         });
     }
 

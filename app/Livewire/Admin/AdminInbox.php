@@ -5,6 +5,7 @@ namespace App\Livewire\Admin;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Models\Product;
+use App\Services\Admin\ProductImageHashService;
 use App\Services\Channels\ChannelInboxDiagnostics;
 use App\Services\Channels\ChannelInboxPurgeService;
 use App\Services\Channels\ChannelMessageOrderMapper;
@@ -12,6 +13,8 @@ use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
 use App\Services\Channels\MessengerConversationSyncService;
 use App\Support\AdminAccess;
+use App\Support\Fileinfo;
+use App\Support\StorefrontAssets;
 use InvalidArgumentException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -92,9 +95,19 @@ class AdminInbox extends Component
     public string $mappingProductSearch = '';
 
     /**
-     * @var list<array{id: int, name: string, price: float}>
+     * @var list<array{id: int, name: string, price: float, sku?: ?string, stock_quantity?: int, image_url?: ?string}>
      */
     public array $mappingProductSuggestions = [];
+
+    /** Cropped JPEG uploaded from the inbox product-match cropper. */
+    public $mappingCroppedImage = null;
+
+    /**
+     * @var list<array{product_id: int, name: string, sku: ?string, price: float, stock_quantity: int, image_url: ?string, match_percent: float, distance: int}>
+     */
+    public array $mappingImageMatches = [];
+
+    public ?string $mappingImageMatchError = null;
 
     /** When false, the open thread only shows recent messages (see thread_lookback_hours). */
     public bool $threadHistoryExpanded = false;
@@ -263,6 +276,7 @@ class AdminInbox extends Component
         $this->mappingField = null;
         $this->mappingProductSearch = '';
         $this->mappingProductSuggestions = [];
+        $this->clearMappingImageMatchState();
         $this->error = null;
     }
 
@@ -272,6 +286,7 @@ class AdminInbox extends Component
         $this->mappingField = null;
         $this->mappingProductSearch = '';
         $this->mappingProductSuggestions = [];
+        $this->clearMappingImageMatchState();
     }
 
     public function beginMapField(string $field, ChannelMessageOrderMapper $mapper): void
@@ -302,13 +317,29 @@ class AdminInbox extends Component
         }
 
         $this->mappingField = $field;
+        $this->clearMappingImageMatchState();
         $suggestion = $mapper->suggest($message, $field);
+
+        if ($field === ChannelMessageOrderMapper::FIELD_PRODUCT) {
+            $this->mappingProductSearch = (string) ($suggestion['value'] ?? '');
+            $this->mappingProductSuggestions = $this->enrichProductSuggestions(
+                array_map(fn (array $row) => [
+                    'id' => (int) $row['id'],
+                    'name' => (string) $row['name'],
+                    'price' => (float) $row['price'],
+                ], $suggestion['products']),
+            );
+
+            if ($this->mappingProductSearch !== '' && $this->mappingProductSuggestions === []) {
+                $this->updatedMappingProductSearch();
+            }
+
+            return;
+        }
+
         $this->mappingProductSuggestions = $suggestion['products'];
         $this->mappingProductSearch = (string) ($suggestion['value'] ?? '');
-
-        if ($field !== ChannelMessageOrderMapper::FIELD_PRODUCT) {
-            $this->applyMapField($field);
-        }
+        $this->applyMapField($field);
     }
 
     public function applyMapField(string $field, ?int $productId = null): void
@@ -359,16 +390,63 @@ class AdminInbox extends Component
         }
 
         $this->mappingProductSuggestions = Product::query()
+            ->with(['images' => fn ($q) => $q->orderBy('sort_order')->limit(1)])
             ->searchTerm($term)
             ->orderBy('name')
-            ->limit(8)
-            ->get(['id', 'name', 'price'])
+            ->limit(12)
+            ->get()
             ->map(fn (Product $product) => [
                 'id' => (int) $product->id,
                 'name' => (string) $product->name,
+                'sku' => $product->sku,
                 'price' => (float) $product->price,
+                'stock_quantity' => (int) $product->stock_quantity,
+                'image_url' => StorefrontAssets::url($product->primaryImagePath()),
             ])
             ->all();
+    }
+
+    public function matchProductFromCroppedImage(ProductImageHashService $hasher): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->mappingImageMatchError = null;
+        $this->mappingImageMatches = [];
+
+        $this->validate([
+            'mappingCroppedImage' => Fileinfo::storedImageRules(10240),
+        ]);
+
+        try {
+            $hash = $hasher->hashUploadedFile($this->mappingCroppedImage);
+            $matches = $hasher->findTopMatches(
+                $hash,
+                ProductImageHashService::TOP_MATCHES,
+                ProductImageHashService::MIN_MATCH_PERCENT,
+            );
+
+            $best = $matches[0] ?? null;
+            if ($best && $best['match_percent'] >= ProductImageHashService::AUTO_MATCH_PERCENT) {
+                $this->applyMapField(ChannelMessageOrderMapper::FIELD_PRODUCT, (int) $best['product_id']);
+                $this->statusMessage = 'Added “'.$best['name'].'” ('.number_format($best['match_percent'], 1).'% image match).';
+
+                return;
+            }
+
+            $this->mappingImageMatches = $matches;
+            if ($matches === []) {
+                $this->mappingImageMatchError = 'No catalog match at 80%+. Try a tighter crop or search by name.';
+            }
+        } catch (\Throwable $e) {
+            $this->mappingImageMatchError = $e->getMessage();
+        } finally {
+            $this->mappingCroppedImage = null;
+        }
+    }
+
+    public function selectMappingImageMatch(int $productId): void
+    {
+        $this->applyMapField(ChannelMessageOrderMapper::FIELD_PRODUCT, $productId);
     }
 
     public function insertQuickReply(int $index): void
@@ -678,6 +756,47 @@ class AdminInbox extends Component
         $this->mappingField = null;
         $this->mappingProductSearch = '';
         $this->mappingProductSuggestions = [];
+        $this->clearMappingImageMatchState();
+    }
+
+    private function clearMappingImageMatchState(): void
+    {
+        $this->mappingCroppedImage = null;
+        $this->mappingImageMatches = [];
+        $this->mappingImageMatchError = null;
+    }
+
+    /**
+     * @param  list<array{id: int, name: string, price: float}>  $rows
+     * @return list<array{id: int, name: string, price: float, sku: ?string, stock_quantity: int, image_url: ?string}>
+     */
+    private function enrichProductSuggestions(array $rows): array
+    {
+        if ($rows === []) {
+            return [];
+        }
+
+        $ids = array_values(array_unique(array_map(fn (array $row) => (int) $row['id'], $rows)));
+        $products = Product::query()
+            ->with(['images' => fn ($q) => $q->orderBy('sort_order')->limit(1)])
+            ->whereIn('id', $ids)
+            ->get()
+            ->keyBy('id');
+
+        $enriched = [];
+        foreach ($rows as $row) {
+            $product = $products->get((int) $row['id']);
+            $enriched[] = [
+                'id' => (int) $row['id'],
+                'name' => (string) $row['name'],
+                'price' => (float) $row['price'],
+                'sku' => $product?->sku,
+                'stock_quantity' => (int) ($product?->stock_quantity ?? 0),
+                'image_url' => $product ? StorefrontAssets::url($product->primaryImagePath()) : null,
+            ];
+        }
+
+        return $enriched;
     }
 
     private function resetThreadHistory(): void
@@ -777,10 +896,20 @@ class AdminInbox extends Component
             ->values()
             ->all();
 
+        $mappingMessage = null;
+        if ($selectedConversation && $this->mappingMessageId) {
+            $mappingMessage = $selectedConversation->messages->firstWhere('id', $this->mappingMessageId)
+                ?? ChannelMessage::query()
+                    ->where('channel_conversation_id', $selectedConversation->id)
+                    ->whereKey($this->mappingMessageId)
+                    ->first();
+        }
+
         return view('livewire.admin.admin-inbox', [
             'conversations' => $conversations,
             'selectedConversation' => $selectedConversation,
             'replyToMessage' => $replyToMessage,
+            'mappingMessage' => $mappingMessage,
             'quickReplies' => $quickReplies,
             'hasOlderMessages' => $hasOlderMessages,
             'threadLookbackHours' => $lookbackHours,

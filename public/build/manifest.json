@@ -1,4 +1,18 @@
 {
+  "_cropper-D8EYC47y.js": {
+    "file": "assets/cropper-D8EYC47y.js",
+    "name": "cropper",
+    "imports": [
+      "_rolldown-runtime-Bh1tDfsg.js"
+    ],
+    "css": [
+      "assets/cropper-cx_wrqbx.css"
+    ]
+  },
+  "_cropper-cx_wrqbx.css": {
+    "file": "assets/cropper-cx_wrqbx.css",
+    "src": "_cropper-cx_wrqbx.css"
+  },
   "_fonts-DkuEHybc.css": {
     "file": "assets/fonts-DkuEHybc.css",
     "src": "_fonts-DkuEHybc.css"
@@ -56,7 +70,7 @@
     "name": "rolldown-runtime"
   },
   "resources/css/app.css": {
-    "file": "assets/app-DO3Luw3N.css",
+    "file": "assets/app-BvLXzLww.css",
     "name": "app",
     "names": [
       "app.css"
@@ -65,19 +79,17 @@
     "isEntry": true
   },
   "resources/js/admin-product-images.js": {
-    "file": "assets/admin-product-images-DFapawQE.js",
+    "file": "assets/admin-product-images-BoBk_bPj.js",
     "name": "admin-product-images",
     "src": "resources/js/admin-product-images.js",
     "isEntry": true,
     "imports": [
-      "_rolldown-runtime-Bh1tDfsg.js"
-    ],
-    "css": [
-      "assets/admin-product-images-cx_wrqbx.css"
+      "_rolldown-runtime-Bh1tDfsg.js",
+      "_cropper-D8EYC47y.js"
     ]
   },
   "resources/js/app.js": {
-    "file": "assets/app-ClPcZkPz.js",
+    "file": "assets/app-Fg5YEFoR.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true,
@@ -85,7 +97,17 @@
       "_rolldown-runtime-Bh1tDfsg.js"
     ],
     "css": [
-      "assets/app-DO3Luw3N.css"
+      "assets/app-BvLXzLww.css"
+    ]
+  },
+  "resources/js/inbox-product-crop.js": {
+    "file": "assets/inbox-product-crop-Djr7foY9.js",
+    "name": "inbox-product-crop",
+    "src": "resources/js/inbox-product-crop.js",
+    "isEntry": true,
+    "imports": [
+      "_rolldown-runtime-Bh1tDfsg.js",
+      "_cropper-D8EYC47y.js"
     ]
   }
 }

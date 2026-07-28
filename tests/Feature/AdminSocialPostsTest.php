@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\SocialPost;
+use App\Models\SocialPostPublication;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -95,14 +96,14 @@ class AdminSocialPostsTest extends TestCase
         ]);
 
         // Selected channels still get failed rows with a clear reason when Meta is not configured.
-        $this->assertSame(2, \App\Models\SocialPostPublication::query()->count());
+        $this->assertSame(2, SocialPostPublication::query()->count());
         $this->assertDatabaseHas('social_post_publications', [
-            'channel' => \App\Models\SocialPostPublication::CHANNEL_FACEBOOK,
-            'status' => \App\Models\SocialPostPublication::STATUS_FAILED,
+            'channel' => SocialPostPublication::CHANNEL_FACEBOOK,
+            'status' => SocialPostPublication::STATUS_FAILED,
         ]);
         $this->assertDatabaseHas('social_post_publications', [
-            'channel' => \App\Models\SocialPostPublication::CHANNEL_INSTAGRAM,
-            'status' => \App\Models\SocialPostPublication::STATUS_FAILED,
+            'channel' => SocialPostPublication::CHANNEL_INSTAGRAM,
+            'status' => SocialPostPublication::STATUS_FAILED,
         ]);
     }
 
@@ -157,13 +158,13 @@ class AdminSocialPostsTest extends TestCase
             ->assertSet('phase', 'done')
             ->assertSet('channelProgress.facebook.status', 'success');
 
-        $this->assertSame(1, \App\Models\SocialPostPublication::query()->count());
+        $this->assertSame(1, SocialPostPublication::query()->count());
         $this->assertDatabaseHas('social_post_publications', [
-            'channel' => \App\Models\SocialPostPublication::CHANNEL_FACEBOOK,
-            'status' => \App\Models\SocialPostPublication::STATUS_SUCCESS,
+            'channel' => SocialPostPublication::CHANNEL_FACEBOOK,
+            'status' => SocialPostPublication::STATUS_SUCCESS,
         ]);
         $this->assertDatabaseMissing('social_post_publications', [
-            'channel' => \App\Models\SocialPostPublication::CHANNEL_INSTAGRAM,
+            'channel' => SocialPostPublication::CHANNEL_INSTAGRAM,
         ]);
     }
 
@@ -219,7 +220,49 @@ class AdminSocialPostsTest extends TestCase
             ->assertSet('phase', 'done');
 
         $this->assertNotNull($component->get('createdPostId'));
-        $this->assertSame(2, \App\Models\SocialPostPublication::query()->count());
+        $this->assertSame(2, SocialPostPublication::query()->count());
+    }
+
+    #[Test]
+    public function finished_channel_publish_is_not_repeated_when_progress_ui_retries(): void
+    {
+        $admin = $this->adminUser();
+        $category = $this->makeCategory();
+        $product = $this->makeProduct($category, 'p1e', 'img/products/p1e.jpg');
+
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'fb-page-once',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/fb-page-once/photos*' => Http::response([
+                'id' => 'photo-once',
+                'post_id' => 'fbpub-once',
+            ], 200),
+            'https://graph.facebook.com/v25.0/fbpub-once*' => Http::response([
+                'permalink_url' => 'https://www.facebook.com/fbpub-once',
+            ], 200),
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(AdminSocialPostsCreate::class, ['products' => (string) $product->id])
+            ->set('body', 'Publish once only')
+            ->set('postToInstagram', false)
+            ->call('createPost')
+            ->assertSeeHtml('x-init="publishWaitingChannels()"')
+            ->call('publishSelectedChannel', 'facebook')
+            ->assertSet('channelProgress.facebook.status', 'success')
+            ->assertSet('phase', 'done')
+            ->call('publishSelectedChannel', 'facebook')
+            ->assertSet('channelProgress.facebook.status', 'success');
+
+        $this->assertSame(1, SocialPostPublication::query()->count());
+        $this->assertDatabaseHas('social_post_publications', [
+            'channel' => SocialPostPublication::CHANNEL_FACEBOOK,
+            'status' => SocialPostPublication::STATUS_SUCCESS,
+        ]);
     }
 
     #[Test]
@@ -264,14 +307,14 @@ class AdminSocialPostsTest extends TestCase
             ->assertHasNoErrors()
             ->assertSet('phase', 'done');
 
-        $this->assertSame(2, \App\Models\SocialPostPublication::query()->count());
+        $this->assertSame(2, SocialPostPublication::query()->count());
         $this->assertDatabaseHas('social_post_publications', [
-            'channel' => \App\Models\SocialPostPublication::CHANNEL_FACEBOOK,
-            'status' => \App\Models\SocialPostPublication::STATUS_SUCCESS,
+            'channel' => SocialPostPublication::CHANNEL_FACEBOOK,
+            'status' => SocialPostPublication::STATUS_SUCCESS,
         ]);
         $this->assertDatabaseHas('social_post_publications', [
-            'channel' => \App\Models\SocialPostPublication::CHANNEL_INSTAGRAM,
-            'status' => \App\Models\SocialPostPublication::STATUS_SUCCESS,
+            'channel' => SocialPostPublication::CHANNEL_INSTAGRAM,
+            'status' => SocialPostPublication::STATUS_SUCCESS,
         ]);
     }
 
@@ -356,7 +399,7 @@ class AdminSocialPostsTest extends TestCase
             ->assertHasNoErrors()
             ->assertSet('republishPhase', 'done');
 
-        $this->assertSame(2, \App\Models\SocialPostPublication::query()->count());
+        $this->assertSame(2, SocialPostPublication::query()->count());
 
         Livewire::actingAs($admin)
             ->test(AdminSocialPostsShow::class, ['socialPost' => $post])
@@ -366,7 +409,6 @@ class AdminSocialPostsTest extends TestCase
             ->assertHasNoErrors()
             ->assertSet('republishPhase', 'done');
 
-        $this->assertSame(3, \App\Models\SocialPostPublication::query()->count());
+        $this->assertSame(3, SocialPostPublication::query()->count());
     }
 }
-

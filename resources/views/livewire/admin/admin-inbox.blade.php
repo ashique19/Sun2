@@ -51,10 +51,8 @@
         </div>
     @endif
 
-    <div @class([
-        'px-4 pt-3 xl:px-0 xl:pt-0',
-        'hidden xl:block' => $mobileThreadOpen,
-    ])>
+    <div class="px-4 pt-3 xl:px-0 xl:pt-0">
+        {{-- Keep visible on mobile even with a thread open — expired tokens must stay reachable. --}}
         <livewire:admin.admin-facebook-token-gate />
     </div>
 

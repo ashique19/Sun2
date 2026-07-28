@@ -1,6 +1,6 @@
 <div>
     @if ($status && ! $status['valid'])
-        <div class="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 sm:p-5">
+        <div class="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-4 sm:mb-6 sm:p-5" wire:key="fb-token-gate-invalid">
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div class="min-w-0">
                     <h2 class="font-semibold text-rose-800">Facebook Page token needs attention</h2>
@@ -28,28 +28,51 @@
                 </a>
             </div>
 
-            <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-start">
-                <input type="password"
-                    wire:model="tokenInput"
-                    autocomplete="off"
-                    placeholder="Paste new FACEBOOK_PAGE_ACCESS_TOKEN"
-                    class="min-w-0 flex-1 rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm text-[#1E1E1E] focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-400">
-                <button type="button"
-                    wire:click="saveToken"
-                    wire:loading.attr="disabled"
-                    class="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-60">
-                    Save token
-                </button>
+            @include('livewire.admin.partials.facebook-token-form', ['tone' => 'rose'])
+        </div>
+    @else
+        <div class="mb-4 rounded-xl border border-[#E7DFCF] bg-white p-3 sm:mb-6 sm:p-4" wire:key="fb-token-gate-valid">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="min-w-0">
+                    <p class="text-sm font-medium text-[#1E1E1E]">Facebook Page token</p>
+                    <p class="mt-0.5 text-xs text-[#8C8474]">
+                        {{ $status['message'] ?? 'Token status unknown.' }}
+                        @if ($feedback && $feedbackOk)
+                            <span class="text-emerald-700">{{ $feedback }}</span>
+                        @endif
+                    </p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button"
+                        wire:click="recheck"
+                        class="rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-3 py-1.5 text-xs font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                        Recheck
+                    </button>
+                    <button type="button"
+                        wire:click="toggleUpdateForm"
+                        class="rounded-full border border-[#E0D6C2] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                        {{ $showUpdateForm ? 'Hide form' : 'Update token' }}
+                    </button>
+                </div>
             </div>
 
-            @if ($feedback)
-                <p class="mt-2 text-xs {{ $feedbackOk ? 'text-emerald-700' : 'text-rose-700' }}">{{ $feedback }}</p>
+            @if ($showUpdateForm)
+                <div class="mt-3 border-t border-[#EFE7D6] pt-3">
+                    <p class="mb-2 text-xs text-[#8C8474]">
+                        Paste a new Page access token if the current one expired. Prefer a long-lived Business Manager System User token.
+                    </p>
+                    <div class="mb-3 flex flex-wrap gap-2 text-xs">
+                        <a href="{{ $generateTokenUrl }}" target="_blank" rel="noopener noreferrer"
+                            class="font-semibold text-[#1877F2] hover:underline">Graph API Explorer</a>
+                        <span class="text-[#C9BFA8]">·</span>
+                        <a href="{{ $systemUserUrl }}" target="_blank" rel="noopener noreferrer"
+                            class="font-semibold text-[#6B6459] hover:underline">Business System Users</a>
+                    </div>
+                    @include('livewire.admin.partials.facebook-token-form', ['tone' => 'neutral'])
+                </div>
+            @elseif ($feedback && ! $feedbackOk)
+                <p class="mt-2 text-xs text-rose-700">{{ $feedback }}</p>
             @endif
-        </div>
-    @elseif ($status && $status['valid'] && $feedback)
-        <div class="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            {{ $feedback }}
-            <span class="text-emerald-700/80"> — {{ $status['message'] }}</span>
         </div>
     @endif
 </div>

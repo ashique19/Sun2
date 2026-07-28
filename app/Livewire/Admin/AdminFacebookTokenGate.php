@@ -4,6 +4,7 @@ namespace App\Livewire\Admin;
 
 use App\Services\Facebook\FacebookPageTokenService;
 use App\Support\AdminAccess;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 class AdminFacebookTokenGate extends Component
@@ -13,6 +14,8 @@ class AdminFacebookTokenGate extends Component
     public ?string $feedback = null;
 
     public bool $feedbackOk = false;
+
+    public bool $showUpdateForm = false;
 
     /**
      * @var array{
@@ -30,13 +33,25 @@ class AdminFacebookTokenGate extends Component
     {
         AdminAccess::ensureStaffAdmin();
         $this->status = $tokens->status();
+        $this->showUpdateForm = ! (bool) ($this->status['valid'] ?? false);
     }
 
+    #[On('facebook-token-recheck')]
     public function recheck(FacebookPageTokenService $tokens): void
     {
         AdminAccess::ensureStaffAdmin();
         $this->feedback = null;
         $this->status = $tokens->status(fresh: true);
+        if (! ($this->status['valid'] ?? false)) {
+            $this->showUpdateForm = true;
+        }
+    }
+
+    public function toggleUpdateForm(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+        $this->showUpdateForm = ! $this->showUpdateForm;
+        $this->feedback = null;
     }
 
     public function saveToken(FacebookPageTokenService $tokens): void
@@ -50,6 +65,7 @@ class AdminFacebookTokenGate extends Component
 
         if ($result['ok']) {
             $this->tokenInput = '';
+            $this->showUpdateForm = false;
         }
     }
 

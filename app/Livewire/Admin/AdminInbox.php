@@ -13,6 +13,7 @@ use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
 use App\Services\Channels\InboxQuickReplyService;
 use App\Services\Channels\MessengerConversationSyncService;
+use App\Services\Facebook\FacebookPageTokenService;
 use App\Support\AdminAccess;
 use App\Support\Fileinfo;
 use App\Support\StorefrontAssets;
@@ -730,9 +731,26 @@ class AdminInbox extends Component
         $this->lastSyncError = $result['message'];
         $this->syncToast = $result['message'];
 
+        if ($this->isFacebookTokenSyncError($result['message'])) {
+            app(FacebookPageTokenService::class)->invalidateStatusCache();
+            $this->dispatch('facebook-token-recheck');
+        }
+
         if ($announceSuccess) {
             $this->error = $result['message'];
         }
+    }
+
+    private function isFacebookTokenSyncError(string $message): bool
+    {
+        $haystack = mb_strtolower($message);
+
+        return str_contains($haystack, 'access token')
+            || str_contains($haystack, 'oauth')
+            || str_contains($haystack, 'session has expired')
+            || str_contains($haystack, 'error validating')
+            || str_contains($haystack, 'invalid oauth')
+            || str_contains($haystack, 'page id is not configured');
     }
 
     private function markConversationRead(ChannelConversation $conversation, ChannelReplyService $replies): void

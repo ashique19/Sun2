@@ -4,10 +4,40 @@
         ->count();
 @endphp
 
-<div
-    class="xl:space-y-6"
-    wire:poll.10s.visible="pollSyncFromFacebook"
->
+<div class="xl:space-y-6">
+    {{--
+        Fixed beacon so Graph poll keeps running while the mobile thread sheet is open.
+        The sheet is position:fixed (out of document flow), which can collapse in-flow
+        layout and pause wire:poll.visible on the page root.
+    --}}
+    <div
+        wire:poll.10s.visible="pollSyncFromFacebook"
+        class="pointer-events-none fixed bottom-0 left-0 z-[60] h-px w-px opacity-0"
+        aria-hidden="true"
+    ></div>
+
+    @if ($syncToast)
+        <div
+            wire:key="sync-toast-{{ md5($syncToast) }}"
+            x-data="{ show: true }"
+            x-show="show"
+            x-transition.opacity.duration.200ms
+            x-init="setTimeout(() => { show = false; $wire.dismissSyncToast() }, 8000)"
+            class="fixed bottom-4 left-1/2 z-[70] w-[min(24rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900 shadow-lg"
+            role="alert"
+        >
+            <div class="flex items-start gap-2">
+                <p class="min-w-0 flex-1">Sync failed: {{ $syncToast }}</p>
+                <button type="button"
+                    wire:click="dismissSyncToast"
+                    class="shrink-0 text-xs font-semibold text-rose-700 hover:text-rose-900"
+                    aria-label="Dismiss sync error">
+                    Dismiss
+                </button>
+            </div>
+        </div>
+    @endif
+
     <div @class([
         'px-4 pt-3 xl:px-0 xl:pt-0',
         'hidden xl:block' => $mobileThreadOpen,
@@ -26,6 +56,13 @@
                 Messenger and WhatsApp conversations in one place.
                 Syncs from Facebook every 10s while this page is open.
             </p>
+            @if ($lastSyncedAt)
+                <p class="mt-1 text-[11px] tabular-nums text-[#8C8474]" wire:key="last-synced-{{ $lastSyncedAt }}">
+                    Last synced {{ \Illuminate\Support\Carbon::parse($lastSyncedAt)->timezone('Asia/Dhaka')->diffForHumans() }}
+                </p>
+            @elseif ($lastSyncError)
+                <p class="mt-1 text-[11px] text-rose-700">Last sync failed</p>
+            @endif
         </div>
 
         <div class="flex flex-col gap-2 text-sm xl:items-end">
@@ -318,14 +355,51 @@
                                         {{ $selectedConversation->draftOrder->order_number }}
                                     </a>
                                 @endif
+                                @if ($selectedConversation->needsMessengerSeenSync())
+                                    · Messenger seen pending
+                                @endif
                             </p>
                         </div>
+                        <button type="button"
+                            wire:click="syncFromFacebook"
+                            wire:loading.attr="disabled"
+                            wire:target="syncFromFacebook"
+                            class="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-3 text-xs font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60 xl:hidden"
+                            aria-label="Sync from Facebook">
+                            <span wire:loading.remove wire:target="syncFromFacebook">Sync</span>
+                            <span wire:loading wire:target="syncFromFacebook">…</span>
+                        </button>
                     </div>
                 </div>
 
                 <div
-                    wire:key="thread-{{ $selectedConversation->id }}-{{ $selectedConversation->messages->count() }}-{{ $selectedConversation->messages->max('id') }}"
-                    x-init="$el.scrollTop = $el.scrollHeight"
+                    wire:key="thread-{{ $selectedConversation->id }}"
+                    x-data="{
+                        stick: true,
+                        threshold: 96,
+                        init() {
+                            this.scrollBottom();
+                            const obs = new MutationObserver(() => {
+                                if (this.stick) {
+                                    this.$nextTick(() => this.scrollBottom());
+                                }
+                            });
+                            obs.observe(this.$el, { childList: true, subtree: true });
+                            this.$el.addEventListener('load', (e) => {
+                                if (e.target.tagName === 'IMG' && this.stick) {
+                                    this.scrollBottom();
+                                }
+                            }, true);
+                        },
+                        onScroll() {
+                            const el = this.$el;
+                            this.stick = el.scrollHeight - el.scrollTop - el.clientHeight < this.threshold;
+                        },
+                        scrollBottom() {
+                            this.$el.scrollTop = this.$el.scrollHeight;
+                        },
+                    }"
+                    @scroll.passive="onScroll()"
                     class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3 xl:px-4 xl:py-4">
                     @foreach ($selectedConversation->messages as $messageRow)
                         @php $isOutbound = $messageRow->direction === 'outbound'; @endphp

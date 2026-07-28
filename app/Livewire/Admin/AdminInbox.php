@@ -60,6 +60,21 @@ class AdminInbox extends Component
      */
     public bool $mobileFiltersOpen = false;
 
+    /**
+     * ISO-8601 timestamp of the last successful Graph sync (manual or poll).
+     */
+    public ?string $lastSyncedAt = null;
+
+    /**
+     * Last Graph sync failure message (kept until the next success).
+     */
+    public ?string $lastSyncError = null;
+
+    /**
+     * Transient toast for sync failures (poll or manual). Cleared on dismiss/success.
+     */
+    public ?string $syncToast = null;
+
     public function mount(ChannelInboxPurgeService $purge, ChannelReplyService $replies): void
     {
         AdminAccess::ensureStaffAdmin();
@@ -88,17 +103,18 @@ class AdminInbox extends Component
     public function selectConversation(int $conversationId, ChannelReplyService $replies): void
     {
         $conversation = ChannelConversation::query()->findOrFail($conversationId);
-        $this->markConversationRead($conversation, $replies);
         $this->selectedConversationId = $conversation->id;
         $this->mobileThreadOpen = true;
         $this->resetComposer();
         $this->error = null;
         $this->statusMessage = null;
+        $this->markConversationRead($conversation, $replies);
     }
 
     /**
      * Keep the mobile thread pane in sync when the browser Back/Forward
      * restores or clears ?conversation= (#[Url(history: true)]).
+     * Also marks website read + Messenger seen when a conversation opens via URL history.
      */
     public function updatedSelectedConversationId(?int $conversationId): void
     {
@@ -111,7 +127,9 @@ class AdminInbox extends Component
             return;
         }
 
-        if (! ChannelConversation::query()->whereKey($conversationId)->exists()) {
+        $conversation = ChannelConversation::query()->find($conversationId);
+
+        if (! $conversation) {
             $this->selectedConversationId = null;
             $this->mobileThreadOpen = false;
 
@@ -119,6 +137,10 @@ class AdminInbox extends Component
         }
 
         $this->mobileThreadOpen = true;
+        $this->resetComposer();
+        $this->error = null;
+        $this->statusMessage = null;
+        $this->markConversationRead($conversation, app(ChannelReplyService::class));
     }
 
     public function closeMobileThread(): void
@@ -273,28 +295,34 @@ class AdminInbox extends Component
         $this->statusMessage = null;
 
         $result = $sync->sync();
+        $this->recordSyncResult($result, announceSuccess: true);
 
-        if (! $result['ok']) {
-            $this->error = $result['message'];
-
-            return;
+        if ($result['ok']) {
+            $this->refreshOpenThreadAfterPoll();
+            $this->deferMessengerSeenForOpenThread();
         }
-
-        $this->statusMessage = $result['message'];
     }
 
     /**
      * Background Graph sync while the Inbox tab is open (wire:poll.visible).
      * Quiet on success so the UI is not spammed every poll.
      */
-    public function pollSyncFromFacebook(
-        MessengerConversationSyncService $sync,
-        ChannelReplyService $replies,
-    ): void {
+    public function pollSyncFromFacebook(MessengerConversationSyncService $sync): void
+    {
         AdminAccess::ensureStaffAdmin();
 
-        $sync->sync();
-        $this->refreshInbox($replies);
+        $result = $sync->sync();
+        $this->recordSyncResult($result, announceSuccess: false);
+
+        // Local read-state only before render. Defer Graph mark_seen so a slow
+        // Facebook call cannot delay Livewire morphing newly synced messages.
+        $this->refreshOpenThreadAfterPoll();
+        $this->deferMessengerSeenForOpenThread();
+    }
+
+    public function dismissSyncToast(): void
+    {
+        $this->syncToast = null;
     }
 
     public function clearFilters(): void
@@ -306,8 +334,8 @@ class AdminInbox extends Component
     }
 
     /**
-     * Lightweight poll refresh for conversation list + open thread.
-     * Also retries Messenger mark_seen until Graph catches up to latest inbound.
+     * Lightweight refresh for the open thread.
+     * Retries Messenger mark_seen until Graph catches up to latest inbound.
      */
     public function refreshInbox(ChannelReplyService $replies): void
     {
@@ -330,8 +358,71 @@ class AdminInbox extends Component
         }
     }
 
+    /**
+     * After Graph sync, refresh the open thread without waiting on mark_seen.
+     * Poll requests must stay fast so Livewire can morph new messages into the UI.
+     */
+    private function refreshOpenThreadAfterPoll(): void
+    {
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+
+        if (! $conversation) {
+            return;
+        }
+
+        if ($conversation->isUnread()) {
+            $conversation->markRead(auth()->id());
+        }
+    }
+
+    private function deferMessengerSeenForOpenThread(): void
+    {
+        $conversationId = $this->selectedConversationId;
+
+        if (! $conversationId) {
+            return;
+        }
+
+        defer(function () use ($conversationId): void {
+            $conversation = ChannelConversation::query()->find($conversationId);
+            if ($conversation?->needsMessengerSeenSync()) {
+                app(ChannelReplyService::class)->markSeen($conversation);
+            }
+        });
+    }
+
+    /**
+     * @param  array{ok: bool, message: string, conversations?: int, messages?: int, graph_threads?: int}  $result
+     */
+    private function recordSyncResult(array $result, bool $announceSuccess): void
+    {
+        if ($result['ok']) {
+            $this->lastSyncedAt = now()->toIso8601String();
+            $this->lastSyncError = null;
+            $this->syncToast = null;
+
+            if ($announceSuccess) {
+                $this->statusMessage = $result['message'];
+            }
+
+            return;
+        }
+
+        $this->lastSyncError = $result['message'];
+        $this->syncToast = $result['message'];
+
+        if ($announceSuccess) {
+            $this->error = $result['message'];
+        }
+    }
+
     private function markConversationRead(ChannelConversation $conversation, ChannelReplyService $replies): void
     {
+        // Website unread first so the list updates even if Graph mark_seen is slow/fails.
         $conversation->markRead(auth()->id());
         $replies->markSeen($conversation);
     }

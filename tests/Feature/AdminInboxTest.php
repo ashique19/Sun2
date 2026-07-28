@@ -729,8 +729,12 @@ class AdminInboxTest extends TestCase
             ->call('pollSyncFromFacebook')
             ->assertSet('error', null)
             ->assertSet('statusMessage', null)
+            ->assertNotSet('lastSyncedAt', null)
+            ->assertSet('syncToast', null)
             ->assertSee('Polled hello')
-            ->assertSeeHtml('wire:poll.10s.visible="pollSyncFromFacebook"');
+            ->assertSeeHtml('wire:poll.10s.visible="pollSyncFromFacebook"')
+            ->assertSeeHtml('fixed bottom-0 left-0')
+            ->assertSee('Last synced');
 
         $this->assertDatabaseHas('channel_conversations', [
             'channel' => 'messenger',
@@ -740,5 +744,145 @@ class AdminInboxTest extends TestCase
             'external_message_id' => 'm_poll_1',
             'body' => 'Polled hello',
         ]);
+    }
+
+    #[Test]
+    public function poll_sync_failure_sets_toast_without_status_message(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => '',
+            'facebook.messenger.page_id' => '',
+        ]);
+
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminInbox::class)
+            ->call('pollSyncFromFacebook')
+            ->assertSet('statusMessage', null)
+            ->assertSet('error', null)
+            ->assertSet('lastSyncedAt', null)
+            ->assertSet('syncToast', 'Facebook Page access token or Page ID is not configured.')
+            ->assertSee('Sync failed:')
+            ->call('dismissSyncToast')
+            ->assertSet('syncToast', null);
+    }
+
+    #[Test]
+    public function restoring_conversation_from_url_marks_it_read(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation(['last_read_at' => null]);
+
+        // Simulates browser Forward / history restoring ?conversation=
+        Livewire::test(AdminInbox::class)
+            ->assertSet('selectedConversationId', null)
+            ->set('selectedConversationId', $conversation->id)
+            ->assertSet('mobileThreadOpen', true);
+
+        $this->assertNotNull($conversation->fresh()->last_read_at);
+    }
+
+    #[Test]
+    public function poll_sync_updates_open_conversation_from_query_string(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'PAGE42',
+            'facebook.graph_version' => 'v25.0',
+            'gemini.api_key' => null,
+        ]);
+
+        $this->actingAs($this->adminUser());
+
+        $conversation = $this->conversation([
+            'external_user_id' => 'PSID_OPEN_1',
+            'customer_name' => 'Open Thread Customer',
+            'last_read_at' => now()->subHour(),
+            'messenger_seen_at' => now()->subHour(),
+        ]);
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_open_old',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Earlier message',
+            'sent_at' => now()->subHour(),
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/PAGE42/conversations*' => Http::response([
+                'data' => [[
+                    'id' => 't_open_1',
+                    'updated_time' => now()->toIso8601String(),
+                    'participants' => [
+                        'data' => [
+                            ['id' => 'PAGE42', 'name' => 'Sun Page'],
+                            ['id' => 'PSID_OPEN_1', 'name' => 'Open Thread Customer'],
+                        ],
+                    ],
+                    'messages' => [
+                        'data' => [
+                            [
+                                'id' => 'm_open_new',
+                                'message' => 'New while thread open',
+                                'from' => ['id' => 'PSID_OPEN_1', 'name' => 'Open Thread Customer'],
+                                'created_time' => now()->subSecond()->toIso8601String(),
+                            ],
+                            [
+                                'id' => 'm_open_old',
+                                'message' => 'Earlier message',
+                                'from' => ['id' => 'PSID_OPEN_1', 'name' => 'Open Thread Customer'],
+                                'created_time' => now()->subHour()->toIso8601String(),
+                            ],
+                        ],
+                    ],
+                ]],
+            ], 200),
+            'https://graph.facebook.com/v25.0/PAGE42/messages*' => Http::response(['recipient_id' => 'PSID_OPEN_1'], 200),
+        ]);
+
+        Livewire::withQueryParams(['conversation' => $conversation->id])
+            ->test(AdminInbox::class)
+            ->assertSet('selectedConversationId', $conversation->id)
+            ->assertSet('mobileThreadOpen', true)
+            ->assertSee('Earlier message')
+            ->assertSeeHtml('aria-label="Sync from Facebook"')
+            ->assertSeeHtml('wire:poll.10s.visible="pollSyncFromFacebook"')
+            ->assertSeeHtml('fixed bottom-0 left-0')
+            ->assertSeeHtml('wire:key="thread-'.$conversation->id.'"')
+            ->call('pollSyncFromFacebook')
+            ->assertSee('Earlier message')
+            ->assertSee('New while thread open')
+            ->assertNotSet('lastSyncedAt', null);
+
+        $this->assertDatabaseHas('channel_messages', [
+            'external_message_id' => 'm_open_new',
+            'body' => 'New while thread open',
+        ]);
+    }
+
+    #[Test]
+    public function thread_header_shows_messenger_seen_pending_when_graph_lags(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'PAGE42',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/PAGE42/messages*' => Http::response(['error' => ['message' => 'busy']], 400),
+            'https://graph.facebook.com/v25.0/PAGE42/take_thread_control*' => Http::response(['error' => ['message' => 'busy']], 400),
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation([
+            'last_inbound_at' => now()->subMinute(),
+            'messenger_seen_at' => null,
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSee('Messenger seen pending');
     }
 }

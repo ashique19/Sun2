@@ -340,7 +340,8 @@
                         <div class="flex items-center justify-between gap-2 mb-1">
                             <label class="text-[#6B6459]">Delivery</label>
                             <label class="inline-flex items-center gap-1 text-xs text-[#8C8474]">
-                                <input type="checkbox" wire:model.live="autoDelivery" class="rounded border-[#C9A227] text-[#C9A227]">
+                                <input type="checkbox" wire:model.live="autoDelivery" @checked($autoDelivery)
+                                    class="rounded border-[#C9A227] text-[#C9A227]">
                                 Auto
                             </label>
                         </div>

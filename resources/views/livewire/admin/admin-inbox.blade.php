@@ -83,15 +83,28 @@
         </div>
 
         <div class="flex flex-col gap-2 text-sm xl:items-end">
-            <div class="flex gap-2">
+            <div class="flex flex-wrap gap-2">
                 <button type="button"
                     wire:click="syncFromFacebook"
                     wire:loading.attr="disabled"
                     wire:target="syncFromFacebook"
                     class="inline-flex flex-1 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-3 py-2 text-sm font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60 sm:flex-none sm:px-4">
-                    <span wire:loading.remove wire:target="syncFromFacebook">Sync from Facebook</span>
+                    <span wire:loading.remove wire:target="syncFromFacebook">Sync Messenger</span>
                     <span wire:loading wire:target="syncFromFacebook">Syncing…</span>
                 </button>
+                <button type="button"
+                    wire:click="checkWhatsAppApi"
+                    wire:loading.attr="disabled"
+                    wire:target="checkWhatsAppApi"
+                    class="inline-flex flex-1 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-3 py-2 text-sm font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60 sm:flex-none sm:px-4"
+                    title="WhatsApp has no conversation history sync — this checks Cloud API credentials. Incoming chats require the WhatsApp webhook.">
+                    <span wire:loading.remove wire:target="checkWhatsAppApi">Check WhatsApp</span>
+                    <span wire:loading wire:target="checkWhatsAppApi">Checking…</span>
+                </button>
+                <a href="{{ route('admin.inbox.quick-replies') }}" wire:navigate
+                    class="inline-flex flex-1 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-3 py-2 text-sm font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] sm:flex-none sm:px-4">
+                    Quick replies
+                </a>
 
                 <button type="button"
                     wire:click="toggleMobileFilters"
@@ -176,23 +189,23 @@
                     <details class="mt-2 xl:hidden">
                         <summary class="cursor-pointer text-xs font-medium opacity-80">Connection details</summary>
                         <p class="mt-2 text-xs opacity-80">
-                            Webhooks only receive chats Meta delivers to
+                            Messenger webhook:
                             <code class="rounded bg-white/70 px-1.5 py-0.5">{{ $diagnostics['webhook_url'] }}</code>
-                            <code class="rounded bg-white/70 px-1.5 py-0.5">messages</code> +
+                            (subscribe <code class="rounded bg-white/70 px-1.5 py-0.5">messages</code> +
                             <code class="rounded bg-white/70 px-1.5 py-0.5">standby</code>).
-                            <strong>Development mode:</strong> even as Page owner, only Facebook accounts that are App Admins/Developers/Testers will appear.
-                            Add other accounts under Meta App → App Roles → Roles (Testers), or switch the app to <strong>Live</strong>.
-                            Use <strong>Sync from Facebook</strong> (or leave this page open — it syncs every 10s) to import threads Graph can currently see.
+                            WhatsApp webhook:
+                            <code class="rounded bg-white/70 px-1.5 py-0.5">{{ $diagnostics['whatsapp_webhook_url'] }}</code>
+                            (subscribe <code class="rounded bg-white/70 px-1.5 py-0.5">messages</code>).
+                            WhatsApp has no history sync — only new webhook events appear. Use <strong>Check WhatsApp</strong> to verify Cloud API credentials, and <strong>Sync Messenger</strong> for Graph backfill.
                         </p>
                     </details>
                     <p class="mt-2 hidden text-xs opacity-80 xl:block">
-                        Webhooks only receive chats Meta delivers to
+                        Messenger:
                         <code class="rounded bg-white/70 px-1.5 py-0.5">{{ $diagnostics['webhook_url'] }}</code>
-                        <code class="rounded bg-white/70 px-1.5 py-0.5">messages</code> +
-                        <code class="rounded bg-white/70 px-1.5 py-0.5">standby</code>).
-                        <strong>Development mode:</strong> even as Page owner, only Facebook accounts that are App Admins/Developers/Testers will appear.
-                        Add other accounts under Meta App → App Roles → Roles (Testers), or switch the app to <strong>Live</strong>.
-                        Use <strong>Sync from Facebook</strong> (or leave this page open — it syncs every 10s) to import threads Graph can currently see.
+                        · WhatsApp:
+                        <code class="rounded bg-white/70 px-1.5 py-0.5">{{ $diagnostics['whatsapp_webhook_url'] }}</code>.
+                        WhatsApp cannot be backfilled like Messenger — configure Meta → WhatsApp → Configuration callback and wait for customer messages.
+                        Use <strong>Sync Messenger</strong> / <strong>Check WhatsApp</strong> as needed.
                     </p>
                 </div>
                 @if ($diagnostics['filters_active'] && $conversations->isEmpty())
@@ -707,7 +720,7 @@
                     @enderror
 
                     @if (! empty($quickReplies))
-                        <div class="mb-2 flex gap-1.5 overflow-x-auto pb-0.5">
+                        <div class="mb-2 flex items-center gap-1.5 overflow-x-auto pb-0.5">
                             @foreach ($quickReplies as $index => $quickReply)
                                 <button type="button"
                                     wire:click="insertQuickReply({{ $index }})"
@@ -715,6 +728,17 @@
                                     {{ $quickReply['label'] }}
                                 </button>
                             @endforeach
+                            <a href="{{ route('admin.inbox.quick-replies') }}" wire:navigate
+                                class="shrink-0 px-1 text-[11px] font-semibold text-[#8C8474] hover:text-[#C9A227]">
+                                Edit
+                            </a>
+                        </div>
+                    @else
+                        <div class="mb-2">
+                            <a href="{{ route('admin.inbox.quick-replies') }}" wire:navigate
+                                class="text-[11px] font-semibold text-[#C9A227] hover:underline">
+                                Add quick replies
+                            </a>
                         </div>
                     @endif
 
@@ -745,7 +769,7 @@
             @else
                 <div class="flex flex-1 items-center justify-center bg-white px-4 py-16 text-center text-sm text-[#8C8474] xl:rounded-2xl">
                     @if ($conversations->isEmpty())
-                        Once a Messenger webhook arrives, conversations will appear in the list.
+                        Once a Messenger or WhatsApp webhook arrives, conversations will appear in the list.
                     @else
                         Select a conversation to read and reply.
                     @endif

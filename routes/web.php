@@ -20,6 +20,7 @@ use App\Livewire\Admin\AdminDashboard;
 use App\Livewire\Admin\AdminHeroSlideEdit;
 use App\Livewire\Admin\AdminHeroSlides;
 use App\Livewire\Admin\AdminInbox;
+use App\Livewire\Admin\AdminInboxQuickReplies;
 use App\Livewire\Admin\AdminIssues;
 use App\Livewire\Admin\AdminOrderForm;
 use App\Livewire\Admin\AdminOrders;
@@ -182,6 +183,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
 
     Route::middleware('role:admin|dev')->group(function () {
         Route::get('/inbox', AdminInbox::class)->name('inbox');
+        Route::get('/inbox/quick-replies', AdminInboxQuickReplies::class)->name('inbox.quick-replies');
         Route::get('/inbox/media/{message}', ChannelMessageMediaController::class)
             ->whereNumber('message')
             ->name('inbox.media');

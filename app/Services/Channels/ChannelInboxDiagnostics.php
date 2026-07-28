@@ -165,18 +165,87 @@ class ChannelInboxDiagnostics
                 : 'channel_conversations has 0 Messenger rows. Nothing to list until a customer message is ingested.',
         ];
 
-        if ($whatsappCount > 0 || ! empty($whatsappHealth['last_received_at'])) {
+        $whatsappEnabled = (bool) config('whatsapp.enabled', true);
+        $whatsappVerifySet = trim((string) config('whatsapp.verify_token', '')) !== '';
+        $whatsappTokenSet = trim((string) config('whatsapp.access_token', '')) !== '';
+        $whatsappPhoneSet = trim((string) config('whatsapp.phone_number_id', '')) !== '';
+        $whatsappSecretSet = trim((string) config('whatsapp.app_secret', '')) !== '';
+
+        $checks[] = [
+            'ok' => $whatsappEnabled,
+            'label' => 'WhatsApp webhook enabled',
+            'detail' => $whatsappEnabled
+                ? 'WHATSAPP_WEBHOOK_ENABLED is on.'
+                : 'WhatsApp webhook is disabled — Meta events are rejected.',
+        ];
+
+        $checks[] = [
+            'ok' => $whatsappVerifySet,
+            'label' => 'WhatsApp verify token configured',
+            'detail' => $whatsappVerifySet
+                ? 'WHATSAPP_VERIFY_TOKEN is set.'
+                : 'Missing WHATSAPP_VERIFY_TOKEN — Meta cannot verify /api/webhooks/whatsapp.',
+        ];
+
+        $checks[] = [
+            'ok' => $whatsappSecretSet,
+            'label' => 'WhatsApp app secret configured',
+            'detail' => $whatsappSecretSet
+                ? 'WHATSAPP_APP_SECRET / FACEBOOK_APP_SECRET is set for webhook signatures.'
+                : 'Missing app secret — production WhatsApp webhook POSTs are rejected.',
+        ];
+
+        $checks[] = [
+            'ok' => $whatsappTokenSet && $whatsappPhoneSet,
+            'label' => 'WhatsApp Cloud API credentials',
+            'detail' => ($whatsappTokenSet && $whatsappPhoneSet)
+                ? 'WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID are set (needed to send/reply and resolve media).'
+                : 'Missing WHATSAPP_ACCESS_TOKEN and/or WHATSAPP_PHONE_NUMBER_ID. Token alone does not import chats — WhatsApp has no Messenger-style history sync.',
+        ];
+
+        $checks[] = [
+            'ok' => ! empty($whatsappHealth['last_verified_at']),
+            'label' => 'WhatsApp webhook verification seen',
+            'detail' => ! empty($whatsappHealth['last_verified_at'])
+                ? 'Last successful Meta verify: '.$this->formatWhen($whatsappHealth['last_verified_at'])
+                : 'No successful WhatsApp webhook verification yet. In Meta → WhatsApp → Configuration, set callback to '
+                    .rtrim((string) config('app.url'), '/').'/api/webhooks/whatsapp and subscribe to messages.',
+        ];
+
+        $checks[] = [
+            'ok' => ! empty($whatsappHealth['last_received_at']),
+            'label' => 'WhatsApp events received',
+            'detail' => ! empty($whatsappHealth['last_received_at'])
+                ? 'Last WhatsApp webhook POST: '.$this->formatWhen($whatsappHealth['last_received_at'])
+                    .(! empty($whatsappHealth['last_entry_count']) ? ' (entries: '.$whatsappHealth['last_entry_count'].')' : '')
+                : 'No WhatsApp webhook POSTs recorded. Cloud API authorization does not pull past chats — customers must message the business number after the webhook is subscribed.',
+        ];
+
+        if (! empty($whatsappHealth['last_rejection_reason'])) {
             $checks[] = [
-                'ok' => $whatsappCount > 0,
-                'label' => 'WhatsApp conversations in database',
-                'detail' => $whatsappCount > 0
-                    ? $whatsappCount.' conversation(s) stored.'
-                    : 'No WhatsApp conversations stored yet'
-                        .(! empty($whatsappHealth['last_received_at'])
-                            ? ' (last WA webhook: '.$this->formatWhen($whatsappHealth['last_received_at']).').'
-                            : '.'),
+                'ok' => false,
+                'label' => 'Last WhatsApp webhook rejection',
+                'detail' => ($whatsappHealth['last_rejected_at'] ? $this->formatWhen($whatsappHealth['last_rejected_at']).': ' : '')
+                    .$whatsappHealth['last_rejection_reason'],
             ];
         }
+
+        if (! empty($whatsappHealth['last_error'])) {
+            $checks[] = [
+                'ok' => false,
+                'label' => 'Last WhatsApp processing error',
+                'detail' => ($whatsappHealth['last_error_at'] ? $this->formatWhen($whatsappHealth['last_error_at']).': ' : '')
+                    .$whatsappHealth['last_error'],
+            ];
+        }
+
+        $checks[] = [
+            'ok' => $whatsappCount > 0,
+            'label' => 'WhatsApp conversations in database',
+            'detail' => $whatsappCount > 0
+                ? $whatsappCount.' conversation(s) stored.'
+                : 'No WhatsApp conversations stored yet. Unlike Messenger, WhatsApp cannot be backfilled with “Sync” — only webhook-delivered messages appear.',
+        ];
 
         $failed = collect($checks)->contains(fn (array $check) => $check['ok'] === false);
         $filteredOut = $filtersActive && $total > 0;
@@ -185,16 +254,18 @@ class ChannelInboxDiagnostics
             $summary = 'Conversations exist in the database, but current filters hide them. Clear filters to see them.';
             $severity = 'warning';
         } elseif ($total === 0 && $failed) {
-            $summary = 'Inbox is empty because no conversations have been ingested yet, and one or more Messenger setup checks are failing.';
+            $summary = 'Inbox is empty because no conversations have been ingested yet, and one or more channel setup checks are failing.';
             $severity = 'error';
         } elseif ($total === 0) {
-            $summary = 'Inbox is empty. Config looks okay so far — waiting for Meta to deliver a Messenger (or WhatsApp) message webhook.';
+            $summary = 'Inbox is empty. Config looks okay so far — waiting for Meta to deliver a Messenger or WhatsApp message webhook.';
             $severity = 'info';
-        } elseif ($messengerCount <= 1) {
-            $summary = 'Only your app-role chats can appear while the Meta app is in Development mode. Being Page owner/admin is not enough for other Facebook users — add them as App Testers, or switch the app to Live. Use “Sync from Facebook” to import tester threads Graph can see.';
+        } elseif ($messengerCount <= 1 && $whatsappCount === 0) {
+            $summary = 'Only your app-role chats can appear while the Meta app is in Development mode. Being Page owner/admin is not enough for other Facebook users — add them as App Testers, or switch the app to Live. Use “Sync Messenger” to import tester threads Graph can see. WhatsApp still requires a live webhook.';
             $severity = 'warning';
         } else {
-            $summary = 'Conversations are loading from the local database (webhook ingest).';
+            $summary = 'Conversations are loading from the local database (webhook ingest'
+                .($whatsappCount > 0 ? ' · Messenger + WhatsApp' : '')
+                .').';
             $severity = $failed ? 'warning' : 'ok';
         }
 
@@ -205,6 +276,7 @@ class ChannelInboxDiagnostics
             'filtered_out' => $filteredOut,
             'filters_active' => $filtersActive,
             'webhook_url' => rtrim((string) config('app.url'), '/').'/api/webhooks/messenger',
+            'whatsapp_webhook_url' => rtrim((string) config('app.url'), '/').'/api/webhooks/whatsapp',
             'checks' => $checks,
             'summary' => $summary,
             'severity' => $severity,
@@ -253,6 +325,13 @@ class ChannelInboxDiagnostics
         ]);
     }
 
+    public function recordWhatsAppVerified(): void
+    {
+        $this->patchHealth(self::WHATSAPP_HEALTH_KEY, [
+            'last_verified_at' => now()->toIso8601String(),
+        ]);
+    }
+
     public function recordWhatsAppReceived(int $entryCount): void
     {
         $this->patchHealth(self::WHATSAPP_HEALTH_KEY, [
@@ -268,6 +347,14 @@ class ChannelInboxDiagnostics
         $this->patchHealth(self::WHATSAPP_HEALTH_KEY, [
             'last_rejected_at' => now()->toIso8601String(),
             'last_rejection_reason' => $reason,
+        ]);
+    }
+
+    public function recordWhatsAppError(string $message): void
+    {
+        $this->patchHealth(self::WHATSAPP_HEALTH_KEY, [
+            'last_error_at' => now()->toIso8601String(),
+            'last_error' => $message,
         ]);
     }
 

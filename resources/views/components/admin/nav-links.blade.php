@@ -39,8 +39,12 @@
         Dashboard
     </a>
     <a href="{{ route('admin.inbox') }}" wire:navigate {!! $click !!}
-        class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.inbox') ? $active : $inactive }}">
+        class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.inbox') && ! request()->routeIs('admin.inbox.quick-replies') ? $active : $inactive }}">
         Inbox
+    </a>
+    <a href="{{ route('admin.inbox.quick-replies') }}" wire:navigate {!! $click !!}
+        class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.inbox.quick-replies') ? $active : $inactive }}">
+        Quick replies
     </a>
     <a href="{{ route('admin.issues.index') }}" wire:navigate {!! $click !!}
         class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.issues*') ? $active : $inactive }}">

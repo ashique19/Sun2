@@ -2,11 +2,14 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class WhatsAppWebhookTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_verify_challenge_succeeds_with_matching_token(): void
     {
         config([

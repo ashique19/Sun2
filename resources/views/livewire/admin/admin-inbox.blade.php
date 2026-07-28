@@ -71,12 +71,54 @@
                     Syncs from Facebook every {{ $graphPollSeconds }}s while this page is open.
                 @endif
             </p>
-            @if ($lastSyncedAt)
-                <p class="mt-1 text-[11px] tabular-nums text-[#8C8474]" wire:key="last-synced-{{ $lastSyncedAt }}">
-                    Last synced {{ \Illuminate\Support\Carbon::parse($lastSyncedAt)->timezone('Asia/Dhaka')->diffForHumans() }}
-                </p>
-            @elseif ($lastSyncError)
-                <p class="mt-1 text-[11px] text-rose-700">Last sync failed</p>
+            <p
+                class="mt-1 text-[11px] tabular-nums text-[#8C8474]"
+                wire:key="auto-sync-countdown-{{ $lastSyncedAt ?? 'pending' }}-{{ $graphPollSeconds }}"
+                x-data="{
+                    interval: {{ (int) $graphPollSeconds }},
+                    remaining: {{ (int) $graphPollSeconds }},
+                    lastAt: @js($lastSyncedAt),
+                    timer: null,
+                    label() {
+                        if (this.remaining <= 0) {
+                            return 'Auto syncing…';
+                        }
+
+                        return 'Auto sync in ' + this.remaining + 's';
+                    },
+                    refreshFromLastSync() {
+                        if (! this.lastAt) {
+                            return;
+                        }
+
+                        const nextAt = Date.parse(this.lastAt) + (this.interval * 1000);
+                        if (Number.isNaN(nextAt)) {
+                            return;
+                        }
+
+                        this.remaining = Math.max(0, Math.ceil((nextAt - Date.now()) / 1000));
+                    },
+                    init() {
+                        this.refreshFromLastSync();
+                        this.timer = setInterval(() => {
+                            if (this.lastAt) {
+                                this.refreshFromLastSync();
+                            } else {
+                                this.remaining = Math.max(0, this.remaining - 1);
+                            }
+                        }, 1000);
+                    },
+                    destroy() {
+                        if (this.timer) {
+                            clearInterval(this.timer);
+                        }
+                    },
+                }"
+            >
+                <span x-text="label()">Auto sync in {{ (int) $graphPollSeconds }}s</span>
+            </p>
+            @if ($lastSyncError)
+                <p class="mt-0.5 text-[11px] text-rose-700">Last sync failed</p>
             @endif
         </div>
 

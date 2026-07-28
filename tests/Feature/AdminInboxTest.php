@@ -62,7 +62,9 @@ class AdminInboxTest extends TestCase
 
         Livewire::test(AdminInbox::class)
             ->assertSet('mobileThreadOpen', false)
-            ->assertSee('Filters')
+            ->assertSeeHtml('aria-label="Filters"')
+            ->assertSeeHtml('aria-label="Sync Messenger"')
+            ->assertSeeHtml('aria-label="Quick replies"')
             ->call('selectConversation', $conversation->id)
             ->assertSet('mobileThreadOpen', true)
             ->assertSeeHtml('aria-label="Back to conversations"')

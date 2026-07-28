@@ -56,127 +56,147 @@
         <livewire:admin.admin-facebook-token-gate />
     </div>
 
-    {{-- Header: compact on mobile, full controls on desktop. Hidden on mobile while reading a thread. --}}
+    {{-- Header: on small screens, Inbox title + icon actions share one row. --}}
     <div @class([
-        'flex flex-col gap-3 px-4 pt-3 xl:flex-row xl:items-end xl:justify-between xl:gap-4 xl:px-0 xl:pt-0',
+        'flex flex-col gap-2 px-4 pt-2 xl:gap-3 xl:px-0 xl:pt-0',
         'hidden xl:flex' => $mobileThreadOpen,
     ])>
-        <div class="min-w-0">
-            <h1 class="font-serif text-2xl font-semibold xl:text-3xl">Inbox</h1>
-            <p class="mt-0.5 hidden text-sm text-[#8C8474] sm:block">
-                Messenger conversations in one place.
-                @if ($realtimeEnabled)
-                    Live updates when Reverb is running; Graph backfill every {{ $graphPollSeconds }}s.
-                @else
-                    Syncs from Facebook every {{ $graphPollSeconds }}s while this page is open.
-                @endif
-            </p>
-            <p
-                class="mt-1 text-[11px] tabular-nums text-[#8C8474]"
-                wire:key="auto-sync-countdown-{{ $lastSyncedAt ?? 'pending' }}-{{ $graphPollSeconds }}"
-                x-data="{
-                    interval: {{ (int) $graphPollSeconds }},
-                    remaining: {{ (int) $graphPollSeconds }},
-                    lastAt: @js($lastSyncedAt),
-                    timer: null,
-                    label() {
-                        if (this.remaining <= 0) {
-                            return 'Auto syncing…';
-                        }
-
-                        return 'Auto sync in ' + this.remaining + 's';
-                    },
-                    refreshFromLastSync() {
-                        if (! this.lastAt) {
-                            return;
-                        }
-
-                        const nextAt = Date.parse(this.lastAt) + (this.interval * 1000);
-                        if (Number.isNaN(nextAt)) {
-                            return;
-                        }
-
-                        this.remaining = Math.max(0, Math.ceil((nextAt - Date.now()) / 1000));
-                    },
-                    init() {
-                        this.refreshFromLastSync();
-                        this.timer = setInterval(() => {
-                            if (this.lastAt) {
-                                this.refreshFromLastSync();
-                            } else {
-                                this.remaining = Math.max(0, this.remaining - 1);
+        <div class="flex items-center justify-between gap-3 xl:items-end">
+            <div class="min-w-0">
+                <h1 class="font-serif text-2xl font-semibold xl:text-3xl">Inbox</h1>
+                <p class="mt-0.5 hidden text-sm text-[#8C8474] xl:block">
+                    Messenger conversations in one place.
+                    @if ($realtimeEnabled)
+                        Live updates when Reverb is running; Graph backfill every {{ $graphPollSeconds }}s.
+                    @else
+                        Syncs from Facebook every {{ $graphPollSeconds }}s while this page is open.
+                    @endif
+                </p>
+                <p
+                    class="mt-0.5 text-[11px] tabular-nums text-[#8C8474] xl:mt-1"
+                    wire:key="auto-sync-countdown-{{ $lastSyncedAt ?? 'pending' }}-{{ $graphPollSeconds }}"
+                    x-data="{
+                        interval: {{ (int) $graphPollSeconds }},
+                        remaining: {{ (int) $graphPollSeconds }},
+                        lastAt: @js($lastSyncedAt),
+                        timer: null,
+                        label() {
+                            if (this.remaining <= 0) {
+                                return 'Auto syncing…';
                             }
-                        }, 1000);
-                    },
-                    destroy() {
-                        if (this.timer) {
-                            clearInterval(this.timer);
-                        }
-                    },
-                }"
-            >
-                <span x-text="label()">Auto sync in {{ (int) $graphPollSeconds }}s</span>
-            </p>
-            @if ($lastSyncError)
-                <p class="mt-0.5 text-[11px] text-rose-700">Last sync failed</p>
-            @endif
+
+                            return 'Auto sync in ' + this.remaining + 's';
+                        },
+                        refreshFromLastSync() {
+                            if (! this.lastAt) {
+                                return;
+                            }
+
+                            const nextAt = Date.parse(this.lastAt) + (this.interval * 1000);
+                            if (Number.isNaN(nextAt)) {
+                                return;
+                            }
+
+                            this.remaining = Math.max(0, Math.ceil((nextAt - Date.now()) / 1000));
+                        },
+                        init() {
+                            this.refreshFromLastSync();
+                            this.timer = setInterval(() => {
+                                if (this.lastAt) {
+                                    this.refreshFromLastSync();
+                                } else {
+                                    this.remaining = Math.max(0, this.remaining - 1);
+                                }
+                            }, 1000);
+                        },
+                        destroy() {
+                            if (this.timer) {
+                                clearInterval(this.timer);
+                            }
+                        },
+                    }"
+                >
+                    <span x-text="label()">Auto sync in {{ (int) $graphPollSeconds }}s</span>
+                </p>
+                @if ($lastSyncError)
+                    <p class="mt-0.5 text-[11px] text-rose-700">Last sync failed</p>
+                @endif
+            </div>
+
+            <div class="flex shrink-0 items-center gap-1.5 xl:flex-col xl:items-end xl:gap-2">
+                <div class="flex items-center gap-1.5 xl:gap-2">
+                    <button type="button"
+                        wire:click="syncFromFacebook"
+                        wire:loading.attr="disabled"
+                        wire:target="syncFromFacebook"
+                        title="Sync Messenger"
+                        aria-label="Sync Messenger"
+                        class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60 xl:h-auto xl:w-auto xl:gap-2 xl:px-4 xl:py-2 xl:text-sm xl:font-semibold">
+                        <svg wire:loading.remove wire:target="syncFromFacebook" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5 xl:hidden" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.39a.75.75 0 0 0-.75.75v3.842a.75.75 0 0 0 1.5 0v-2.14l.311.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm-10.623-2.85a5.5 5.5 0 0 1 9.201-2.466l.312.311H11.77a.75.75 0 0 0 0 1.5h3.843a.75.75 0 0 0 .75-.75V3.328a.75.75 0 1 0-1.5 0V5.47l-.311-.311A7 7 0 0 0 3.04 8.295a.75.75 0 1 0 1.45.39Z" clip-rule="evenodd" />
+                        </svg>
+                        <svg wire:loading wire:target="syncFromFacebook" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5 animate-spin xl:hidden" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.39a.75.75 0 0 0-.75.75v3.842a.75.75 0 0 0 1.5 0v-2.14l.311.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm-10.623-2.85a5.5 5.5 0 0 1 9.201-2.466l.312.311H11.77a.75.75 0 0 0 0 1.5h3.843a.75.75 0 0 0 .75-.75V3.328a.75.75 0 1 0-1.5 0V5.47l-.311-.311A7 7 0 0 0 3.04 8.295a.75.75 0 1 0 1.45.39Z" clip-rule="evenodd" />
+                        </svg>
+                        <span class="hidden xl:inline" wire:loading.remove wire:target="syncFromFacebook">Sync Messenger</span>
+                        <span class="hidden xl:inline" wire:loading wire:target="syncFromFacebook">Syncing…</span>
+                    </button>
+
+                    <a href="{{ route('admin.inbox.quick-replies') }}" wire:navigate
+                        title="Quick replies"
+                        aria-label="Quick replies"
+                        class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] xl:h-auto xl:w-auto xl:px-4 xl:py-2 xl:text-sm xl:font-semibold">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5 xl:hidden" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M10 3c-4.31 0-8 3.033-8 7 0 2.024.978 3.825 2.499 5.085a3.478 3.478 0 0 1-.522 1.756.75.75 0 0 0 .584 1.143 5.976 5.976 0 0 0 3.936-1.108c.542.142 1.112.22 1.703.22 4.31 0 8-3.033 8-7s-3.69-7-8-7Zm0 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm-2-1a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm5 1a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" />
+                        </svg>
+                        <span class="hidden xl:inline">Quick replies</span>
+                    </a>
+
+                    <button type="button"
+                        wire:click="toggleMobileFilters"
+                        aria-expanded="{{ $mobileFiltersOpen ? 'true' : 'false' }}"
+                        aria-label="Filters"
+                        title="Filters"
+                        class="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] xl:hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 0 1 .628.74v2.288a2.25 2.25 0 0 1-.659 1.59l-4.682 4.683a2.25 2.25 0 0 0-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 0 1 8 18.25v-5.757a2.25 2.25 0 0 0-.659-1.591L2.659 6.22A2.25 2.25 0 0 1 2 4.629V2.34a.75.75 0 0 1 .628-.74Z" clip-rule="evenodd" />
+                        </svg>
+                        @if ($activeFilterCount > 0)
+                            <span class="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#C9A227] px-1 text-[10px] font-bold text-white">
+                                {{ $activeFilterCount }}
+                            </span>
+                        @endif
+                    </button>
+                </div>
+            </div>
         </div>
 
-        <div class="flex flex-col gap-2 text-sm xl:items-end">
-            <div class="flex flex-wrap gap-2">
-                <button type="button"
-                    wire:click="syncFromFacebook"
-                    wire:loading.attr="disabled"
-                    wire:target="syncFromFacebook"
-                    class="inline-flex flex-1 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-3 py-2 text-sm font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60 sm:flex-none sm:px-4">
-                    <span wire:loading.remove wire:target="syncFromFacebook">Sync Messenger</span>
-                    <span wire:loading wire:target="syncFromFacebook">Syncing…</span>
+        <div @class([
+            'grid w-full grid-cols-2 gap-2 rounded-xl border border-[#EFE7D6] bg-white p-3 xl:flex xl:w-auto xl:flex-wrap xl:items-center xl:justify-end xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0',
+            'hidden' => ! $mobileFiltersOpen,
+        ])>
+            <select wire:model.live="channel" class="rounded-lg border border-[#E0D6C2] px-2.5 py-2 xl:px-3">
+                <option value="">All channels</option>
+                <option value="messenger">Messenger</option>
+            </select>
+            <select wire:model.live="unread" class="rounded-lg border border-[#E0D6C2] px-2.5 py-2 xl:px-3">
+                <option value="">All reads</option>
+                <option value="1">Unread only</option>
+            </select>
+            <select wire:model.live="window" class="rounded-lg border border-[#E0D6C2] px-2.5 py-2 xl:px-3">
+                <option value="">All windows</option>
+                <option value="1">Within 24h only</option>
+            </select>
+            <select wire:model.live="linked" class="rounded-lg border border-[#E0D6C2] px-2.5 py-2 xl:px-3">
+                <option value="">All links</option>
+                <option value="1">Linked draft/order</option>
+            </select>
+            @if ($activeFilterCount > 0)
+                <button type="button" wire:click="clearFilters"
+                    class="col-span-2 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-3 py-2 text-xs font-semibold text-[#6B6459] xl:hidden">
+                    Clear filters
                 </button>
-                <a href="{{ route('admin.inbox.quick-replies') }}" wire:navigate
-                    class="inline-flex flex-1 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-3 py-2 text-sm font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] sm:flex-none sm:px-4">
-                    Quick replies
-                </a>
-
-                <button type="button"
-                    wire:click="toggleMobileFilters"
-                    aria-expanded="{{ $mobileFiltersOpen ? 'true' : 'false' }}"
-                    class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E0D6C2] bg-white px-3 py-2 text-sm font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] sm:flex-none xl:hidden">
-                    Filters
-                    @if ($activeFilterCount > 0)
-                        <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#C9A227] px-1.5 text-[10px] font-bold text-white">
-                            {{ $activeFilterCount }}
-                        </span>
-                    @endif
-                </button>
-            </div>
-
-            <div @class([
-                'grid w-full grid-cols-2 gap-2 rounded-xl border border-[#EFE7D6] bg-white p-3 xl:flex xl:w-auto xl:flex-wrap xl:items-center xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0',
-                'hidden' => ! $mobileFiltersOpen,
-            ])>
-                <select wire:model.live="channel" class="rounded-lg border border-[#E0D6C2] px-2.5 py-2 xl:px-3">
-                    <option value="">All channels</option>
-                    <option value="messenger">Messenger</option>
-                </select>
-                <select wire:model.live="unread" class="rounded-lg border border-[#E0D6C2] px-2.5 py-2 xl:px-3">
-                    <option value="">All reads</option>
-                    <option value="1">Unread only</option>
-                </select>
-                <select wire:model.live="window" class="rounded-lg border border-[#E0D6C2] px-2.5 py-2 xl:px-3">
-                    <option value="">All windows</option>
-                    <option value="1">Within 24h only</option>
-                </select>
-                <select wire:model.live="linked" class="rounded-lg border border-[#E0D6C2] px-2.5 py-2 xl:px-3">
-                    <option value="">All links</option>
-                    <option value="1">Linked draft/order</option>
-                </select>
-                @if ($activeFilterCount > 0)
-                    <button type="button" wire:click="clearFilters"
-                        class="col-span-2 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-3 py-2 text-xs font-semibold text-[#6B6459] xl:hidden">
-                        Clear filters
-                    </button>
-                @endif
-            </div>
+            @endif
         </div>
     </div>
 

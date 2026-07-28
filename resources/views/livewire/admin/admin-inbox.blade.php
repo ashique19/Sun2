@@ -4,7 +4,7 @@
         ->count();
 @endphp
 
-<div class="space-y-4 xl:space-y-6" wire:poll.5s.visible="refreshInbox">
+<div class="space-y-4 xl:space-y-6" wire:poll.10s.visible="pollSyncFromFacebook">
     <livewire:admin.admin-facebook-token-gate />
 
     {{-- Header: compact on mobile, full controls on desktop. Hidden on mobile while reading a thread. --}}
@@ -16,7 +16,7 @@
             <h1 class="font-serif text-2xl font-semibold xl:text-3xl">Inbox</h1>
             <p class="mt-0.5 hidden text-sm text-[#8C8474] sm:block">
                 Messenger and WhatsApp conversations in one place.
-                New messages arrive via webhooks; Graph sync runs on a schedule (or use the button).
+                Syncs from Facebook every 10s while this page is open.
             </p>
         </div>
 

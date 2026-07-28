@@ -11,4 +11,4 @@ Artisan::command('inspire', function () {
 Schedule::command('messenger:sync-conversations')
     ->everyFiveMinutes()
     ->withoutOverlapping()
-    ->when(fn () => (bool) config('facebook.messenger.auto_sync_enabled', true));
+    ->when(fn () => (bool) config('facebook.messenger.auto_sync_enabled', false));

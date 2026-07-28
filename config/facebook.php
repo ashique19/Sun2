@@ -35,10 +35,11 @@ return [
         'page_id' => env('FACEBOOK_PAGE_ID'),
 
         /*
-        | Scheduled Graph Conversations API catch-up (php artisan schedule:run).
-        | Webhooks remain the realtime path; this backfills missed/history threads.
+        | Optional server cron Graph catch-up (php artisan schedule:run).
+        | Primary catch-up is Livewire poll while /admin/inbox is open.
+        | Default off — enable only if you run the Laravel scheduler.
         */
-        'auto_sync_enabled' => filter_var(env('FACEBOOK_MESSENGER_AUTO_SYNC_ENABLED', true), FILTER_VALIDATE_BOOL),
+        'auto_sync_enabled' => filter_var(env('FACEBOOK_MESSENGER_AUTO_SYNC_ENABLED', false), FILTER_VALIDATE_BOOL),
 
         /*
         | Secret token for HTTP sync (hosting panel cron / curl):

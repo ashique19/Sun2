@@ -216,6 +216,20 @@ class AdminInbox extends Component
         }
     }
 
+    /**
+     * Background Graph sync while the Inbox tab is open (wire:poll.visible).
+     * Quiet on success so the UI is not spammed every poll.
+     */
+    public function pollSyncFromFacebook(
+        MessengerConversationSyncService $sync,
+        ChannelReplyService $replies,
+    ): void {
+        AdminAccess::ensureStaffAdmin();
+
+        $sync->sync();
+        $this->refreshInbox($replies);
+    }
+
     public function clearFilters(): void
     {
         $this->channel = '';

@@ -552,4 +552,56 @@ class AdminInboxTest extends TestCase
             'direction' => 'inbound',
         ]);
     }
+
+    #[Test]
+    public function poll_sync_from_facebook_imports_quietly_while_inbox_is_open(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'PAGE42',
+            'facebook.graph_version' => 'v25.0',
+            'gemini.api_key' => null,
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/PAGE42/conversations*' => Http::response([
+                'data' => [[
+                    'id' => 't_poll_1',
+                    'updated_time' => now()->toIso8601String(),
+                    'participants' => [
+                        'data' => [
+                            ['id' => 'PAGE42', 'name' => 'Sun Page'],
+                            ['id' => 'PSID_POLL_1', 'name' => 'Polled Customer'],
+                        ],
+                    ],
+                    'messages' => [
+                        'data' => [[
+                            'id' => 'm_poll_1',
+                            'message' => 'Polled hello',
+                            'from' => ['id' => 'PSID_POLL_1', 'name' => 'Polled Customer'],
+                            'created_time' => now()->subMinute()->toIso8601String(),
+                        ]],
+                    ],
+                ]],
+            ], 200),
+        ]);
+
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminInbox::class)
+            ->call('pollSyncFromFacebook')
+            ->assertSet('error', null)
+            ->assertSet('statusMessage', null)
+            ->assertSee('Polled hello')
+            ->assertSeeHtml('wire:poll.10s.visible="pollSyncFromFacebook"');
+
+        $this->assertDatabaseHas('channel_conversations', [
+            'channel' => 'messenger',
+            'external_user_id' => 'PSID_POLL_1',
+        ]);
+        $this->assertDatabaseHas('channel_messages', [
+            'external_message_id' => 'm_poll_1',
+            'body' => 'Polled hello',
+        ]);
+    }
 }

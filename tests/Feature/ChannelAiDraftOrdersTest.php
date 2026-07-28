@@ -349,6 +349,46 @@ class ChannelAiDraftOrdersTest extends TestCase
         $this->assertSame(4, $product->fresh()->stock_quantity);
     }
 
+    public function test_livewire_can_clear_customer_note_from_draft_ai_list(): void
+    {
+        $admin = $this->adminUser();
+
+        $draft = $this->baseOrder([
+            'status' => Order::STATUS_DRAFT,
+            'order_number' => '3002',
+            'placed_via' => Order::PLACED_VIA_MESSENGER,
+            'customer_note' => "Garbage chat dump\nwith phone 01627237432",
+            'admin_note' => 'Draft by AI (Messenger).',
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(AdminOrders::class, ['segment' => 'draft-ai'])
+            ->assertSee('Customer note')
+            ->assertSee('Garbage chat dump')
+            ->call('clearCustomerNote', $draft->id)
+            ->assertDontSee('Garbage chat dump');
+
+        $this->assertNull($draft->fresh()->customer_note);
+    }
+
+    public function test_order_show_can_clear_customer_note(): void
+    {
+        $admin = $this->adminUser();
+        $order = $this->baseOrder([
+            'customer_note' => 'Leave at the gate please',
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(AdminOrderShow::class, ['order' => $order])
+            ->assertSee('Customer note')
+            ->assertSee('Leave at the gate please')
+            ->call('clearCustomerNote')
+            ->assertSee('Customer note cleared')
+            ->assertDontSee('Leave at the gate please');
+
+        $this->assertNull($order->fresh()->customer_note);
+    }
+
     public function test_conversation_viewer_and_reply_within_window(): void
     {
         Http::fake([
@@ -541,7 +581,8 @@ class ChannelAiDraftOrdersTest extends TestCase
         $this->assertSame('heuristic', $draft->ai_parse_meta['source'] ?? null);
         $this->assertLessThanOrEqual(255, mb_strlen((string) $draft->address));
         $this->assertSame('01831066963', $draft->phone);
-        $this->assertNotNull($draft->customer_note);
+        $this->assertNull($draft->customer_note);
+        $this->assertNotNull($draft->ai_parse_meta['raw_text'] ?? null);
     }
 
     public function test_historic_inbound_messages_do_not_create_ai_draft(): void
@@ -625,7 +666,8 @@ class ChannelAiDraftOrdersTest extends TestCase
         $this->assertNotNull($draft);
         $this->assertSame('Nila', $draft->name);
         $this->assertSame('01627237432', $draft->phone);
-        $this->assertStringNotContainsString('random old chatter', (string) $draft->customer_note);
+        $this->assertNull($draft->customer_note);
+        $this->assertStringNotContainsString('random old chatter', (string) ($draft->ai_parse_meta['raw_text'] ?? ''));
     }
 
     public function test_discard_draft_does_not_change_stock(): void

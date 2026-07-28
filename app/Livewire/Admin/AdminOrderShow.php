@@ -137,6 +137,19 @@ class AdminOrderShow extends Component
         $this->message = 'Order updated.';
     }
 
+    public function clearCustomerNote(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (blank($this->order->customer_note)) {
+            return;
+        }
+
+        $this->order->forceFill(['customer_note' => null])->save();
+        $this->order->refresh();
+        $this->message = 'Customer note cleared.';
+    }
+
     public function confirmDraft(ChannelOrderDraftService $drafts): void
     {
         AdminAccess::ensureStaffAdmin();

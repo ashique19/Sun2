@@ -57,6 +57,11 @@ class AdminOrderFormValidationTest extends TestCase
         $lookup->shouldReceive('findOrCreateCustomer')->andReturnUsing(function (string $phone, string $name) {
             Role::findOrCreate('customers');
 
+            $user = User::query()->where('phone', $phone)->first();
+            if ($user) {
+                return $user;
+            }
+
             $user = User::factory()->create([
                 'name' => $name,
                 'phone' => $phone,
@@ -204,6 +209,49 @@ class AdminOrderFormValidationTest extends TestCase
         $this->assertSame('Dr farhana', $order->name);
         $this->assertSame('01627237432', $order->phone);
         $this->assertStringContainsString('bashaboo', $order->address);
+    }
+
+    public function test_edit_form_can_update_and_clear_customer_note(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->mockCustomerLookup();
+
+        $order = Order::query()->create([
+            'order_number' => '9001',
+            'name' => 'Customer',
+            'phone' => '01627237432',
+            'address' => 'House 1',
+            'city' => 'Dhaka',
+            'subtotal' => 980,
+            'delivery_charge' => 0,
+            'discount' => 0,
+            'total' => 980,
+            'cod_amount' => 980,
+            'due_amount' => 980,
+            'payment_status' => 'unpaid',
+            'payment_method' => 'cod',
+            'status' => 'new',
+            'placed_at' => now(),
+            'customer_note' => 'Old chat dump that should be editable',
+        ]);
+
+        Livewire::test(AdminOrderForm::class, ['order' => $order])
+            ->assertSet('customerNote', 'Old chat dump that should be editable')
+            ->assertSee('Customer note')
+            ->assertSee('Clear')
+            ->set('customerNote', 'Call before delivery')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertSame('Call before delivery', $order->fresh()->customer_note);
+
+        Livewire::test(AdminOrderForm::class, ['order' => $order->fresh()])
+            ->set('customerNote', '')
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertSet('error', null);
+
+        $this->assertNull($order->fresh()->customer_note);
     }
 
     public function test_normalize_parses_raw_paste_block_left_in_phone(): void

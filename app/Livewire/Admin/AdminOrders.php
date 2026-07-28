@@ -263,6 +263,20 @@ class AdminOrders extends Component
         $this->listRevision++;
     }
 
+    public function clearCustomerNote(int $orderId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $order = Order::query()->find($orderId);
+
+        if (! $order || blank($order->customer_note)) {
+            return;
+        }
+
+        $order->forceFill(['customer_note' => null])->save();
+        $this->listRevision++;
+    }
+
     public function openConversation(int $orderId): void
     {
         AdminAccess::ensureStaffAdmin();

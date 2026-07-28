@@ -275,9 +275,9 @@ class ChannelOrderDraftService
             'payment_method' => 'cod',
             'status' => Order::STATUS_DRAFT,
             'admin_note' => implode('. ', $adminNoteParts).'.',
-            'customer_note' => filled($parsed['raw_text'] ?? null)
-                ? mb_substr((string) $parsed['raw_text'], 0, 2000)
-                : null,
+            // Do not dump the Messenger/WhatsApp transcript into customer_note —
+            // that field is for courier special instructions and staff-editable notes.
+            'customer_note' => null,
             'is_replacement' => false,
             'has_return' => false,
             'placed_at' => now(),
@@ -288,6 +288,9 @@ class ChannelOrderDraftService
                 'confidence' => $parsed['confidence'] ?? 0,
                 'missing' => $missing,
                 'product_name' => $parsed['product_name'] ?? null,
+                'raw_text' => filled($parsed['raw_text'] ?? null)
+                    ? mb_substr((string) $parsed['raw_text'], 0, 2000)
+                    : null,
                 'parsed_at' => now()->toIso8601String(),
             ],
             'user_id' => null,

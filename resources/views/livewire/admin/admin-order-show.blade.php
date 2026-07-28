@@ -120,7 +120,18 @@
                     <div><dt class="text-[#8C8474]">City</dt><dd class="break-words">{{ $order->city }}@if($order->area), {{ $order->area }}@endif</dd></div>
                     <div class="sm:col-span-2"><dt class="text-[#8C8474]">Address</dt><dd class="break-words">{{ $order->address }}</dd></div>
                     @if ($order->customer_note)
-                        <div class="sm:col-span-2"><dt class="text-[#8C8474]">Customer note</dt><dd class="break-words whitespace-pre-line">{{ $order->customer_note }}</dd></div>
+                        <div class="sm:col-span-2">
+                            <div class="flex items-start justify-between gap-2">
+                                <dt class="text-[#8C8474]">Customer note</dt>
+                                <button type="button"
+                                    wire:click="clearCustomerNote"
+                                    wire:confirm="Clear this customer note?"
+                                    class="text-xs font-semibold text-[#8C8474] hover:text-rose-700">
+                                    Clear
+                                </button>
+                            </div>
+                            <dd class="mt-1 break-words whitespace-pre-line">{{ $order->customer_note }}</dd>
+                        </div>
                     @endif
                 </dl>
             </div>

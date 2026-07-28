@@ -103,9 +103,9 @@ class MessengerInboundService
             ? Carbon::createFromTimestampMs($timestampMs)
             : now();
 
-        [$mediaUrl, $mediaMime] = $this->extractAttachment($message);
+        $attachments = $this->extractAttachments($message);
 
-        if (($text === null || $text === '') && $mediaUrl === null) {
+        if (($text === null || $text === '') && $attachments === []) {
             return;
         }
 
@@ -118,29 +118,47 @@ class MessengerInboundService
             ],
         );
 
-        $this->conversations->storeMessage($conversation, [
-            'external_message_id' => $mid,
-            'direction' => ChannelMessage::DIRECTION_INBOUND,
-            'body' => $text !== '' ? $text : null,
-            'media_url' => $mediaUrl,
-            'media_mime' => $mediaMime,
-            'raw_payload' => $event,
-            'sent_at' => $sentAt,
-        ]);
+        if ($attachments === []) {
+            $this->conversations->storeMessage($conversation, [
+                'external_message_id' => $mid,
+                'direction' => ChannelMessage::DIRECTION_INBOUND,
+                'body' => $text !== '' ? $text : null,
+                'media_url' => null,
+                'media_mime' => null,
+                'raw_payload' => $event,
+                'sent_at' => $sentAt,
+            ]);
+        } else {
+            $total = count($attachments);
+            foreach ($attachments as $index => $attachment) {
+                $this->conversations->storeMessage($conversation, [
+                    'external_message_id' => $this->attachmentExternalId($mid, $index, $total),
+                    'direction' => ChannelMessage::DIRECTION_INBOUND,
+                    // Caption/text only on the first image of an album.
+                    'body' => $index === 0 && $text !== null && $text !== '' ? $text : null,
+                    'media_url' => $attachment['url'],
+                    'media_mime' => $attachment['mime'],
+                    'raw_payload' => $event,
+                    'sent_at' => $sentAt,
+                ]);
+            }
+        }
 
         $this->drafts->syncDraftFromConversation($conversation->fresh(['messages']));
     }
 
     /**
      * @param  array<string, mixed>  $message
-     * @return array{0:?string,1:?string}
+     * @return list<array{url: string, mime: ?string}>
      */
-    private function extractAttachment(array $message): array
+    private function extractAttachments(array $message): array
     {
         $attachments = $message['attachments'] ?? [];
         if (! is_array($attachments)) {
-            return [null, null];
+            return [];
         }
+
+        $extracted = [];
 
         foreach ($attachments as $attachment) {
             if (! is_array($attachment)) {
@@ -160,10 +178,8 @@ class MessengerInboundService
                 continue;
             }
 
-            // Try to get MIME type from payload if available
             $mime = data_get($attachment, 'payload.mime_type');
             if (! is_string($mime) || $mime === '') {
-                // Fallback to reasonable defaults based on type
                 $mime = match ($type) {
                     'image' => 'image/jpeg',
                     'audio' => 'audio/mpeg',
@@ -172,12 +188,24 @@ class MessengerInboundService
                 };
             }
 
-            // Prefer a durable copy when page token can fetch Graph attachments later;
-            // for now store the CDN URL Meta provides (time-limited but enough for parse).
-            return [$url, $mime];
+            $extracted[] = ['url' => $url, 'mime' => $mime];
         }
 
-        return [null, null];
+        return $extracted;
+    }
+
+    private function attachmentExternalId(?string $mid, int $index, int $total): ?string
+    {
+        if ($mid === null || $mid === '') {
+            return null;
+        }
+
+        // Keep single-attachment mids stable for backward-compatible dedupe.
+        if ($total === 1) {
+            return $mid;
+        }
+
+        return $mid.'#'.$index;
     }
 
     /**

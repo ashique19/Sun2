@@ -77,6 +77,16 @@ class AdminOrderFormValidationTest extends TestCase
         $this->app->instance(CustomerLookupService::class, $lookup);
     }
 
+    public function test_create_form_defaults_auto_delivery_checked(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->mockCustomerLookup();
+
+        Livewire::test(AdminOrderForm::class)
+            ->assertSet('autoDelivery', true)
+            ->assertSeeHtml('wire:model.live="autoDelivery" checked');
+    }
+
     public function test_create_order_accepts_filled_phone_and_name(): void
     {
         $this->actingAs($this->adminUser());

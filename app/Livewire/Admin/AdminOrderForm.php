@@ -161,6 +161,9 @@ class AdminOrderForm extends Component
             }
         } elseif ($this->customer) {
             $this->fillFromCustomer($this->customer);
+        } else {
+            // New create form: keep Auto delivery checked by default.
+            $this->autoDelivery = true;
         }
 
         if ($this->phone !== '') {

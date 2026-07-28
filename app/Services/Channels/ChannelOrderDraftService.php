@@ -249,6 +249,10 @@ class ChannelOrderDraftService
         if (is_array($missing) && $missing !== []) {
             $adminNoteParts[] = 'Missing: '.implode(', ', $missing);
         }
+        $weakPoints = array_values($parsed['weak_points'] ?? []);
+        if ($weakPoints !== []) {
+            $adminNoteParts[] = 'Weak: '.implode(', ', array_slice($weakPoints, 0, 6));
+        }
 
         $address = filled($parsed['address'] ?? null) ? (string) $parsed['address'] : '';
 
@@ -275,9 +279,8 @@ class ChannelOrderDraftService
             'payment_method' => 'cod',
             'status' => Order::STATUS_DRAFT,
             'admin_note' => implode('. ', $adminNoteParts).'.',
-            'customer_note' => filled($parsed['raw_text'] ?? null)
-                ? mb_substr((string) $parsed['raw_text'], 0, 2000)
-                : null,
+            // Courier special-instruction field — never dump the Messenger transcript here.
+            'customer_note' => null,
             'is_replacement' => false,
             'has_return' => false,
             'placed_at' => now(),
@@ -287,7 +290,12 @@ class ChannelOrderDraftService
                 'source' => $parsed['source'] ?? 'none',
                 'confidence' => $parsed['confidence'] ?? 0,
                 'missing' => $missing,
+                'weak_points' => array_values($parsed['weak_points'] ?? []),
                 'product_name' => $parsed['product_name'] ?? null,
+                'image_matches' => array_values($parsed['image_matches'] ?? []),
+                'raw_text' => filled($parsed['raw_text'] ?? null)
+                    ? mb_substr((string) $parsed['raw_text'], 0, 2000)
+                    : null,
                 'parsed_at' => now()->toIso8601String(),
             ],
             'user_id' => null,

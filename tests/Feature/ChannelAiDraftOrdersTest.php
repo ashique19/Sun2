@@ -8,8 +8,10 @@ use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\ProductImage;
 use App\Models\User;
 use App\Services\Admin\GeminiClient;
+use App\Services\Admin\ProductImageHashService;
 use App\Services\Channels\ChannelConversationService;
 use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
@@ -437,7 +439,8 @@ class ChannelAiDraftOrdersTest extends TestCase
         app(ChannelConversationService::class)->storeMessage($conversation, [
             'external_message_id' => 'm_gem',
             'direction' => ChannelMessage::DIRECTION_INBOUND,
-            'body' => 'please send this',
+            // Phone is required locally first; Gemini only fills remaining gaps.
+            'body' => "01712345678\nplease send this",
             'sent_at' => now(),
         ]);
 
@@ -449,30 +452,18 @@ class ChannelAiDraftOrdersTest extends TestCase
         $this->assertSame('01712345678', $draft->phone);
         $this->assertSame(2, (int) $draft->items->first()->quantity);
         $this->assertSame($product->id, (int) $draft->items->first()->product_id);
-        $this->assertSame('gemini', $draft->ai_parse_meta['source'] ?? null);
+        $this->assertSame('local+gemini', $draft->ai_parse_meta['source'] ?? null);
+        $this->assertContains('gemini_gap_fill_used', $draft->ai_parse_meta['weak_points'] ?? []);
     }
 
     public function test_draft_truncates_overlong_address_instead_of_failing_sync(): void
     {
-        $longAddress = str_repeat('valo hobe nk, Parsel pawa pore ki, ', 20)
-            .'Thikana hotse Chittagong, এডভান্স করতে হবে?';
+        $longAddress = str_repeat('House 12 Road 4 Banani sector, ', 20)
+            .'Thikana hotse Chittagong';
 
         $this->assertGreaterThan(255, mb_strlen($longAddress));
 
-        $gemini = Mockery::mock(GeminiClient::class);
-        $gemini->shouldReceive('isConfigured')->andReturn(true);
-        $gemini->shouldReceive('generateJsonFromParts')->once()->andReturn([
-            'name' => 'Ei 2ta nite chai',
-            'phone' => '01831066963',
-            'address' => $longAddress,
-            'city' => 'Chittagong',
-            'area' => null,
-            'product_id' => null,
-            'product_name' => null,
-            'quantity' => 1,
-            'missing' => ['product'],
-        ]);
-        $this->app->instance(GeminiClient::class, $gemini);
+        config(['gemini.api_key' => null]);
 
         $conversation = app(ChannelConversationService::class)->findOrCreate(
             ChannelConversation::CHANNEL_MESSENGER,
@@ -481,7 +472,7 @@ class ChannelAiDraftOrdersTest extends TestCase
         app(ChannelConversationService::class)->storeMessage($conversation, [
             'external_message_id' => 'm_long_addr',
             'direction' => ChannelMessage::DIRECTION_INBOUND,
-            'body' => $longAddress,
+            'body' => "01831066963\n".$longAddress,
             'sent_at' => now(),
         ]);
 
@@ -490,12 +481,12 @@ class ChannelAiDraftOrdersTest extends TestCase
 
         $this->assertNotNull($draft);
         $this->assertSame(Order::STATUS_DRAFT, $draft->status);
-        $this->assertSame(255, mb_strlen((string) $draft->address));
-        $this->assertSame(mb_substr($longAddress, 0, 255), $draft->address);
+        $this->assertLessThanOrEqual(255, mb_strlen((string) $draft->address));
         $this->assertSame('01831066963', $draft->phone);
+        $this->assertNull($draft->customer_note);
     }
 
-    public function test_heuristic_draft_truncates_conversation_dumped_into_address(): void
+    public function test_local_parse_does_not_dump_chat_chatter_into_address(): void
     {
         config(['gemini.api_key' => null]);
 
@@ -520,7 +511,6 @@ class ChannelAiDraftOrdersTest extends TestCase
         ];
 
         $body = implode("\n", $lines);
-        $this->assertGreaterThan(255, mb_strlen(implode(', ', array_slice($lines, 2))));
 
         $conversation = app(ChannelConversationService::class)->findOrCreate(
             ChannelConversation::CHANNEL_MESSENGER,
@@ -538,10 +528,15 @@ class ChannelAiDraftOrdersTest extends TestCase
 
         $this->assertNotNull($draft);
         $this->assertSame(Order::STATUS_DRAFT, $draft->status);
-        $this->assertSame('heuristic', $draft->ai_parse_meta['source'] ?? null);
-        $this->assertLessThanOrEqual(255, mb_strlen((string) $draft->address));
         $this->assertSame('01831066963', $draft->phone);
-        $this->assertNotNull($draft->customer_note);
+        $this->assertNull($draft->customer_note);
+        $this->assertStringContainsString('Chittagong', (string) $draft->address);
+        $this->assertStringNotContainsString('valo hobe nk', (string) $draft->address);
+        $this->assertStringNotContainsString('extra chat line', (string) $draft->address);
+        $this->assertLessThanOrEqual(255, mb_strlen((string) $draft->address));
+        $this->assertSame('local', $draft->ai_parse_meta['source'] ?? null);
+        $this->assertNotEmpty($draft->ai_parse_meta['weak_points'] ?? []);
+        $this->assertContains('chatty_transcript_discarded', $draft->ai_parse_meta['weak_points']);
     }
 
     public function test_historic_inbound_messages_do_not_create_ai_draft(): void
@@ -625,7 +620,82 @@ class ChannelAiDraftOrdersTest extends TestCase
         $this->assertNotNull($draft);
         $this->assertSame('Nila', $draft->name);
         $this->assertSame('01627237432', $draft->phone);
-        $this->assertStringNotContainsString('random old chatter', (string) $draft->customer_note);
+        $this->assertNull($draft->customer_note);
+        $this->assertStringNotContainsString('random old chatter', (string) ($draft->ai_parse_meta['raw_text'] ?? ''));
+    }
+
+    public function test_inbound_product_image_auto_matches_catalog_hash(): void
+    {
+        config([
+            'gemini.api_key' => null,
+            'facebook.messenger.page_access_token' => 'page-token',
+            'channels.ai_draft.image_min_bytes' => 100,
+        ]);
+
+        $product = $this->product(['name' => 'Hash Match Kurti']);
+        $bytes = $this->makeTestJpegBytes(color: [180, 40, 40]);
+        $hash = app(ProductImageHashService::class)->hashBinary($bytes);
+
+        ProductImage::query()->create([
+            'product_id' => $product->id,
+            'path' => 'img/products/hash-match-test.jpg',
+            'is_primary' => true,
+            'sort_order' => 0,
+            'perceptual_hash' => $hash,
+        ]);
+
+        Http::fake([
+            'https://lookaside.fbsbx.com/*' => Http::response($bytes, 200, [
+                'Content-Type' => 'image/jpeg',
+            ]),
+        ]);
+
+        $conversation = app(ChannelConversationService::class)->findOrCreate(
+            ChannelConversation::CHANNEL_MESSENGER,
+            'PSID_IMG_MATCH',
+            ['customer_name' => 'Image Buyer'],
+        );
+        app(ChannelConversationService::class)->storeMessage($conversation, [
+            'external_message_id' => 'm_img_text',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => "Image Buyer\n01627237432\nBanani, Dhaka",
+            'sent_at' => now()->subMinute(),
+        ]);
+        app(ChannelConversationService::class)->storeMessage($conversation, [
+            'external_message_id' => 'm_img_photo',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => null,
+            'media_url' => 'https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=999',
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now(),
+        ]);
+
+        $draft = app(ChannelOrderDraftService::class)
+            ->syncDraftFromConversation($conversation->fresh(['messages']));
+
+        $this->assertNotNull($draft);
+        $this->assertSame($product->id, (int) $draft->items->first()->product_id);
+        $this->assertSame('local+image', $draft->ai_parse_meta['source'] ?? null);
+        $this->assertNotEmpty($draft->ai_parse_meta['image_matches'] ?? []);
+    }
+
+    /**
+     * @param  array{0:int,1:int,2:int}  $color
+     */
+    private function makeTestJpegBytes(array $color): string
+    {
+        $image = imagecreatetruecolor(64, 64);
+        $paint = imagecolorallocate($image, $color[0], $color[1], $color[2]);
+        imagefilledrectangle($image, 0, 0, 63, 63, $paint);
+        // Distinct pattern so hashes differ across colors.
+        $accent = imagecolorallocate($image, 255 - $color[0], 255 - $color[1], 255 - $color[2]);
+        imagefilledrectangle($image, 8, 8, 40, 40, $accent);
+
+        ob_start();
+        imagejpeg($image, null, 90);
+        imagedestroy($image);
+
+        return (string) ob_get_clean();
     }
 
     public function test_discard_draft_does_not_change_stock(): void

@@ -13,7 +13,6 @@ use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
 use App\Services\Channels\InboxQuickReplyService;
 use App\Services\Channels\MessengerConversationSyncService;
-use App\Services\Channels\WhatsAppCloudApiService;
 use App\Support\AdminAccess;
 use App\Support\Fileinfo;
 use App\Support\StorefrontAssets;
@@ -467,19 +466,6 @@ class AdminInbox extends Component
             ? $body
             : rtrim($this->replyText)."\n".$body;
         $this->error = null;
-    }
-
-    public function checkWhatsAppApi(WhatsAppCloudApiService $whatsapp): void
-    {
-        AdminAccess::ensureStaffAdmin();
-        $result = $whatsapp->probe();
-        if ($result['ok']) {
-            $this->statusMessage = $result['message'];
-            $this->error = null;
-        } else {
-            $this->error = $result['message'];
-            $this->statusMessage = null;
-        }
     }
 
     public function loadOlderThreadHistory(): void

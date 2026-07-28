@@ -66,7 +66,7 @@
         <div class="min-w-0">
             <h1 class="font-serif text-2xl font-semibold xl:text-3xl">Inbox</h1>
             <p class="mt-0.5 hidden text-sm text-[#8C8474] sm:block">
-                Messenger and WhatsApp conversations in one place.
+                Messenger conversations in one place.
                 @if ($realtimeEnabled)
                     Live updates when Reverb is running; Graph backfill every {{ $graphPollSeconds }}s.
                 @else
@@ -91,15 +91,6 @@
                     class="inline-flex flex-1 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-3 py-2 text-sm font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60 sm:flex-none sm:px-4">
                     <span wire:loading.remove wire:target="syncFromFacebook">Sync Messenger</span>
                     <span wire:loading wire:target="syncFromFacebook">Syncing…</span>
-                </button>
-                <button type="button"
-                    wire:click="checkWhatsAppApi"
-                    wire:loading.attr="disabled"
-                    wire:target="checkWhatsAppApi"
-                    class="inline-flex flex-1 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-3 py-2 text-sm font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60 sm:flex-none sm:px-4"
-                    title="WhatsApp has no conversation history sync — this checks Cloud API credentials. Incoming chats require the WhatsApp webhook.">
-                    <span wire:loading.remove wire:target="checkWhatsAppApi">Check WhatsApp</span>
-                    <span wire:loading wire:target="checkWhatsAppApi">Checking…</span>
                 </button>
                 <a href="{{ route('admin.inbox.quick-replies') }}" wire:navigate
                     class="inline-flex flex-1 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-3 py-2 text-sm font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] sm:flex-none sm:px-4">
@@ -126,7 +117,6 @@
                 <select wire:model.live="channel" class="rounded-lg border border-[#E0D6C2] px-2.5 py-2 xl:px-3">
                     <option value="">All channels</option>
                     <option value="messenger">Messenger</option>
-                    <option value="whatsapp">WhatsApp</option>
                 </select>
                 <select wire:model.live="unread" class="rounded-lg border border-[#E0D6C2] px-2.5 py-2 xl:px-3">
                     <option value="">All reads</option>
@@ -193,19 +183,13 @@
                             <code class="rounded bg-white/70 px-1.5 py-0.5">{{ $diagnostics['webhook_url'] }}</code>
                             (subscribe <code class="rounded bg-white/70 px-1.5 py-0.5">messages</code> +
                             <code class="rounded bg-white/70 px-1.5 py-0.5">standby</code>).
-                            WhatsApp webhook:
-                            <code class="rounded bg-white/70 px-1.5 py-0.5">{{ $diagnostics['whatsapp_webhook_url'] }}</code>
-                            (subscribe <code class="rounded bg-white/70 px-1.5 py-0.5">messages</code>).
-                            WhatsApp has no history sync — only new webhook events appear. Use <strong>Check WhatsApp</strong> to verify Cloud API credentials, and <strong>Sync Messenger</strong> for Graph backfill.
+                            Use <strong>Sync Messenger</strong> for Graph backfill while the app can see those threads.
                         </p>
                     </details>
                     <p class="mt-2 hidden text-xs opacity-80 xl:block">
-                        Messenger:
+                        Messenger webhook:
                         <code class="rounded bg-white/70 px-1.5 py-0.5">{{ $diagnostics['webhook_url'] }}</code>
-                        · WhatsApp:
-                        <code class="rounded bg-white/70 px-1.5 py-0.5">{{ $diagnostics['whatsapp_webhook_url'] }}</code>.
-                        WhatsApp cannot be backfilled like Messenger — configure Meta → WhatsApp → Configuration callback and wait for customer messages.
-                        Use <strong>Sync Messenger</strong> / <strong>Check WhatsApp</strong> as needed.
+                        · Use <strong>Sync Messenger</strong> to import threads Graph can currently see.
                     </p>
                 </div>
                 @if ($diagnostics['filters_active'] && $conversations->isEmpty())
@@ -737,7 +721,7 @@
             @else
                 <div class="flex flex-1 items-center justify-center bg-white px-4 py-16 text-center text-sm text-[#8C8474] xl:rounded-2xl">
                     @if ($conversations->isEmpty())
-                        Once a Messenger or WhatsApp webhook arrives, conversations will appear in the list.
+                        Once a Messenger webhook arrives, conversations will appear in the list.
                     @else
                         Select a conversation to read and reply.
                     @endif

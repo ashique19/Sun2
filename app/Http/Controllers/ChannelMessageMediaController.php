@@ -13,7 +13,7 @@ class ChannelMessageMediaController extends Controller
 {
     /**
      * Stream a channel attachment for staff preview.
-     * Facebook/WhatsApp CDN/Graph URLs often require a token, which browsers cannot send on <img>.
+     * Facebook CDN/Graph URLs often require a token, which browsers cannot send on <img>.
      */
     public function __invoke(ChannelMessage $message, FacebookPageTokenService $tokens): Response
     {
@@ -27,7 +27,7 @@ class ChannelMessageMediaController extends Controller
                 return $local;
             }
 
-            $response = $this->fetchMedia($url, $this->tokenForUrl($url, $tokens));
+            $response = $this->fetchMedia($url, $tokens->token());
 
             if ($response === null || ! $response->successful()) {
                 abort(404, 'Attachment could not be fetched.');
@@ -76,17 +76,6 @@ class ChannelMessageMediaController extends Controller
         ]);
     }
 
-    private function tokenForUrl(string $url, FacebookPageTokenService $tokens): string
-    {
-        if (str_contains($url, 'whatsapp.net') || str_contains($url, 'mmg.whatsapp')) {
-            $whatsappToken = trim((string) config('whatsapp.access_token', ''));
-
-            return $whatsappToken !== '' ? $whatsappToken : $tokens->token();
-        }
-
-        return $tokens->token();
-    }
-
     /**
      * @return \Illuminate\Http\Client\Response|null
      */
@@ -100,7 +89,7 @@ class ChannelMessageMediaController extends Controller
             return $response->successful() ? $response : null;
         }
 
-        // Prefer Bearer (Graph / WhatsApp media)
+        // Prefer Bearer (Graph / Messenger media)
         $response = Http::timeout(20)
             ->withOptions(['allow_redirects' => true])
             ->withToken($token)
@@ -130,9 +119,7 @@ class ChannelMessageMediaController extends Controller
         return str_contains($url, 'fbcdn')
             || str_contains($url, 'facebook.com')
             || str_contains($url, 'fbsbx.com')
-            || str_contains($url, 'lookaside')
-            || str_contains($url, 'whatsapp.net')
-            || str_contains($url, 'mmg.whatsapp');
+            || str_contains($url, 'lookaside');
     }
 
     private function withAccessTokenQuery(string $url, string $token): string

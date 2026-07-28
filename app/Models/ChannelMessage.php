@@ -106,11 +106,6 @@ class ChannelMessage extends Model
             }
         }
 
-        // WhatsApp Cloud API message shape stores type at the root of raw_payload
-        if (data_get($this->raw_payload, 'type') === 'image') {
-            return true;
-        }
-
         // Meta CDN/lookaside URLs rarely include a file extension
         return str_contains($url, 'fbcdn')
             || str_contains($url, 'fbsbx.com')

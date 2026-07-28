@@ -713,13 +713,6 @@ class ChannelOrderParser
 
     private function tokenForMediaUrl(string $url): string
     {
-        if (str_contains($url, 'whatsapp.net') || str_contains($url, 'mmg.whatsapp')) {
-            $whatsappToken = trim((string) config('whatsapp.access_token', ''));
-            if ($whatsappToken !== '') {
-                return $whatsappToken;
-            }
-        }
-
         return trim((string) config('facebook.messenger.page_access_token', ''));
     }
 
@@ -728,9 +721,7 @@ class ChannelOrderParser
         return str_contains($url, 'fbcdn')
             || str_contains($url, 'facebook.com')
             || str_contains($url, 'fbsbx.com')
-            || str_contains($url, 'lookaside')
-            || str_contains($url, 'whatsapp.net')
-            || str_contains($url, 'mmg.whatsapp');
+            || str_contains($url, 'lookaside');
     }
 
     private function withAccessTokenQuery(string $url, string $token): string
@@ -779,7 +770,7 @@ class ChannelOrderParser
             ->implode("\n");
 
         $system = <<<'PROMPT'
-You extract Bangladesh e-commerce order details from recent Messenger/WhatsApp customer messages and optional product photos.
+You extract Bangladesh e-commerce order details from recent Messenger customer messages and optional product photos.
 Return ONLY JSON with keys: name, phone, address, city, area, product_id, product_name, quantity
 Rules:
 - Only fill fields you are confident about; use null otherwise.

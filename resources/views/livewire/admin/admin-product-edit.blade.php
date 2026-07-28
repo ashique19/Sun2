@@ -1,5 +1,7 @@
 <div x-data="productImageUploader()">
-    @vite(['resources/js/admin-product-images.js'])
+    @assets
+        @vite(['resources/js/admin-product-images.js'])
+    @endassets
 
     <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
@@ -213,29 +215,39 @@
                 </template>
             </div>
 
-            <div x-show="editorOpen" x-cloak
-                class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-                @keydown.escape.window="closeEditor()">
-                <div class="w-full max-w-3xl rounded-xl bg-white shadow-xl overflow-hidden" @click.outside="closeEditor()">
-                    <div class="flex items-center justify-between border-b border-[#EFE7D6] px-4 py-3">
-                        <h3 class="font-semibold">Edit image</h3>
-                        <button type="button" @click="closeEditor()" class="text-sm text-[#6B6459] hover:text-[#1E1E1E]">Close</button>
-                    </div>
-                    <div class="max-h-[60vh] bg-[#FAF6EF]">
-                        <img x-ref="cropImage" :src="queue[editorIndex]?.previewUrl" alt="" class="block max-w-full max-h-[60vh] mx-auto">
-                    </div>
-                    <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[#EFE7D6] px-4 py-3">
-                        <div class="flex flex-wrap gap-2">
-                            <button type="button" @click="rotate(-90)" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Rotate left</button>
-                            <button type="button" @click="rotate(90)" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Rotate right</button>
-                            <button type="button" @click="resetCrop()" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Reset</button>
+            {{-- Keep Alpine modal out of Livewire morphs: x-show styles were stripped on re-render, leaving the dialog stuck open. --}}
+            <div wire:ignore>
+                <template x-teleport="body">
+                    <template x-if="editorOpen">
+                        <div
+                            class="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4"
+                            @keydown.escape.window="closeEditor()"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label="Edit image">
+                            <div class="w-full max-w-3xl rounded-xl bg-white shadow-xl overflow-hidden" @click.outside="closeEditor()">
+                                <div class="flex items-center justify-between border-b border-[#EFE7D6] px-4 py-3">
+                                    <h3 class="font-semibold">Edit image</h3>
+                                    <button type="button" @click="closeEditor()" class="text-sm text-[#6B6459] hover:text-[#1E1E1E]">Close</button>
+                                </div>
+                                <div class="max-h-[60vh] bg-[#FAF6EF]">
+                                    <img x-ref="cropImage" :src="queue[editorIndex]?.previewUrl" alt="" class="block max-w-full max-h-[60vh] mx-auto">
+                                </div>
+                                <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[#EFE7D6] px-4 py-3">
+                                    <div class="flex flex-wrap gap-2">
+                                        <button type="button" @click="rotate(-90)" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Rotate left</button>
+                                        <button type="button" @click="rotate(90)" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Rotate right</button>
+                                        <button type="button" @click="resetCrop()" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Reset</button>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button type="button" @click="closeEditor()" class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm">Cancel</button>
+                                        <button type="button" @click="applyCrop()" class="rounded-full bg-[#C9A227] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">Apply</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="flex gap-2">
-                            <button type="button" @click="closeEditor()" class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm">Cancel</button>
-                            <button type="button" @click="applyCrop()" class="rounded-full bg-[#C9A227] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">Apply</button>
-                        </div>
-                    </div>
-                </div>
+                    </template>
+                </template>
             </div>
         </section>
 
@@ -407,29 +419,38 @@
                         @endif
                     </div>
 
-                    <div x-show="aiEditorOpen" x-cloak
-                        class="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4"
-                        @keydown.escape.window="closeAiEditor()">
-                        <div class="w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-xl" @click.outside="closeAiEditor()">
-                            <div class="flex items-center justify-between border-b border-[#EFE7D6] px-4 py-3">
-                                <h3 class="font-semibold">Edit generated image</h3>
-                                <button type="button" @click="closeAiEditor()" class="text-sm text-[#6B6459] hover:text-[#1E1E1E]">Close</button>
-                            </div>
-                            <div class="max-h-[60vh] bg-[#FAF6EF]">
-                                <img x-ref="aiCropImage" :src="aiEditorSrc" alt="" class="mx-auto block max-h-[60vh] max-w-full">
-                            </div>
-                            <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[#EFE7D6] px-4 py-3">
-                                <div class="flex flex-wrap gap-2">
-                                    <button type="button" @click="rotateAi(-90)" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Rotate left</button>
-                                    <button type="button" @click="rotateAi(90)" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Rotate right</button>
-                                    <button type="button" @click="resetAiCrop()" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Reset</button>
+                    <div wire:ignore>
+                        <template x-teleport="body">
+                            <template x-if="aiEditorOpen">
+                                <div
+                                    class="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4"
+                                    @keydown.escape.window="closeAiEditor()"
+                                    role="dialog"
+                                    aria-modal="true"
+                                    aria-label="Edit generated image">
+                                    <div class="w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-xl" @click.outside="closeAiEditor()">
+                                        <div class="flex items-center justify-between border-b border-[#EFE7D6] px-4 py-3">
+                                            <h3 class="font-semibold">Edit generated image</h3>
+                                            <button type="button" @click="closeAiEditor()" class="text-sm text-[#6B6459] hover:text-[#1E1E1E]">Close</button>
+                                        </div>
+                                        <div class="max-h-[60vh] bg-[#FAF6EF]">
+                                            <img x-ref="aiCropImage" :src="aiEditorSrc" alt="" class="mx-auto block max-h-[60vh] max-w-full">
+                                        </div>
+                                        <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[#EFE7D6] px-4 py-3">
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="button" @click="rotateAi(-90)" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Rotate left</button>
+                                                <button type="button" @click="rotateAi(90)" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Rotate right</button>
+                                                <button type="button" @click="resetAiCrop()" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Reset</button>
+                                            </div>
+                                            <div class="flex gap-2">
+                                                <button type="button" @click="closeAiEditor()" class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm">Cancel</button>
+                                                <button type="button" @click="applyAiCrop()" class="rounded-full bg-[#C9A227] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">Apply</button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="flex gap-2">
-                                    <button type="button" @click="closeAiEditor()" class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm">Cancel</button>
-                                    <button type="button" @click="applyAiCrop()" class="rounded-full bg-[#C9A227] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">Apply</button>
-                                </div>
-                            </div>
-                        </div>
+                            </template>
+                        </template>
                     </div>
                 </div>
             </div>

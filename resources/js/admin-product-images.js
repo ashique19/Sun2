@@ -3,7 +3,7 @@ import 'cropperjs/dist/cropper.css';
 
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-document.addEventListener('alpine:init', () => {
+const registerProductImageAlpineData = () => {
     Alpine.data('productImageUploader', () => ({
         queue: [],
         editorOpen: false,
@@ -318,4 +318,10 @@ document.addEventListener('alpine:init', () => {
             this.closeAiEditor();
         },
     }));
-});
+};
+
+if (window.Alpine) {
+    registerProductImageAlpineData();
+} else {
+    document.addEventListener('alpine:init', registerProductImageAlpineData);
+}

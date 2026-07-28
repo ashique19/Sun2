@@ -215,13 +215,17 @@ class ChannelOrderDraftService
             $adminNoteParts[] = 'Missing: '.implode(', ', $missing);
         }
 
+        $address = filled($parsed['address'] ?? null) ? (string) $parsed['address'] : '';
+
         return [
-            'name' => $name,
-            'phone' => $phone,
+            // Keep within orders string column limits (MySQL VARCHAR) so long
+            // Messenger/WhatsApp parses cannot fail inbox sync with SQL 1406.
+            'name' => mb_substr($name, 0, 255),
+            'phone' => mb_substr($phone, 0, 32),
             'email' => null,
-            'address' => filled($parsed['address'] ?? null) ? (string) $parsed['address'] : '',
-            'area' => $area,
-            'city' => $city,
+            'address' => mb_substr($address, 0, 255),
+            'area' => is_string($area) ? mb_substr($area, 0, 255) : $area,
+            'city' => is_string($city) ? mb_substr($city, 0, 255) : $city,
             'state' => null,
             'delivery_type' => 'home',
             'subtotal' => $subtotal,

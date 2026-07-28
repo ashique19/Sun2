@@ -145,6 +145,7 @@ class AdminSocialPostsCreate extends Component
                 $product = $selectedProducts->get($pid);
                 if (! $product) {
                     $missing[] = (string) $pid;
+
                     continue;
                 }
 
@@ -271,6 +272,11 @@ class AdminSocialPostsCreate extends Component
     public function publishSelectedChannel(string $channel, MetaGraphSocialPublisher $publisher): void
     {
         if ($this->phase !== 'publishing' || ! $this->createdPostId || ! isset($this->channelProgress[$channel])) {
+            return;
+        }
+
+        // Skip channels already finished (progress UI may remount and retry).
+        if (! in_array($this->channelProgress[$channel]['status'], ['waiting', 'posting'], true)) {
             return;
         }
 

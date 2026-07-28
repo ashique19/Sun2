@@ -144,6 +144,10 @@
                 </div>
             </div>
 
+            {{--
+                Only create the post here. Channel publishing runs on the progress panel
+                after Livewire swaps away this compose UI (Alpine on this button would be destroyed mid-loop).
+            --}}
             <div class="flex flex-wrap items-center gap-3 justify-end"
                 x-data="{
                     busy: false,
@@ -152,12 +156,6 @@
                         this.busy = true;
                         try {
                             await $wire.createPost();
-                            if ($wire.phase !== 'publishing') return;
-                            const channels = Object.keys($wire.channelProgress || {});
-                            for (const channel of channels) {
-                                await $wire.markChannelPosting(channel);
-                                await $wire.publishSelectedChannel(channel);
-                            }
                         } finally {
                             this.busy = false;
                         }
@@ -173,7 +171,28 @@
             </div>
         </div>
     @else
-        <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-6">
+        {{--
+            Mounted after createPost(); auto-publishes waiting channels so progress survives
+            the compose → publishing DOM swap that previously aborted Alpine mid-flight.
+        --}}
+        <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-6"
+            wire:key="social-publish-progress-{{ $createdPostId }}"
+            x-data="{
+                started: false,
+                async publishWaitingChannels() {
+                    if (this.started) return;
+                    this.started = true;
+                    if ($wire.phase !== 'publishing') return;
+                    const channels = Object.keys($wire.channelProgress || {});
+                    for (const channel of channels) {
+                        const status = $wire.channelProgress[channel]?.status;
+                        if (status !== 'waiting' && status !== 'posting') continue;
+                        await $wire.markChannelPosting(channel);
+                        await $wire.publishSelectedChannel(channel);
+                    }
+                }
+            }"
+            x-init="publishWaitingChannels()">
             <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
                 <div>
                     <h2 class="font-semibold">Publishing progress</h2>

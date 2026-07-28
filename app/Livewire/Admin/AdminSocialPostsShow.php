@@ -100,6 +100,10 @@ class AdminSocialPostsShow extends Component
             return;
         }
 
+        if (! in_array($this->channelProgress[$channel]['status'], ['waiting', 'posting'], true)) {
+            return;
+        }
+
         $this->ensureCanRepublish();
         $this->channelProgress[$channel]['status'] = 'posting';
 

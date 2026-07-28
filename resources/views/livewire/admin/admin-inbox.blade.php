@@ -519,9 +519,13 @@
                                 @touchmove.passive="cancelLongPress()"
                                 @click.outside="
                                     closeMenu();
-                                    // Product mapper is a separate fixed modal outside this bubble —
-                                    // closing on outside click would kill Cropper drag mid-gesture.
-                                    if ($wire.mappingMessageId === {{ $messageRow->id }} && $wire.mappingField !== 'product') {
+                                    // Never close while the product mapper is mounted — Alpine $wire
+                                    // field reads are unreliable here, and modal clicks are 'outside'
+                                    // this bubble (search focus, Find match, crop drag all broke).
+                                    if (
+                                        $wire.mappingMessageId === {{ $messageRow->id }}
+                                        && ! document.querySelector('[data-inbox-product-map-modal]')
+                                    ) {
                                         $wire.closeMessageMapMenu();
                                     }
                                 "
@@ -590,7 +594,7 @@
                                 </div>
 
                                 <div
-                                    x-show="menu || ($wire.mappingMessageId === {{ $messageRow->id }} && $wire.mappingField !== 'product')"
+                                    x-show="(menu || ($wire.mappingMessageId === {{ $messageRow->id }} && $wire.mappingField && $wire.mappingField !== 'product')) && ! document.querySelector('[data-inbox-product-map-modal]')"
                                     x-cloak
                                     @click.stop
                                     class="absolute left-0 right-0 top-full z-20 mt-1 min-w-[11rem] rounded-xl border border-[#E7DFCF] bg-white p-1.5 text-left text-[#1E1E1E] shadow-lg"
@@ -610,132 +614,6 @@
                         </div>
                     @endforeach
                 </div>
-
-                @if ($mappingField === 'product' && $mappingMessage)
-                    <div class="fixed inset-0 z-[80] flex items-end justify-center p-3 sm:items-center sm:p-4" wire:key="product-map-modal-{{ $mappingMessage->id }}">
-                        <button type="button"
-                            wire:click="closeMessageMapMenu"
-                            class="absolute inset-0 bg-black/40"
-                            aria-label="Close product mapper"></button>
-                        <div
-                            class="relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[#E7DFCF] bg-white shadow-xl"
-                            @click.stop
-                            @mousedown.stop
-                            @touchstart.stop
-                        >
-                            <div class="flex items-start justify-between gap-3 border-b border-[#E7DFCF] px-4 py-3">
-                                <div class="min-w-0">
-                                    <h3 class="font-semibold text-[#1E1E1E]">Add product to order</h3>
-                                    <p class="mt-0.5 text-xs text-[#8C8474]">
-                                        Search the catalog{{ $mappingMessage->isImageAttachment() ? ', or crop the chat image to match' : '' }}.
-                                    </p>
-                                </div>
-                                <button type="button" wire:click="closeMessageMapMenu" class="text-[#8C8474] hover:text-[#1E1E1E]" aria-label="Close">&times;</button>
-                            </div>
-
-                            <div class="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-                                <div>
-                                    <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Search products</label>
-                                    <input type="search"
-                                        wire:model.live.debounce.250ms="mappingProductSearch"
-                                        placeholder="Name, SKU, or price…"
-                                        class="w-full rounded-xl border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
-                                        aria-label="Search products">
-                                    <div class="mt-2 max-h-48 space-y-1.5 overflow-y-auto">
-                                        @forelse ($mappingProductSuggestions as $suggestion)
-                                            <button type="button"
-                                                wire:click="applyMapField('product', {{ $suggestion['id'] }})"
-                                                class="flex w-full items-center gap-2.5 rounded-xl border border-[#EFE7D6] px-2.5 py-2 text-left hover:border-[#C9A227] hover:bg-[#FAF6EF]">
-                                                @if (! empty($suggestion['image_url']))
-                                                    <img src="{{ $suggestion['image_url'] }}" alt="" class="h-11 w-11 shrink-0 rounded-lg object-cover bg-[#FAF6EF]">
-                                                @else
-                                                    <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] text-[10px] text-[#8C8474]">No img</div>
-                                                @endif
-                                                <div class="min-w-0 flex-1">
-                                                    <p class="truncate text-sm font-medium text-[#1E1E1E]">{{ $suggestion['name'] }}</p>
-                                                    <p class="truncate text-[11px] text-[#8C8474]">
-                                                        {{ $suggestion['sku'] ?? '—' }}
-                                                        · ৳{{ number_format($suggestion['price']) }}
-                                                        @if (isset($suggestion['stock_quantity']))
-                                                            · Stock {{ $suggestion['stock_quantity'] }}
-                                                        @endif
-                                                    </p>
-                                                </div>
-                                            </button>
-                                        @empty
-                                            @if (trim($mappingProductSearch) !== '')
-                                                <p class="text-xs text-[#8C8474]">No products match that search.</p>
-                                            @elseif (! $mappingMessage->isImageAttachment())
-                                                <button type="button"
-                                                    wire:click="applyMapField('product')"
-                                                    class="w-full rounded-xl border border-dashed border-[#E0D6C2] px-3 py-2 text-left text-xs text-[#6B6459] hover:border-[#C9A227]">
-                                                    Use message text as unmatched product
-                                                </button>
-                                            @endif
-                                        @endforelse
-                                    </div>
-                                </div>
-
-                                @if ($mappingMessage->isImageAttachment())
-                                    <div
-                                        wire:ignore
-                                        x-data="inboxProductCrop(@js(route('admin.inbox.media', $mappingMessage)))"
-                                        class="rounded-xl border border-[#E7DFCF] bg-[#FAF6EF] p-3"
-                                    >
-                                        <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Crop chat image</p>
-                                        <div class="overflow-hidden rounded-lg bg-black/5">
-                                            <img x-ref="cropImage" src="{{ route('admin.inbox.media', $mappingMessage) }}" alt="Chat image" class="max-h-64 w-full object-contain">
-                                        </div>
-                                        <div class="mt-2 flex flex-wrap gap-2">
-                                            <button type="button" @click="rotate(-90)" class="rounded-full border border-[#E0D6C2] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6B6459]">↺</button>
-                                            <button type="button" @click="rotate(90)" class="rounded-full border border-[#E0D6C2] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6B6459]">↻</button>
-                                            <button type="button" @click="resetCrop()" class="rounded-full border border-[#E0D6C2] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6B6459]">Reset</button>
-                                            <button type="button"
-                                                @click="findMatch()"
-                                                :disabled="busy"
-                                                class="ml-auto rounded-full bg-[#C9A227] px-3 py-1 text-[11px] font-semibold text-white hover:bg-[#b89220] disabled:opacity-60">
-                                                <span x-show="!busy">Find match</span>
-                                                <span x-show="busy" x-cloak>Matching…</span>
-                                            </button>
-                                        </div>
-                                        <p x-show="error" x-text="error" class="mt-2 text-xs text-rose-600" x-cloak></p>
-                                    </div>
-                                @endif
-
-                                @if ($mappingImageMatchError)
-                                    <p class="text-xs text-rose-600">{{ $mappingImageMatchError }}</p>
-                                @endif
-
-                                @if ($mappingImageMatches !== [])
-                                    <div class="space-y-2">
-                                        <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Image matches</p>
-                                        @foreach ($mappingImageMatches as $match)
-                                            <div wire:key="inbox-image-match-{{ $match['product_id'] }}" class="flex items-center gap-2.5 rounded-xl border border-[#E7DFCF] p-2.5">
-                                                @if ($match['image_url'])
-                                                    <img src="{{ $match['image_url'] }}" alt="" class="h-12 w-12 shrink-0 rounded-lg object-cover bg-[#FAF6EF]">
-                                                @else
-                                                    <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] text-[10px] text-[#8C8474]">No img</div>
-                                                @endif
-                                                <div class="min-w-0 flex-1">
-                                                    <p class="truncate text-sm font-medium">{{ $match['name'] }}</p>
-                                                    <p class="text-[11px] text-[#8C8474]">
-                                                        {{ $match['sku'] ?: '—' }} · ৳{{ number_format($match['price']) }}
-                                                    </p>
-                                                    <p class="text-[11px] font-semibold text-emerald-700">{{ number_format($match['match_percent'], 1) }}% match</p>
-                                                </div>
-                                                <button type="button"
-                                                    wire:click="selectMappingImageMatch({{ $match['product_id'] }})"
-                                                    class="shrink-0 rounded-lg bg-[#C9A227] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#b89220]">
-                                                    Add
-                                                </button>
-                                            </div>
-                                        @endforeach
-                                    </div>
-                                @endif
-                            </div>
-                        </div>
-                    </div>
-                @endif
 
                 <div class="shrink-0 border-t border-[#E7DFCF] bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 xl:px-4 xl:py-3">
                     @if ($error)
@@ -817,4 +695,141 @@
             @endif
         </div>
     </div>
+
+    @if ($mappingField === 'product' && $mappingMessage)
+        @teleport('body')
+            <div
+                data-inbox-product-map-modal
+                wire:key="product-map-modal-{{ $mappingMessage->id }}"
+                wire:click.self="closeMessageMapMenu"
+                class="fixed inset-0 z-[100] flex items-end justify-center bg-black/45 sm:items-center sm:p-5"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="inbox-product-map-title"
+            >
+                <div
+                    class="relative flex h-[min(92dvh,52rem)] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-[#E7DFCF] bg-white shadow-2xl sm:h-auto sm:max-h-[min(92vh,52rem)] sm:rounded-2xl"
+                    @click.stop
+                    @mousedown.stop
+                    @touchstart.stop
+                >
+                    <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#E7DFCF] px-4 py-3 sm:px-5 sm:py-4">
+                        <div class="min-w-0">
+                            <h3 id="inbox-product-map-title" class="text-base font-semibold text-[#1E1E1E] sm:text-lg">Add product to order</h3>
+                            <p class="mt-0.5 text-xs text-[#8C8474] sm:text-sm">
+                                Search the catalog{{ $mappingMessage->isImageAttachment() ? ', or crop the chat image to match' : '' }}.
+                            </p>
+                        </div>
+                        <button type="button" wire:click="closeMessageMapMenu" class="text-2xl leading-none text-[#8C8474] hover:text-[#1E1E1E]" aria-label="Close">&times;</button>
+                    </div>
+
+                    <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
+                        <div>
+                            <label class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Search products</label>
+                            <input type="search"
+                                wire:model.live.debounce.250ms="mappingProductSearch"
+                                placeholder="Name, SKU, or price…"
+                                class="w-full rounded-xl border border-[#E0D6C2] px-3 py-2.5 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
+                                aria-label="Search products">
+                            <div class="mt-2.5 max-h-56 space-y-1.5 overflow-y-auto sm:max-h-64">
+                                @forelse ($mappingProductSuggestions as $suggestion)
+                                    <button type="button"
+                                        wire:click="applyMapField('product', {{ $suggestion['id'] }})"
+                                        class="flex w-full items-center gap-3 rounded-xl border border-[#EFE7D6] px-3 py-2.5 text-left hover:border-[#C9A227] hover:bg-[#FAF6EF]">
+                                        @if (! empty($suggestion['image_url']))
+                                            <img src="{{ $suggestion['image_url'] }}" alt="" class="h-12 w-12 shrink-0 rounded-lg object-cover bg-[#FAF6EF]">
+                                        @else
+                                            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] text-[10px] text-[#8C8474]">No img</div>
+                                        @endif
+                                        <div class="min-w-0 flex-1">
+                                            <p class="truncate text-sm font-medium text-[#1E1E1E]">{{ $suggestion['name'] }}</p>
+                                            <p class="truncate text-[11px] text-[#8C8474]">
+                                                {{ $suggestion['sku'] ?? '—' }}
+                                                · ৳{{ number_format($suggestion['price']) }}
+                                                @if (isset($suggestion['stock_quantity']))
+                                                    · Stock {{ $suggestion['stock_quantity'] }}
+                                                @endif
+                                            </p>
+                                        </div>
+                                    </button>
+                                @empty
+                                    @if (trim($mappingProductSearch) !== '')
+                                        <p class="text-xs text-[#8C8474]">No products match that search.</p>
+                                    @elseif (! $mappingMessage->isImageAttachment())
+                                        <button type="button"
+                                            wire:click="applyMapField('product')"
+                                            class="w-full rounded-xl border border-dashed border-[#E0D6C2] px-3 py-2.5 text-left text-xs text-[#6B6459] hover:border-[#C9A227]">
+                                            Use message text as unmatched product
+                                        </button>
+                                    @endif
+                                @endforelse
+                            </div>
+                        </div>
+
+                        @if ($mappingMessage->isImageAttachment())
+                            <div
+                                wire:ignore
+                                x-data="inboxProductCrop(@js(route('admin.inbox.media', $mappingMessage)))"
+                                class="rounded-xl border border-[#E7DFCF] bg-[#FAF6EF] p-3 sm:p-4"
+                            >
+                                <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Crop chat image</p>
+                                <div class="overflow-hidden rounded-lg bg-black/5">
+                                    <img
+                                        x-ref="cropImage"
+                                        src="{{ route('admin.inbox.media', $mappingMessage) }}"
+                                        alt="Chat image"
+                                        class="max-h-[min(48vh,28rem)] w-full object-contain"
+                                    >
+                                </div>
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <button type="button" @click="rotate(-90)" class="rounded-full border border-[#E0D6C2] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B6459]">↺</button>
+                                    <button type="button" @click="rotate(90)" class="rounded-full border border-[#E0D6C2] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B6459]">↻</button>
+                                    <button type="button" @click="resetCrop()" class="rounded-full border border-[#E0D6C2] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B6459]">Reset</button>
+                                    <button type="button"
+                                        @click="findMatch()"
+                                        :disabled="busy"
+                                        class="ml-auto rounded-full bg-[#C9A227] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#b89220] disabled:opacity-60">
+                                        <span x-show="!busy">Find match</span>
+                                        <span x-show="busy" x-cloak>Matching…</span>
+                                    </button>
+                                </div>
+                                <p x-show="error" x-text="error" class="mt-2 text-xs text-rose-600" x-cloak></p>
+                            </div>
+                        @endif
+
+                        @if ($mappingImageMatchError)
+                            <p class="text-xs text-rose-600">{{ $mappingImageMatchError }}</p>
+                        @endif
+
+                        @if ($mappingImageMatches !== [])
+                            <div class="space-y-2">
+                                <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Image matches</p>
+                                @foreach ($mappingImageMatches as $match)
+                                    <div wire:key="inbox-image-match-{{ $match['product_id'] }}" class="flex items-center gap-3 rounded-xl border border-[#E7DFCF] p-3">
+                                        @if ($match['image_url'])
+                                            <img src="{{ $match['image_url'] }}" alt="" class="h-14 w-14 shrink-0 rounded-lg object-cover bg-[#FAF6EF]">
+                                        @else
+                                            <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] text-[10px] text-[#8C8474]">No img</div>
+                                        @endif
+                                        <div class="min-w-0 flex-1">
+                                            <p class="truncate text-sm font-medium">{{ $match['name'] }}</p>
+                                            <p class="text-[11px] text-[#8C8474]">
+                                                {{ $match['sku'] ?: '—' }} · ৳{{ number_format($match['price']) }}
+                                            </p>
+                                            <p class="text-[11px] font-semibold text-emerald-700">{{ number_format($match['match_percent'], 1) }}% match</p>
+                                        </div>
+                                        <button type="button"
+                                            wire:click="selectMappingImageMatch({{ $match['product_id'] }})"
+                                            class="shrink-0 rounded-lg bg-[#C9A227] px-3 py-2 text-xs font-semibold text-white hover:bg-[#b89220]">
+                                            Add
+                                        </button>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        @endteleport
+    @endif
 </div>

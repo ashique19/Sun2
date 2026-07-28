@@ -96,8 +96,11 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->assertSet('mappingField', 'product')
             ->assertSee('Add product to order')
             ->assertSee('Search products')
+            ->assertSeeHtml('data-inbox-product-map-modal')
+            ->assertSeeHtml('max-w-3xl')
             ->set('mappingProductSearch', 'Silk Kurti')
             ->assertSee('Silk Kurti Search')
+            ->assertSet('mappingField', 'product')
             ->call('applyMapField', 'product', $product->id)
             ->assertSet('mappingField', null);
 

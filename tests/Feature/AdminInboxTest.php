@@ -738,7 +738,8 @@ class AdminInboxTest extends TestCase
             ->assertSee('Polled hello')
             ->assertSeeHtml('wire:poll.10s.visible="pollSyncFromFacebook"')
             ->assertSeeHtml('fixed bottom-0 left-0')
-            ->assertSee('Last synced');
+            ->assertSee('Auto sync in')
+            ->assertDontSee('Last synced');
 
         $this->assertDatabaseHas('channel_conversations', [
             'channel' => 'messenger',

@@ -703,9 +703,17 @@
                         </label>
                         <div class="min-w-0 flex-1">
                             <div wire:loading wire:target="replyImage" class="mb-1 text-[11px] text-[#8C8474]">Uploading image…</div>
-                            <input type="text" wire:model="replyText" placeholder="{{ $replyToMessage ? 'Write a reply…' : 'Message…' }}"
-                                class="w-full rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-4 py-2.5 text-sm focus:border-[#C9A227] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
-                                wire:keydown.enter.prevent="sendReply">
+                            @php
+                                $replyRows = max(1, min(8, substr_count((string) $replyText, "\n") + 1));
+                            @endphp
+                            <textarea
+                                wire:model="replyText"
+                                rows="{{ $replyRows }}"
+                                placeholder="{{ $replyToMessage ? 'Write a reply…' : 'Message…' }}"
+                                class="w-full resize-none rounded-2xl border border-[#E0D6C2] bg-[#FAF6EF] px-4 py-2.5 text-sm leading-5 focus:border-[#C9A227] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
+                                wire:keydown.enter.exact.prevent="sendReply"
+                                title="Enter to send · Shift+Enter for a new line"
+                            ></textarea>
                         </div>
                         <button type="button"
                             wire:click="sendReply"

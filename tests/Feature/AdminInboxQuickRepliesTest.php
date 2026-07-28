@@ -61,6 +61,34 @@ class AdminInboxQuickRepliesTest extends TestCase
     }
 
     #[Test]
+    public function multiline_quick_reply_keeps_line_breaks_in_composer(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $body = "আসসালামু আলাইকুম\nআপনার ঠিকানা দিবেন?\nধন্যবাদ";
+
+        Setting::putValue(InboxQuickReplyService::SETTING_KEY, json_encode([
+            ['label' => 'Address', 'body' => $body],
+        ], JSON_UNESCAPED_UNICODE), 'channels');
+
+        $this->assertSame($body, app(InboxQuickReplyService::class)->all()[0]['body']);
+
+        $conversation = ChannelConversation::query()->create([
+            'channel' => ChannelConversation::CHANNEL_MESSENGER,
+            'external_user_id' => 'psid-qr-ml',
+            'customer_name' => 'Karim',
+            'last_inbound_at' => now(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSeeHtml('<textarea')
+            ->call('insertQuickReply', 0)
+            ->assertSet('replyText', $body)
+            ->assertSeeHtml('rows="3"');
+    }
+
+    #[Test]
     public function reset_defaults_clears_stored_overrides(): void
     {
         $this->actingAs($this->adminUser());

@@ -58,7 +58,7 @@ class InboxQuickReplyService
             }
 
             $label = trim((string) ($row['label'] ?? ''));
-            $body = trim((string) ($row['body'] ?? ''));
+            $body = trim(str_replace(["\r\n", "\r"], "\n", (string) ($row['body'] ?? '')));
             if ($label === '' || $body === '') {
                 continue;
             }

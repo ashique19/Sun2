@@ -289,6 +289,12 @@ class AdminInbox extends Component
         $this->clearMappingImageMatchState();
     }
 
+    public function beginMapProductFromMessage(int $messageId, ChannelMessageOrderMapper $mapper): void
+    {
+        $this->openMessageMapMenu($messageId);
+        $this->beginMapField(ChannelMessageOrderMapper::FIELD_PRODUCT, $mapper);
+    }
+
     public function beginMapField(string $field, ChannelMessageOrderMapper $mapper): void
     {
         AdminAccess::ensureStaffAdmin();

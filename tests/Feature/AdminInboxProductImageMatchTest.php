@@ -84,6 +84,7 @@ class AdminInboxProductImageMatchTest extends TestCase
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->assertSee('Open full size')
+            ->assertSee('Match product')
             ->assertSee('+ Order')
             ->call('openMessageMapMenu', $message->id)
             ->assertSet('mappingMessageId', $message->id)
@@ -93,7 +94,33 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->call('beginMapField', 'product')
             ->assertSet('mappingField', 'product')
             ->assertSeeHtml('data-inbox-product-map-modal')
-            ->assertSeeHtml('max-w-lg');
+            ->assertSeeHtml('z-index: 100000')
+            ->assertDontSee('Search older messages…');
+    }
+
+    #[Test]
+    public function match_product_opens_mapper_in_one_step_from_image_message(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $message = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => null,
+            'media_url' => 'https://example.test/chat-direct.jpg',
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('beginMapProductFromMessage', $message->id)
+            ->assertSet('mappingMessageId', $message->id)
+            ->assertSet('mappingField', 'product')
+            ->assertSee('Add product to order')
+            ->assertSee('Crop chat image')
+            ->assertDontSee('Search older messages…');
     }
 
     #[Test]

@@ -9,6 +9,19 @@ use RuntimeException;
 
 class ProductPricedImageService
 {
+    public const POSITIONS = [
+        'top-left',
+        'top-right',
+        'bottom-left',
+        'bottom-right',
+    ];
+
+    public const FONT_MIN = 28;
+
+    public const FONT_MAX = 96;
+
+    public const FONT_DEFAULT = 56;
+
     public function generate(Product $product, ?array $layout = null): string
     {
         $sourcePath = $product->primaryImagePath();
@@ -56,23 +69,47 @@ class ProductPricedImageService
         }
     }
 
+    /**
+     * @return array{position: string, font: int}
+     */
     public function defaultLayout(): array
     {
         return [
-            'x' => 24,
-            'y' => 24,
-            'font' => 5,
+            'position' => 'top-left',
+            'font' => self::FONT_DEFAULT,
         ];
     }
 
+    /**
+     * @param  array<string, mixed>  $layout
+     * @return array{position: string, font: int}
+     */
     public function normalizeLayout(array $layout): array
     {
         $defaults = $this->defaultLayout();
 
+        $position = $layout['position'] ?? null;
+
+        if (! is_string($position) || ! in_array($position, self::POSITIONS, true)) {
+            $position = $this->guessPositionFromLegacyCoordinates($layout) ?? $defaults['position'];
+        }
+
+        $font = (int) ($layout['font'] ?? $defaults['font']);
+
+        // Legacy GD built-in font indexes 1–5 → readable TTF pixel sizes.
+        if ($font >= 1 && $font <= 5) {
+            $font = match ($font) {
+                1 => 32,
+                2 => 40,
+                3 => 48,
+                4 => 56,
+                default => 64,
+            };
+        }
+
         return [
-            'x' => max(0, (int) ($layout['x'] ?? $defaults['x'])),
-            'y' => max(0, (int) ($layout['y'] ?? $defaults['y'])),
-            'font' => min(5, max(1, (int) ($layout['font'] ?? $defaults['font']))),
+            'position' => $position,
+            'font' => min(self::FONT_MAX, max(self::FONT_MIN, $font)),
         ];
     }
 
@@ -95,6 +132,50 @@ class ProductPricedImageService
         }
     }
 
+    public function fontPath(): string
+    {
+        $bundled = resource_path('fonts/DejaVuSans-Bold.ttf');
+
+        if (is_file($bundled)) {
+            return $bundled;
+        }
+
+        $system = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+
+        if (is_file($system)) {
+            return $system;
+        }
+
+        throw new RuntimeException('Priced image font file is missing.');
+    }
+
+    /**
+     * @param  array<string, mixed>  $layout
+     */
+    private function guessPositionFromLegacyCoordinates(array $layout): ?string
+    {
+        if (! array_key_exists('x', $layout) && ! array_key_exists('y', $layout)) {
+            return null;
+        }
+
+        $x = (int) ($layout['x'] ?? 0);
+        $y = (int) ($layout['y'] ?? 0);
+
+        // Without image size, treat large offsets as "toward the opposite edge".
+        $right = $x >= 120;
+        $bottom = $y >= 120;
+
+        return match (true) {
+            $right && $bottom => 'bottom-right',
+            $right && ! $bottom => 'top-right',
+            ! $right && $bottom => 'bottom-left',
+            default => 'top-left',
+        };
+    }
+
+    /**
+     * @param  array{position: string, font: int}  $layout
+     */
     private function compose(string $source, string $destination, Product $product, array $layout): void
     {
         $info = @getimagesize($source);
@@ -124,15 +205,17 @@ class ProductPricedImageService
             throw new RuntimeException('Could not create image canvas.');
         }
 
+        imagealphablending($canvas, true);
+        imagesavealpha($canvas, true);
         imagefill($canvas, 0, 0, imagecolorallocate($canvas, 255, 255, 255));
         imagecopy($canvas, $image, 0, 0, 0, 0, $width, $height);
         imagedestroy($image);
 
-        $font = $layout['font'];
-        $x = $layout['x'];
-        $y = $layout['y'];
-        $padding = 12;
-        $lineGap = 10;
+        $fontSize = $layout['font'];
+        $fontFile = $this->fontPath();
+        $padding = max(14, (int) round($fontSize * 0.35));
+        $lineGap = max(8, (int) round($fontSize * 0.25));
+        $margin = max(16, (int) round(min($width, $height) * 0.03));
         $panelWhite = imagecolorallocatealpha($canvas, 255, 255, 255, 45);
         $black = imagecolorallocate($canvas, 0, 0, 0);
 
@@ -143,22 +226,37 @@ class ProductPricedImageService
         $lines[] = ['text' => 'Tk '.number_format((float) $product->price, 0), 'strike' => false];
 
         $maxWidth = 0;
+        $lineHeights = [];
         foreach ($lines as $line) {
-            $maxWidth = max($maxWidth, imagefontwidth($font) * strlen($line['text']));
+            $box = imagettfbbox($fontSize, 0, $fontFile, $line['text']);
+            if ($box === false) {
+                imagedestroy($canvas);
+                throw new RuntimeException('Could not measure priced image text.');
+            }
+            $textWidth = (int) abs($box[2] - $box[0]);
+            $textHeight = (int) abs($box[7] - $box[1]);
+            $maxWidth = max($maxWidth, $textWidth);
+            $lineHeights[] = $textHeight;
         }
 
-        $lineHeight = imagefontheight($font);
+        $textBlockHeight = array_sum($lineHeights) + ((count($lines) - 1) * $lineGap);
         $panelWidth = $maxWidth + ($padding * 2);
-        $panelHeight = (count($lines) * $lineHeight) + ((count($lines) - 1) * $lineGap) + ($padding * 2);
+        $panelHeight = $textBlockHeight + ($padding * 2);
+
+        [$x, $y] = $this->panelOrigin($layout['position'], $width, $height, $panelWidth, $panelHeight, $margin);
 
         imagefilledrectangle($canvas, $x, $y, $x + $panelWidth, $y + $panelHeight, $panelWhite);
 
         $cursorY = $y + $padding;
-        foreach ($lines as $line) {
-            imagestring($canvas, $font, $x + $padding, $cursorY, $line['text'], $black);
+        foreach ($lines as $index => $line) {
+            $lineHeight = $lineHeights[$index];
+            // imagettftext uses baseline Y.
+            $baseline = $cursorY + $lineHeight;
+            imagettftext($canvas, $fontSize, 0, $x + $padding, $baseline, $black, $fontFile, $line['text']);
 
             if ($line['strike']) {
-                $textWidth = imagefontwidth($font) * strlen($line['text']);
+                $box = imagettfbbox($fontSize, 0, $fontFile, $line['text']);
+                $textWidth = (int) abs($box[2] - $box[0]);
                 $strikeY = $cursorY + (int) floor($lineHeight / 2);
                 imageline($canvas, $x + $padding, $strikeY, $x + $padding + $textWidth, $strikeY, $black);
             }
@@ -168,6 +266,22 @@ class ProductPricedImageService
 
         imagejpeg($canvas, $destination, 90);
         imagedestroy($canvas);
+    }
+
+    /**
+     * @return array{0: int, 1: int}
+     */
+    private function panelOrigin(string $position, int $imageWidth, int $imageHeight, int $panelWidth, int $panelHeight, int $margin): array
+    {
+        $maxX = max($margin, $imageWidth - $panelWidth - $margin);
+        $maxY = max($margin, $imageHeight - $panelHeight - $margin);
+
+        return match ($position) {
+            'top-right' => [$maxX, $margin],
+            'bottom-left' => [$margin, $maxY],
+            'bottom-right' => [$maxX, $maxY],
+            default => [$margin, $margin],
+        };
     }
 
     private function directory(int $productId): string

@@ -85,11 +85,9 @@ class AdminProductEdit extends Component
 
     public bool $showPricedImageModal = false;
 
-    public int $pricedImageX = 24;
+    public string $pricedImagePosition = 'top-left';
 
-    public int $pricedImageY = 24;
-
-    public int $pricedImageFont = 5;
+    public int $pricedImageFont = 56;
 
     public function mount(?Product $product = null): void
     {
@@ -178,9 +176,13 @@ class AdminProductEdit extends Component
     public function savePricedImageLayout(): void
     {
         $this->validate([
-            'pricedImageX' => ['required', 'integer', 'min:0'],
-            'pricedImageY' => ['required', 'integer', 'min:0'],
-            'pricedImageFont' => ['required', 'integer', 'min:1', 'max:5'],
+            'pricedImagePosition' => ['required', 'in:'.implode(',', ProductPricedImageService::POSITIONS)],
+            'pricedImageFont' => [
+                'required',
+                'integer',
+                'min:'.ProductPricedImageService::FONT_MIN,
+                'max:'.ProductPricedImageService::FONT_MAX,
+            ],
         ]);
 
         if (! $this->product) {
@@ -189,8 +191,7 @@ class AdminProductEdit extends Component
 
         $this->product->update([
             'priced_image_layout' => [
-                'x' => $this->pricedImageX,
-                'y' => $this->pricedImageY,
+                'position' => $this->pricedImagePosition,
                 'font' => $this->pricedImageFont,
             ],
         ]);
@@ -202,14 +203,17 @@ class AdminProductEdit extends Component
             $this->ensureProductSaved();
         }
 
-        $this->savePricedImageLayout();
-        $pricedImages->generate($this->product->fresh(), [
-            'x' => $this->pricedImageX,
-            'y' => $this->pricedImageY,
-            'font' => $this->pricedImageFont,
-        ]);
-        $this->product->refresh();
-        $this->message = 'Priced image generated.';
+        try {
+            $this->savePricedImageLayout();
+            $pricedImages->generate($this->product->fresh(), [
+                'position' => $this->pricedImagePosition,
+                'font' => $this->pricedImageFont,
+            ]);
+            $this->product->refresh();
+            $this->message = 'Priced image generated.';
+        } catch (Throwable $e) {
+            $this->addError('pricedImage', $e->getMessage());
+        }
     }
 
     public function generateAiImage(GeminiClient $gemini): void
@@ -583,8 +587,7 @@ class AdminProductEdit extends Component
         $layout = $pricedImages?->normalizeLayout($this->product?->priced_image_layout ?? [])
             ?? app(ProductPricedImageService::class)->normalizeLayout($this->product?->priced_image_layout ?? []);
 
-        $this->pricedImageX = (int) $layout['x'];
-        $this->pricedImageY = (int) $layout['y'];
+        $this->pricedImagePosition = (string) $layout['position'];
         $this->pricedImageFont = (int) $layout['font'];
     }
 }

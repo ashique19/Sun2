@@ -252,37 +252,79 @@
         </section>
 
         @if ($showPricedImageModal)
-            <div class="fixed inset-0 z-[55] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+            <div class="fixed inset-0 z-[55] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
                 wire:click.self="closePricedImageModal"
                 role="dialog"
                 aria-modal="true"
                 aria-label="Priced image controls">
-                <div class="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl">
-                    <div class="flex items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
-                        <div>
+                <div class="flex h-[min(92dvh,40rem)] w-full max-w-4xl flex-col overflow-hidden rounded-t-2xl border border-[#EFE7D6] bg-white shadow-xl sm:h-auto sm:max-h-[90vh] sm:rounded-xl">
+                    <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#EFE7D6] bg-white px-4 py-3">
+                        <div class="min-w-0">
                             <h2 class="font-semibold text-lg">Priced image</h2>
                             <p class="mt-1 text-xs text-[#8C8474]">Generate or rebuild a shareable priced image from the primary product photo.</p>
                         </div>
-                        <button type="button" wire:click="closePricedImageModal" class="text-sm text-[#8C8474] hover:text-[#1E1E1E]">Close</button>
+                        <button type="button" wire:click="closePricedImageModal"
+                            class="shrink-0 rounded-full border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
+                            Close
+                        </button>
                     </div>
-                    <div class="grid gap-6 overflow-y-auto px-4 py-4 md:grid-cols-[18rem_minmax(0,1fr)]">
+                    <div class="grid min-h-0 flex-1 gap-6 overflow-y-auto px-4 py-4 md:grid-cols-[18rem_minmax(0,1fr)]">
                         <div class="space-y-4">
                             <div>
-                                <label class="block text-sm font-medium mb-1">X position</label>
-                                <input type="number" min="0" wire:model.live="pricedImageX" class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm">
+                                <label class="block text-sm font-medium mb-2">Text position</label>
+                                <div class="grid grid-cols-2 gap-2">
+                                    @foreach ([
+                                        'top-left' => 'Top left',
+                                        'top-right' => 'Top right',
+                                        'bottom-left' => 'Bottom left',
+                                        'bottom-right' => 'Bottom right',
+                                    ] as $value => $label)
+                                        <button type="button"
+                                            wire:click="$set('pricedImagePosition', '{{ $value }}')"
+                                            class="rounded-lg border px-3 py-2 text-left text-sm transition
+                                                {{ $pricedImagePosition === $value
+                                                    ? 'border-[#1E1E1E] bg-[#1E1E1E] text-white'
+                                                    : 'border-[#E0D6C2] bg-white text-[#1E1E1E] hover:bg-[#FAF6EF]' }}">
+                                            {{ $label }}
+                                        </button>
+                                    @endforeach
+                                </div>
                             </div>
                             <div>
-                                <label class="block text-sm font-medium mb-1">Y position</label>
-                                <input type="number" min="0" wire:model.live="pricedImageY" class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm">
+                                <label class="block text-sm font-medium mb-1" for="priced-image-font">Text size (px)</label>
+                                <div class="flex items-center gap-3">
+                                    <input id="priced-image-font" type="range"
+                                        min="{{ \App\Services\Admin\ProductPricedImageService::FONT_MIN }}"
+                                        max="{{ \App\Services\Admin\ProductPricedImageService::FONT_MAX }}"
+                                        step="4"
+                                        wire:model.live="pricedImageFont"
+                                        class="min-w-0 flex-1">
+                                    <input type="number"
+                                        min="{{ \App\Services\Admin\ProductPricedImageService::FONT_MIN }}"
+                                        max="{{ \App\Services\Admin\ProductPricedImageService::FONT_MAX }}"
+                                        wire:model.live="pricedImageFont"
+                                        class="w-20 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums">
+                                </div>
+                                <p class="mt-1 text-xs text-[#8C8474]">
+                                    {{ \App\Services\Admin\ProductPricedImageService::FONT_MIN }}–{{ \App\Services\Admin\ProductPricedImageService::FONT_MAX }} px
+                                </p>
                             </div>
-                            <div>
-                                <label class="block text-sm font-medium mb-1">Text size</label>
-                                <input type="range" min="1" max="5" wire:model.live="pricedImageFont" class="w-full">
-                                <p class="mt-1 text-xs text-[#8C8474]">Font {{ $pricedImageFont }}</p>
-                            </div>
+                            @error('pricedImage')
+                                <p class="text-xs text-rose-600">{{ $message }}</p>
+                            @enderror
+                            @error('pricedImagePosition')
+                                <p class="text-xs text-rose-600">{{ $message }}</p>
+                            @enderror
+                            @error('pricedImageFont')
+                                <p class="text-xs text-rose-600">{{ $message }}</p>
+                            @enderror
                             <button type="button" wire:click="generatePricedImage"
-                                class="rounded-full bg-[#1E1E1E] px-5 py-2 text-sm font-semibold text-white hover:bg-black">
-                                {{ $product?->priced_image_path ? 'Rebuild priced image' : 'Generate priced image' }}
+                                wire:loading.attr="disabled"
+                                class="rounded-full bg-[#1E1E1E] px-5 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-60">
+                                <span wire:loading.remove wire:target="generatePricedImage">
+                                    {{ $product?->priced_image_path ? 'Rebuild priced image' : 'Generate priced image' }}
+                                </span>
+                                <span wire:loading wire:target="generatePricedImage">Working…</span>
                             </button>
                         </div>
                         <div class="space-y-3">
@@ -297,6 +339,12 @@
                             @endif
                             <p class="text-xs text-[#8C8474]">Uses the primary product image and current price / regular price. Rebuild after changing photo or price.</p>
                         </div>
+                    </div>
+                    <div class="flex shrink-0 justify-end border-t border-[#EFE7D6] bg-white px-4 py-3 sm:hidden">
+                        <button type="button" wire:click="closePricedImageModal"
+                            class="rounded-full border border-[#E0D6C2] px-5 py-2 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
+                            Close
+                        </button>
                     </div>
                 </div>
             </div>

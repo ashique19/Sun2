@@ -39,6 +39,8 @@ class AdminProducts extends Component
 
     public string $editingValue = '';
 
+    public ?string $message = null;
+
     public function updatedSearch(): void
     {
         $this->resetPage();
@@ -173,8 +175,15 @@ class AdminProducts extends Component
 
     public function generatePricedImage(int $productId, ProductPricedImageService $pricedImages): void
     {
-        $product = Product::query()->findOrFail($productId);
-        $pricedImages->generate($product);
+        $this->message = null;
+
+        try {
+            $product = Product::query()->findOrFail($productId);
+            $pricedImages->generate($product);
+            $this->message = 'Priced image created for “'.$product->name.'”.';
+        } catch (\Throwable $e) {
+            $this->addError('pricedImage', $e->getMessage());
+        }
     }
 
     public function render()

@@ -171,6 +171,7 @@ class AdminProductEdit extends Component
     public function closePricedImageModal(): void
     {
         $this->showPricedImageModal = false;
+        $this->js('document.body.classList.remove("overflow-hidden")');
     }
 
     public function savePricedImageLayout(): void

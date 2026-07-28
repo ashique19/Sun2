@@ -251,27 +251,31 @@
             </div>
         </section>
 
-        @if ($showPricedImageModal)
-            <div class="fixed inset-0 z-[55] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
-                wire:click.self="closePricedImageModal"
-                role="dialog"
-                aria-modal="true"
-                aria-label="Priced image controls">
-                <div class="flex h-[min(92dvh,40rem)] w-full max-w-4xl flex-col overflow-hidden rounded-t-2xl border border-[#EFE7D6] bg-white shadow-xl sm:h-auto sm:max-h-[90vh] sm:rounded-xl">
-                    <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#EFE7D6] bg-white px-4 py-3">
-                        <div class="min-w-0">
+        @teleport('body')
+            @if ($showPricedImageModal)
+                <div class="fixed inset-0 z-[80] flex items-stretch justify-center bg-black/50 sm:items-center sm:p-4"
+                    wire:click.self="closePricedImageModal"
+                    wire:key="priced-image-modal"
+                    x-data
+                    x-init="document.body.classList.add('overflow-hidden')"
+                    x-on:livewire:navigating.window="document.body.classList.remove('overflow-hidden')"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Priced image controls">
+                    <div class="flex h-dvh w-full max-w-4xl flex-col overflow-hidden bg-white shadow-xl sm:h-auto sm:max-h-[min(90dvh,42rem)] sm:rounded-xl"
+                        wire:click.stop
+                        x-on:remove="document.body.classList.remove('overflow-hidden')">
+                        <div class="flex shrink-0 items-center justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
                             <h2 class="font-semibold text-lg">Priced image</h2>
-                            <p class="mt-1 text-xs text-[#8C8474]">Generate or rebuild a shareable priced image from the primary product photo.</p>
+                            <button type="button" wire:click="closePricedImageModal"
+                                class="shrink-0 rounded-full border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
+                                Close
+                            </button>
                         </div>
-                        <button type="button" wire:click="closePricedImageModal"
-                            class="shrink-0 rounded-full border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
-                            Close
-                        </button>
-                    </div>
-                    <div class="grid min-h-0 flex-1 gap-6 overflow-y-auto px-4 py-4 md:grid-cols-[18rem_minmax(0,1fr)]">
-                        <div class="space-y-4">
+
+                        <div class="shrink-0 space-y-4 border-b border-[#EFE7D6] px-4 py-4">
                             <div>
-                                <label class="block text-sm font-medium mb-2">Text position</label>
+                                <label class="mb-2 block text-sm font-medium">Text position</label>
                                 <div class="grid grid-cols-2 gap-2">
                                     @foreach ([
                                         'top-left' => 'Top left',
@@ -291,18 +295,18 @@
                                 </div>
                             </div>
                             <div>
-                                <label class="block text-sm font-medium mb-1" for="priced-image-font">Text size (px)</label>
+                                <label class="mb-1 block text-sm font-medium" for="priced-image-font">Text size (px)</label>
                                 <div class="flex items-center gap-3">
                                     <input id="priced-image-font" type="range"
                                         min="{{ \App\Services\Admin\ProductPricedImageService::FONT_MIN }}"
                                         max="{{ \App\Services\Admin\ProductPricedImageService::FONT_MAX }}"
                                         step="4"
-                                        wire:model.live="pricedImageFont"
+                                        wire:model="pricedImageFont"
                                         class="min-w-0 flex-1">
                                     <input type="number"
                                         min="{{ \App\Services\Admin\ProductPricedImageService::FONT_MIN }}"
                                         max="{{ \App\Services\Admin\ProductPricedImageService::FONT_MAX }}"
-                                        wire:model.live="pricedImageFont"
+                                        wire:model="pricedImageFont"
                                         class="w-20 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums">
                                 </div>
                                 <p class="mt-1 text-xs text-[#8C8474]">
@@ -327,7 +331,8 @@
                                 <span wire:loading wire:target="generatePricedImage">Working…</span>
                             </button>
                         </div>
-                        <div class="space-y-3">
+
+                        <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4">
                             @if ($product?->priced_image_path)
                                 <div class="overflow-hidden rounded-xl border border-[#EFE7D6] bg-[#FAF6EF]">
                                     <img src="{{ \App\Support\StorefrontAssets::url($product->priced_image_path) }}" alt="Priced image preview" class="w-full object-contain">
@@ -340,15 +345,9 @@
                             <p class="text-xs text-[#8C8474]">Uses the primary product image and current price / regular price. Rebuild after changing photo or price.</p>
                         </div>
                     </div>
-                    <div class="flex shrink-0 justify-end border-t border-[#EFE7D6] bg-white px-4 py-3 sm:hidden">
-                        <button type="button" wire:click="closePricedImageModal"
-                            class="rounded-full border border-[#E0D6C2] px-5 py-2 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
-                            Close
-                        </button>
-                    </div>
                 </div>
-            </div>
-        @endif
+            @endif
+        @endteleport
 
         @if ($showAiGenerateModal)
             <div class="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-4 sm:items-center"

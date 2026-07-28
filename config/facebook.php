@@ -33,5 +33,17 @@ return [
         'page_access_token' => env('FACEBOOK_PAGE_ACCESS_TOKEN'),
 
         'page_id' => env('FACEBOOK_PAGE_ID'),
+
+        /*
+        | Scheduled Graph Conversations API catch-up (php artisan schedule:run).
+        | Webhooks remain the realtime path; this backfills missed/history threads.
+        */
+        'auto_sync_enabled' => filter_var(env('FACEBOOK_MESSENGER_AUTO_SYNC_ENABLED', true), FILTER_VALIDATE_BOOL),
+
+        /*
+        | Secret token for HTTP sync (hosting panel cron / curl):
+        |   GET /internal/messenger/sync-conversations?token=...
+        */
+        'sync_token' => env('FACEBOOK_MESSENGER_SYNC_TOKEN'),
     ],
 ];

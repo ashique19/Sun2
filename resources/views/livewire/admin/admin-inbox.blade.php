@@ -14,7 +14,10 @@
     ])>
         <div class="min-w-0">
             <h1 class="font-serif text-2xl font-semibold xl:text-3xl">Inbox</h1>
-            <p class="mt-0.5 hidden text-sm text-[#8C8474] sm:block">Messenger and WhatsApp conversations in one place.</p>
+            <p class="mt-0.5 hidden text-sm text-[#8C8474] sm:block">
+                Messenger and WhatsApp conversations in one place.
+                New messages arrive via webhooks; Graph sync runs on a schedule (or use the button).
+            </p>
         </div>
 
         <div class="flex flex-col gap-2 text-sm xl:items-end">

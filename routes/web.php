@@ -1,7 +1,8 @@
 <?php
 
-use App\Http\Controllers\ProductImageHashRebuildController;
 use App\Http\Controllers\ChannelMessageMediaController;
+use App\Http\Controllers\MessengerConversationSyncController;
+use App\Http\Controllers\ProductImageHashRebuildController;
 use App\Http\Controllers\RobotsController;
 use App\Http\Controllers\SitemapController;
 use App\Livewire\Admin\AdminAreaEdit;
@@ -30,10 +31,10 @@ use App\Livewire\Admin\AdminProductShow;
 use App\Livewire\Admin\AdminReviews;
 use App\Livewire\Admin\AdminSalesByMonth;
 use App\Livewire\Admin\AdminSitemap;
-use App\Livewire\Admin\AdminUserEdit;
-use App\Livewire\Admin\AdminUsers;
 use App\Livewire\Admin\AdminSocialPostsCreate;
 use App\Livewire\Admin\AdminSocialPostsShow;
+use App\Livewire\Admin\AdminUserEdit;
+use App\Livewire\Admin\AdminUsers;
 use App\Livewire\PublicProductShare;
 use App\Livewire\Reseller\ResellerDashboard;
 use App\Livewire\Reseller\ResellerOrderCreate;
@@ -57,8 +58,8 @@ use App\Livewire\StorefrontProfile;
 use App\Livewire\StorefrontRegister;
 use App\Livewire\StorefrontResetPassword;
 use App\Livewire\StorefrontSearch;
-use App\Livewire\StorefrontWishlist;
 use App\Livewire\StorefrontSocialPostShow;
+use App\Livewire\StorefrontWishlist;
 use App\Models\Order;
 use App\Models\Product;
 use App\Support\AdminAccess;
@@ -74,6 +75,8 @@ Route::get('/sitemaps/{file}', [SitemapController::class, 'child'])
 Route::get('/internal/sitemap/rebuild', [SitemapController::class, 'rebuild'])->name('sitemap.rebuild');
 Route::get('/internal/product-image-hashes/rebuild', ProductImageHashRebuildController::class)
     ->name('product-image-hashes.rebuild');
+Route::get('/internal/messenger/sync-conversations', MessengerConversationSyncController::class)
+    ->name('messenger.sync-conversations');
 
 Route::get('/', StorefrontHome::class)->name('home');
 Route::get('/category/{category:slug}', StorefrontCategory::class)->name('category.show');

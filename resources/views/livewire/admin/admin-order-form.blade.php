@@ -388,6 +388,22 @@
                             class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"></textarea>
                     </div>
                     <div>
+                        <div class="mb-1 flex items-center justify-between gap-2">
+                            <label class="block text-[#6B6459] text-sm">Customer note</label>
+                            @if (trim($customerNote) !== '')
+                                <button type="button"
+                                    wire:click="$set('customerNote', '')"
+                                    class="text-xs font-semibold text-[#8C8474] hover:text-rose-700">
+                                    Clear
+                                </button>
+                            @endif
+                        </div>
+                        <p class="text-xs text-[#8C8474] mb-2">Optional special instruction (also sent to the courier when dispatching).</p>
+                        <textarea wire:model="customerNote" rows="3"
+                            class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
+                            placeholder="e.g. Call before delivery, leave at gate…"></textarea>
+                    </div>
+                    <div>
                         <label class="block text-[#6B6459] text-sm mb-1">Courier note</label>
                         <p class="text-xs text-[#8C8474] mb-2">Sent to the courier during dispatch.</p>
                         <textarea wire:model="courierNote" rows="3"

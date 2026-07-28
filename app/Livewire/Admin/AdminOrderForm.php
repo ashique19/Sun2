@@ -66,6 +66,8 @@ class AdminOrderForm extends Component
 
     public string $courierNote = '';
 
+    public string $customerNote = '';
+
     public bool $isExchange = false;
 
     public ?string $addressLocationHint = null;
@@ -209,6 +211,7 @@ class AdminOrderForm extends Component
             $this->paymentMethod = 'cod';
             $this->adminNote = '';
             $this->courierNote = '';
+            $this->customerNote = '';
             $this->isExchange = false;
             $this->autoDelivery = true;
             $this->lines = [];
@@ -244,6 +247,7 @@ class AdminOrderForm extends Component
         $this->paymentMethod = 'cod';
         $this->adminNote = '';
         $this->courierNote = '';
+        $this->customerNote = '';
         $this->isExchange = false;
         $this->autoDelivery = true;
         $this->lines = [];
@@ -284,6 +288,7 @@ class AdminOrderForm extends Component
         $this->paymentMethod = (string) ($source->payment_method ?? 'cod');
         $this->adminNote = (string) ($source->admin_note ?? '');
         $this->courierNote = (string) ($source->courier_note ?? '');
+        $this->customerNote = (string) ($source->customer_note ?? '');
         $this->isExchange = (bool) $source->is_replacement;
         $this->deliveryCharge = (string) (int) round((float) $source->delivery_charge);
         $this->charge = (string) (int) round((float) ($source->charge ?? 0));
@@ -840,7 +845,9 @@ class AdminOrderForm extends Component
             'has_return' => $this->isExchange ? true : ($this->order?->has_return ?? false),
             'email' => $this->order?->email,
             'status' => $this->order?->status ?? 'new',
-            'customer_note' => $this->order?->customer_note,
+            'customer_note' => trim((string) ($validated['customerNote'] ?? '')) !== ''
+                ? trim((string) $validated['customerNote'])
+                : null,
             'subtotal' => $this->subtotal(),
             'delivery_charge' => (float) $this->roundedMoney($this->deliveryCharge),
             'charge' => (float) $this->roundedMoney($this->charge),
@@ -1153,6 +1160,7 @@ class AdminOrderForm extends Component
             'paymentMethod' => ['required', 'string', 'max:32'],
             'adminNote' => ['nullable', 'string', 'max:5000'],
             'courierNote' => ['nullable', 'string', 'max:5000'],
+            'customerNote' => ['nullable', 'string', 'max:2000'],
             'isExchange' => ['boolean'],
             'deliveryCharge' => ['required', 'integer', 'min:0'],
             'charge' => ['required', 'integer', 'min:0'],

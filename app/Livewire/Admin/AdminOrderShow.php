@@ -28,6 +28,8 @@ class AdminOrderShow extends Component
 
     public string $adminNote = '';
 
+    public string $customerNote = '';
+
     public ?int $courierId = null;
 
     public string $apiCourierSlug = '';
@@ -73,6 +75,7 @@ class AdminOrderShow extends Component
         ]);
         $this->status = (string) $order->status;
         $this->adminNote = (string) ($order->admin_note ?? '');
+        $this->customerNote = (string) ($order->customer_note ?? '');
         $this->courierId = $order->courier_id
             ?? Courier::query()->where('is_active', true)->where('is_default', true)->value('id')
             ?? Courier::query()->where('is_active', true)->where('slug', 'steadfast')->value('id')
@@ -135,6 +138,37 @@ class AdminOrderShow extends Component
 
         $this->order->refresh()->load(['statusHistory.changedBy']);
         $this->message = 'Order updated.';
+    }
+
+    public function saveCustomerNote(OrderStatusService $statusService): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        $this->validate([
+            'customerNote' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $previous = (string) ($this->order->customer_note ?? '');
+        $newNote = trim($this->customerNote) !== '' ? trim($this->customerNote) : null;
+
+        $this->order->update(['customer_note' => $newNote]);
+
+        if ($previous !== (string) ($newNote ?? '')) {
+            $statusService->record($this->order, 'Customer note updated.');
+        }
+
+        $this->order->refresh()->load(['statusHistory.changedBy']);
+        $this->customerNote = (string) ($this->order->customer_note ?? '');
+        $this->message = 'Customer note saved.';
+    }
+
+    public function clearCustomerNote(OrderStatusService $statusService): void
+    {
+        $this->customerNote = '';
+        $this->saveCustomerNote($statusService);
     }
 
     public function confirmDraft(ChannelOrderDraftService $drafts): void

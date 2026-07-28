@@ -119,9 +119,40 @@
                     <div><dt class="text-[#8C8474]">Email</dt><dd class="break-all">{{ $order->email ?: '—' }}</dd></div>
                     <div><dt class="text-[#8C8474]">City</dt><dd class="break-words">{{ $order->city }}@if($order->area), {{ $order->area }}@endif</dd></div>
                     <div class="sm:col-span-2"><dt class="text-[#8C8474]">Address</dt><dd class="break-words">{{ $order->address }}</dd></div>
-                    @if ($order->customer_note)
-                        <div class="sm:col-span-2"><dt class="text-[#8C8474]">Customer note</dt><dd class="break-words whitespace-pre-line">{{ $order->customer_note }}</dd></div>
-                    @endif
+                    <div class="sm:col-span-2">
+                        <div class="flex items-center justify-between gap-2">
+                            <dt class="text-[#8C8474]">Customer note</dt>
+                            @unless ($readOnly)
+                                @if (trim($customerNote) !== '')
+                                    <button type="button"
+                                        wire:click="clearCustomerNote"
+                                        wire:confirm="Clear this customer note?"
+                                        class="text-xs font-semibold text-[#8C8474] hover:text-rose-700">
+                                        Clear
+                                    </button>
+                                @endif
+                            @endunless
+                        </div>
+                        @unless ($readOnly)
+                            <dd class="mt-1 space-y-2">
+                                <textarea wire:model="customerNote" rows="3"
+                                    placeholder="e.g. Call before delivery, leave at gate…"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"></textarea>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <button type="button"
+                                        wire:click="saveCustomerNote"
+                                        wire:loading.attr="disabled"
+                                        wire:target="saveCustomerNote,clearCustomerNote"
+                                        class="inline-flex h-8 items-center rounded-lg bg-[#C9A227] px-3 text-xs font-semibold text-white hover:bg-[#b89220] disabled:opacity-60">
+                                        Save note
+                                    </button>
+                                    <p class="text-[11px] text-[#8C8474]">Also sent to the courier when dispatching.</p>
+                                </div>
+                            </dd>
+                        @else
+                            <dd class="mt-1 break-words whitespace-pre-line">{{ $order->customer_note ?: '—' }}</dd>
+                        @endunless
+                    </div>
                 </dl>
             </div>
 

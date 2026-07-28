@@ -61,8 +61,8 @@ class AdminProductEditImageModalTest extends TestCase
             ->call('openPricedImageModal')
             ->assertSet('showPricedImageModal', true)
             ->assertSee('Priced image')
-            ->assertSee('X position')
-            ->assertSee('Y position')
+            ->assertSee('Text position')
+            ->assertSee('Top left')
             ->assertSeeHtml('x-if="editorOpen"')
             ->assertDontSeeHtml('x-show="editorOpen"');
     }
@@ -81,9 +81,8 @@ class AdminProductEditImageModalTest extends TestCase
 
         Livewire::test(AdminProductEdit::class, ['product' => $product])
             ->call('openPricedImageModal')
-            ->set('pricedImageX', 24)
-            ->set('pricedImageY', 24)
-            ->set('pricedImageFont', 3)
+            ->set('pricedImagePosition', 'top-right')
+            ->set('pricedImageFont', 64)
             ->assertSet('showPricedImageModal', true)
             ->assertSee('Priced image')
             ->assertSeeHtml('x-if="editorOpen"')

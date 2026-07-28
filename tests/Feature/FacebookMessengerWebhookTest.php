@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
@@ -187,17 +188,140 @@ class FacebookMessengerWebhookTest extends TestCase
             'external_user_id' => 'PSID_ATTACH',
         ]);
 
-        // Check that a message was stored with media URL
-        $this->assertDatabaseHas('channel_messages', [
-            'external_message_id' => 'm_attach_test',
-            'body' => 'Product image',
+        // Each media attachment becomes its own inbox message (Messenger albums / multi-attach).
+        $this->assertSame(3, ChannelMessage::query()->where('external_message_id', 'like', 'm_attach_test%')->count());
+
+        $first = ChannelMessage::where('external_message_id', 'm_attach_test#0')->first();
+        $this->assertNotNull($first);
+        $this->assertSame('Product image', $first->body);
+        $this->assertSame('https://example.com/image.jpg', $first->media_url);
+        $this->assertSame('image/png', $first->media_mime);
+        $this->assertTrue($first->isImageAttachment());
+
+        $second = ChannelMessage::where('external_message_id', 'm_attach_test#1')->first();
+        $this->assertNotNull($second);
+        $this->assertNull($second->body);
+        $this->assertSame('https://example.com/fallback.jpg', $second->media_url);
+
+        $third = ChannelMessage::where('external_message_id', 'm_attach_test#2')->first();
+        $this->assertNotNull($third);
+        $this->assertSame('https://example.com/video.mp4', $third->media_url);
+        $this->assertSame('video/mp4', $third->media_mime);
+        $this->assertFalse($third->isImageAttachment());
+    }
+
+    public function test_stores_each_image_in_messenger_album_as_separate_message(): void
+    {
+        config([
+            'facebook.messenger.enabled' => true,
+            'facebook.messenger.app_secret' => '',
+            'gemini.api_key' => null,
         ]);
 
-        // The message should have the first valid attachment URL (image)
-        $message = ChannelMessage::where('external_message_id', 'm_attach_test')->first();
-        $this->assertNotNull($message);
-        $this->assertEquals('https://example.com/image.jpg', $message->media_url);
-        $this->assertEquals('image/png', $message->media_mime);
+        $body = json_encode([
+            'object' => 'page',
+            'entry' => [[
+                'id' => 'PAGE123',
+                'time' => time(),
+                'messaging' => [[
+                    'sender' => ['id' => 'PSID_ALBUM'],
+                    'recipient' => ['id' => 'PAGE123'],
+                    'timestamp' => (int) (microtime(true) * 1000),
+                    'message' => [
+                        'mid' => 'm_album_3',
+                        'text' => 'Which one?',
+                        'attachments' => [
+                            [
+                                'type' => 'image',
+                                'payload' => ['url' => 'https://example.com/a.jpg', 'mime_type' => 'image/jpeg'],
+                            ],
+                            [
+                                'type' => 'image',
+                                'payload' => ['url' => 'https://example.com/b.jpg', 'mime_type' => 'image/jpeg'],
+                            ],
+                            [
+                                'type' => 'image',
+                                'payload' => ['url' => 'https://example.com/c.jpg', 'mime_type' => 'image/jpeg'],
+                            ],
+                        ],
+                    ],
+                ]],
+            ]],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->call(
+            'POST',
+            '/api/webhooks/messenger',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            $body,
+        )->assertOk()->assertSee('EVENT_RECEIVED', false);
+
+        $messages = ChannelMessage::query()
+            ->where('external_message_id', 'like', 'm_album_3%')
+            ->orderBy('external_message_id')
+            ->get();
+
+        $this->assertCount(3, $messages);
+        $this->assertSame(['m_album_3#0', 'm_album_3#1', 'm_album_3#2'], $messages->pluck('external_message_id')->all());
+        $this->assertSame('Which one?', $messages[0]->body);
+        $this->assertNull($messages[1]->body);
+        $this->assertNull($messages[2]->body);
+        $this->assertSame([
+            'https://example.com/a.jpg',
+            'https://example.com/b.jpg',
+            'https://example.com/c.jpg',
+        ], $messages->pluck('media_url')->all());
+        $this->assertTrue($messages->every(fn (ChannelMessage $message) => $message->isImageAttachment()));
+    }
+
+    public function test_single_image_keeps_bare_mid_for_dedupe(): void
+    {
+        config([
+            'facebook.messenger.enabled' => true,
+            'facebook.messenger.app_secret' => '',
+            'gemini.api_key' => null,
+        ]);
+
+        $body = json_encode([
+            'object' => 'page',
+            'entry' => [[
+                'id' => 'PAGE123',
+                'time' => time(),
+                'messaging' => [[
+                    'sender' => ['id' => 'PSID_ONE'],
+                    'recipient' => ['id' => 'PAGE123'],
+                    'timestamp' => (int) (microtime(true) * 1000),
+                    'message' => [
+                        'mid' => 'm_single_img',
+                        'attachments' => [[
+                            'type' => 'image',
+                            'payload' => ['url' => 'https://example.com/one.jpg', 'mime_type' => 'image/jpeg'],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->call(
+            'POST',
+            '/api/webhooks/messenger',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            $body,
+        )->assertOk();
+
+        $this->assertDatabaseHas('channel_messages', [
+            'external_message_id' => 'm_single_img',
+            'media_url' => 'https://example.com/one.jpg',
+        ]);
+        $this->assertDatabaseMissing('channel_messages', [
+            'external_message_id' => 'm_single_img#0',
+        ]);
     }
 
     public function test_ignores_echo_messages(): void
@@ -329,7 +453,7 @@ class FacebookMessengerWebhookTest extends TestCase
             $body,
         )->assertOk();
 
-        $this->assertSame(1, \App\Models\ChannelConversation::query()->where('external_user_id', 'PSID_DEDUP')->count());
+        $this->assertSame(1, ChannelConversation::query()->where('external_user_id', 'PSID_DEDUP')->count());
         $this->assertSame(1, ChannelMessage::query()->where('external_message_id', 'm_shared_mid')->count());
     }
 }

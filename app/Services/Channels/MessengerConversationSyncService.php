@@ -215,16 +215,14 @@ class MessengerConversationSyncService
                 continue;
             }
 
-            $storedMessage = $this->storeGraphMessage($conversation, $message, $pageId);
-            if ($storedMessage === null) {
-                continue;
-            }
+            $result = $this->storeGraphMessage($conversation, $message, $pageId);
+            $stored += $result['stored'];
 
-            $stored++;
-
-            if ($storedMessage->direction === ChannelMessage::DIRECTION_INBOUND
-                && $storedMessage->sent_at
-                && $storedMessage->sent_at->greaterThanOrEqualTo($since)) {
+            if ($result['recent_inbound']
+                && $result['last']?->sent_at
+                && $result['last']->sent_at->greaterThanOrEqualTo($since)) {
+                $storedRecentInbound = true;
+            } elseif ($result['recent_inbound']) {
                 $storedRecentInbound = true;
             }
         }
@@ -239,21 +237,13 @@ class MessengerConversationSyncService
 
     /**
      * @param  array<string, mixed>  $message
+     * @return array{stored: int, recent_inbound: bool, last: ?ChannelMessage}
      */
-    private function storeGraphMessage(ChannelConversation $conversation, array $message, string $pageId): ?ChannelMessage
+    private function storeGraphMessage(ChannelConversation $conversation, array $message, string $pageId): array
     {
         $mid = isset($message['id']) ? (string) $message['id'] : null;
         if ($mid === null || $mid === '') {
-            return null;
-        }
-
-        $existing = ChannelMessage::query()
-            ->where('channel_conversation_id', $conversation->id)
-            ->where('external_message_id', $mid)
-            ->exists();
-
-        if ($existing) {
-            return null;
+            return ['stored' => 0, 'recent_inbound' => false, 'last' => null];
         }
 
         $fromId = (string) data_get($message, 'from.id', '');
@@ -262,10 +252,10 @@ class MessengerConversationSyncService
             : ChannelMessage::DIRECTION_INBOUND;
 
         $text = isset($message['message']) ? trim((string) $message['message']) : null;
-        [$mediaUrl, $mediaMime] = $this->extractAttachment($message);
+        $attachments = $this->extractAttachments($message);
 
-        if (($text === null || $text === '') && $mediaUrl === null) {
-            return null;
+        if (($text === null || $text === '') && $attachments === []) {
+            return ['stored' => 0, 'recent_inbound' => false, 'last' => null];
         }
 
         $sentAt = null;
@@ -276,28 +266,89 @@ class MessengerConversationSyncService
                 $sentAt = now();
             }
         }
+        $sentAt ??= now();
 
-        return $this->conversations->storeMessage($conversation, [
-            'external_message_id' => $mid,
-            'direction' => $direction,
-            'body' => $text !== '' ? $text : null,
-            'media_url' => $mediaUrl,
-            'media_mime' => $mediaMime,
-            'raw_payload' => $message,
-            'sent_at' => $sentAt ?? now(),
-        ]);
+        $stored = 0;
+        $last = null;
+
+        if ($attachments === []) {
+            if ($this->messageExists($conversation->id, $mid)) {
+                return ['stored' => 0, 'recent_inbound' => false, 'last' => null];
+            }
+
+            $last = $this->conversations->storeMessage($conversation, [
+                'external_message_id' => $mid,
+                'direction' => $direction,
+                'body' => $text !== '' ? $text : null,
+                'media_url' => null,
+                'media_mime' => null,
+                'raw_payload' => $message,
+                'sent_at' => $sentAt,
+            ]);
+            $stored = 1;
+        } else {
+            $total = count($attachments);
+            foreach ($attachments as $index => $attachment) {
+                $externalId = $this->attachmentExternalId($mid, $index, $total);
+
+                // Legacy first-only ingest stored the first album image under the bare mid.
+                if ($total > 1 && $index === 0 && $this->messageExists($conversation->id, $mid)) {
+                    continue;
+                }
+
+                if ($this->messageExists($conversation->id, $externalId)) {
+                    continue;
+                }
+
+                $last = $this->conversations->storeMessage($conversation, [
+                    'external_message_id' => $externalId,
+                    'direction' => $direction,
+                    'body' => $index === 0 && $text !== null && $text !== '' ? $text : null,
+                    'media_url' => $attachment['url'],
+                    'media_mime' => $attachment['mime'],
+                    'raw_payload' => $message,
+                    'sent_at' => $sentAt,
+                ]);
+                $stored++;
+            }
+        }
+
+        return [
+            'stored' => $stored,
+            'recent_inbound' => $stored > 0 && $direction === ChannelMessage::DIRECTION_INBOUND,
+            'last' => $last,
+        ];
+    }
+
+    private function messageExists(int $conversationId, string $externalMessageId): bool
+    {
+        return ChannelMessage::query()
+            ->where('channel_conversation_id', $conversationId)
+            ->where('external_message_id', $externalMessageId)
+            ->exists();
+    }
+
+    private function attachmentExternalId(string $mid, int $index, int $total): string
+    {
+        if ($total === 1) {
+            return $mid;
+        }
+
+        return $mid.'#'.$index;
     }
 
     /**
      * @param  array<string, mixed>  $message
-     * @return array{0:?string,1:?string}
+     * @return list<array{url: string, mime: ?string}>
      */
-    private function extractAttachment(array $message): array
+    private function extractAttachments(array $message): array
     {
         $attachments = data_get($message, 'attachments.data');
         if (! is_array($attachments)) {
-            return [null, null];
+            return [];
         }
+
+        $extracted = [];
 
         foreach ($attachments as $attachment) {
             if (! is_array($attachment)) {
@@ -319,9 +370,9 @@ class MessengerConversationSyncService
                 $mime = 'video/mp4';
             }
 
-            return [$url, $mime];
+            $extracted[] = ['url' => $url, 'mime' => $mime];
         }
 
-        return [null, null];
+        return $extracted;
     }
 }

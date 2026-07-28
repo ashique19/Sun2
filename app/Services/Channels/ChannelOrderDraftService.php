@@ -525,9 +525,10 @@ class ChannelOrderDraftService
         }
 
         $total = max(0, $subtotal + $deliveryCharge);
-        $placedVia = $conversation->channel === ChannelConversation::CHANNEL_WHATSAPP
-            ? Order::PLACED_VIA_WHATSAPP
-            : Order::PLACED_VIA_MESSENGER;
+        $placedVia = match ($conversation->channel) {
+            ChannelConversation::CHANNEL_MESSENGER => Order::PLACED_VIA_MESSENGER,
+            default => Order::PLACED_VIA_ADMIN,
+        };
 
         $missing = $parsed['missing'] ?? [];
         $adminNoteParts = ['Draft by AI ('.ucfirst($conversation->channel).')'];
@@ -543,7 +544,7 @@ class ChannelOrderDraftService
 
         return [
             // Keep within orders string column limits (MySQL VARCHAR) so long
-            // Messenger/WhatsApp parses cannot fail inbox sync with SQL 1406.
+            // Messenger parses cannot fail inbox sync with SQL 1406.
             'name' => mb_substr($name, 0, 255),
             'phone' => mb_substr($phone, 0, 32),
             'email' => null,

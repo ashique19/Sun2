@@ -238,7 +238,7 @@ class AdminInboxTest extends TestCase
         $this->conversation();
 
         Livewire::test(AdminInbox::class)
-            ->set('channel', 'whatsapp')
+            ->set('channel', 'sms')
             ->assertSee('Clear filters')
             ->assertSee('No conversations match the current filters')
             ->call('clearFilters')

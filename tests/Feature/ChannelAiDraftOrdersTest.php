@@ -202,70 +202,6 @@ class ChannelAiDraftOrdersTest extends TestCase
         $this->assertSame(25, $product->fresh()->stock_quantity);
     }
 
-    public function test_whatsapp_webhook_creates_draft_from_text(): void
-    {
-        config([
-            'whatsapp.enabled' => true,
-            'whatsapp.app_secret' => '',
-            'gemini.api_key' => null,
-        ]);
-
-        $this->product(['name' => 'Silk Kurti']);
-
-        $body = json_encode([
-            'object' => 'whatsapp_business_account',
-            'entry' => [[
-                'id' => 'WABA1',
-                'changes' => [[
-                    'field' => 'messages',
-                    'value' => [
-                        'messaging_product' => 'whatsapp',
-                        'metadata' => [
-                            'phone_number_id' => 'PNID1',
-                            'display_phone_number' => '15550001111',
-                        ],
-                        'contacts' => [[
-                            'profile' => ['name' => 'Karim'],
-                            'wa_id' => '8801627237432',
-                        ]],
-                        'messages' => [[
-                            'from' => '8801627237432',
-                            'id' => 'wamid.TEST1',
-                            'timestamp' => (string) time(),
-                            'type' => 'text',
-                            'text' => [
-                                'body' => "Karim\n০১৬২৭২৩৭৪৩২\nBanani, Dhaka\nSilk Kurti 2pcs",
-                            ],
-                        ]],
-                    ],
-                ]],
-            ]],
-        ], JSON_THROW_ON_ERROR);
-
-        $this->call(
-            'POST',
-            '/api/webhooks/whatsapp',
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
-            $body,
-        )->assertOk()->assertSee('EVENT_RECEIVED', false);
-
-        $conversation = ChannelConversation::query()
-            ->where('channel', ChannelConversation::CHANNEL_WHATSAPP)
-            ->where('external_user_id', '8801627237432')
-            ->first();
-
-        $this->assertNotNull($conversation);
-        $draft = Order::query()->find($conversation->draft_order_id);
-        $this->assertNotNull($draft);
-        $this->assertSame(Order::STATUS_DRAFT, $draft->status);
-        $this->assertSame(Order::PLACED_VIA_WHATSAPP, $draft->placed_via);
-        $this->assertSame('WhatsApp', $draft->placedByLabel());
-        $this->assertSame('Karim', $draft->name);
-    }
-
     public function test_confirm_draft_moves_to_new_reserves_stock_and_clears_draft_pointer(): void
     {
         $product = $this->product(['stock_quantity' => 10]);
@@ -702,15 +638,15 @@ class ChannelAiDraftOrdersTest extends TestCase
     {
         $product = $this->product(['stock_quantity' => 8]);
         $conversation = ChannelConversation::query()->create([
-            'channel' => ChannelConversation::CHANNEL_WHATSAPP,
-            'external_user_id' => '8801',
+            'channel' => ChannelConversation::CHANNEL_MESSENGER,
+            'external_user_id' => 'PSID_DISCARD',
             'last_inbound_at' => now(),
         ]);
 
         $draft = $this->baseOrder([
             'status' => Order::STATUS_DRAFT,
             'order_number' => '5001',
-            'placed_via' => Order::PLACED_VIA_WHATSAPP,
+            'placed_via' => Order::PLACED_VIA_MESSENGER,
             'channel_conversation_id' => $conversation->id,
         ]);
         $draft->items()->create([

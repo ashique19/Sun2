@@ -223,14 +223,7 @@ class ChannelReplyService
                     $publicUrl,
                     $replyTo,
                 ),
-                ChannelConversation::CHANNEL_WHATSAPP => $this->sendWhatsApp(
-                    $conversation,
-                    $text,
-                    $publicUrl,
-                    $mediaMime,
-                    $replyTo,
-                ),
-                default => throw new RuntimeException('Unsupported channel: '.$conversation->channel),
+                default => throw new RuntimeException('Unsupported channel for outbound replies: '.$conversation->channel),
             };
 
             $stored = $this->conversations->storeMessage($conversation, [
@@ -405,60 +398,5 @@ class ChannelReplyService
         }
 
         return $mid;
-    }
-
-    private function sendWhatsApp(
-        ChannelConversation $conversation,
-        string $text,
-        ?string $imageUrl,
-        ?string $mediaMime,
-        ?ChannelMessage $replyTo,
-    ): ?string {
-        $token = (string) config('whatsapp.access_token', '');
-        $phoneNumberId = (string) (
-            $conversation->external_account_id
-            ?: config('whatsapp.phone_number_id', '')
-        );
-
-        if ($token === '' || $phoneNumberId === '') {
-            throw new RuntimeException('WhatsApp access token or phone number id is not configured.');
-        }
-
-        $version = (string) config('whatsapp.graph_version', config('facebook.graph_version', 'v25.0'));
-        $url = 'https://graph.facebook.com/'.$version.'/'.$phoneNumberId.'/messages';
-
-        $payload = [
-            'messaging_product' => 'whatsapp',
-            'to' => $conversation->external_user_id,
-        ];
-
-        if ($replyTo && filled($replyTo->external_message_id)) {
-            $payload['context'] = ['message_id' => $replyTo->external_message_id];
-        }
-
-        if ($imageUrl) {
-            $payload['type'] = 'image';
-            $payload['image'] = array_filter([
-                'link' => $imageUrl,
-                'caption' => $text !== '' ? $text : null,
-            ], fn ($v) => $v !== null);
-        } else {
-            $payload['type'] = 'text';
-            $payload['text'] = ['body' => $text];
-        }
-
-        $response = Http::timeout(30)
-            ->withToken($token)
-            ->acceptJson()
-            ->asJson()
-            ->post($url, $payload);
-
-        if (! $response->successful()) {
-            throw new RuntimeException('WhatsApp Send API error ('.$response->status().'): '.$response->body());
-        }
-
-        $id = data_get($response->json(), 'messages.0.id');
-
-        return is_string($id) && $id !== '' ? $id : null;
     }
 }

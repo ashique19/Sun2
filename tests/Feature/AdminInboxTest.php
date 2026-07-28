@@ -69,7 +69,35 @@ class AdminInboxTest extends TestCase
             ->assertSeeHtml('aria-label="Send"')
             ->call('closeMobileThread')
             ->assertSet('mobileThreadOpen', false)
-            ->assertSet('selectedConversationId', $conversation->id);
+            ->assertSet('selectedConversationId', null);
+    }
+
+    #[Test]
+    public function closing_mobile_thread_clears_conversation_query_param(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        // Explicit open sets ?conversation= via the Url attribute.
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSet('selectedConversationId', $conversation->id)
+            ->assertSet('mobileThreadOpen', true)
+            ->call('closeMobileThread')
+            ->assertSet('selectedConversationId', null)
+            ->assertSet('mobileThreadOpen', false);
+
+        // Fresh load without ?conversation= stays on the list (no auto-URL selection).
+        Livewire::test(AdminInbox::class)
+            ->assertSet('selectedConversationId', null)
+            ->assertSet('mobileThreadOpen', false)
+            ->assertSee('Conversations');
+
+        // Deep link still opens the thread.
+        Livewire::withQueryParams(['conversation' => $conversation->id])
+            ->test(AdminInbox::class)
+            ->assertSet('selectedConversationId', $conversation->id)
+            ->assertSet('mobileThreadOpen', true);
     }
 
     #[Test]

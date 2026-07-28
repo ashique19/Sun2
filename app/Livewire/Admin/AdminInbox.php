@@ -99,6 +99,11 @@ class AdminInbox extends Component
     public function closeMobileThread(): void
     {
         $this->mobileThreadOpen = false;
+        // Clear URL ?conversation= so reload stays on the list.
+        $this->selectedConversationId = null;
+        $this->resetComposer();
+        $this->error = null;
+        $this->statusMessage = null;
     }
 
     public function toggleMobileFilters(): void
@@ -218,15 +223,6 @@ class AdminInbox extends Component
         }
 
         $this->statusMessage = $result['message'];
-
-        if ($this->selectedConversationId === null) {
-            $first = ChannelConversation::query()
-                ->orderByRaw('COALESCE(last_inbound_at, last_outbound_at, created_at) desc')
-                ->value('id');
-            if ($first) {
-                $this->selectedConversationId = (int) $first;
-            }
-        }
     }
 
     /**
@@ -320,20 +316,22 @@ class AdminInbox extends Component
 
         $conversations = $query->limit(100)->get();
 
-        // Keep selection stable; only auto-pick when nothing is selected yet.
-        if ($this->selectedConversationId === null && $conversations->isNotEmpty()) {
-            $this->selectedConversationId = (int) $conversations->first()->id;
+        // Desktop convenience: preview the first thread without writing ?conversation= into the URL.
+        // URL selection is only set by explicit open / deep link, and cleared by the mobile back button.
+        $displayConversationId = $this->selectedConversationId;
+        if ($displayConversationId === null && $conversations->isNotEmpty() && ! $this->mobileThreadOpen) {
+            $displayConversationId = (int) $conversations->first()->id;
         }
 
         // If the selected id is outside the filtered list, still load it for the thread,
         // but never shrink the left list to that single conversation.
-        $selectedConversation = $this->selectedConversationId
+        $selectedConversation = $displayConversationId
             ? ChannelConversation::query()
                 ->with([
                     'draftOrder:id,order_number,status',
                     'messages' => fn ($q) => $q->with('replyTo')->orderBy('sent_at')->orderBy('id'),
                 ])
-                ->find($this->selectedConversationId)
+                ->find($displayConversationId)
             : null;
 
         $replyToMessage = null;

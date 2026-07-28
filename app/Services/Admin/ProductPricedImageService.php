@@ -257,8 +257,17 @@ class ProductPricedImageService
             if ($line['strike']) {
                 $box = imagettfbbox($fontSize, 0, $fontFile, $line['text']);
                 $textWidth = (int) abs($box[2] - $box[0]);
-                $strikeY = $cursorY + (int) floor($lineHeight / 2);
-                imageline($canvas, $x + $padding, $strikeY, $x + $padding + $textWidth, $strikeY, $black);
+                $strikeThickness = max(3, (int) round($fontSize * 0.1));
+                $strikeCenterY = $cursorY + (int) floor($lineHeight / 2);
+                $strikeTop = $strikeCenterY - (int) floor($strikeThickness / 2);
+                imagefilledrectangle(
+                    $canvas,
+                    $x + $padding,
+                    $strikeTop,
+                    $x + $padding + $textWidth,
+                    $strikeTop + $strikeThickness - 1,
+                    $black
+                );
             }
 
             $cursorY += $lineHeight + $lineGap;

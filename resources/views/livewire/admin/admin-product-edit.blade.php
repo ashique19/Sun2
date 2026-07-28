@@ -491,14 +491,30 @@
                             @error('pricedImageFont')
                                 <p class="text-xs text-rose-600">{{ $message }}</p>
                             @enderror
-                            <button type="button" wire:click="generatePricedImage"
-                                wire:loading.attr="disabled"
-                                class="rounded-full bg-[#1E1E1E] px-5 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-60">
-                                <span wire:loading.remove wire:target="generatePricedImage">
-                                    {{ $product?->priced_image_path ? 'Rebuild priced image' : 'Generate priced image' }}
-                                </span>
-                                <span wire:loading wire:target="generatePricedImage">Working…</span>
-                            </button>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button type="button" wire:click="generatePricedImage"
+                                    wire:loading.attr="disabled"
+                                    class="rounded-full bg-[#1E1E1E] px-5 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-60">
+                                    <span wire:loading.remove wire:target="generatePricedImage">
+                                        {{ $product?->priced_image_path ? 'Save & rebuild' : 'Save & generate' }}
+                                    </span>
+                                    <span wire:loading wire:target="generatePricedImage">Saving…</span>
+                                </button>
+                                @if ($product?->priced_image_path)
+                                    <button type="button"
+                                        wire:click="deletePricedImage"
+                                        wire:confirm="Delete this priced image? Position and size settings are kept for next time."
+                                        wire:loading.attr="disabled"
+                                        wire:target="deletePricedImage"
+                                        class="rounded-full border border-rose-300 px-5 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60">
+                                        <span wire:loading.remove wire:target="deletePricedImage">Delete</span>
+                                        <span wire:loading wire:target="deletePricedImage">Deleting…</span>
+                                    </button>
+                                @endif
+                            </div>
+                            <p class="text-xs text-[#8C8474]">
+                                Save &amp; {{ $product?->priced_image_path ? 'rebuild' : 'generate' }} writes the position, text size, and priced image.
+                            </p>
                         </div>
 
                         <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4">

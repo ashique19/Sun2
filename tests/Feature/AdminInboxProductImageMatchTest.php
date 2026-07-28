@@ -110,7 +110,7 @@ class AdminInboxProductImageMatchTest extends TestCase
     }
 
     #[Test]
-    public function cropped_image_auto_applies_strong_catalog_match(): void
+    public function cropped_image_lists_strong_catalog_match_for_manual_confirm(): void
     {
         Storage::fake('public');
         $this->actingAs($this->adminUser());
@@ -162,8 +162,11 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->assertSee('Crop chat image')
             ->set('mappingCroppedImage', $upload)
             ->call('matchProductFromCroppedImage')
-            ->assertSet('mappingField', null)
-            ->assertSee('image match');
+            ->assertSet('mappingField', 'product')
+            ->assertSee('Image matches')
+            ->assertSee('95.0% match')
+            ->call('selectMappingImageMatch', $product->id)
+            ->assertSet('mappingField', null);
 
         $order = Order::query()->with('items')->find($conversation->fresh()->draft_order_id);
         $this->assertSame($product->id, $order?->items->first()?->product_id);

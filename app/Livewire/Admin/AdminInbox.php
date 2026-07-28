@@ -425,14 +425,7 @@ class AdminInbox extends Component
                 ProductImageHashService::MIN_MATCH_PERCENT,
             );
 
-            $best = $matches[0] ?? null;
-            if ($best && $best['match_percent'] >= ProductImageHashService::AUTO_MATCH_PERCENT) {
-                $this->applyMapField(ChannelMessageOrderMapper::FIELD_PRODUCT, (int) $best['product_id']);
-                $this->statusMessage = 'Added “'.$best['name'].'” ('.number_format($best['match_percent'], 1).'% image match).';
-
-                return;
-            }
-
+            // Always list matches so staff can confirm before adding; do not auto-apply/close.
             $this->mappingImageMatches = $matches;
             if ($matches === []) {
                 $this->mappingImageMatchError = 'No catalog match at 80%+. Try a tighter crop or search by name.';

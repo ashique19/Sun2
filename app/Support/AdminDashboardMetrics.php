@@ -57,19 +57,29 @@ class AdminDashboardMetrics
             ->selectRaw('DATE(placed_at) as day')
             ->selectRaw('COUNT(*) as order_qty')
             ->selectRaw('COALESCE(SUM(total), 0) as order_value')
-            // Dashboard "Collected Value" should show what customers actually paid.
-            ->selectRaw('COALESCE(SUM(collected_amount), 0) as delivery_value')
             ->groupByRaw('DATE(placed_at)')
             ->get()
             ->keyBy('day');
 
-        $itemsByDay = DB::table('order_products')
+        // Delivery Qty / Collected Value: delivered orders only, by actual delivery date.
+        $deliveredByDay = Order::query()
+            ->where('status', 'delivered')
+            ->whereNotNull('actual_delivery_date')
+            ->where('actual_delivery_date', '>=', $start)
+            ->selectRaw('DATE(actual_delivery_date) as day')
+            ->selectRaw('COALESCE(SUM(collected_amount), 0) as delivery_value')
+            ->groupByRaw('DATE(actual_delivery_date)')
+            ->get()
+            ->keyBy('day');
+
+        $deliveredItemsByDay = DB::table('order_products')
             ->join('orders', 'orders.id', '=', 'order_products.order_id')
-            ->where('orders.placed_at', '>=', $start)
-            ->where('orders.status', '!=', Order::STATUS_DRAFT)
-            ->selectRaw('DATE(orders.placed_at) as day')
-            ->selectRaw('COALESCE(SUM(order_products.quantity), 0) as delivery_qty')
-            ->groupByRaw('DATE(orders.placed_at)')
+            ->where('orders.status', 'delivered')
+            ->whereNotNull('orders.actual_delivery_date')
+            ->where('orders.actual_delivery_date', '>=', $start)
+            ->selectRaw('DATE(orders.actual_delivery_date) as day')
+            ->selectRaw('COALESCE(SUM(CASE WHEN order_products.quantity > COALESCE(order_products.returned_quantity, 0) THEN order_products.quantity - COALESCE(order_products.returned_quantity, 0) ELSE 0 END), 0) as delivery_qty')
+            ->groupByRaw('DATE(orders.actual_delivery_date)')
             ->get()
             ->keyBy('day');
 
@@ -78,7 +88,8 @@ class AdminDashboardMetrics
         for ($offset = $days - 1; $offset >= 0; $offset--) {
             $date = now()->subDays($offset)->toDateString();
             $orderRow = $ordersByDay->get($date);
-            $itemRow = $itemsByDay->get($date);
+            $deliveredRow = $deliveredByDay->get($date);
+            $itemRow = $deliveredItemsByDay->get($date);
 
             $rows[] = [
                 'date' => $date,
@@ -86,7 +97,7 @@ class AdminDashboardMetrics
                 'order_qty' => (int) ($orderRow->order_qty ?? 0),
                 'order_value' => (float) ($orderRow->order_value ?? 0),
                 'delivery_qty' => (int) ($itemRow->delivery_qty ?? 0),
-                'delivery_value' => (float) ($orderRow->delivery_value ?? 0),
+                'delivery_value' => (float) ($deliveredRow->delivery_value ?? 0),
             ];
         }
 

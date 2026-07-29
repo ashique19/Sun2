@@ -1,0 +1,64 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Livewire\Admin\AdminDashboard;
+use App\Models\AdminAttentionItem;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
+use PHPUnit\Framework\Attributes\Test;
+use Spatie\Permission\Models\Role;
+use Tests\TestCase;
+
+class AdminDashboardLayoutTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private function adminUser(): User
+    {
+        Role::findOrCreate('admin');
+
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        return $user;
+    }
+
+    #[Test]
+    public function clear_attention_state_renders_a_compact_row(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSee('Admin Attention')
+            ->assertSee('All clear')
+            ->assertDontSee('No issues need attention at the moment.')
+            ->assertDontSee('Needs Attention (')
+            ->assertDontSee('Recently Resolved (')
+            ->assertSeeHtml('grid-cols-3')
+            ->assertSee('New')
+            ->assertSee('Draft by AI')
+            ->assertSee('Dispatched')
+            ->assertDontSee('View orders');
+    }
+
+    #[Test]
+    public function unresolved_attention_expands_into_a_compact_list(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        AdminAttentionItem::query()->create([
+            'issue_type' => AdminAttentionItem::ISSUE_TYPE_SYSTEM_ALERT,
+            'title' => 'Token refresh needed',
+            'description' => 'Page token looks expired.',
+        ]);
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSee('Admin Attention')
+            ->assertSee('1 issue needs review')
+            ->assertSee('Token refresh needed')
+            ->assertSee('Resolve')
+            ->assertDontSee('All clear');
+    }
+}

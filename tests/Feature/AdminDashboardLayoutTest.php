@@ -31,6 +31,7 @@ class AdminDashboardLayoutTest extends TestCase
         $this->actingAs($this->adminUser());
 
         Livewire::test(AdminDashboard::class)
+            ->assertSeeHtml('aria-label="Create order"')
             ->assertSee('Admin Attention')
             ->assertSee('All clear')
             ->assertDontSee('No issues need attention at the moment.')

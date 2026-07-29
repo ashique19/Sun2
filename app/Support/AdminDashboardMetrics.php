@@ -57,7 +57,8 @@ class AdminDashboardMetrics
             ->selectRaw('DATE(placed_at) as day')
             ->selectRaw('COUNT(*) as order_qty')
             ->selectRaw('COALESCE(SUM(total), 0) as order_value')
-            ->selectRaw('COALESCE(SUM(delivery_charge), 0) as delivery_value')
+            // Dashboard "Collected Value" should show what customers actually paid.
+            ->selectRaw('COALESCE(SUM(collected_amount), 0) as delivery_value')
             ->groupByRaw('DATE(placed_at)')
             ->get()
             ->keyBy('day');

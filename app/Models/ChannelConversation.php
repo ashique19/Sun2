@@ -94,9 +94,11 @@ class ChannelConversation extends Model
 
     public function markRead(?int $userId = null): void
     {
-        $this->update([
-            'last_read_at' => now(),
+        // Watermark at latest inbound so clock skew vs Facebook created_time cannot leave
+        // the thread stuck unread (last_inbound_at > now()-based last_read_at).
+        $this->forceFill([
+            'last_read_at' => $this->last_inbound_at?->copy() ?? now(),
             'last_read_by' => $userId,
-        ]);
+        ])->save();
     }
 }

@@ -104,14 +104,14 @@ class ChannelReplyService
     private function postMarkSeen(ChannelConversation $conversation, string $psid, string $token): bool
     {
         $version = $this->tokens->graphVersion();
-        $pageId = $this->tokens->pageId();
-        $path = $pageId !== '' ? $pageId.'/messages' : 'me/messages';
+        // Match sendMessenger: page tokens authenticate /me/messages.
+        $url = 'https://graph.facebook.com/'.$version.'/me/messages';
 
         $response = Http::timeout(12)
             ->withToken($token)
             ->acceptJson()
             ->asJson()
-            ->post('https://graph.facebook.com/'.$version.'/'.$path, [
+            ->post($url, [
                 'recipient' => ['id' => $psid],
                 'sender_action' => 'mark_seen',
             ]);

@@ -35,42 +35,99 @@ class AdminDashboardMetricsTest extends TestCase
         ], $overrides));
     }
 
+    private function addItem(Order $order, int $quantity, int $returnedQuantity = 0): void
+    {
+        $order->items()->create([
+            'name' => 'Product',
+            'quantity' => $quantity,
+            'returned_quantity' => $returnedQuantity,
+            'price' => 100,
+            'purchase_price' => 50,
+            'line_total' => 100 * $quantity,
+        ]);
+    }
+
     #[Test]
-    public function daily_totals_use_collected_amount_for_delivery_value(): void
+    public function daily_totals_use_delivered_orders_by_delivery_date_for_qty_and_collected_value(): void
     {
         $today = now()->startOfDay()->addHours(10);
         $yesterday = now()->subDay()->startOfDay()->addHours(11);
+        $twoDaysAgo = now()->subDays(2)->startOfDay()->addHours(9);
 
-        $this->order([
+        // Placed today, delivered today — counts for both order and delivery metrics today.
+        $deliveredToday = $this->order([
             'placed_at' => $today,
-            'delivery_charge' => 90,
-            'total' => 1590,
+            'status' => 'delivered',
+            'actual_delivery_date' => $today,
             'collected_amount' => 1200,
+            'total' => 1590,
         ]);
-        $this->order([
-            'placed_at' => $today,
-            'delivery_charge' => 70,
-            'total' => 870,
-            'collected_amount' => 300,
-        ]);
-        $this->order([
+        $this->addItem($deliveredToday, 3, 1); // net delivered qty = 2
+
+        // Placed yesterday, delivered today — order metrics yesterday; delivery metrics today.
+        $deliveredTodayPlacedEarlier = $this->order([
             'placed_at' => $yesterday,
-            'delivery_charge' => 60,
-            'total' => 560,
-            'collected_amount' => 450,
+            'status' => 'delivered',
+            'actual_delivery_date' => $today,
+            'collected_amount' => 300,
+            'total' => 870,
         ]);
-        $this->order([
+        $this->addItem($deliveredTodayPlacedEarlier, 4);
+
+        // Placed & delivered yesterday.
+        $deliveredYesterday = $this->order([
+            'placed_at' => $yesterday,
+            'status' => 'delivered',
+            'actual_delivery_date' => $yesterday,
+            'collected_amount' => 450,
+            'total' => 560,
+        ]);
+        $this->addItem($deliveredYesterday, 1);
+
+        // Placed today but not delivered — order metrics only.
+        $pending = $this->order([
+            'placed_at' => $today,
+            'status' => 'new',
+            'collected_amount' => 999,
+            'total' => 500,
+        ]);
+        $this->addItem($pending, 10);
+
+        // Draft — ignored entirely.
+        $draft = $this->order([
             'placed_at' => $today,
             'status' => Order::STATUS_DRAFT,
-            'collected_amount' => 999,
+            'collected_amount' => 100,
         ]);
+        $this->addItem($draft, 5);
 
-        $rows = AdminDashboardMetrics::dailyTotals(2, fresh: true);
+        // Delivered without delivery date — excluded from delivery metrics.
+        $missingDate = $this->order([
+            'placed_at' => $twoDaysAgo,
+            'status' => 'delivered',
+            'actual_delivery_date' => null,
+            'collected_amount' => 200,
+        ]);
+        $this->addItem($missingDate, 2);
 
-        $this->assertCount(2, $rows);
+        $rows = AdminDashboardMetrics::dailyTotals(3, fresh: true);
+
+        $this->assertCount(3, $rows);
         $this->assertSame($today->toDateString(), $rows[0]['date']);
-        $this->assertSame(1500.0, $rows[0]['delivery_value']);
+        $this->assertSame(2, $rows[0]['order_qty']);
+        $this->assertSame(2090.0, $rows[0]['order_value']);
+        $this->assertSame(6, $rows[0]['delivery_qty']); // 2 + 4
+        $this->assertSame(1500.0, $rows[0]['delivery_value']); // 1200 + 300
+
         $this->assertSame($yesterday->toDateString(), $rows[1]['date']);
+        $this->assertSame(2, $rows[1]['order_qty']);
+        $this->assertSame(1430.0, $rows[1]['order_value']);
+        $this->assertSame(1, $rows[1]['delivery_qty']);
         $this->assertSame(450.0, $rows[1]['delivery_value']);
+
+        $this->assertSame($twoDaysAgo->toDateString(), $rows[2]['date']);
+        $this->assertSame(1, $rows[2]['order_qty']);
+        $this->assertSame(0, $rows[2]['delivery_qty']);
+        $this->assertSame(0.0, $rows[2]['delivery_value']);
     }
 }

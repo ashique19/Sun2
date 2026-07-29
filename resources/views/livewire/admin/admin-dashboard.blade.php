@@ -164,7 +164,7 @@
     <div class="rounded-xl border border-[#EFE7D6] bg-white overflow-hidden">
         <div class="px-6 py-5 border-b border-[#E7DFCF]">
             <h2 class="font-semibold text-lg">Last 30 Days</h2>
-            <p class="text-sm text-[#8C8474] mt-1">Daily order quantity/value, item quantity, and customer-collected value (by order placed date).</p>
+            <p class="text-sm text-[#8C8474] mt-1">Order qty/value by placed date; delivery qty and collected value by delivery date for delivered orders.</p>
         </div>
 
         <div class="overflow-x-auto">

@@ -355,8 +355,9 @@ class ChannelReplyService
             'messaging_type' => 'RESPONSE',
             'message' => $message,
         ];
-        if ($replyTo && filled($replyTo->external_message_id)) {
-            $payload['reply_to'] = ['mid' => $replyTo->external_message_id];
+        $replyToMid = $this->messengerReplyMid($replyTo);
+        if ($replyToMid) {
+            $payload['reply_to'] = ['mid' => $replyToMid];
         }
 
         $response = Http::timeout(30)
@@ -381,8 +382,8 @@ class ChannelReplyService
             ];
             if ($mid) {
                 $captionPayload['reply_to'] = ['mid' => $mid];
-            } elseif ($replyTo && filled($replyTo->external_message_id)) {
-                $captionPayload['reply_to'] = ['mid' => $replyTo->external_message_id];
+            } elseif ($replyToMid) {
+                $captionPayload['reply_to'] = ['mid' => $replyToMid];
             }
 
             $captionResponse = Http::timeout(20)
@@ -400,5 +401,29 @@ class ChannelReplyService
         }
 
         return $mid;
+    }
+
+    private function messengerReplyMid(?ChannelMessage $message): ?string
+    {
+        if (! $message) {
+            return null;
+        }
+
+        $rawWebhookMid = data_get($message->raw_payload, 'message.mid');
+        if (is_string($rawWebhookMid) && trim($rawWebhookMid) !== '') {
+            return trim($rawWebhookMid);
+        }
+
+        $rawGraphMid = data_get($message->raw_payload, 'id');
+        if (is_string($rawGraphMid) && trim($rawGraphMid) !== '') {
+            return trim($rawGraphMid);
+        }
+
+        $externalMessageId = trim((string) ($message->external_message_id ?? ''));
+        if ($externalMessageId === '') {
+            return null;
+        }
+
+        return preg_replace('/#\d+$/', '', $externalMessageId) ?: null;
     }
 }

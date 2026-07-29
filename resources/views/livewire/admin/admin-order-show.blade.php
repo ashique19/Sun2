@@ -33,6 +33,13 @@
                         class="inline-flex h-9 items-center rounded-lg border border-[#E0D6C2] bg-white px-3 text-sm text-[#6B6459] hover:bg-[#FAF6EF] sm:px-4">
                         {{ $showConversation ? 'Hide conversation' : 'Conversation' }}
                     </button>
+                    <a href="{{ route('admin.inbox', ['conversation' => $order->channelConversation->id]) }}"
+                        wire:navigate
+                        aria-label="Open conversation in Inbox"
+                        title="Open conversation in Inbox"
+                        class="inline-flex h-9 items-center rounded-lg border border-[#E0D6C2] bg-white px-3 text-sm text-[#6B6459] hover:bg-[#FAF6EF] sm:px-4">
+                        Inbox
+                    </a>
                 @endif
                 <a href="{{ route('admin.orders.create', ['repeat' => $order->id]) }}"
                     title="Repeat order"

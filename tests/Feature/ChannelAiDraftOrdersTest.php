@@ -242,6 +242,11 @@ class ChannelAiDraftOrdersTest extends TestCase
         $this->assertFalse(
             AdminOrderSegment::apply(Order::query(), 'draft-ai')->whereKey($confirmed->id)->exists()
         );
+
+        // Orders created/confirmed from Inbox threads should keep a trace to the conversation.
+        Livewire::actingAs($admin)
+            ->test(AdminOrderShow::class, ['order' => $confirmed])
+            ->assertSeeHtml('aria-label="Open conversation in Inbox"');
     }
 
     public function test_livewire_confirm_draft_from_list(): void
@@ -321,6 +326,7 @@ class ChannelAiDraftOrdersTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(AdminOrderShow::class, ['order' => $draft])
+            ->assertSeeHtml('aria-label="Open conversation in Inbox"')
             ->call('toggleConversation')
             ->assertSet('showConversation', true)
             ->set('replyText', 'Thanks, confirming your order.')

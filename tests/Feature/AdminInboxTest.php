@@ -68,8 +68,6 @@ class AdminInboxTest extends TestCase
             ->call('selectConversation', $conversation->id)
             ->assertSet('mobileThreadOpen', true)
             ->assertSeeHtml('aria-label="Back to conversations"')
-            ->assertSeeHtml('aria-label="Create order"')
-            ->assertSee(route('admin.orders.create'), false)
             ->assertSeeHtml('fixed inset-0 z-30')
             ->assertSeeHtml('aria-label="Send"')
             ->call('closeMobileThread')

@@ -163,8 +163,8 @@
 
     <div class="rounded-xl border border-[#EFE7D6] bg-white overflow-hidden">
         <div class="px-6 py-5 border-b border-[#E7DFCF]">
-            <h2 class="font-semibold text-lg">Last 30 Days</h2>
-            <p class="text-sm text-[#8C8474] mt-1">Order qty/value by placed date; delivery qty and collected value by delivery date for delivered orders.</p>
+            <h2 class="font-semibold text-lg">Orders by date</h2>
+            <p class="text-sm text-[#8C8474] mt-1">Order qty/value by placed date; delivery qty and collected value by delivery date for delivered orders. Grouped by current and previous month.</p>
         </div>
 
         <div class="overflow-x-auto">
@@ -209,24 +209,38 @@
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#E7DFCF]">
-                    @forelse ($dailyTotals as $day)
-                        <tr class="hover:bg-[#FAF6EF]/50">
-                            <td class="px-4 py-3 whitespace-nowrap font-medium">{{ $day['label'] }}</td>
-                            <td class="px-4 py-3 text-right tabular-nums">{{ number_format($day['order_qty']) }}</td>
-                            <td class="px-4 py-3 text-right tabular-nums">&#2547; {{ number_format($day['order_value'], 0) }}</td>
-                            <td class="px-4 py-3 text-right tabular-nums">{{ number_format($day['delivery_qty']) }}</td>
-                            <td class="px-4 py-3 text-right tabular-nums">&#2547; {{ number_format($day['delivery_value'], 0) }}</td>
+                    @forelse ($monthlyTotals as $month)
+                        <tr class="bg-[#FAF6EF]/80">
+                            <td colspan="5" class="px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-[#6B6459]">
+                                {{ $month['label'] }}
+                            </td>
+                        </tr>
+                        @foreach ($month['days'] as $day)
+                            <tr class="hover:bg-[#FAF6EF]/50">
+                                <td class="px-4 py-3 whitespace-nowrap font-medium">{{ $day['label'] }}</td>
+                                <td class="px-4 py-3 text-right tabular-nums">{{ number_format($day['order_qty']) }}</td>
+                                <td class="px-4 py-3 text-right tabular-nums">&#2547; {{ number_format($day['order_value'], 0) }}</td>
+                                <td class="px-4 py-3 text-right tabular-nums">{{ number_format($day['delivery_qty']) }}</td>
+                                <td class="px-4 py-3 text-right tabular-nums">&#2547; {{ number_format($day['delivery_value'], 0) }}</td>
+                            </tr>
+                        @endforeach
+                        <tr class="bg-[#FAF6EF]/50 font-medium">
+                            <td class="px-4 py-2.5 text-[#6B6459]">{{ $month['label'] }} total</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums">{{ number_format($month['totals']['order_qty']) }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums">&#2547; {{ number_format($month['totals']['order_value'], 0) }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums">{{ number_format($month['totals']['delivery_qty']) }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums">&#2547; {{ number_format($month['totals']['delivery_value'], 0) }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="px-4 py-8 text-center text-[#8C8474]">No orders in the last 30 days.</td>
+                            <td colspan="5" class="px-4 py-8 text-center text-[#8C8474]">No orders in the current or previous month.</td>
                         </tr>
                     @endforelse
                 </tbody>
-                @if ($dailyTotals !== [])
+                @if ($monthlyTotals !== [])
                     <tfoot class="bg-[#FAF6EF] font-semibold border-t border-[#E7DFCF]">
                         <tr>
-                            <td class="px-4 py-3">30-day total</td>
+                            <td class="px-4 py-3">Both months total</td>
                             <td class="px-4 py-3 text-right tabular-nums">{{ number_format($periodTotals['order_qty']) }}</td>
                             <td class="px-4 py-3 text-right tabular-nums">&#2547; {{ number_format($periodTotals['order_value'], 0) }}</td>
                             <td class="px-4 py-3 text-right tabular-nums">{{ number_format($periodTotals['delivery_qty']) }}</td>

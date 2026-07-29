@@ -116,6 +116,52 @@ class SitemapGeneratorTest extends TestCase
         $this->assertStringContainsString('<image:image>', $productsXml);
         $this->assertStringContainsString('necklace-primary', $productsXml);
         $this->assertStringContainsString('<image:title>Necklace, earring set</image:title>', $productsXml);
+        $this->assertStringStartsWith('<?xml version="1.0" encoding="UTF-8"?>', ltrim($pagesXml));
+        $this->assertStringStartsWith('<?xml version="1.0" encoding="UTF-8"?>', ltrim($index->getContent()));
+    }
+
+    #[Test]
+    public function sitemap_blade_templates_survive_php_short_open_tags(): void
+    {
+        // Hosts with short_open_tag=On treat a raw "<?xml ..." Blade line as PHP and fail with:
+        // syntax error, unexpected identifier "version".
+        foreach (['sitemap.blade.php', 'sitemap-index.blade.php'] as $file) {
+            $source = file_get_contents(resource_path('views/'.$file));
+            $this->assertIsString($source);
+            $this->assertDoesNotMatchRegularExpression('/^\s*<\?xml\b/m', $source, $file.' must not start with a raw <?xml declaration');
+        }
+
+        $urlset = view('sitemap', [
+            'urls' => [[
+                'loc' => 'https://example.test/',
+                'lastmod' => now()->toAtomString(),
+            ]],
+        ])->render();
+
+        $index = view('sitemap-index', [
+            'sitemaps' => [[
+                'loc' => 'https://example.test/sitemaps/pages.xml',
+                'lastmod' => now()->toAtomString(),
+            ]],
+        ])->render();
+
+        $this->assertStringStartsWith('<?xml version="1.0" encoding="UTF-8"?>', ltrim($urlset));
+        $this->assertStringStartsWith('<?xml version="1.0" encoding="UTF-8"?>', ltrim($index));
+
+        // The escaped Blade declaration must compile to PHP that is safe under short_open_tag=On.
+        $compiled = app('blade.compiler')->compileString(
+            "{!! '<'.'?xml version=\"1.0\" encoding=\"UTF-8\"?>' !!}\n<root/>"
+        );
+        $tmp = tempnam(sys_get_temp_dir(), 'sitemap-blade-');
+        $this->assertNotFalse($tmp);
+        file_put_contents($tmp, $compiled."\n");
+
+        $cmd = escapeshellarg(PHP_BINARY).' -d short_open_tag=1 '.escapeshellarg($tmp);
+        exec($cmd.' 2>&1', $output, $exit);
+        @unlink($tmp);
+
+        $this->assertSame(0, $exit, implode("\n", $output));
+        $this->assertStringContainsString('<?xml version="1.0" encoding="UTF-8"?>', implode("\n", $output));
     }
 
     #[Test]

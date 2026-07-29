@@ -90,8 +90,10 @@ class ChannelConversationService
             ]);
 
             if ($payload['direction'] === ChannelMessage::DIRECTION_INBOUND) {
-                $conversation->forceFill(['last_inbound_at' => $sentAt])->save();
-            } else {
+                if ($conversation->last_inbound_at === null || $sentAt->greaterThan($conversation->last_inbound_at)) {
+                    $conversation->forceFill(['last_inbound_at' => $sentAt])->save();
+                }
+            } elseif ($conversation->last_outbound_at === null || $sentAt->greaterThan($conversation->last_outbound_at)) {
                 $conversation->forceFill(['last_outbound_at' => $sentAt])->save();
             }
 

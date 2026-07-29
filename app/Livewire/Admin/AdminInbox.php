@@ -624,6 +624,22 @@ class AdminInbox extends Component
     }
 
     /**
+     * Retry Messenger mark_seen for the open thread (after Graph sync morphs).
+     */
+    public function retryMessengerSeen(ChannelReplyService $replies): void
+    {
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+
+        if ($conversation?->needsMessengerSeenSync()) {
+            $replies->markSeen($conversation);
+        }
+    }
+
+    /**
      * Lightweight refresh for the open thread.
      * Retries Messenger mark_seen until Graph catches up to latest inbound.
      */
@@ -643,9 +659,7 @@ class AdminInbox extends Component
             $conversation->markRead(auth()->id());
         }
 
-        if ($conversation->needsMessengerSeenSync()) {
-            $replies->markSeen($conversation);
-        }
+        $this->retryMessengerSeen($replies);
     }
 
     /**
@@ -671,18 +685,25 @@ class AdminInbox extends Component
 
     private function deferMessengerSeenForOpenThread(): void
     {
-        $conversationId = $this->selectedConversationId;
-
-        if (! $conversationId) {
+        if (! $this->selectedConversationId) {
             return;
         }
 
-        defer(function () use ($conversationId): void {
-            $conversation = ChannelConversation::query()->find($conversationId);
-            if ($conversation?->needsMessengerSeenSync()) {
-                app(ChannelReplyService::class)->markSeen($conversation);
-            }
-        });
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+
+        if (! $conversation?->needsMessengerSeenSync()) {
+            return;
+        }
+
+        // Prefer a follow-up Livewire request after morph (does not block new messages).
+        // In HTTP tests / non-browser contexts, run mark_seen immediately.
+        if (app()->runningUnitTests()) {
+            $this->retryMessengerSeen(app(ChannelReplyService::class));
+
+            return;
+        }
+
+        $this->js('queueMicrotask(() => $wire.retryMessengerSeen())');
     }
 
     /**

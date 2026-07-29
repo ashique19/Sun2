@@ -104,8 +104,26 @@ class AdminInboxTest extends TestCase
     }
 
     #[Test]
+    public function closing_mobile_thread_returns_to_list_after_switching_conversations(): void
+    {
+        $this->actingAs($this->adminUser());
+        $first = $this->conversation(['external_user_id' => 'psid-back-1', 'customer_name' => 'First']);
+        $second = $this->conversation(['external_user_id' => 'psid-back-2', 'customer_name' => 'Second']);
+
+        // UI back must clear selection (not history.back to the previous thread).
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $first->id)
+            ->call('selectConversation', $second->id)
+            ->assertSet('selectedConversationId', $second->id)
+            ->call('closeMobileThread')
+            ->assertSet('selectedConversationId', null)
+            ->assertSet('mobileThreadOpen', false);
+    }
+
+    #[Test]
     public function conversation_url_uses_push_history_so_browser_back_returns_to_list(): void
     {
+        // Browser Back/Forward use history: true; the in-app back button clears selection.
         $attribute = (new \ReflectionProperty(AdminInbox::class, 'selectedConversationId'))
             ->getAttributes(Url::class)[0] ?? null;
 

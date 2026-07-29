@@ -441,6 +441,13 @@
                             <span wire:loading.remove wire:target="syncFromFacebook">Sync</span>
                             <span wire:loading wire:target="syncFromFacebook">…</span>
                         </button>
+                        <a href="{{ route('admin.orders.create') }}"
+                            wire:navigate
+                            class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227] hover:bg-[#FAF6EF] hover:text-[#C9A227]"
+                            aria-label="Create order"
+                            title="Create order">
+                            <span class="text-xl leading-none font-semibold">+</span>
+                        </a>
                     </div>
                     @if ($mappingField !== 'product')
                         @if ($hasOlderMessages && ! $threadHistoryExpanded)

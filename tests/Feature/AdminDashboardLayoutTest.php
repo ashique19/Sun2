@@ -44,7 +44,20 @@ class AdminDashboardLayoutTest extends TestCase
             ->assertSee('New')
             ->assertSee('Draft by AI')
             ->assertSee('Dispatched')
-            ->assertDontSee('View orders');
+            ->assertDontSee('View orders')
+            ->assertSee('OQ')
+            ->assertSee('OV')
+            ->assertSee('DQ')
+            ->assertSee('CV')
+            ->assertSeeHtml('aria-label="Order quantity"')
+            ->assertSeeHtml('aria-label="Order value"')
+            ->assertSeeHtml('aria-label="Delivered quantity"')
+            ->assertSeeHtml('aria-label="Collected value"')
+            ->assertSeeHtml('role="tooltip"')
+            ->assertDontSee('Order Qty')
+            ->assertDontSee('Order Value')
+            ->assertDontSee('Delivery Qty')
+            ->assertDontSee('Collected Value');
     }
 
     #[Test]

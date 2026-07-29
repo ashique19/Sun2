@@ -172,10 +172,40 @@
                 <thead class="bg-[#FAF6EF] text-left text-[#6B6459]">
                     <tr>
                         <th class="px-4 py-3 font-medium whitespace-nowrap">Date</th>
-                        <th class="px-4 py-3 font-medium text-right whitespace-nowrap">Order Qty</th>
-                        <th class="px-4 py-3 font-medium text-right whitespace-nowrap">Order Value</th>
-                        <th class="px-4 py-3 font-medium text-right whitespace-nowrap">Delivery Qty</th>
-                        <th class="px-4 py-3 font-medium text-right whitespace-nowrap">Collected Value</th>
+                        @foreach ([
+                            ['abbr' => 'OQ', 'label' => 'Order quantity'],
+                            ['abbr' => 'OV', 'label' => 'Order value'],
+                            ['abbr' => 'DQ', 'label' => 'Delivered quantity'],
+                            ['abbr' => 'CV', 'label' => 'Collected value'],
+                        ] as $column)
+                            <th class="px-4 py-3 font-medium text-right whitespace-nowrap" scope="col">
+                                <span
+                                    x-data="{ open: false }"
+                                    tabindex="0"
+                                    role="button"
+                                    class="relative inline-flex cursor-help rounded outline-none focus-visible:ring-2 focus-visible:ring-[#C9A227]/60"
+                                    :aria-expanded="open"
+                                    aria-label="{{ $column['label'] }}"
+                                    title="{{ $column['label'] }}"
+                                    @mouseenter="open = true"
+                                    @mouseleave="open = false"
+                                    @focus="open = true"
+                                    @blur="open = false"
+                                    @keydown.space.prevent="open = ! open"
+                                    @keydown.enter.prevent="open = ! open"
+                                    @keydown.escape="open = false"
+                                >
+                                    {{ $column['abbr'] }}
+                                    <span
+                                        x-cloak
+                                        x-show="open"
+                                        x-transition.opacity.duration.150ms
+                                        role="tooltip"
+                                        class="pointer-events-none absolute left-1/2 top-full z-20 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#1E1E1E] px-2 py-1 text-xs font-normal normal-case tracking-normal text-white shadow-sm"
+                                    >{{ $column['label'] }}</span>
+                                </span>
+                            </th>
+                        @endforeach
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#E7DFCF]">

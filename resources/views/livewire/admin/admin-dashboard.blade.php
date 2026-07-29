@@ -164,7 +164,7 @@
     <div class="rounded-xl border border-[#EFE7D6] bg-white overflow-hidden">
         <div class="px-6 py-5 border-b border-[#E7DFCF]">
             <h2 class="font-semibold text-lg">Last 30 Days</h2>
-            <p class="text-sm text-[#8C8474] mt-1">Daily order and delivery quantity and value (by order placed date).</p>
+            <p class="text-sm text-[#8C8474] mt-1">Daily order quantity/value, item quantity, and customer-collected value (by order placed date).</p>
         </div>
 
         <div class="overflow-x-auto">
@@ -175,7 +175,7 @@
                         <th class="px-4 py-3 font-medium text-right whitespace-nowrap">Order Qty</th>
                         <th class="px-4 py-3 font-medium text-right whitespace-nowrap">Order Value</th>
                         <th class="px-4 py-3 font-medium text-right whitespace-nowrap">Delivery Qty</th>
-                        <th class="px-4 py-3 font-medium text-right whitespace-nowrap">Delivery Value</th>
+                        <th class="px-4 py-3 font-medium text-right whitespace-nowrap">Collected Value</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#E7DFCF]">

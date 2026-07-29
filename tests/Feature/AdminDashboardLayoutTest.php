@@ -57,7 +57,13 @@ class AdminDashboardLayoutTest extends TestCase
             ->assertDontSee('Order Qty')
             ->assertDontSee('Order Value')
             ->assertDontSee('Delivery Qty')
-            ->assertDontSee('Collected Value');
+            ->assertDontSee('Collected Value')
+            ->assertSee('Orders by date')
+            ->assertSee('Current month')
+            ->assertSee('Previous month')
+            ->assertSee(now()->format('M-d'))
+            ->assertDontSee('Last 30 Days')
+            ->assertDontSee('30-day total');
     }
 
     #[Test]

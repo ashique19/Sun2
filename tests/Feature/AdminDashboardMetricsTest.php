@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Order;
 use App\Support\AdminDashboardMetrics;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -47,14 +48,30 @@ class AdminDashboardMetricsTest extends TestCase
         ]);
     }
 
-    #[Test]
-    public function daily_totals_use_delivered_orders_by_delivery_date_for_qty_and_collected_value(): void
+    /**
+     * @param  list<array{date: string, label: string, order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}>  $days
+     * @return array{date: string, label: string, order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}|null
+     */
+    private function dayRow(array $days, string $date): ?array
     {
+        foreach ($days as $day) {
+            if ($day['date'] === $date) {
+                return $day;
+            }
+        }
+
+        return null;
+    }
+
+    #[Test]
+    public function daily_totals_group_current_and_previous_month_with_m_d_labels(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-29 12:00:00'));
+
         $today = now()->startOfDay()->addHours(10);
         $yesterday = now()->subDay()->startOfDay()->addHours(11);
-        $twoDaysAgo = now()->subDays(2)->startOfDay()->addHours(9);
+        $previousMonthDay = now()->subMonthNoOverflow()->startOfMonth()->addDays(4)->startOfDay()->addHours(9);
 
-        // Placed today, delivered today — counts for both order and delivery metrics today.
         $deliveredToday = $this->order([
             'placed_at' => $today,
             'status' => 'delivered',
@@ -62,9 +79,8 @@ class AdminDashboardMetricsTest extends TestCase
             'collected_amount' => 1200,
             'total' => 1590,
         ]);
-        $this->addItem($deliveredToday, 3, 1); // net delivered qty = 2
+        $this->addItem($deliveredToday, 3, 1);
 
-        // Placed yesterday, delivered today — order metrics yesterday; delivery metrics today.
         $deliveredTodayPlacedEarlier = $this->order([
             'placed_at' => $yesterday,
             'status' => 'delivered',
@@ -74,7 +90,6 @@ class AdminDashboardMetricsTest extends TestCase
         ]);
         $this->addItem($deliveredTodayPlacedEarlier, 4);
 
-        // Placed & delivered yesterday.
         $deliveredYesterday = $this->order([
             'placed_at' => $yesterday,
             'status' => 'delivered',
@@ -84,7 +99,6 @@ class AdminDashboardMetricsTest extends TestCase
         ]);
         $this->addItem($deliveredYesterday, 1);
 
-        // Placed today but not delivered — order metrics only.
         $pending = $this->order([
             'placed_at' => $today,
             'status' => 'new',
@@ -93,7 +107,6 @@ class AdminDashboardMetricsTest extends TestCase
         ]);
         $this->addItem($pending, 10);
 
-        // Draft — ignored entirely.
         $draft = $this->order([
             'placed_at' => $today,
             'status' => Order::STATUS_DRAFT,
@@ -101,33 +114,57 @@ class AdminDashboardMetricsTest extends TestCase
         ]);
         $this->addItem($draft, 5);
 
-        // Delivered without delivery date — excluded from delivery metrics.
-        $missingDate = $this->order([
-            'placed_at' => $twoDaysAgo,
+        $previousMonthOrder = $this->order([
+            'placed_at' => $previousMonthDay,
             'status' => 'delivered',
-            'actual_delivery_date' => null,
-            'collected_amount' => 200,
+            'actual_delivery_date' => $previousMonthDay,
+            'collected_amount' => 700,
+            'total' => 800,
         ]);
-        $this->addItem($missingDate, 2);
+        $this->addItem($previousMonthOrder, 2);
 
-        $rows = AdminDashboardMetrics::dailyTotals(3, fresh: true);
+        $months = AdminDashboardMetrics::dailyTotals(fresh: true);
 
-        $this->assertCount(3, $rows);
-        $this->assertSame($today->toDateString(), $rows[0]['date']);
-        $this->assertSame(2, $rows[0]['order_qty']);
-        $this->assertSame(2090.0, $rows[0]['order_value']);
-        $this->assertSame(6, $rows[0]['delivery_qty']); // 2 + 4
-        $this->assertSame(1500.0, $rows[0]['delivery_value']); // 1200 + 300
+        $this->assertCount(2, $months);
+        $this->assertSame('Current month', $months[0]['label']);
+        $this->assertTrue($months[0]['is_current']);
+        $this->assertSame('2026-07', $months[0]['key']);
+        $this->assertSame('Previous month', $months[1]['label']);
+        $this->assertFalse($months[1]['is_current']);
+        $this->assertSame('2026-06', $months[1]['key']);
 
-        $this->assertSame($yesterday->toDateString(), $rows[1]['date']);
-        $this->assertSame(2, $rows[1]['order_qty']);
-        $this->assertSame(1430.0, $rows[1]['order_value']);
-        $this->assertSame(1, $rows[1]['delivery_qty']);
-        $this->assertSame(450.0, $rows[1]['delivery_value']);
+        $this->assertSame('Jul-29', $months[0]['days'][0]['label']);
+        $this->assertSame($today->toDateString(), $months[0]['days'][0]['date']);
+        $this->assertSame('Jun-01', $months[1]['days'][array_key_last($months[1]['days'])]['label']);
 
-        $this->assertSame($twoDaysAgo->toDateString(), $rows[2]['date']);
-        $this->assertSame(1, $rows[2]['order_qty']);
-        $this->assertSame(0, $rows[2]['delivery_qty']);
-        $this->assertSame(0.0, $rows[2]['delivery_value']);
+        $todayRow = $this->dayRow($months[0]['days'], $today->toDateString());
+        $yesterdayRow = $this->dayRow($months[0]['days'], $yesterday->toDateString());
+        $previousRow = $this->dayRow($months[1]['days'], $previousMonthDay->toDateString());
+
+        $this->assertNotNull($todayRow);
+        $this->assertSame(2, $todayRow['order_qty']);
+        $this->assertSame(2090.0, $todayRow['order_value']);
+        $this->assertSame(6, $todayRow['delivery_qty']);
+        $this->assertSame(1500.0, $todayRow['delivery_value']);
+
+        $this->assertNotNull($yesterdayRow);
+        $this->assertSame(2, $yesterdayRow['order_qty']);
+        $this->assertSame(1430.0, $yesterdayRow['order_value']);
+        $this->assertSame(1, $yesterdayRow['delivery_qty']);
+        $this->assertSame(450.0, $yesterdayRow['delivery_value']);
+
+        $this->assertNotNull($previousRow);
+        $this->assertSame('Jun-05', $previousRow['label']);
+        $this->assertSame(1, $previousRow['order_qty']);
+        $this->assertSame(800.0, $previousRow['order_value']);
+        $this->assertSame(2, $previousRow['delivery_qty']);
+        $this->assertSame(700.0, $previousRow['delivery_value']);
+
+        $this->assertSame(4, $months[0]['totals']['order_qty']);
+        $this->assertSame(1, $months[1]['totals']['order_qty']);
+        $this->assertCount(29, $months[0]['days']);
+        $this->assertCount(30, $months[1]['days']);
+
+        Carbon::setTestNow();
     }
 }

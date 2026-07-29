@@ -36,7 +36,7 @@ class AdminDashboard extends Component
             return view('livewire.admin.admin-dashboard', [
                 'segments' => [],
                 'segmentCounts' => [],
-                'dailyTotals' => [],
+                'monthlyTotals' => [],
                 'periodTotals' => [
                     'order_qty' => 0,
                     'order_value' => 0,
@@ -53,7 +53,7 @@ class AdminDashboard extends Component
         }
 
         $segmentCounts = AdminOrderSegment::counts();
-        $dailyTotals = AdminDashboardMetrics::dailyTotals();
+        $monthlyTotals = AdminDashboardMetrics::dailyTotals();
 
         $attentionService = app(AdminAttentionService::class);
         $attentionSummary = $attentionService->getDashboardSummary();
@@ -64,16 +64,16 @@ class AdminDashboard extends Component
             ->get();
 
         $periodTotals = [
-            'order_qty' => array_sum(array_column($dailyTotals, 'order_qty')),
-            'order_value' => array_sum(array_column($dailyTotals, 'order_value')),
-            'delivery_qty' => array_sum(array_column($dailyTotals, 'delivery_qty')),
-            'delivery_value' => array_sum(array_column($dailyTotals, 'delivery_value')),
+            'order_qty' => (int) array_sum(array_column(array_column($monthlyTotals, 'totals'), 'order_qty')),
+            'order_value' => (float) array_sum(array_column(array_column($monthlyTotals, 'totals'), 'order_value')),
+            'delivery_qty' => (int) array_sum(array_column(array_column($monthlyTotals, 'totals'), 'delivery_qty')),
+            'delivery_value' => (float) array_sum(array_column(array_column($monthlyTotals, 'totals'), 'delivery_value')),
         ];
 
         return view('livewire.admin.admin-dashboard', [
             'segments' => AdminOrderSegment::SEGMENTS,
             'segmentCounts' => $segmentCounts,
-            'dailyTotals' => $dailyTotals,
+            'monthlyTotals' => $monthlyTotals,
             'periodTotals' => $periodTotals,
             'attentionSummary' => $attentionSummary,
         ]);

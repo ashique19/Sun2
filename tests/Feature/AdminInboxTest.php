@@ -993,7 +993,33 @@ class AdminInboxTest extends TestCase
             ->assertSee('Recent greeting')
             ->assertDontSee('Ancient greeting')
             ->assertSee('load older messages')
+            ->assertSeeHtml('wire:click="loadOlderThreadHistory"')
+            // Control lives in the thread header, not a sticky empty bar in the scroll area.
+            ->assertDontSeeHtml('sticky top-0 z-10 -mx-1 mb-1')
             ->assertSet('threadHistoryExpanded', false);
+    }
+
+    #[Test]
+    public function load_older_control_is_hidden_when_thread_has_no_older_messages(): void
+    {
+        config(['channels.inbox.thread_lookback_hours' => 24]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Only recent',
+            'sent_at' => now()->subHour(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSee('Only recent')
+            ->assertDontSee('load older messages')
+            ->assertDontSee('Showing full conversation history')
+            ->assertDontSeeHtml('sticky top-0 z-10 -mx-1 mb-1');
     }
 
     #[Test]

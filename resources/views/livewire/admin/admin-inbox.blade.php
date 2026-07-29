@@ -442,6 +442,17 @@
                             <span wire:loading wire:target="syncFromFacebook">…</span>
                         </button>
                     </div>
+                    @if ($mappingField !== 'product')
+                        @if ($hasOlderMessages && ! $threadHistoryExpanded)
+                            <button type="button"
+                                wire:click="loadOlderThreadHistory"
+                                class="mt-1.5 text-[11px] font-medium text-[#8C8474] underline-offset-2 hover:text-[#C9A227] hover:underline">
+                                load older messages
+                            </button>
+                        @elseif ($threadHistoryExpanded)
+                            <p class="mt-1.5 text-[10px] text-[#8C8474]">Showing full conversation history</p>
+                        @endif
+                    @endif
                 </div>
 
                 @if ($orderPanelOpen && $selectedConversation->draftOrder)
@@ -506,20 +517,6 @@
                     }"
                     @scroll.passive="onScroll()"
                     class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3 xl:px-4 xl:py-4">
-                    <div class="sticky top-0 z-10 -mx-1 mb-1 bg-[#F7F3EA]/95 px-1 py-1 backdrop-blur xl:bg-white/95">
-                        @if ($mappingField !== 'product')
-                            @if ($hasOlderMessages && ! $threadHistoryExpanded)
-                                <button type="button"
-                                    wire:click="loadOlderThreadHistory"
-                                    class="w-full py-1 text-center text-[11px] font-medium text-[#8C8474] underline-offset-2 hover:text-[#C9A227] hover:underline">
-                                    load older messages
-                                </button>
-                            @elseif ($threadHistoryExpanded)
-                                <p class="py-1 text-center text-[10px] text-[#8C8474]">Showing full conversation history</p>
-                            @endif
-                        @endif
-                    </div>
-
                     @foreach ($selectedConversation->messages as $messageRow)
                         @php $isOutbound = $messageRow->direction === 'outbound'; @endphp
                         <div @class([

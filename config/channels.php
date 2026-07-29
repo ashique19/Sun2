@@ -7,8 +7,9 @@ return [
     | AI draft orders from channel conversations
     |--------------------------------------------------------------------------
     |
-    | Only recent inbound messages are parsed. Weak / empty parses do not
-    | create Draft by AI rows (historic Graph sync must not invent orders).
+    | Used when ChannelOrderDraftService parses a conversation on demand.
+    | Webhooks and Graph sync do not auto-create Draft by AI rows — staff
+    | start orders from Inbox. Weak / empty parses still create nothing.
     |
     */
 

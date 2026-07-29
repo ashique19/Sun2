@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
+use App\Models\Order;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
@@ -58,6 +59,49 @@ class SyncMessengerConversationsCommandTest extends TestCase
             'external_message_id' => 'm_cmd_1',
             'body' => 'Hello from cron sync',
         ]);
+    }
+
+    public function test_graph_sync_does_not_auto_create_ai_drafts(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'PAGE42',
+            'facebook.graph_version' => 'v25.0',
+            'gemini.api_key' => null,
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/PAGE42/conversations*' => Http::response([
+                'data' => [[
+                    'id' => 't_no_draft',
+                    'updated_time' => now()->toIso8601String(),
+                    'participants' => [
+                        'data' => [
+                            ['id' => 'PAGE42', 'name' => 'Sun Page'],
+                            ['id' => 'PSID_NO_DRAFT', 'name' => 'Orderish Customer'],
+                        ],
+                    ],
+                    'messages' => [
+                        'data' => [[
+                            'id' => 'm_no_draft',
+                            'message' => "Rahim\n01627237432\nHouse 12, Dhanmondi, Dhaka\nSilk Kurti",
+                            'from' => ['id' => 'PSID_NO_DRAFT', 'name' => 'Orderish Customer'],
+                            'created_time' => now()->subMinute()->toIso8601String(),
+                        ]],
+                    ],
+                ]],
+            ], 200),
+        ]);
+
+        $this->assertSame(0, Artisan::call('messenger:sync-conversations'));
+
+        $conversation = ChannelConversation::query()
+            ->where('external_user_id', 'PSID_NO_DRAFT')
+            ->first();
+
+        $this->assertNotNull($conversation);
+        $this->assertNull($conversation->draft_order_id);
+        $this->assertSame(0, Order::query()->where('status', Order::STATUS_DRAFT)->count());
     }
 
     public function test_http_sync_endpoint_requires_token_and_imports_threads(): void

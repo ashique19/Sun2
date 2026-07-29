@@ -16,7 +16,6 @@ class MessengerConversationSyncService
     public function __construct(
         private FacebookPageTokenService $tokens,
         private ChannelConversationService $conversations,
-        private ChannelOrderDraftService $drafts,
     ) {}
 
     /**
@@ -203,33 +202,16 @@ class MessengerConversationSyncService
             $messages = [];
         }
 
-        // Graph returns newest-first; store oldest-first for chronological drafts.
+        // Graph returns newest-first; store oldest-first for chronological Inbox.
         $messages = array_reverse($messages);
         $stored = 0;
-        $storedRecentInbound = false;
-        $lookbackHours = max(1, (int) config('channels.ai_draft.lookback_hours', 48));
-        $since = now()->subHours($lookbackHours);
 
         foreach ($messages as $message) {
             if (! is_array($message)) {
                 continue;
             }
 
-            $result = $this->storeGraphMessage($conversation, $message, $pageId);
-            $stored += $result['stored'];
-
-            if ($result['recent_inbound']
-                && $result['last']?->sent_at
-                && $result['last']->sent_at->greaterThanOrEqualTo($since)) {
-                $storedRecentInbound = true;
-            } elseif ($result['recent_inbound']) {
-                $storedRecentInbound = true;
-            }
-        }
-
-        // Inbox can keep historic messages; AI drafts only from recent inbound.
-        if ($storedRecentInbound) {
-            $this->drafts->syncDraftFromConversation($conversation->fresh(['messages']));
+            $stored += $this->storeGraphMessage($conversation, $message, $pageId);
         }
 
         return ['conversation' => true, 'messages' => $stored];
@@ -237,13 +219,12 @@ class MessengerConversationSyncService
 
     /**
      * @param  array<string, mixed>  $message
-     * @return array{stored: int, recent_inbound: bool, last: ?ChannelMessage}
      */
-    private function storeGraphMessage(ChannelConversation $conversation, array $message, string $pageId): array
+    private function storeGraphMessage(ChannelConversation $conversation, array $message, string $pageId): int
     {
         $mid = isset($message['id']) ? (string) $message['id'] : null;
         if ($mid === null || $mid === '') {
-            return ['stored' => 0, 'recent_inbound' => false, 'last' => null];
+            return 0;
         }
 
         $fromId = (string) data_get($message, 'from.id', '');
@@ -255,7 +236,7 @@ class MessengerConversationSyncService
         $attachments = $this->extractAttachments($message);
 
         if (($text === null || $text === '') && $attachments === []) {
-            return ['stored' => 0, 'recent_inbound' => false, 'last' => null];
+            return 0;
         }
 
         $sentAt = null;
@@ -269,14 +250,13 @@ class MessengerConversationSyncService
         $sentAt ??= now();
 
         $stored = 0;
-        $last = null;
 
         if ($attachments === []) {
             if ($this->messageExists($conversation->id, $mid)) {
-                return ['stored' => 0, 'recent_inbound' => false, 'last' => null];
+                return 0;
             }
 
-            $last = $this->conversations->storeMessage($conversation, [
+            $this->conversations->storeMessage($conversation, [
                 'external_message_id' => $mid,
                 'direction' => $direction,
                 'body' => $text !== '' ? $text : null,
@@ -285,39 +265,36 @@ class MessengerConversationSyncService
                 'raw_payload' => $message,
                 'sent_at' => $sentAt,
             ]);
-            $stored = 1;
-        } else {
-            $total = count($attachments);
-            foreach ($attachments as $index => $attachment) {
-                $externalId = $this->attachmentExternalId($mid, $index, $total);
 
-                // Legacy first-only ingest stored the first album image under the bare mid.
-                if ($total > 1 && $index === 0 && $this->messageExists($conversation->id, $mid)) {
-                    continue;
-                }
-
-                if ($this->messageExists($conversation->id, $externalId)) {
-                    continue;
-                }
-
-                $last = $this->conversations->storeMessage($conversation, [
-                    'external_message_id' => $externalId,
-                    'direction' => $direction,
-                    'body' => $index === 0 && $text !== null && $text !== '' ? $text : null,
-                    'media_url' => $attachment['url'],
-                    'media_mime' => $attachment['mime'],
-                    'raw_payload' => $message,
-                    'sent_at' => $sentAt,
-                ]);
-                $stored++;
-            }
+            return 1;
         }
 
-        return [
-            'stored' => $stored,
-            'recent_inbound' => $stored > 0 && $direction === ChannelMessage::DIRECTION_INBOUND,
-            'last' => $last,
-        ];
+        $total = count($attachments);
+        foreach ($attachments as $index => $attachment) {
+            $externalId = $this->attachmentExternalId($mid, $index, $total);
+
+            // Legacy first-only ingest stored the first album image under the bare mid.
+            if ($total > 1 && $index === 0 && $this->messageExists($conversation->id, $mid)) {
+                continue;
+            }
+
+            if ($this->messageExists($conversation->id, $externalId)) {
+                continue;
+            }
+
+            $this->conversations->storeMessage($conversation, [
+                'external_message_id' => $externalId,
+                'direction' => $direction,
+                'body' => $index === 0 && $text !== null && $text !== '' ? $text : null,
+                'media_url' => $attachment['url'],
+                'media_mime' => $attachment['mime'],
+                'raw_payload' => $message,
+                'sent_at' => $sentAt,
+            ]);
+            $stored++;
+        }
+
+        return $stored;
     }
 
     private function messageExists(int $conversationId, string $externalMessageId): bool

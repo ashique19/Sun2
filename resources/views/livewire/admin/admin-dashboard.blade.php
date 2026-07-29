@@ -7,7 +7,7 @@
 <div>
     <div class="mb-6 flex items-center justify-between gap-3">
         <h1 class="font-serif text-3xl font-semibold">Dashboard</h1>
-        <a href="{{ route('admin.orders.new') }}"
+        <a href="{{ route('admin.orders.create') }}"
             class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227] hover:bg-[#FAF6EF] hover:text-[#C9A227] transition"
             aria-label="Create order"
             title="Create order">

@@ -113,12 +113,18 @@ class AdminProductImageEditTest extends TestCase
         [$product, $image, $oldAbsolute] = $this->productWithImage();
         $oldPath = $image->path;
 
+        $jpeg = imagecreatetruecolor(640, 480);
+        $color = imagecolorallocate($jpeg, 20, 80, 140);
+        imagefill($jpeg, 0, 0, $color);
+        ob_start();
+        imagejpeg($jpeg, null, 85);
+        imagedestroy($jpeg);
+        $binary = ob_get_clean();
+
         Livewire::test(AdminProductEdit::class, ['product' => $product])
-            ->set('editedImage', UploadedFile::fake()->image('from-editor.jpg', 1000, 1000))
-            ->call('replaceEditedImage', $image->id)
+            ->call('replaceEditedImage', $image->id, base64_encode($binary), 'image/jpeg')
             ->assertHasNoErrors()
-            ->assertSet('message', 'Image updated.')
-            ->assertSet('editedImage', null);
+            ->assertSet('message', 'Image updated.');
 
         $image->refresh();
         $this->assertNotSame($oldPath, $image->path);
@@ -127,7 +133,7 @@ class AdminProductImageEditTest extends TestCase
     }
 
     #[Test]
-    public function replace_edited_image_requires_upload(): void
+    public function replace_edited_image_requires_image_payload(): void
     {
         $this->actingAs($this->adminUser());
         [$product, $image] = $this->productWithImage();
@@ -135,5 +141,24 @@ class AdminProductImageEditTest extends TestCase
         Livewire::test(AdminProductEdit::class, ['product' => $product])
             ->call('replaceEditedImage', $image->id)
             ->assertHasErrors(['editedImage']);
+    }
+
+    #[Test]
+    public function edit_modal_save_no_longer_uses_livewire_temp_upload_property(): void
+    {
+        $this->actingAs($this->adminUser());
+        [$product] = $this->productWithImage();
+
+        $html = Livewire::test(AdminProductEdit::class, ['product' => $product])->html();
+
+        $this->assertStringContainsString('saveSavedEdit()', $html);
+        $this->assertStringNotContainsString('wire:model="editedImage"', $html);
+        $this->assertStringNotContainsString("\$wire.upload(\n                        'editedImage'", $html);
+
+        $source = file_get_contents(resource_path('js/admin-product-images.js'));
+        $this->assertIsString($source);
+        $this->assertStringContainsString("replaceEditedImage(imageId, base64, 'image/jpeg')", $source);
+        $this->assertStringContainsString('canvasToSaveJpeg', $source);
+        $this->assertStringNotContainsString("\$wire.upload(\n                        'editedImage'", $source);
     }
 }

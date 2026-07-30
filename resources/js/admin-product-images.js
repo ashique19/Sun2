@@ -726,6 +726,71 @@ const registerProductImageAlpineData = () => {
             return output;
         },
 
+        arrayBufferToBase64(buffer) {
+            const bytes = new Uint8Array(buffer);
+            const chunkSize = 0x8000;
+            let binary = '';
+
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+            }
+
+            return btoa(binary);
+        },
+
+        async blobToBase64(blob) {
+            const buffer = await blob.arrayBuffer();
+
+            return this.arrayBufferToBase64(buffer);
+        },
+
+        async canvasToSaveJpeg(sourceCanvas) {
+            let width = sourceCanvas.width;
+            let height = sourceCanvas.height;
+            let quality = 0.88;
+            // Keep under Livewire payload.max_size (2MB) with headroom for the request envelope.
+            const maxChars = 1400000;
+
+            for (let attempt = 0; attempt < 8; attempt += 1) {
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+
+                const context = canvas.getContext('2d', { alpha: false });
+
+                if (! context) {
+                    throw new Error('Could not compress the edited image in this browser.');
+                }
+
+                context.fillStyle = '#ffffff';
+                context.fillRect(0, 0, width, height);
+                context.drawImage(sourceCanvas, 0, 0, width, height);
+
+                const blob = await new Promise((resolve, reject) => {
+                    canvas.toBlob(
+                        (result) => (result ? resolve(result) : reject(new Error('Could not encode the edited image.'))),
+                        'image/jpeg',
+                        quality,
+                    );
+                });
+
+                const base64 = await this.blobToBase64(blob);
+
+                if (base64.length <= maxChars) {
+                    return base64;
+                }
+
+                quality = Math.max(0.55, quality - 0.1);
+
+                if (attempt >= 2) {
+                    width = Math.max(720, Math.round(width * 0.8));
+                    height = Math.max(720, Math.round(height * 0.8));
+                }
+            }
+
+            throw new Error('Edited image is still too large to save. Try a tighter crop.');
+        },
+
         async saveSavedEdit() {
             if (! this.savedCropper || ! this.savedEditorId || this.savedSaving) {
                 return;
@@ -741,31 +806,25 @@ const registerProductImageAlpineData = () => {
                     throw new Error('Could not crop the image.');
                 }
 
-                const blob = await new Promise((resolve) => {
-                    output.toBlob(resolve, 'image/jpeg', 0.88);
-                });
-
-                if (! blob) {
-                    throw new Error('Could not encode the edited image.');
-                }
-
-                const file = new File([blob], `edited-${this.savedEditorId}.jpg`, {
-                    type: 'image/jpeg',
-                });
+                const base64 = await this.canvasToSaveJpeg(output);
                 const imageId = this.savedEditorId;
 
-                await new Promise((resolve, reject) => {
-                    this.$wire.upload(
-                        'editedImage',
-                        file,
-                        () => resolve(),
-                        (error) => reject(error instanceof Error ? error : new Error(String(error || 'Upload failed'))),
-                        () => {},
-                        () => reject(new Error('Upload cancelled')),
-                    );
-                });
+                // Avoid Livewire temp uploads from the teleported modal — they can hang forever.
+                await Promise.race([
+                    this.$wire.replaceEditedImage(imageId, base64, 'image/jpeg'),
+                    new Promise((_, reject) => {
+                        setTimeout(() => {
+                            reject(new Error('Save timed out after 60 seconds. Try again.'));
+                        }, 60000);
+                    }),
+                ]);
 
-                await this.$wire.replaceEditedImage(imageId);
+                const livewireMessage = this.firstLivewireError();
+
+                if (livewireMessage) {
+                    throw new Error(livewireMessage);
+                }
+
                 this.closeSavedEditor();
             } catch (error) {
                 console.error(error);

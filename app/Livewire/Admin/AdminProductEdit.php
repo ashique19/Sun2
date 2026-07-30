@@ -58,8 +58,6 @@ class AdminProductEdit extends Component
     /** @var array<int, TemporaryUploadedFile> */
     public array $newImages = [];
 
-    public mixed $editedImage = null;
-
     /** @var array<int, string> */
     public array $pendingAlts = [];
 
@@ -467,19 +465,76 @@ class AdminProductEdit extends Component
         $this->message = $count === 1 ? 'Image uploaded.' : "{$count} images uploaded.";
     }
 
-    public function replaceEditedImage(int $imageId, ProductImageService $images): void
-    {
+    public function replaceEditedImage(
+        int $imageId,
+        ProductImageService $images,
+        string $imageBase64 = '',
+        string $mime = 'image/jpeg',
+    ): void {
         $image = $this->findOwnedImage($imageId);
         $wasPrimary = $image->is_primary;
 
-        $this->validate([
-            'editedImage' => Fileinfo::storedImageRules(5120),
-        ]);
+        $imageBase64 = trim($imageBase64);
 
-        /** @var TemporaryUploadedFile|UploadedFile $file */
-        $file = $this->editedImage;
-        $images->replace($image, $file);
-        $this->editedImage = null;
+        if ($imageBase64 === '') {
+            $this->addError('editedImage', 'The edited image is required.');
+
+            return;
+        }
+
+        $binary = base64_decode($imageBase64, true);
+
+        if ($binary === false || $binary === '') {
+            $this->addError('editedImage', 'The edited image data is invalid.');
+
+            return;
+        }
+
+        if (strlen($binary) > 8 * 1024 * 1024) {
+            $this->addError('editedImage', 'The edited image must be 8 MB or smaller.');
+
+            return;
+        }
+
+        $mime = strtolower(trim($mime));
+
+        if (! in_array($mime, ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'], true)) {
+            $mime = 'image/jpeg';
+        }
+
+        $extension = match (true) {
+            str_contains($mime, 'png') => 'png',
+            str_contains($mime, 'webp') => 'webp',
+            default => 'jpg',
+        };
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'editimg_');
+
+        if ($tempPath === false) {
+            $this->addError('editedImage', 'Could not create a temporary file.');
+
+            return;
+        }
+
+        $pathWithExt = $tempPath.'.'.$extension;
+        rename($tempPath, $pathWithExt);
+        file_put_contents($pathWithExt, $binary);
+
+        try {
+            $upload = new UploadedFile(
+                $pathWithExt,
+                'edited-'.$imageId.'.'.$extension,
+                $mime === 'image/jpg' ? 'image/jpeg' : $mime,
+                null,
+                true,
+            );
+
+            $images->replace($image, $upload);
+        } finally {
+            if (is_file($pathWithExt)) {
+                @unlink($pathWithExt);
+            }
+        }
 
         $this->refreshImages();
         $this->syncImageAlts();

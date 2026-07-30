@@ -50,7 +50,8 @@ class AdminProductImageFileController
 
             return response($response->body(), 200, [
                 'Content-Type' => $contentType !== '' ? $contentType : 'image/jpeg',
-                'Cache-Control' => 'private, max-age=120',
+                'Cache-Control' => 'private, no-store, no-cache, must-revalidate',
+                'Pragma' => 'no-cache',
                 'X-Content-Type-Options' => 'nosniff',
             ]);
         } catch (Throwable) {
@@ -78,7 +79,9 @@ class AdminProductImageFileController
 
         return response((string) file_get_contents($absolute), 200, [
             'Content-Type' => $contentType !== '' ? $contentType : 'image/jpeg',
-            'Cache-Control' => 'private, max-age=120',
+            // Admin editor/gallery must never keep a stale bytes cache after replace.
+            'Cache-Control' => 'private, no-store, no-cache, must-revalidate',
+            'Pragma' => 'no-cache',
             'X-Content-Type-Options' => 'nosniff',
         ]);
     }

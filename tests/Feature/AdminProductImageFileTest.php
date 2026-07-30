@@ -47,6 +47,7 @@ class AdminProductImageFileTest extends TestCase
 
         $response->assertOk();
         $this->assertStringStartsWith('image/', (string) $response->headers->get('Content-Type'));
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
         $this->assertNotSame('', $response->getContent());
     }
 

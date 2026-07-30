@@ -57,7 +57,7 @@ class AdminProductImageEditTest extends TestCase
 
         Livewire::test(AdminProductEdit::class, ['product' => $product])
             ->assertSeeHtml('openSavedEditor('.$image->id.',')
-            ->assertSeeHtml('products\\/'.$product->id.'\\/images\\/'.$image->id.'\\/raw')
+            ->assertSeeHtml('products/'.$product->id.'/images/'.$image->id.'/raw')
             ->assertSeeHtml('data-saved-crop-image')
             ->assertSeeHtml('data-saved-editor')
             ->assertSeeHtml('aria-label="Edit image"')
@@ -121,20 +121,28 @@ class AdminProductImageEditTest extends TestCase
         imagedestroy($jpeg);
         $binary = ob_get_clean();
 
-        Livewire::test(AdminProductEdit::class, ['product' => $product])
+        $component = Livewire::test(AdminProductEdit::class, ['product' => $product])
             ->call('replaceEditedImage', $image->id, base64_encode($binary), 'image/jpeg')
             ->assertHasNoErrors()
-            ->assertSet('message', 'Image updated.');
+            ->assertSet('message', 'Image updated.')
+            ->assertSet('imagesEpoch', 1);
 
         $image->refresh();
         $this->assertNotSame($oldPath, $image->path);
         $this->assertFileDoesNotExist($oldAbsolute);
         $this->assertFileExists(public_path(ltrim($image->path, '/')));
 
-        $html = Livewire::test(AdminProductEdit::class, ['product' => $product->fresh(['images'])])->html();
-        $this->assertStringContainsString('product-image-'.$image->id.'-'.md5($image->path), $html);
-        $this->assertStringContainsString($image->path, $html);
-        $this->assertStringNotContainsString('sundoritoma.com/public/'.$image->path, $html);
+        $html = $component->html();
+        $this->assertStringContainsString('product-image-'.$image->id.'-'.md5($image->path).'-1', $html);
+        $this->assertStringContainsString('products/'.$product->id.'/images/'.$image->id.'/raw', $html);
+        $this->assertStringContainsString('?v=', $html);
+        $this->assertStringNotContainsString('sundoritoma.com/public/', $html);
+
+        $returned = $component->effects['returns'][0] ?? null;
+        $this->assertIsArray($returned);
+        $this->assertSame($image->id, $returned['id']);
+        $this->assertSame($image->path, $returned['path']);
+        $this->assertStringContainsString('/images/'.$image->id.'/raw', $returned['url']);
     }
 
     #[Test]
@@ -164,6 +172,7 @@ class AdminProductImageEditTest extends TestCase
         $this->assertIsString($source);
         $this->assertStringContainsString("replaceEditedImage(imageId, base64, 'image/jpeg')", $source);
         $this->assertStringContainsString('canvasToSaveJpeg', $source);
+        $this->assertStringContainsString('returnedUrl', $source);
         $this->assertStringContainsString("updatedMessage !== 'Image updated.'", $source);
         $this->assertStringNotContainsString("\$wire.upload(\n                        'editedImage'", $source);
     }

@@ -810,7 +810,7 @@ const registerProductImageAlpineData = () => {
                 const imageId = this.savedEditorId;
 
                 // Avoid Livewire temp uploads from the teleported modal — they can hang forever.
-                await Promise.race([
+                const result = await Promise.race([
                     this.$wire.replaceEditedImage(imageId, base64, 'image/jpeg'),
                     new Promise((_, reject) => {
                         setTimeout(() => {
@@ -825,9 +825,11 @@ const registerProductImageAlpineData = () => {
                     throw new Error(livewireMessage);
                 }
 
-                const updatedMessage = String(this.$wire.get?.('message') ?? '').trim();
+                const updatedMessage = String(this.$wire.message ?? this.$wire.get?.('message') ?? '').trim();
+                const returnedUrl = typeof result === 'object' && result !== null ? String(result.url || '') : '';
+                const returnedPath = typeof result === 'object' && result !== null ? String(result.path || '') : '';
 
-                if (updatedMessage !== 'Image updated.') {
+                if (! returnedUrl || ! returnedPath || updatedMessage !== 'Image updated.') {
                     throw new Error(updatedMessage || 'Image was not updated. Please try again.');
                 }
 

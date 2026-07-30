@@ -118,18 +118,18 @@
                     <h3 class="text-sm font-medium mb-3">Saved images</h3>
                     <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                         @foreach ($product->images as $image)
-                            <li wire:key="product-image-{{ $image->id }}-{{ md5((string) $image->path) }}" class="rounded-xl border border-[#EFE7D6] p-3 space-y-3">
+                            @php
+                                $galleryPreviewUrl = route('admin.products.images.raw', [$product, $image])
+                                    .'?v='.rawurlencode(md5((string) $image->path).'-'.$imagesEpoch);
+                            @endphp
+                            <li wire:key="product-image-{{ $image->id }}-{{ md5((string) $image->path) }}-{{ $imagesEpoch }}" class="rounded-xl border border-[#EFE7D6] p-3 space-y-3">
                                 <div class="relative aspect-square rounded-lg overflow-hidden bg-[#FAF6EF]">
-                                    @if ($url = \App\Support\StorefrontAssets::url($image->path))
-                                        <img src="{{ $url }}" alt="{{ $image->alt }}" class="w-full h-full object-cover" loading="eager">
-                                    @else
-                                        <div class="w-full h-full flex items-center justify-center text-xs text-[#8C8474]">No preview</div>
-                                    @endif
+                                    <img src="{{ $galleryPreviewUrl }}" alt="{{ $image->alt }}" class="w-full h-full object-cover" loading="eager">
                                     @if ($image->is_primary)
                                         <span class="absolute top-2 left-2 rounded bg-[#C9A227] px-2 py-0.5 text-[10px] font-semibold text-white">Primary</span>
                                     @endif
                                     <button type="button"
-                                        @click.stop="openSavedEditor({{ $image->id }}, @js(route('admin.products.images.raw', [$product, $image])))"
+                                        @click.stop="openSavedEditor({{ $image->id }}, @js($galleryPreviewUrl))"
                                         class="absolute top-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-[#1E1E1E] shadow-sm ring-1 ring-[#E0D6C2] hover:bg-[#FAF6EF]"
                                         title="Edit image"
                                         aria-label="Edit image">

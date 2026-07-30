@@ -92,6 +92,8 @@ class AdminProductEdit extends Component
 
     public int $pricedImageFont = 56;
 
+    public int $imagesEpoch = 0;
+
     public function mount(?Product $product = null): void
     {
         if (! $product?->exists) {
@@ -469,16 +471,17 @@ class AdminProductEdit extends Component
         int $imageId,
         string $imageBase64 = '',
         string $mime = 'image/jpeg',
-    ): void {
+    ): array {
         $image = $this->findOwnedImage($imageId);
         $wasPrimary = $image->is_primary;
+        $oldPath = (string) $image->path;
 
         $imageBase64 = trim($imageBase64);
 
         if ($imageBase64 === '') {
             $this->addError('editedImage', 'The edited image is required.');
 
-            return;
+            return [];
         }
 
         $binary = base64_decode($imageBase64, true);
@@ -486,13 +489,13 @@ class AdminProductEdit extends Component
         if ($binary === false || $binary === '') {
             $this->addError('editedImage', 'The edited image data is invalid.');
 
-            return;
+            return [];
         }
 
         if (strlen($binary) > 8 * 1024 * 1024) {
             $this->addError('editedImage', 'The edited image must be 8 MB or smaller.');
 
-            return;
+            return [];
         }
 
         $mime = strtolower(trim($mime));
@@ -512,7 +515,7 @@ class AdminProductEdit extends Component
         if ($tempPath === false) {
             $this->addError('editedImage', 'Could not create a temporary file.');
 
-            return;
+            return [];
         }
 
         $pathWithExt = $tempPath.'.'.$extension;
@@ -536,15 +539,33 @@ class AdminProductEdit extends Component
         }
 
         $image->refresh();
+
+        if ($image->path === $oldPath) {
+            $this->addError('editedImage', 'The image file was not replaced. Please try again.');
+
+            return [];
+        }
+
+        $this->imagesEpoch++;
         $this->refreshImages();
         $this->syncImageAlts();
 
         if ($wasPrimary && $this->product?->priced_image_path) {
             app(ProductPricedImageService::class)->generate($this->product->fresh());
             $this->product->refresh();
+            $this->refreshImages();
         }
 
         $this->message = 'Image updated.';
+
+        $previewUrl = route('admin.products.images.raw', [$this->product, $image])
+            .'?v='.rawurlencode(md5((string) $image->path).'-'.$this->imagesEpoch);
+
+        return [
+            'id' => $image->id,
+            'path' => $image->path,
+            'url' => $previewUrl,
+        ];
     }
 
     /**
@@ -730,6 +751,12 @@ class AdminProductEdit extends Component
 
     private function refreshImages(): void
     {
+        if (! $this->product) {
+            return;
+        }
+
+        $this->product->unsetRelation('images');
+        $this->product->unsetRelation('listingImage');
         $this->product->load(['images' => fn ($q) => $q->orderBy('sort_order')]);
     }
 

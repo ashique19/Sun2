@@ -3,8 +3,11 @@
 namespace App\Livewire\Admin;
 
 use App\Models\AdminAttentionItem;
+use App\Models\Expense;
+use App\Models\ExpenseRecurringReminder;
 use App\Models\Order;
 use App\Services\Admin\AdminAttentionService;
+use App\Services\Admin\ExpenseAssistantService;
 use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderPackagingCost;
 use App\Support\AdminAccess;
@@ -26,6 +29,19 @@ class AdminDashboard extends Component
 
     public ?string $courierChargeMessage = null;
 
+    public ?string $expenseAssistantMessage = null;
+
+    /** @var array<int|string, string> */
+    public array $expenseReminderAmounts = [];
+
+    public bool $showEveningExpenseForm = false;
+
+    public string $eveningExpenseTitle = '';
+
+    public string $eveningExpenseAmount = '';
+
+    public string $eveningExpenseCategory = 'other';
+
     public function mount(): void
     {
         if (AdminAccess::isModeratorOnly()) {
@@ -39,6 +55,105 @@ class AdminDashboard extends Component
         app(AdminAttentionService::class)->markAsResolved($item, 'Resolved from dashboard');
 
         $this->dispatch('attention-item-resolved');
+    }
+
+    public function recordExpenseReminder(int $reminderId, ExpenseAssistantService $assistant): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $reminder = ExpenseRecurringReminder::query()->whereKey($reminderId)->where('is_active', true)->firstOrFail();
+        $amountKey = 'expenseReminderAmounts.'.$reminderId;
+
+        if (! array_key_exists($reminderId, $this->expenseReminderAmounts) || $this->expenseReminderAmounts[$reminderId] === '') {
+            $this->expenseReminderAmounts[$reminderId] = $reminder->default_amount !== null
+                ? (string) (int) round((float) $reminder->default_amount)
+                : '';
+        }
+
+        $this->validate([
+            $amountKey => ['required', 'numeric', 'min:0.01'],
+        ], [], [
+            $amountKey => 'amount',
+        ]);
+
+        $assistant->recordPayment(
+            reminder: $reminder,
+            amount: (float) $this->expenseReminderAmounts[$reminderId],
+            user: auth()->user(),
+        );
+
+        unset($this->expenseReminderAmounts[$reminderId]);
+        $this->expenseAssistantMessage = $reminder->title.' recorded.';
+    }
+
+    public function markExpenseReminderChecked(int $reminderId, ExpenseAssistantService $assistant): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $reminder = ExpenseRecurringReminder::query()
+            ->whereKey($reminderId)
+            ->where('prompt_type', ExpenseRecurringReminder::PROMPT_CHECK)
+            ->where('is_active', true)
+            ->firstOrFail();
+
+        $assistant->markChecked($reminder, auth()->user());
+        $this->expenseAssistantMessage = $reminder->title.' marked as checked.';
+    }
+
+    public function skipExpenseReminder(int $reminderId, ExpenseAssistantService $assistant): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $reminder = ExpenseRecurringReminder::query()->whereKey($reminderId)->where('is_active', true)->firstOrFail();
+        $assistant->skipReminder($reminder, auth()->user());
+        unset($this->expenseReminderAmounts[$reminderId]);
+        $this->expenseAssistantMessage = $reminder->title.' skipped for this month.';
+    }
+
+    public function openEveningExpenseForm(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+        $this->showEveningExpenseForm = true;
+        $this->eveningExpenseTitle = '';
+        $this->eveningExpenseAmount = '';
+        $this->eveningExpenseCategory = 'other';
+    }
+
+    public function dismissEveningExpensePrompt(ExpenseAssistantService $assistant): void
+    {
+        AdminAccess::ensureStaffAdmin();
+        $assistant->dismissEvening(auth()->user());
+        $this->showEveningExpenseForm = false;
+        $this->expenseAssistantMessage = 'Evening reminder dismissed for tonight.';
+    }
+
+    public function saveEveningExpense(ExpenseAssistantService $assistant): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $validated = $this->validate([
+            'eveningExpenseTitle' => ['required', 'string', 'max:160'],
+            'eveningExpenseAmount' => ['required', 'numeric', 'min:0.01'],
+            'eveningExpenseCategory' => ['required', 'in:'.implode(',', array_keys(Expense::CATEGORIES))],
+        ], [], [
+            'eveningExpenseTitle' => 'title',
+            'eveningExpenseAmount' => 'amount',
+            'eveningExpenseCategory' => 'category',
+        ]);
+
+        $assistant->recordOneOff(
+            title: $validated['eveningExpenseTitle'],
+            amount: (float) $validated['eveningExpenseAmount'],
+            category: $validated['eveningExpenseCategory'],
+            user: auth()->user(),
+        );
+        $assistant->dismissEvening(auth()->user());
+
+        $this->showEveningExpenseForm = false;
+        $this->eveningExpenseTitle = '';
+        $this->eveningExpenseAmount = '';
+        $this->eveningExpenseCategory = 'other';
+        $this->expenseAssistantMessage = 'Expense recorded.';
     }
 
     public function applyCourierChargePreset(int $orderId, int $amount): void
@@ -127,11 +242,25 @@ class AdminDashboard extends Component
                 'unconfirmedCourierCharges' => collect(),
                 'courierChargeAreaLabels' => [],
                 'courierChargeQuickAmounts' => [],
+                'dueExpenseReminders' => collect(),
+                'showEveningExpensePrompt' => false,
+                'expenseCategories' => Expense::CATEGORIES,
             ]);
         }
 
         $segmentCounts = AdminOrderSegment::counts();
         $monthlyTotals = AdminDashboardMetrics::dailyTotals();
+        $expenseAssistant = app(ExpenseAssistantService::class);
+        $dueExpenseReminders = $expenseAssistant->dueReminders(auth()->user());
+        $showEveningExpensePrompt = $expenseAssistant->shouldShowEveningPrompt(auth()->user());
+
+        foreach ($dueExpenseReminders as $reminder) {
+            if (! array_key_exists($reminder->id, $this->expenseReminderAmounts)) {
+                $this->expenseReminderAmounts[$reminder->id] = $reminder->default_amount !== null
+                    ? (string) (int) round((float) $reminder->default_amount)
+                    : '';
+            }
+        }
 
         $attentionService = app(AdminAttentionService::class);
         $attentionSummary = $attentionService->getDashboardSummary();
@@ -186,6 +315,9 @@ class AdminDashboard extends Component
             'unconfirmedCourierCharges' => $unconfirmedCourierCharges,
             'courierChargeAreaLabels' => $courierChargeAreaLabels,
             'courierChargeQuickAmounts' => $courierChargeQuickAmounts,
+            'dueExpenseReminders' => $dueExpenseReminders,
+            'showEveningExpensePrompt' => $showEveningExpensePrompt,
+            'expenseCategories' => Expense::CATEGORIES,
         ]);
     }
 }

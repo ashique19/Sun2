@@ -104,6 +104,150 @@
         </div>
     @endif
 
+    @if ($expenseAssistantMessage)
+        <div class="mb-4 rounded-lg bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">{{ $expenseAssistantMessage }}</div>
+    @endif
+
+    @if (($dueExpenseReminders ?? collect())->isNotEmpty() || ($showEveningExpensePrompt ?? false))
+        <div class="mb-6 rounded-xl border border-[#C9A227]/40 bg-white overflow-hidden">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#EFE7D6] px-4 py-3">
+                <div class="min-w-0">
+                    <h2 class="text-sm font-semibold text-[#1E1E1E]">Expense assistant</h2>
+                    <p class="text-xs text-[#8C8474]">Gentle reminders so monthly costs don’t get forgotten.</p>
+                </div>
+                <a href="{{ route('admin.expenses') }}" wire:navigate
+                    class="shrink-0 text-xs font-medium text-[#C9A227] hover:text-[#B8921F]">
+                    Manage due dates →
+                </a>
+            </div>
+
+            @if (($dueExpenseReminders ?? collect())->isNotEmpty())
+                <div class="divide-y divide-[#EFE7D6]">
+                    @foreach ($dueExpenseReminders as $reminder)
+                        <div class="px-4 py-3" wire:key="expense-reminder-{{ $reminder->id }}">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <h3 class="text-sm font-medium text-[#1E1E1E]">
+                                            @if ($reminder->prompt_type === 'check')
+                                                {{ $reminder->title }} checked?
+                                            @else
+                                                {{ $reminder->title }} paid?
+                                            @endif
+                                        </h3>
+                                        <span class="rounded bg-[#FAF6EF] px-1.5 py-0.5 text-[10px] font-medium text-[#6B6459]">
+                                            Due day {{ $reminder->due_day }}
+                                        </span>
+                                        <span class="rounded bg-[#FAF6EF] px-1.5 py-0.5 text-[10px] font-medium text-[#6B6459]">
+                                            {{ $reminder->categoryLabel() }}
+                                        </span>
+                                    </div>
+                                    @if ($reminder->notes)
+                                        <p class="mt-1 text-xs text-[#8C8474]">{{ $reminder->notes }}</p>
+                                    @endif
+                                </div>
+                                <button type="button"
+                                    wire:click="skipExpenseReminder({{ $reminder->id }})"
+                                    class="shrink-0 text-xs font-medium text-[#8C8474] hover:text-[#1E1E1E]">
+                                    Skip this month
+                                </button>
+                            </div>
+
+                            <div class="mt-3 flex flex-wrap items-end gap-2">
+                                @if ($reminder->prompt_type === 'check')
+                                    <button type="button"
+                                        wire:click="markExpenseReminderChecked({{ $reminder->id }})"
+                                        class="rounded-lg border border-[#E0D6C2] bg-[#FAF6EF] px-3 py-1.5 text-xs font-medium text-[#6B6459] hover:border-[#C9A227]">
+                                        Checked — no top-up
+                                    </button>
+                                @endif
+                                <div>
+                                    <label class="mb-1 block text-[10px] font-medium uppercase tracking-wide text-[#8C8474]">
+                                        {{ $reminder->prompt_type === 'check' ? 'Top-up amount' : 'Amount' }} (৳)
+                                    </label>
+                                    <input type="number" min="0.01" step="1"
+                                        wire:model="expenseReminderAmounts.{{ $reminder->id }}"
+                                        class="w-28 rounded-lg border border-[#E0D6C2] px-2.5 py-1.5 text-sm tabular-nums focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                </div>
+                                <button type="button"
+                                    wire:click="recordExpenseReminder({{ $reminder->id }})"
+                                    class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#B8921F]">
+                                    {{ $reminder->prompt_type === 'check' ? 'Record top-up' : 'Yes, record it' }}
+                                </button>
+                                @error('expenseReminderAmounts.'.$reminder->id)
+                                    <p class="w-full text-xs text-rose-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+
+            @if ($showEveningExpensePrompt ?? false)
+                <div @class([
+                    'px-4 py-3',
+                    'border-t border-[#EFE7D6]' => ($dueExpenseReminders ?? collect())->isNotEmpty(),
+                ])>
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h3 class="text-sm font-medium text-[#1E1E1E]">Any cost needs to be recorded?</h3>
+                            <p class="mt-0.5 text-xs text-[#8C8474]">Shown between 8pm and 1am — one-off expenses from a busy day.</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            @unless ($showEveningExpenseForm)
+                                <button type="button" wire:click="openEveningExpenseForm"
+                                    class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#B8921F]">
+                                    Yes
+                                </button>
+                                <button type="button" wire:click="dismissEveningExpensePrompt"
+                                    class="rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-xs font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
+                                    Not tonight
+                                </button>
+                            @endunless
+                        </div>
+                    </div>
+
+                    @if ($showEveningExpenseForm)
+                        <form wire:submit="saveEveningExpense" class="mt-3 grid gap-2 sm:grid-cols-4">
+                            <div class="sm:col-span-2">
+                                <label class="mb-1 block text-[10px] font-medium uppercase tracking-wide text-[#8C8474]">Title</label>
+                                <input type="text" wire:model="eveningExpenseTitle" placeholder="e.g. Office supplies"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-2.5 py-1.5 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                @error('eveningExpenseTitle') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-[10px] font-medium uppercase tracking-wide text-[#8C8474]">Amount (৳)</label>
+                                <input type="number" min="0.01" step="1" wire:model="eveningExpenseAmount"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-2.5 py-1.5 text-sm tabular-nums focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                @error('eveningExpenseAmount') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-[10px] font-medium uppercase tracking-wide text-[#8C8474]">Type</label>
+                                <select wire:model="eveningExpenseCategory"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-2.5 py-1.5 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                    @foreach ($expenseCategories as $value => $label)
+                                        <option value="{{ $value }}">{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                                @error('eveningExpenseCategory') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                            </div>
+                            <div class="flex flex-wrap items-end gap-2 sm:col-span-4">
+                                <button type="submit"
+                                    class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#B8921F]">
+                                    Save expense
+                                </button>
+                                <button type="button" wire:click="dismissEveningExpensePrompt"
+                                    class="rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-xs font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
+                                    Not tonight
+                                </button>
+                            </div>
+                        </form>
+                    @endif
+                </div>
+            @endif
+        </div>
+    @endif
+
     @if ($courierChargeMessage)
         <div class="mb-4 rounded-lg bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">{{ $courierChargeMessage }}</div>
     @endif

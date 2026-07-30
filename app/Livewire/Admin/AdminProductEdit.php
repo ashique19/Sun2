@@ -240,18 +240,20 @@ class AdminProductEdit extends Component
     public function generateAiImage(GeminiClient $gemini): void
     {
         $this->aiGenerateError = null;
+
+        if (! $this->product) {
+            $this->ensureProductSaved();
+        }
+
+        // Validate outside the catch-all so Livewire can surface field errors.
+        $this->validate([
+            'aiRawImage' => Fileinfo::storedImageRules(8192, true),
+            'aiPrompt' => ['required', 'string', 'min:3', 'max:4000'],
+        ]);
+
         $this->aiGenerating = true;
 
         try {
-            if (! $this->product) {
-                $this->ensureProductSaved();
-            }
-
-            $this->validate([
-                'aiRawImage' => Fileinfo::storedImageRules(8192, true),
-                'aiPrompt' => ['required', 'string', 'min:3', 'max:4000'],
-            ]);
-
             if (! $gemini->isConfigured()) {
                 throw new RuntimeException('Gemini API key is not configured (GEMINI_API_KEY).');
             }

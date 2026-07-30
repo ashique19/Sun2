@@ -269,9 +269,48 @@ const registerProductImageAlpineData = () => {
         aiEditorSrc: '',
         aiAllowOutsideClose: false,
         aiCropper: null,
+        rawUploading: false,
+        rawUploadError: null,
 
-        syncFromWire() {
-            // Livewire re-renders keep Alpine state for the open editor only.
+        async uploadRawPhoto(event) {
+            const file = event.target.files?.[0] ?? null;
+            event.target.value = '';
+            this.rawUploadError = null;
+
+            if (! file) {
+                return;
+            }
+
+            const looksLikeImage = (file.type || '').startsWith('image/')
+                || /\.(jpe?g|png|webp|gif)$/i.test(file.name);
+
+            if (! looksLikeImage) {
+                this.rawUploadError = 'Use a JPG, PNG, or WebP photo.';
+
+                return;
+            }
+
+            this.rawUploading = true;
+
+            try {
+                await new Promise((resolve, reject) => {
+                    this.$wire.upload(
+                        'aiRawImage',
+                        file,
+                        () => resolve(),
+                        (error) => reject(error instanceof Error ? error : new Error(String(error || 'Upload failed'))),
+                        () => {},
+                        () => reject(new Error('Upload cancelled')),
+                    );
+                });
+            } catch (error) {
+                console.error(error);
+                this.rawUploadError = error?.message && error.message !== 'Upload failed'
+                    ? error.message
+                    : 'Could not upload the raw photo. Try again.';
+            } finally {
+                this.rawUploading = false;
+            }
         },
 
         openAiEditor(id) {

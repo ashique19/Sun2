@@ -48,6 +48,28 @@ class AdminProductAiImageGenerateTest extends TestCase
     }
 
     #[Test]
+    public function generate_requires_raw_image_and_surfaces_validation_error(): void
+    {
+        config(['gemini.api_key' => 'test-key']);
+
+        $gemini = Mockery::mock(GeminiClient::class);
+        $gemini->shouldReceive('isConfigured')->andReturn(true);
+        $gemini->shouldReceive('generateImage')->never();
+        $this->app->instance(GeminiClient::class, $gemini);
+
+        $this->actingAs($this->adminUser());
+        $product = $this->product();
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->call('openAiGenerateModal')
+            ->set('aiPrompt', 'Clean white background jewelry photo')
+            ->call('generateAiImage')
+            ->assertHasErrors(['aiRawImage' => 'required'])
+            ->assertSet('aiGenerateError', null)
+            ->assertCount('aiCandidates', 0);
+    }
+
+    #[Test]
     public function generate_appends_session_candidate_and_remembers_prompt(): void
     {
         config(['gemini.api_key' => 'test-key']);

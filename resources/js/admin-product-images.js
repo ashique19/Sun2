@@ -304,15 +304,78 @@ const registerProductImageAlpineData = () => {
             return btoa(binary);
         },
 
+        // Keep base64 under Livewire payload budget (config/livewire.php payload.max_size).
+        maxRawBase64Chars() {
+            return 900000;
+        },
+
+        async blobToBase64(blob) {
+            const buffer = await blob.arrayBuffer();
+
+            return this.arrayBufferToBase64(buffer);
+        },
+
+        async canvasToConstrainedJpeg(sourceCanvas, onProgress) {
+            let width = sourceCanvas.width;
+            let height = sourceCanvas.height;
+            let quality = 0.8;
+            const maxChars = this.maxRawBase64Chars();
+
+            for (let attempt = 0; attempt < 8; attempt += 1) {
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+
+                const context = canvas.getContext('2d', { alpha: false });
+
+                if (! context) {
+                    throw new Error('Could not compress the raw photo in this browser.');
+                }
+
+                context.fillStyle = '#ffffff';
+                context.fillRect(0, 0, width, height);
+                context.drawImage(sourceCanvas, 0, 0, width, height);
+
+                const blob = await new Promise((resolve, reject) => {
+                    canvas.toBlob(
+                        (result) => (result ? resolve(result) : reject(new Error('Could not compress the raw photo.'))),
+                        'image/jpeg',
+                        quality,
+                    );
+                });
+
+                const base64 = await this.blobToBase64(blob);
+                onProgress(70 + Math.min(25, attempt * 4));
+
+                if (base64.length <= maxChars) {
+                    return base64;
+                }
+
+                quality = Math.max(0.45, quality - 0.12);
+
+                if (attempt >= 2) {
+                    width = Math.max(640, Math.round(width * 0.75));
+                    height = Math.max(640, Math.round(height * 0.75));
+                }
+            }
+
+            throw new Error('Photo is still too large after compression. Try a smaller image.');
+        },
+
         async fileToPreparedImage(file, onProgress) {
             onProgress(8);
 
             if (typeof createImageBitmap !== 'function') {
                 const buffer = await file.arrayBuffer();
+                const base64 = this.arrayBufferToBase64(buffer);
                 onProgress(90);
 
+                if (base64.length > this.maxRawBase64Chars()) {
+                    throw new Error('Photo is too large for AI generate in this browser. Try a smaller JPG.');
+                }
+
                 return {
-                    base64: this.arrayBufferToBase64(buffer),
+                    base64,
                     mime: file.type || 'image/jpeg',
                     name: file.name || 'raw-photo.jpg',
                 };
@@ -321,7 +384,7 @@ const registerProductImageAlpineData = () => {
             const bitmap = await createImageBitmap(file);
             onProgress(30);
 
-            const maxDim = 2048;
+            const maxDim = 1600;
             const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
             const width = Math.max(1, Math.round(bitmap.width * scale));
             const height = Math.max(1, Math.round(bitmap.height * scale));
@@ -340,22 +403,13 @@ const registerProductImageAlpineData = () => {
             context.fillRect(0, 0, width, height);
             context.drawImage(bitmap, 0, 0, width, height);
             bitmap.close();
-            onProgress(65);
+            onProgress(55);
 
-            const blob = await new Promise((resolve, reject) => {
-                canvas.toBlob(
-                    (result) => (result ? resolve(result) : reject(new Error('Could not compress the raw photo.'))),
-                    'image/jpeg',
-                    0.88,
-                );
-            });
-            onProgress(85);
-
-            const buffer = await blob.arrayBuffer();
+            const base64 = await this.canvasToConstrainedJpeg(canvas, onProgress);
             onProgress(100);
 
             return {
-                base64: this.arrayBufferToBase64(buffer),
+                base64,
                 mime: 'image/jpeg',
                 name: (file.name || 'raw-photo').replace(/\.\w+$/, '') + '.jpg',
             };

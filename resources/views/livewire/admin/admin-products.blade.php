@@ -50,7 +50,7 @@
 
     <div class="rounded-xl border border-[#EFE7D6] bg-white overflow-hidden">
         <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="w-full min-w-[72rem] text-sm">
                 <thead class="bg-[#FAF6EF] text-left text-[#6B6459]">
                     <tr>
                         <th class="px-4 py-3 font-medium text-center">Post</th>
@@ -63,8 +63,8 @@
                         <th class="px-4 py-3 font-medium">Max disc.</th>
                         <th class="px-4 py-3 font-medium">Stock</th>
                         <th class="px-4 py-3 font-medium">Published</th>
-                        <th class="px-4 py-3 font-medium">Priced image</th>
-                        <th class="px-4 py-3 font-medium"></th>
+                        <th class="px-4 py-3 font-medium min-w-[9rem]">Priced image</th>
+                        <th class="px-4 py-3 font-medium min-w-[9rem]"></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#E7DFCF]">
@@ -175,8 +175,8 @@
                                     {{ $product->is_published ? 'Yes' : 'No' }}
                                 </button>
                             </td>
-                            <td class="px-4 py-3">
-                                <div class="flex items-center gap-2">
+                            <td class="px-4 py-3 align-middle">
+                                <div class="flex flex-col items-start gap-2 min-w-[7.5rem]">
                                     @if ($product->priced_image_path)
                                         <a href="{{ route('admin.products.edit', $product) }}" wire:navigate
                                             class="shrink-0"
@@ -198,14 +198,16 @@
                                     </button>
                                 </div>
                             </td>
-                            <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
-                                <a href="{{ route('admin.products.show', $product) }}" wire:navigate
-                                    class="text-[#6B6459] hover:text-[#C9A227] hover:underline">View</a>
-                                <a href="{{ route('admin.products.edit', $product) }}" wire:navigate class="text-[#C9A227] hover:underline">Edit</a>
-                                <button type="button"
-                                    wire:click="delete({{ $product->id }})"
-                                    wire:confirm="Delete “{{ $product->name }}”? This cannot be undone."
-                                    class="text-rose-600 hover:underline">Delete</button>
+                            <td class="px-4 py-3 text-right align-middle whitespace-nowrap">
+                                <div class="inline-flex items-center justify-end gap-3">
+                                    <a href="{{ route('admin.products.show', $product) }}" wire:navigate
+                                        class="text-[#6B6459] hover:text-[#C9A227] hover:underline">View</a>
+                                    <a href="{{ route('admin.products.edit', $product) }}" wire:navigate class="text-[#C9A227] hover:underline">Edit</a>
+                                    <button type="button"
+                                        wire:click="delete({{ $product->id }})"
+                                        wire:confirm="Delete “{{ $product->name }}”? This cannot be undone."
+                                        class="text-rose-600 hover:underline">Delete</button>
+                                </div>
                             </td>
                         </tr>
                     @empty

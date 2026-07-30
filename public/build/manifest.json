@@ -70,7 +70,7 @@
     "name": "rolldown-runtime"
   },
   "resources/css/app.css": {
-    "file": "assets/app-DU6CBWWE.css",
+    "file": "assets/app-DBbaMWYR.css",
     "name": "app",
     "names": [
       "app.css"
@@ -89,7 +89,7 @@
     ]
   },
   "resources/js/app.js": {
-    "file": "assets/app-C4XSA8Jf.js",
+    "file": "assets/app-poHmkrMZ.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true,
@@ -97,7 +97,7 @@
       "_rolldown-runtime-Bh1tDfsg.js"
     ],
     "css": [
-      "assets/app-DU6CBWWE.css"
+      "assets/app-DBbaMWYR.css"
     ]
   },
   "resources/js/inbox-image-edit.js": {

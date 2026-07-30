@@ -122,7 +122,30 @@ class ProductPricedImageTest extends TestCase
             ->assertSeeHtml('alt="Priced image for List Product"')
             ->assertSeeHtml($product->priced_image_path)
             ->assertSeeHtml('h-[7.5rem] w-[7.5rem]')
-            ->assertSee('Rebuild');
+            ->assertSeeHtml('min-w-[72rem]')
+            ->assertSeeHtml('flex flex-col items-start gap-2')
+            ->assertSeeHtml('inline-flex items-center justify-end gap-3')
+            ->assertSee('Rebuild')
+            ->assertSee('View');
+    }
+
+    #[Test]
+    public function products_list_actions_do_not_share_cell_with_rebuild_button(): void
+    {
+        $this->actingAs($this->adminUser());
+        $product = $this->productWithPrimaryImage('Overlap Check');
+
+        Livewire::test(AdminProducts::class)
+            ->call('generatePricedImage', $product->id)
+            ->assertHasNoErrors();
+
+        $html = Livewire::test(AdminProducts::class)->html();
+
+        $this->assertStringContainsString('min-w-[72rem]', $html);
+        $this->assertMatchesRegularExpression(
+            '/flex flex-col items-start gap-2[\s\S]*?Rebuild[\s\S]*?<\/div>\s*<\/td>\s*<td[^>]*>\s*<div class="inline-flex items-center justify-end gap-3">\s*<a[^>]*>View<\/a>/',
+            $html
+        );
     }
 
     #[Test]

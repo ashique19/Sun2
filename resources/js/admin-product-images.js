@@ -17,6 +17,8 @@ const registerProductImageAlpineData = () => {
         allowOutsideClose: false,
         cropper: null,
         uploading: false,
+        uploadProgress: 0,
+        uploadStatus: '',
         uploadError: null,
 
         addFiles(event) {
@@ -200,10 +202,13 @@ const registerProductImageAlpineData = () => {
             }
 
             this.uploading = true;
+            this.uploadProgress = 0;
+            this.uploadStatus = 'Preparing…';
             this.uploadError = null;
 
             const files = this.queue.map((item) => item.file);
             const alts = this.queue.map((item) => item.alt);
+            const total = files.length;
 
             try {
                 // Persist product first so create does not race with temp uploads.
@@ -211,17 +216,29 @@ const registerProductImageAlpineData = () => {
 
                 await this.$wire.set('pendingAlts', alts);
 
+                this.uploadStatus = total === 1
+                    ? 'Uploading image…'
+                    : `Uploading ${total} images…`;
+
                 await new Promise((resolve, reject) => {
                     this.$wire.uploadMultiple(
                         'newImages',
                         files,
                         () => resolve(),
                         (error) => reject(error instanceof Error ? error : new Error(String(error || 'Upload failed'))),
-                        () => {},
+                        (event) => {
+                            const progress = Number(event?.detail?.progress ?? 0);
+                            this.uploadProgress = Math.max(0, Math.min(100, Number.isFinite(progress) ? progress : 0));
+                        },
                         () => reject(new Error('Upload cancelled')),
                         false, // replace property — do not append stale temp files
                     );
                 });
+
+                this.uploadProgress = 100;
+                this.uploadStatus = total === 1
+                    ? 'Saving image…'
+                    : `Saving ${total} images…`;
 
                 await this.$wire.uploadImages();
 
@@ -241,6 +258,8 @@ const registerProductImageAlpineData = () => {
                         : 'Upload failed. Check product details (name, price, slug) and try again.');
             } finally {
                 this.uploading = false;
+                this.uploadProgress = 0;
+                this.uploadStatus = '';
             }
         },
 

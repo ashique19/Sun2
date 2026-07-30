@@ -269,7 +269,19 @@
                                 <span x-show="!uploading" x-text="`Upload ${queue.length} image(s)`"></span>
                                 <span x-show="uploading" x-cloak>Uploading…</span>
                             </button>
-                            <p class="text-xs text-[#8C8474]" x-text="`${queue.length} image(s) ready — or use Save Product below`"></p>
+                            <p class="text-xs text-[#8C8474]" x-show="!uploading" x-text="`${queue.length} image(s) ready — or use Save Product below`"></p>
+                        </div>
+                        <div x-show="uploading" x-cloak class="max-w-md space-y-1.5">
+                            <div class="flex items-center justify-between gap-2 text-xs text-[#8C8474]">
+                                <span x-text="uploadStatus || 'Uploading…'"></span>
+                                <span class="tabular-nums" x-text="`${uploadProgress}%`"></span>
+                            </div>
+                            <div class="h-1.5 overflow-hidden rounded-full bg-[#EFE7D6]" role="progressbar"
+                                :aria-valuenow="uploadProgress" aria-valuemin="0" aria-valuemax="100"
+                                :aria-label="uploadStatus || 'Upload progress'">
+                                <div class="h-full rounded-full bg-[#C9A227] transition-[width] duration-150"
+                                    :style="`width: ${uploadProgress}%`"></div>
+                            </div>
                         </div>
                         <p x-show="uploadError" x-text="uploadError" class="text-xs text-rose-600" x-cloak></p>
                     </div>

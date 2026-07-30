@@ -13,39 +13,43 @@ class AdminDashboardMetrics
 
     public const DAILY_CACHE_TTL = 60;
 
+    public const RANGE_LAST7 = 'last7';
+
+    public const RANGE_CURRENT = 'current';
+
+    public const RANGE_PREVIOUS = 'previous';
+
     /**
-     * Current and previous calendar months of daily order metrics.
+     * Month tiles + last-7-days / month day breakdowns for the dashboard.
      *
-     * @return list<array{
-     *     key: string,
-     *     label: string,
-     *     is_current: bool,
-     *     days: list<array{
-     *         date: string,
+     * @return array{
+     *     months: list<array{
+     *         key: string,
+     *         range: string,
      *         label: string,
-     *         order_qty: int,
-     *         order_value: float,
-     *         delivery_qty: int,
-     *         delivery_value: float
+     *         is_current: bool,
+     *         days: list<array{date: string, label: string, order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}>,
+     *         totals: array{order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}
      *     }>,
-     *     totals: array{
-     *         order_qty: int,
-     *         order_value: float,
-     *         delivery_qty: int,
-     *         delivery_value: float
+     *     last7: array{
+     *         key: string,
+     *         range: string,
+     *         label: string,
+     *         days: list<array{date: string, label: string, order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}>,
+     *         totals: array{order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}
      *     }
-     * }>
+     * }
      */
-    public static function dailyTotals(bool $fresh = false): array
+    public static function orderActivity(bool $fresh = false): array
     {
-        $cacheKey = self::DAILY_CACHE_KEY.':months:'.now()->toDateString();
+        $cacheKey = self::DAILY_CACHE_KEY.':activity:'.now()->toDateString();
 
         if ($fresh) {
             Cache::forget($cacheKey);
         }
 
         return Cache::remember($cacheKey, self::DAILY_CACHE_TTL, function () {
-            return self::computeMonthlyGroupedTotals();
+            return self::computeOrderActivity();
         });
     }
 
@@ -54,31 +58,56 @@ class AdminDashboardMetrics
      *     key: string,
      *     label: string,
      *     is_current: bool,
-     *     days: list<array{
-     *         date: string,
-     *         label: string,
-     *         order_qty: int,
-     *         order_value: float,
-     *         delivery_qty: int,
-     *         delivery_value: float
-     *     }>,
-     *     totals: array{
-     *         order_qty: int,
-     *         order_value: float,
-     *         delivery_qty: int,
-     *         delivery_value: float
-     *     }
+     *     days: list<array{date: string, label: string, order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}>,
+     *     totals: array{order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}
      * }>
      */
-    private static function computeMonthlyGroupedTotals(): array
+    public static function dailyTotals(bool $fresh = false): array
+    {
+        $activity = self::orderActivity($fresh);
+
+        return array_map(static function (array $month): array {
+            return [
+                'key' => $month['key'],
+                'label' => $month['label'],
+                'is_current' => $month['is_current'],
+                'days' => $month['days'],
+                'totals' => $month['totals'],
+            ];
+        }, $activity['months']);
+    }
+
+    /**
+     * @return array{
+     *     months: list<array{
+     *         key: string,
+     *         range: string,
+     *         label: string,
+     *         is_current: bool,
+     *         days: list<array{date: string, label: string, order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}>,
+     *         totals: array{order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}
+     *     }>,
+     *     last7: array{
+     *         key: string,
+     *         range: string,
+     *         label: string,
+     *         days: list<array{date: string, label: string, order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}>,
+     *         totals: array{order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}
+     *     }
+     * }
+     */
+    private static function computeOrderActivity(): array
     {
         $today = now()->startOfDay();
         $currentMonthStart = $today->copy()->startOfMonth();
         $previousMonthStart = $today->copy()->subMonthNoOverflow()->startOfMonth();
         $previousMonthEnd = $currentMonthStart->copy()->subDay();
+        $last7Start = $today->copy()->subDays(6);
+
+        $queryFrom = $previousMonthStart->lt($last7Start) ? $previousMonthStart : $last7Start;
 
         $ordersByDay = Order::query()
-            ->where('placed_at', '>=', $previousMonthStart)
+            ->where('placed_at', '>=', $queryFrom)
             ->where('status', '!=', Order::STATUS_DRAFT)
             ->selectRaw('DATE(placed_at) as day')
             ->selectRaw('COUNT(*) as order_qty')
@@ -90,7 +119,7 @@ class AdminDashboardMetrics
         // Delivery Qty / Collected Value: among orders placed that day, those now delivered.
         $deliveredByDay = Order::query()
             ->where('status', 'delivered')
-            ->where('placed_at', '>=', $previousMonthStart)
+            ->where('placed_at', '>=', $queryFrom)
             ->selectRaw('DATE(placed_at) as day')
             ->selectRaw('COALESCE(SUM(collected_amount), 0) as delivery_value')
             ->groupByRaw('DATE(placed_at)')
@@ -100,7 +129,7 @@ class AdminDashboardMetrics
         $deliveredItemsByDay = DB::table('order_products')
             ->join('orders', 'orders.id', '=', 'order_products.order_id')
             ->where('orders.status', 'delivered')
-            ->where('orders.placed_at', '>=', $previousMonthStart)
+            ->where('orders.placed_at', '>=', $queryFrom)
             ->selectRaw('DATE(orders.placed_at) as day')
             ->selectRaw('COALESCE(SUM(CASE WHEN order_products.quantity > COALESCE(order_products.returned_quantity, 0) THEN order_products.quantity - COALESCE(order_products.returned_quantity, 0) ELSE 0 END), 0) as delivery_qty')
             ->groupByRaw('DATE(orders.placed_at)')
@@ -143,21 +172,33 @@ class AdminDashboardMetrics
 
         $currentDays = $buildDays($currentMonthStart, $today);
         $previousDays = $buildDays($previousMonthStart, $previousMonthEnd);
+        $last7Days = $buildDays($last7Start, $today);
 
         return [
-            [
-                'key' => $currentMonthStart->format('Y-m'),
-                'label' => 'Current month',
-                'is_current' => true,
-                'days' => $currentDays,
-                'totals' => $sumDays($currentDays),
+            'months' => [
+                [
+                    'key' => $currentMonthStart->format('Y-m'),
+                    'range' => self::RANGE_CURRENT,
+                    'label' => 'This month',
+                    'is_current' => true,
+                    'days' => $currentDays,
+                    'totals' => $sumDays($currentDays),
+                ],
+                [
+                    'key' => $previousMonthStart->format('Y-m'),
+                    'range' => self::RANGE_PREVIOUS,
+                    'label' => 'Last month',
+                    'is_current' => false,
+                    'days' => $previousDays,
+                    'totals' => $sumDays($previousDays),
+                ],
             ],
-            [
-                'key' => $previousMonthStart->format('Y-m'),
-                'label' => 'Previous month',
-                'is_current' => false,
-                'days' => $previousDays,
-                'totals' => $sumDays($previousDays),
+            'last7' => [
+                'key' => 'last7',
+                'range' => self::RANGE_LAST7,
+                'label' => 'Last 7 days',
+                'days' => $last7Days,
+                'totals' => $sumDays($last7Days),
             ],
         ];
     }

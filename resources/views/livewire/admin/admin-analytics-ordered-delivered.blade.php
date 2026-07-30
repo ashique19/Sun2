@@ -74,7 +74,7 @@
                                 'values' => array_column($ovdMonths, 'ordered_count'),
                             ],
                             [
-                                'label' => 'Delivered',
+                                'label' => 'Delivered (of that cohort)',
                                 'color' => '#2F6F4E',
                                 'values' => array_column($ovdMonths, 'delivered_count'),
                             ],
@@ -94,7 +94,7 @@
                                 'values' => array_column($ovdMonths, 'ordered_value'),
                             ],
                             [
-                                'label' => 'Delivered (collected)',
+                                'label' => 'Collected (of that cohort)',
                                 'color' => '#C45C26',
                                 'values' => array_column($ovdMonths, 'delivered_value'),
                             ],
@@ -109,11 +109,11 @@
                 <table class="w-full min-w-[36rem] text-xs sm:text-sm">
                     <thead class="text-left text-[#8C8474]">
                         <tr class="border-b border-[#EFE7D6]">
-                            <th class="py-2 pr-3 font-medium">Month</th>
+                            <th class="py-2 pr-3 font-medium">Month placed</th>
                             <th class="py-2 pr-3 font-medium text-right">Ordered #</th>
                             <th class="py-2 pr-3 font-medium text-right">Ordered ৳</th>
                             <th class="py-2 pr-3 font-medium text-right">Delivered #</th>
-                            <th class="py-2 font-medium text-right">Delivered ৳</th>
+                            <th class="py-2 font-medium text-right">Collected ৳</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-[#F0EBE0]">

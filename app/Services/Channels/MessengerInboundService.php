@@ -13,7 +13,6 @@ class MessengerInboundService
 {
     public function __construct(
         private ChannelConversationService $conversations,
-        private ChannelOrderDraftService $drafts,
     ) {}
 
     /**
@@ -143,8 +142,6 @@ class MessengerInboundService
                 ]);
             }
         }
-
-        $this->drafts->syncDraftFromConversation($conversation->fresh(['messages']));
     }
 
     /**

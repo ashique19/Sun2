@@ -33,8 +33,9 @@ class ChannelOrderDraftService
     /**
      * Parse recent conversation messages and upsert a staff-only AI draft when useful.
      *
-     * Returns null when there is no recent order signal (historic/weak chats must not
-     * create Draft by AI rows). Existing drafts are left unchanged on weak parses.
+     * Not called automatically from webhooks or Graph sync — Inbox staff drafts and
+     * explicit parse paths own order creation. Returns null when there is no useful
+     * order signal; existing drafts are left unchanged on weak parses.
      */
     public function syncDraftFromConversation(ChannelConversation $conversation): ?Order
     {

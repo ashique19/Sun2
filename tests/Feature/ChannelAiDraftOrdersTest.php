@@ -132,7 +132,7 @@ class ChannelAiDraftOrdersTest extends TestCase
             ->assertOk();
     }
 
-    public function test_messenger_webhook_stores_message_and_creates_ai_draft(): void
+    public function test_messenger_webhook_stores_message_without_auto_creating_ai_draft(): void
     {
         config([
             'facebook.messenger.enabled' => true,
@@ -176,17 +176,10 @@ class ChannelAiDraftOrdersTest extends TestCase
 
         $this->assertNotNull($conversation);
         $this->assertSame(1, $conversation->messages()->count());
-        $this->assertNotNull($conversation->draft_order_id);
+        $this->assertNull($conversation->draft_order_id);
+        $this->assertSame(0, Order::query()->where('status', Order::STATUS_DRAFT)->count());
 
-        $draft = Order::query()->find($conversation->draft_order_id);
-        $this->assertNotNull($draft);
-        $this->assertTrue($draft->isAiDraft());
-        $this->assertSame(Order::PLACED_VIA_MESSENGER, $draft->placed_via);
-        $this->assertSame('01627237432', $draft->phone);
-        $this->assertSame($conversation->id, $draft->channel_conversation_id);
-        $this->assertStringContainsString('Draft by AI', (string) $draft->admin_note);
-
-        // Duplicate mid is idempotent — still one message, one draft.
+        // Duplicate mid is idempotent — still one message, still no draft.
         $this->call(
             'POST',
             '/api/webhooks/messenger',
@@ -198,7 +191,7 @@ class ChannelAiDraftOrdersTest extends TestCase
         )->assertOk();
 
         $this->assertSame(1, ChannelMessage::query()->count());
-        $this->assertSame(1, Order::query()->where('status', Order::STATUS_DRAFT)->count());
+        $this->assertSame(0, Order::query()->where('status', Order::STATUS_DRAFT)->count());
         $this->assertSame(25, $product->fresh()->stock_quantity);
     }
 

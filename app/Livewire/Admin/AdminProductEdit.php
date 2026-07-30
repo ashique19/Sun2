@@ -235,7 +235,7 @@ class AdminProductEdit extends Component
         $this->message = 'Priced image deleted.';
     }
 
-    public function generateAiImage(GeminiClient $gemini, string $rawImageBase64 = '', string $rawImageMime = 'image/jpeg'): void
+    public function generateAiImage(GeminiClient $gemini, string $rawImageBase64 = '', string $rawImageMime = 'image/jpeg'): array
     {
         $this->aiGenerateError = null;
 
@@ -252,7 +252,7 @@ class AdminProductEdit extends Component
         if ($rawImageBase64 === '') {
             $this->addError('aiRawImage', 'The raw photo is required.');
 
-            return;
+            return ['ok' => false, 'error' => 'The raw photo is required.'];
         }
 
         $binary = base64_decode($rawImageBase64, true);
@@ -260,13 +260,13 @@ class AdminProductEdit extends Component
         if ($binary === false || $binary === '') {
             $this->addError('aiRawImage', 'The raw photo data is invalid.');
 
-            return;
+            return ['ok' => false, 'error' => 'The raw photo data is invalid.'];
         }
 
         if (strlen($binary) > 8 * 1024 * 1024) {
             $this->addError('aiRawImage', 'The raw photo must be 8 MB or smaller.');
 
-            return;
+            return ['ok' => false, 'error' => 'The raw photo must be 8 MB or smaller.'];
         }
 
         $mime = strtolower(trim($rawImageMime));
@@ -292,16 +292,22 @@ class AdminProductEdit extends Component
                 ],
             ], 'You enhance product photos for a Bangladeshi jewelry e-commerce catalog. Preserve the product identity from the reference photo. Return one polished product image.');
 
+            $candidateId = (string) Str::uuid();
+
             $this->aiCandidates[] = [
-                'id' => (string) Str::uuid(),
+                'id' => $candidateId,
                 'mime' => $result['mime'],
                 'base64' => $result['base64'],
                 'name' => 'ai-generated-'.(count($this->aiCandidates) + 1).'.jpg',
             ];
 
             AiImagePrompt::remember(trim($this->aiPrompt), Auth::id());
+
+            return ['ok' => true, 'id' => $candidateId];
         } catch (Throwable $e) {
             $this->aiGenerateError = $e->getMessage();
+
+            return ['ok' => false, 'error' => $e->getMessage()];
         } finally {
             $this->aiGenerating = false;
         }

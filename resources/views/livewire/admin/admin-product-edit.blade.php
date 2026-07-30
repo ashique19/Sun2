@@ -627,24 +627,22 @@
                                 <p class="text-xs text-[#8C8474]">Each Generate adds another candidate to this session list.</p>
                             </div>
 
-                            <div x-show="generating || generateProgress > 0" x-cloak class="max-w-md space-y-1">
-                                <div class="flex items-center justify-between gap-2 text-xs text-[#8C8474]">
+                            <div x-show="generating || generateProgress > 0 || generateError" x-cloak class="max-w-md space-y-1">
+                                <div class="flex items-center justify-between gap-2 text-xs"
+                                    :class="generateError ? 'text-rose-600' : 'text-[#8C8474]'">
                                     <span x-text="generateStatus || 'Working…'"></span>
                                     <span class="tabular-nums" x-text="`${generateProgress}%`"></span>
                                 </div>
                                 <div class="h-1.5 overflow-hidden rounded-full bg-[#EFE7D6]" role="progressbar"
                                     :aria-valuenow="generateProgress" aria-valuemin="0" aria-valuemax="100"
                                     aria-label="AI generation progress">
-                                    <div class="h-full rounded-full bg-[#C9A227] transition-[width] duration-150"
+                                    <div class="h-full rounded-full transition-[width] duration-150"
+                                        :class="generateError ? 'bg-rose-400' : 'bg-[#C9A227]'"
                                         :style="`width: ${generateProgress}%`"></div>
                                 </div>
                             </div>
 
                             <p x-show="generateError" x-text="generateError" x-cloak class="text-sm text-rose-600"></p>
-
-                            @if ($aiGenerateError)
-                                <p class="text-sm text-rose-600">{{ $aiGenerateError }}</p>
-                            @endif
                         </div>
 
                             @if (count($aiCandidates) > 0)

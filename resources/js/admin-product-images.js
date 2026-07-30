@@ -1221,7 +1221,7 @@ const registerProductImageAlpineData = () => {
             const timeoutMs = 120000;
 
             try {
-                await Promise.race([
+                const result = await Promise.race([
                     this.$wire.generateAiImage(this.rawImageBase64, this.rawImageMime),
                     new Promise((_, reject) => {
                         setTimeout(() => {
@@ -1230,18 +1230,20 @@ const registerProductImageAlpineData = () => {
                     }),
                 ]);
 
-                this.generateProgress = 100;
-                this.generateStatus = 'Finishing…';
-
                 await this.$nextTick();
 
-                const serverError = this.firstGenerateError();
+                const serverError = (result && typeof result === 'object' && result.ok === false)
+                    ? String(result.error || 'Generation failed.')
+                    : (this.firstGenerateError() || null);
 
-                if (serverError) {
-                    this.generateError = serverError;
+                if (serverError || ! result || result.ok !== true) {
+                    this.generateError = serverError || 'Generation failed. Try again.';
                     this.generateStatus = 'Generation failed';
+                    this.generateProgress = 0;
                 } else {
+                    this.generateProgress = 100;
                     this.generateStatus = 'Image ready';
+                    this.generateError = null;
                 }
             } catch (error) {
                 console.error(error);

@@ -304,8 +304,8 @@ class GeminiClient
                     'status' => $status,
                 ]);
 
-                if ($this->isAuthFailure($status, $body)) {
-                    // Bad / revoked key — skip other models for this key.
+                if ($this->isAuthFailure($status, $body) || $this->isKeyLevelQuotaFailure($status, $body)) {
+                    // Bad key or key/project quota — skip other models for this key.
                     $skipRemainingModelsForKey = true;
 
                     continue;
@@ -320,11 +320,36 @@ class GeminiClient
             }
         }
 
-        $summary = $errors === []
-            ? "{$label} failed for all configured keys/models."
-            : "{$label} failed after {$attempt} attempt(s): ".$this->truncateError(implode(' | ', array_unique($errors)), 420);
+        throw new RuntimeException($this->summarizeFailoverFailure($label, $attempt, $errors));
+    }
 
-        throw new RuntimeException($summary);
+    /**
+     * @param  list<string>  $errors
+     */
+    private function summarizeFailoverFailure(string $label, int $attempt, array $errors): string
+    {
+        $unique = array_values(array_unique(array_filter($errors)));
+
+        if ($unique === []) {
+            return "{$label} failed for all configured keys/models.";
+        }
+
+        $joined = strtolower(implode(' ', $unique));
+
+        if (
+            str_contains($joined, 'quota')
+            || str_contains($joined, 'rate limit')
+            || str_contains($joined, 'resource_exhausted')
+            || str_contains($joined, 'resource exhausted')
+            || str_contains($joined, 'billing')
+        ) {
+            return 'Gemini image quota exceeded for all configured API keys. '
+                .'Enable billing in Google AI Studio, wait for the daily reset, '
+                .'or add another key via GEMINI_API_KEYS. '
+                .'See https://ai.google.dev/gemini-api/docs/rate-limits';
+        }
+
+        return "{$label} failed after {$attempt} attempt(s): ".$this->truncateError(implode(' | ', $unique), 420);
     }
 
     private function responseContainsInlineImage(Response $response): bool
@@ -363,6 +388,24 @@ class GeminiClient
             || str_contains($haystack, 'invalid api key')
             || str_contains($haystack, 'permission denied')
             || str_contains($haystack, 'api_key_invalid');
+    }
+
+    /**
+     * Project/key billing or daily quota — remaining models on this key will not help.
+     */
+    private function isKeyLevelQuotaFailure(int $status, string $body): bool
+    {
+        if ($status !== 429) {
+            return false;
+        }
+
+        $haystack = strtolower($body);
+
+        return str_contains($haystack, 'check your plan and billing')
+            || str_contains($haystack, 'billing details')
+            || str_contains($haystack, 'exceeded your current quota')
+            || str_contains($haystack, 'free_tier')
+            || str_contains($haystack, 'limit: 0');
     }
 
     private function shouldTryNext(int $status, string $body): bool

@@ -236,6 +236,12 @@ class AdminProductAiImageGenerateTest extends TestCase
             ->call('generateAiImage', $this->tinyPngBase64(), 'image/png')
             ->assertSet('aiGenerateError', 'Gemini image API error (503): temporary unavailable')
             ->assertCount('aiCandidates', 0);
+
+        $source = file_get_contents(resource_path('js/admin-product-images.js'));
+        $this->assertIsString($source);
+        $this->assertStringContainsString('result.ok === false', $source);
+        $this->assertStringContainsString("generateStatus = 'Image ready'", $source);
+        $this->assertStringContainsString("generateStatus = 'Generation failed'", $source);
     }
 
     #[Test]

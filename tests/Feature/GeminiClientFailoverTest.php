@@ -238,8 +238,56 @@ class GeminiClientFailoverTest extends TestCase
             app(GeminiClient::class)->generateImage([['text' => 'x']]);
             $this->fail('Expected RuntimeException was not thrown.');
         } catch (\RuntimeException $e) {
-            $this->assertStringContainsString('failed after 2 attempt(s)', $e->getMessage());
-            $this->assertStringContainsString('429', $e->getMessage());
+            $this->assertStringContainsString('Gemini image quota exceeded', $e->getMessage());
+            $this->assertStringContainsString('GEMINI_API_KEYS', $e->getMessage());
         }
+    }
+
+    #[Test]
+    public function generate_image_skips_remaining_models_on_billing_quota_for_a_key(): void
+    {
+        config([
+            'gemini.api_key' => 'key-1',
+            'gemini.api_keys' => ['key-2'],
+            'gemini.image_model' => 'model-a',
+            'gemini.image_models' => ['model-a', 'model-b'],
+            'gemini.base_url' => 'https://example.test/v1beta',
+        ]);
+
+        $calls = [];
+
+        Http::fake(function (Request $request) use (&$calls) {
+            parse_str(parse_url($request->url(), PHP_URL_QUERY) ?: '', $query);
+            $apiKey = $query['key'] ?? '';
+            $model = str_contains($request->url(), '/models/model-a:') ? 'model-a' : 'model-b';
+            $calls[] = $apiKey.'|'.$model;
+
+            if ($apiKey === 'key-1') {
+                return Http::response([
+                    'error' => [
+                        'message' => 'You exceeded your current quota, please check your plan and billing details.',
+                    ],
+                ], 429);
+            }
+
+            return Http::response([
+                'candidates' => [[
+                    'content' => [
+                        'parts' => [[
+                            'inlineData' => [
+                                'mimeType' => 'image/png',
+                                'data' => $this->tinyPngBase64(),
+                            ],
+                        ]],
+                    ],
+                ]],
+            ], 200);
+        });
+
+        $result = app(GeminiClient::class)->generateImage([['text' => 'x']]);
+
+        $this->assertSame($this->tinyPngBase64(), $result['base64']);
+        // key-1 model-a only (billing quota skips model-b), then key-2 model-a succeeds
+        $this->assertSame(['key-1|model-a', 'key-2|model-a'], $calls);
     }
 }

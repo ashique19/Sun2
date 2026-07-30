@@ -70,7 +70,7 @@
     "name": "rolldown-runtime"
   },
   "resources/css/app.css": {
-    "file": "assets/app-D26ymQAA.css",
+    "file": "assets/app-DMNcwvT4.css",
     "name": "app",
     "names": [
       "app.css"
@@ -89,7 +89,7 @@
     ]
   },
   "resources/js/app.js": {
-    "file": "assets/app-BVPfvDyq.js",
+    "file": "assets/app-Cw8b6R81.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true,
@@ -97,7 +97,17 @@
       "_rolldown-runtime-Bh1tDfsg.js"
     ],
     "css": [
-      "assets/app-D26ymQAA.css"
+      "assets/app-DMNcwvT4.css"
+    ]
+  },
+  "resources/js/inbox-image-edit.js": {
+    "file": "assets/inbox-image-edit-DpbLZolJ.js",
+    "name": "inbox-image-edit",
+    "src": "resources/js/inbox-image-edit.js",
+    "isEntry": true,
+    "imports": [
+      "_rolldown-runtime-Bh1tDfsg.js",
+      "_cropper-D8EYC47y.js"
     ]
   },
   "resources/js/inbox-product-crop.js": {

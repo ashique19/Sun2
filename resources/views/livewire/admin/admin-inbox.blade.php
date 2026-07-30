@@ -603,7 +603,7 @@
                                 @if ($messageRow->isImageAttachment())
                                     {{-- Not an <a>: mobile long-press / right-click on links opens the browser menu instead of map fields. --}}
                                     <div
-                                        class="mt-2 overflow-hidden rounded-xl {{ $isOutbound ? 'bg-black/10' : 'bg-[#FAF6EF]' }}"
+                                        class="relative mt-2 overflow-hidden rounded-xl {{ $isOutbound ? 'bg-black/10' : 'bg-[#FAF6EF]' }}"
                                         @contextmenu.prevent.stop="openMenu()"
                                         @touchstart.passive="startLongPress($event)"
                                         @touchend.passive="cancelLongPress()"
@@ -615,6 +615,30 @@
                                             class="max-h-72 w-full object-contain select-none"
                                             draggable="false"
                                             loading="lazy">
+                                        @if (! $isOutbound)
+                                            <div class="absolute right-2 top-2 flex gap-1.5">
+                                                <button type="button"
+                                                    wire:click="openImageEdit({{ $messageRow->id }})"
+                                                    @click.stop
+                                                    title="Edit &amp; send"
+                                                    aria-label="Edit image and send"
+                                                    class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white shadow hover:bg-black/70">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                                                        <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z"/>
+                                                    </svg>
+                                                </button>
+                                                <button type="button"
+                                                    wire:click="openPricedImageSend({{ $messageRow->id }})"
+                                                    @click.stop
+                                                    title="Send priced product image"
+                                                    aria-label="Search products and send priced image"
+                                                    class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white shadow hover:bg-black/70">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                                                        <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        @endif
                                     </div>
                                     <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                                         <a href="{{ route('admin.inbox.media', $messageRow) }}" target="_blank" rel="noopener"
@@ -932,6 +956,212 @@
                                     @endforeach
                                 </div>
                             @endif
+                        </div>
+                    </div>
+                </div>
+            @endteleport
+        </div>
+    @endif
+
+    @if ($imageEditMessage && $imageEditMessage->isImageAttachment())
+        <div x-data="{}" wire:key="image-edit-teleport-{{ $imageEditMessage->id }}">
+            @teleport('body')
+                <div
+                    data-inbox-image-edit-modal
+                    wire:key="image-edit-modal-{{ $imageEditMessage->id }}"
+                    wire:click.self="closeImageEdit"
+                    class="fixed inset-0 flex items-end justify-center overflow-y-auto overscroll-contain bg-black/50 p-0 sm:items-center sm:p-4"
+                    style="z-index: 100000;"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="inbox-image-edit-title"
+                >
+                    <div
+                        class="relative flex w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-[#E7DFCF] bg-white shadow-2xl sm:rounded-2xl"
+                        style="max-height: calc(100vh - 1rem); max-height: calc(100dvh - 1rem); max-height: calc(100svh - 1rem); min-height: 0;"
+                        @click.stop
+                        @mousedown.stop
+                        wire:ignore.self
+                        x-data="inboxImageEdit(@js(route('admin.inbox.media', $imageEditMessage)), @js($this->getId()))"
+                    >
+                        <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#E7DFCF] px-4 py-3">
+                            <div class="min-w-0">
+                                <h3 id="inbox-image-edit-title" class="text-base font-semibold text-[#1E1E1E]">Edit &amp; send image</h3>
+                                <p class="mt-0.5 text-xs text-[#8C8474]">Crop, add text, then send back to the customer.</p>
+                            </div>
+                            <button type="button" wire:click="closeImageEdit" class="text-2xl leading-none text-[#8C8474] hover:text-[#1E1E1E]" aria-label="Close">&times;</button>
+                        </div>
+
+                        <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4" style="-webkit-overflow-scrolling: touch;">
+                            <div
+                                class="relative overflow-hidden rounded-lg bg-black/5"
+                                style="height: min(42vh, 22rem); max-height: min(42vh, 22rem);"
+                            >
+                                <img
+                                    x-ref="editImage"
+                                    src="{{ route('admin.inbox.media', $imageEditMessage) }}"
+                                    alt="Customer image"
+                                    class="block h-full w-full object-contain"
+                                >
+                            </div>
+
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" @click="rotate(-90)" class="rounded-full border border-[#E0D6C2] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6B6459]">Rotate left</button>
+                                <button type="button" @click="rotate(90)" class="rounded-full border border-[#E0D6C2] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6B6459]">Rotate right</button>
+                                <button type="button" @click="resetCrop()" class="rounded-full border border-[#E0D6C2] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6B6459]">Reset crop</button>
+                            </div>
+
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div>
+                                    <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Text on image</label>
+                                    <input type="text"
+                                        x-model="overlayText"
+                                        maxlength="80"
+                                        placeholder="e.g. Available · Tk 2500"
+                                        class="w-full rounded-xl border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Text size</label>
+                                    <input type="range" min="24" max="96" step="2" x-model.number="overlayTextSize" class="w-full">
+                                </div>
+                            </div>
+
+                            <div>
+                                <p class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Text position</p>
+                                <div class="flex flex-wrap gap-2">
+                                    @foreach (['top-left' => 'Top left', 'top-right' => 'Top right', 'bottom-left' => 'Bottom left', 'bottom-right' => 'Bottom right'] as $value => $label)
+                                        <button type="button"
+                                            @click="overlayTextPosition = '{{ $value }}'"
+                                            :class="overlayTextPosition === '{{ $value }}' ? 'border-[#C9A227] bg-[#FAF6EF] text-[#1E1E1E]' : 'border-[#E0D6C2] text-[#6B6459]'"
+                                            class="rounded-full border px-2.5 py-1 text-[11px] font-semibold">
+                                            {{ $label }}
+                                        </button>
+                                    @endforeach
+                                </div>
+                            </div>
+
+                            <div x-show="previewUrl" x-cloak class="rounded-xl border border-[#E7DFCF] bg-[#FAF6EF] p-2">
+                                <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Preview</p>
+                                <img :src="previewUrl" alt="Edited preview" class="mx-auto max-h-40 rounded-lg object-contain">
+                            </div>
+
+                            <p x-show="error" x-text="error" class="text-xs text-rose-600" x-cloak></p>
+                        </div>
+
+                        <div class="flex shrink-0 items-center justify-end gap-2 border-t border-[#E7DFCF] px-4 py-3">
+                            <button type="button" wire:click="closeImageEdit" class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm font-semibold text-[#6B6459]">Cancel</button>
+                            <button type="button"
+                                @click="sendEdited()"
+                                :disabled="busy"
+                                class="rounded-full bg-[#C9A227] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b89220] disabled:opacity-60">
+                                <span x-show="!busy">Send to customer</span>
+                                <span x-show="busy" x-cloak>Sending…</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            @endteleport
+        </div>
+    @endif
+
+    @if ($pricedSendMessage)
+        <div x-data="{}" wire:key="priced-send-teleport-{{ $pricedSendMessage->id }}">
+            @teleport('body')
+                <div
+                    data-inbox-priced-send-modal
+                    wire:key="priced-send-modal-{{ $pricedSendMessage->id }}"
+                    wire:click.self="closePricedImageSend"
+                    class="fixed inset-0 flex items-end justify-center overflow-y-auto overscroll-contain bg-black/50 p-0 sm:items-center sm:p-4"
+                    style="z-index: 100000;"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="inbox-priced-send-title"
+                >
+                    <div
+                        class="relative flex w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-[#E7DFCF] bg-white shadow-2xl sm:rounded-2xl"
+                        style="max-height: calc(100vh - 1rem); max-height: calc(100dvh - 1rem); max-height: calc(100svh - 1rem); min-height: 0;"
+                        @click.stop
+                        @mousedown.stop
+                    >
+                        <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#E7DFCF] px-4 py-3">
+                            <div class="min-w-0">
+                                <h3 id="inbox-priced-send-title" class="text-base font-semibold text-[#1E1E1E]">Send priced product image</h3>
+                                <p class="mt-0.5 text-xs text-[#8C8474]">Filter by category or price, then send a priced image as a reply.</p>
+                            </div>
+                            <button type="button" wire:click="closePricedImageSend" class="text-2xl leading-none text-[#8C8474] hover:text-[#1E1E1E]" aria-label="Close">&times;</button>
+                        </div>
+
+                        <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4" style="-webkit-overflow-scrolling: touch;">
+                            <div>
+                                <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Search</label>
+                                <input type="search"
+                                    wire:model.live.debounce.250ms="pricedSendSearch"
+                                    placeholder="Name or SKU…"
+                                    class="w-full rounded-xl border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
+                                    aria-label="Search products">
+                            </div>
+
+                            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                <div>
+                                    <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Category</label>
+                                    <select wire:model.live="pricedSendCategory"
+                                        class="w-full rounded-xl border border-[#E0D6C2] bg-white px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                        <option value="">All</option>
+                                        @foreach ($pricedSendCategories as $category)
+                                            <option value="{{ $category->id }}">{{ $category->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Min price</label>
+                                    <input type="text"
+                                        wire:model.live.debounce.250ms="pricedSendPriceMin"
+                                        inputmode="numeric"
+                                        placeholder="0"
+                                        class="w-full rounded-xl border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Max price</label>
+                                    <input type="text"
+                                        wire:model.live.debounce.250ms="pricedSendPriceMax"
+                                        inputmode="numeric"
+                                        placeholder="Any"
+                                        class="w-full rounded-xl border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                </div>
+                            </div>
+
+                            <div class="space-y-2">
+                                @forelse ($pricedSendResults as $row)
+                                    <div wire:key="priced-send-row-{{ $row['id'] }}" class="flex items-center gap-2.5 rounded-xl border border-[#E7DFCF] p-2.5">
+                                        @if (! empty($row['image_url']))
+                                            <img src="{{ $row['image_url'] }}" alt="" class="h-14 w-14 shrink-0 rounded-lg object-cover bg-[#FAF6EF]">
+                                        @else
+                                            <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] text-[10px] text-[#8C8474]">No img</div>
+                                        @endif
+                                        <div class="min-w-0 flex-1">
+                                            <p class="truncate text-sm font-medium text-[#1E1E1E]">{{ $row['name'] }}</p>
+                                            <p class="truncate text-[11px] text-[#8C8474]">
+                                                {{ $row['category'] ?? '—' }}
+                                                · ৳{{ number_format($row['price']) }}
+                                                @if ($row['sku'])
+                                                    · {{ $row['sku'] }}
+                                                @endif
+                                            </p>
+                                            <p class="text-[11px] {{ $row['has_priced_image'] ? 'text-emerald-700' : 'text-[#8C8474]' }}">
+                                                {{ $row['has_priced_image'] ? 'Priced image ready' : 'Will generate priced image' }}
+                                            </p>
+                                        </div>
+                                        <button type="button"
+                                            wire:click="sendPricedProductImage({{ $row['id'] }})"
+                                            wire:loading.attr="disabled"
+                                            class="shrink-0 rounded-lg bg-[#C9A227] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#b89220] disabled:opacity-60">
+                                            Send
+                                        </button>
+                                    </div>
+                                @empty
+                                    <p class="text-xs text-[#8C8474]">No products match these filters.</p>
+                                @endforelse
+                            </div>
                         </div>
                     </div>
                 </div>

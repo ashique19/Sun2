@@ -2,10 +2,12 @@
 
 namespace App\Livewire\Admin;
 
+use App\Models\Category;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Models\Product;
 use App\Services\Admin\ProductImageHashService;
+use App\Services\Admin\ProductPricedImageService;
 use App\Services\Channels\ChannelInboxDiagnostics;
 use App\Services\Channels\ChannelInboxPurgeService;
 use App\Services\Channels\ChannelMessageOrderMapper;
@@ -17,6 +19,7 @@ use App\Services\Facebook\FacebookPageTokenService;
 use App\Support\AdminAccess;
 use App\Support\Fileinfo;
 use App\Support\StorefrontAssets;
+use Illuminate\Http\UploadedFile;
 use InvalidArgumentException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -24,6 +27,8 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
+use RuntimeException;
+use Throwable;
 
 #[Title('Admin Inbox')]
 #[Layout('components.layouts.admin')]
@@ -111,6 +116,28 @@ class AdminInbox extends Component
 
     public ?string $mappingImageMatchError = null;
 
+    /** Inbound image message currently open in the edit-and-send modal. */
+    public ?int $imageEditMessageId = null;
+
+    /** Edited JPEG uploaded from the inbox image editor before send. */
+    public $editedReplyImage = null;
+
+    /** Inbound image message targeted by the priced-product send modal. */
+    public ?int $pricedSendMessageId = null;
+
+    public string $pricedSendSearch = '';
+
+    public string $pricedSendCategory = '';
+
+    public string $pricedSendPriceMin = '';
+
+    public string $pricedSendPriceMax = '';
+
+    /**
+     * @var list<array{id: int, name: string, price: float, sku: ?string, category: ?string, image_url: ?string, priced_image_url: ?string, has_priced_image: bool}>
+     */
+    public array $pricedSendResults = [];
+
     /** When false, the open thread only shows recent messages (see thread_lookback_hours). */
     public bool $threadHistoryExpanded = false;
 
@@ -149,6 +176,7 @@ class AdminInbox extends Component
         $this->mobileThreadOpen = true;
         $this->resetComposer();
         $this->resetOrderMapping();
+        $this->resetImageTools();
         $this->resetThreadHistory();
         $this->error = null;
         $this->statusMessage = null;
@@ -166,6 +194,7 @@ class AdminInbox extends Component
             $this->mobileThreadOpen = false;
             $this->resetComposer();
             $this->resetOrderMapping();
+            $this->resetImageTools();
             $this->resetThreadHistory();
             $this->error = null;
             $this->statusMessage = null;
@@ -185,6 +214,7 @@ class AdminInbox extends Component
         $this->mobileThreadOpen = true;
         $this->resetComposer();
         $this->resetOrderMapping();
+        $this->resetImageTools();
         $this->resetThreadHistory();
         $this->error = null;
         $this->statusMessage = null;
@@ -205,6 +235,7 @@ class AdminInbox extends Component
         $this->mobileThreadOpen = false;
         $this->resetComposer();
         $this->resetOrderMapping();
+        $this->resetImageTools();
         $this->resetThreadHistory();
         $this->error = null;
         $this->statusMessage = null;
@@ -412,7 +443,7 @@ class AdminInbox extends Component
             if ($matches === []) {
                 $this->mappingImageMatchError = 'No catalog match at 80%+. Try a tighter crop or search by name.';
             }
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->mappingImageMatchError = $e->getMessage();
         } finally {
             $this->mappingCroppedImage = null;
@@ -480,6 +511,200 @@ class AdminInbox extends Component
     public function clearReplyImage(): void
     {
         $this->replyImage = null;
+    }
+
+    public function openImageEdit(int $messageId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+        $this->error = null;
+        $this->statusMessage = null;
+
+        $message = $this->inboundImageMessage($messageId);
+        if (! $message) {
+            $this->error = 'Image message not found.';
+
+            return;
+        }
+
+        $this->closePricedImageSend();
+        $this->editedReplyImage = null;
+        $this->imageEditMessageId = $message->id;
+    }
+
+    public function closeImageEdit(): void
+    {
+        $this->imageEditMessageId = null;
+        $this->editedReplyImage = null;
+    }
+
+    public function sendEditedImageReply(ChannelReplyService $replies): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
+
+        if (! $this->selectedConversationId || ! $this->imageEditMessageId) {
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+        if (! $conversation) {
+            $this->error = 'Conversation not found.';
+
+            return;
+        }
+
+        $replyTo = $this->inboundImageMessage($this->imageEditMessageId);
+        if (! $replyTo) {
+            $this->error = 'Image message not found.';
+            $this->closeImageEdit();
+
+            return;
+        }
+
+        $this->validate([
+            'editedReplyImage' => ['required', 'image', 'max:5120'],
+        ]);
+
+        $result = $replies->sendImage(
+            $conversation,
+            $this->editedReplyImage,
+            '',
+            false,
+            $replyTo,
+        );
+
+        if (! $result['ok']) {
+            $this->error = $result['error'] ?? 'Failed to send edited image.';
+
+            return;
+        }
+
+        $this->markConversationRead($conversation, $replies);
+        $this->closeImageEdit();
+        $this->statusMessage = 'Edited image sent.';
+    }
+
+    public function openPricedImageSend(int $messageId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+        $this->error = null;
+        $this->statusMessage = null;
+
+        $message = $this->inboundImageMessage($messageId);
+        if (! $message) {
+            $this->error = 'Image message not found.';
+
+            return;
+        }
+
+        $this->closeImageEdit();
+        $this->pricedSendMessageId = $message->id;
+        $this->pricedSendSearch = '';
+        $this->pricedSendCategory = '';
+        $this->pricedSendPriceMin = '';
+        $this->pricedSendPriceMax = '';
+        $this->refreshPricedSendResults();
+    }
+
+    public function closePricedImageSend(): void
+    {
+        $this->pricedSendMessageId = null;
+        $this->pricedSendSearch = '';
+        $this->pricedSendCategory = '';
+        $this->pricedSendPriceMin = '';
+        $this->pricedSendPriceMax = '';
+        $this->pricedSendResults = [];
+    }
+
+    public function updatedPricedSendSearch(): void
+    {
+        $this->refreshPricedSendResults();
+    }
+
+    public function updatedPricedSendCategory(): void
+    {
+        $this->refreshPricedSendResults();
+    }
+
+    public function updatedPricedSendPriceMin(): void
+    {
+        $this->refreshPricedSendResults();
+    }
+
+    public function updatedPricedSendPriceMax(): void
+    {
+        $this->refreshPricedSendResults();
+    }
+
+    public function sendPricedProductImage(
+        int $productId,
+        ChannelReplyService $replies,
+        ProductPricedImageService $pricedImages,
+    ): void {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
+
+        if (! $this->selectedConversationId || ! $this->pricedSendMessageId) {
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+        if (! $conversation) {
+            $this->error = 'Conversation not found.';
+
+            return;
+        }
+
+        $replyTo = $this->inboundImageMessage($this->pricedSendMessageId);
+        if (! $replyTo) {
+            $this->error = 'Image message not found.';
+            $this->closePricedImageSend();
+
+            return;
+        }
+
+        $product = Product::query()->find($productId);
+        if (! $product) {
+            $this->error = 'Product not found.';
+
+            return;
+        }
+
+        try {
+            $pricedPath = is_string($product->priced_image_path) ? trim($product->priced_image_path) : '';
+            if ($pricedPath === '' || ! is_file(public_path(ltrim($pricedPath, '/')))) {
+                $pricedPath = $pricedImages->generate($product);
+                $product->refresh();
+            }
+
+            $upload = $this->uploadedFileFromPublicPath($pricedPath);
+        } catch (Throwable $e) {
+            $this->error = $e->getMessage();
+
+            return;
+        }
+
+        $result = $replies->sendImage(
+            $conversation,
+            $upload,
+            '',
+            false,
+            $replyTo,
+        );
+
+        if (! $result['ok']) {
+            $this->error = $result['error'] ?? 'Failed to send priced image.';
+
+            return;
+        }
+
+        $this->markConversationRead($conversation, $replies);
+        $this->closePricedImageSend();
+        $this->statusMessage = 'Priced image sent.';
     }
 
     public function sendReply(ChannelReplyService $replies): void
@@ -772,11 +997,119 @@ class AdminInbox extends Component
         $this->clearMappingImageMatchState();
     }
 
+    private function resetImageTools(): void
+    {
+        $this->closeImageEdit();
+        $this->closePricedImageSend();
+    }
+
     private function clearMappingImageMatchState(): void
     {
         $this->mappingCroppedImage = null;
         $this->mappingImageMatches = [];
         $this->mappingImageMatchError = null;
+    }
+
+    private function inboundImageMessage(int $messageId): ?ChannelMessage
+    {
+        if (! $this->selectedConversationId || $messageId <= 0) {
+            return null;
+        }
+
+        $message = ChannelMessage::query()
+            ->where('channel_conversation_id', $this->selectedConversationId)
+            ->whereKey($messageId)
+            ->first();
+
+        if (! $message
+            || $message->direction !== ChannelMessage::DIRECTION_INBOUND
+            || ! $message->isImageAttachment()) {
+            return null;
+        }
+
+        return $message;
+    }
+
+    private function refreshPricedSendResults(): void
+    {
+        if (! $this->pricedSendMessageId) {
+            $this->pricedSendResults = [];
+
+            return;
+        }
+
+        $priceMin = $this->normalizedPriceBound($this->pricedSendPriceMin);
+        $priceMax = $this->normalizedPriceBound($this->pricedSendPriceMax);
+
+        if ($priceMin !== null && $priceMax !== null && $priceMin > $priceMax) {
+            [$priceMin, $priceMax] = [$priceMax, $priceMin];
+        }
+
+        $term = trim($this->pricedSendSearch);
+
+        $products = Product::query()
+            ->with([
+                'category:id,name',
+                'images' => fn ($q) => $q->orderBy('sort_order')->limit(1),
+            ])
+            ->when($term !== '', fn ($q) => $q->searchTerm($term, includePrice: false))
+            ->when($priceMin !== null, fn ($q) => $q->where('price', '>=', $priceMin))
+            ->when($priceMax !== null, fn ($q) => $q->where('price', '<=', $priceMax))
+            ->when($this->pricedSendCategory !== '', fn ($q) => $q->where('category_id', (int) $this->pricedSendCategory))
+            ->orderBy('display_order')
+            ->orderByDesc('id')
+            ->limit(24)
+            ->get();
+
+        $this->pricedSendResults = $products->map(function (Product $product) {
+            $pricedPath = is_string($product->priced_image_path) ? trim($product->priced_image_path) : '';
+            $hasPriced = $pricedPath !== '';
+            $previewPath = $hasPriced ? $pricedPath : $product->primaryImagePath();
+
+            return [
+                'id' => $product->id,
+                'name' => $product->name,
+                'price' => (float) $product->price,
+                'sku' => $product->sku,
+                'category' => $product->category?->name,
+                'image_url' => StorefrontAssets::url($previewPath),
+                'priced_image_url' => $hasPriced ? StorefrontAssets::url($pricedPath) : null,
+                'has_priced_image' => $hasPriced,
+            ];
+        })->all();
+    }
+
+    private function normalizedPriceBound(string $value): ?float
+    {
+        $digits = preg_replace('/[^\d.]/', '', trim($value)) ?? '';
+
+        if ($digits === '' || ! is_numeric($digits)) {
+            return null;
+        }
+
+        return max(0, (float) $digits);
+    }
+
+    private function uploadedFileFromPublicPath(string $relativePath): UploadedFile
+    {
+        $absolute = public_path(ltrim($relativePath, '/'));
+
+        if (! is_file($absolute) || ! is_readable($absolute)) {
+            throw new RuntimeException('Priced image file is missing on disk.');
+        }
+
+        $mime = mime_content_type($absolute) ?: 'image/jpeg';
+        if (! str_starts_with($mime, 'image/')) {
+            throw new RuntimeException('Priced image file is not a valid image.');
+        }
+
+        return new UploadedFile(
+            $absolute,
+            basename($absolute),
+            $mime,
+            null,
+            true,
+        );
     }
 
     /**
@@ -915,11 +1248,32 @@ class AdminInbox extends Component
                     ->first();
         }
 
+        $imageEditMessage = null;
+        if ($selectedConversation && $this->imageEditMessageId) {
+            $imageEditMessage = $selectedConversation->messages->firstWhere('id', $this->imageEditMessageId)
+                ?? ChannelMessage::query()
+                    ->where('channel_conversation_id', $selectedConversation->id)
+                    ->whereKey($this->imageEditMessageId)
+                    ->first();
+        }
+
+        $pricedSendMessage = null;
+        if ($selectedConversation && $this->pricedSendMessageId) {
+            $pricedSendMessage = $selectedConversation->messages->firstWhere('id', $this->pricedSendMessageId)
+                ?? ChannelMessage::query()
+                    ->where('channel_conversation_id', $selectedConversation->id)
+                    ->whereKey($this->pricedSendMessageId)
+                    ->first();
+        }
+
         return view('livewire.admin.admin-inbox', [
             'conversations' => $conversations,
             'selectedConversation' => $selectedConversation,
             'replyToMessage' => $replyToMessage,
             'mappingMessage' => $mappingMessage,
+            'imageEditMessage' => $imageEditMessage,
+            'pricedSendMessage' => $pricedSendMessage,
+            'pricedSendCategories' => Category::query()->orderBy('name')->get(['id', 'name']),
             'quickReplies' => $quickReplies,
             'hasOlderMessages' => $hasOlderMessages,
             'threadLookbackHours' => $lookbackHours,

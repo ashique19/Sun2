@@ -100,8 +100,27 @@ class AdminProductMultiImageUploadTest extends TestCase
             ->assertSeeHtml(':aria-valuenow="uploadProgress"')
             ->assertSeeHtml('x-text="`${uploadProgress}%`"')
             ->assertSeeHtml("uploadStatus || 'Uploading…'")
+            ->assertSee('Large photos are resized in your browser before upload')
             ->assertSeeHtml('@click.stop="openEditor(index)"')
             ->assertSeeHtml('@click.self="onEditorOutside()"')
             ->assertDontSeeHtml('@click.outside="closeEditor()"');
+    }
+
+    #[Test]
+    public function add_images_script_prepares_files_client_side_before_upload(): void
+    {
+        $script = file_get_contents(resource_path('js/admin-product-images.js'));
+
+        $this->assertNotFalse($script);
+        $this->assertStringContainsString('prepareFileForUpload', $script);
+        $this->assertStringContainsString('canvasToUploadJpeg', $script);
+        $this->assertStringContainsString('maxUploadBytes', $script);
+        $this->assertStringContainsString('Resizing image', $script);
+        $this->assertStringContainsString('const maxDim = 1600', $script);
+        $this->assertStringContainsString('return 1500 * 1024', $script);
+        $this->assertMatchesRegularExpression(
+            '/async uploadAll\(\)\s*\{[\s\S]*?prepareFileForUpload[\s\S]*?uploadMultiple/',
+            $script
+        );
     }
 }

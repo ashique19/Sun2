@@ -197,9 +197,10 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
+            // Match ProductImageService::EDGE_LG so cropped queue items stay upload-safe.
             const canvas = this.cropper.getCroppedCanvas({
-                maxWidth: 2400,
-                maxHeight: 2400,
+                maxWidth: 1600,
+                maxHeight: 1600,
                 fillColor: '#ffffff',
             });
 
@@ -207,9 +208,7 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
-            const blob = await new Promise((resolve) => {
-                canvas.toBlob(resolve, 'image/jpeg', 0.92);
-            });
+            const blob = await this.canvasToUploadJpeg(canvas);
 
             if (!blob) {
                 return;
@@ -237,6 +236,116 @@ const registerProductImageAlpineData = () => {
             }
         },
 
+        // Keep under common PHP upload_max_filesize (2M) with multipart headroom.
+        maxUploadBytes() {
+            return 1500 * 1024;
+        },
+
+        loadImageElement(file) {
+            return new Promise((resolve, reject) => {
+                const url = URL.createObjectURL(file);
+                const image = new Image();
+                image.decoding = 'async';
+                image.onload = () => {
+                    URL.revokeObjectURL(url);
+                    resolve(image);
+                };
+                image.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    reject(new Error('Could not read that photo in this browser.'));
+                };
+                image.src = url;
+            });
+        },
+
+        async canvasToUploadJpeg(sourceCanvas) {
+            let width = sourceCanvas.width;
+            let height = sourceCanvas.height;
+            let quality = 0.85;
+            const maxBytes = this.maxUploadBytes();
+
+            for (let attempt = 0; attempt < 8; attempt += 1) {
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+
+                const context = canvas.getContext('2d', { alpha: false });
+
+                if (! context) {
+                    throw new Error('Could not compress the image in this browser.');
+                }
+
+                context.fillStyle = '#ffffff';
+                context.fillRect(0, 0, width, height);
+                context.drawImage(sourceCanvas, 0, 0, width, height);
+
+                const blob = await new Promise((resolve, reject) => {
+                    canvas.toBlob(
+                        (result) => (result ? resolve(result) : reject(new Error('Could not compress the image.'))),
+                        'image/jpeg',
+                        quality,
+                    );
+                });
+
+                if (blob.size <= maxBytes) {
+                    return blob;
+                }
+
+                quality = Math.max(0.5, quality - 0.1);
+
+                if (attempt >= 2) {
+                    width = Math.max(720, Math.round(width * 0.8));
+                    height = Math.max(720, Math.round(height * 0.8));
+                }
+            }
+
+            throw new Error('Image is still too large after compression. Try a smaller photo.');
+        },
+
+        async prepareFileForUpload(file) {
+            // Always redraw through canvas so large phone photos (and EXIF) never hit the server raw.
+            let bitmap = null;
+
+            if (typeof createImageBitmap === 'function') {
+                bitmap = await createImageBitmap(file);
+            } else {
+                bitmap = await this.loadImageElement(file);
+            }
+
+            const maxDim = 1600;
+            const sourceWidth = bitmap.width || bitmap.naturalWidth || 0;
+            const sourceHeight = bitmap.height || bitmap.naturalHeight || 0;
+            const scale = Math.min(1, maxDim / Math.max(1, sourceWidth, sourceHeight));
+            const width = Math.max(1, Math.round(sourceWidth * scale));
+            const height = Math.max(1, Math.round(sourceHeight * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+
+            const context = canvas.getContext('2d', { alpha: false });
+
+            if (! context) {
+                if (typeof bitmap.close === 'function') {
+                    bitmap.close();
+                }
+
+                throw new Error('Could not prepare the image in this browser.');
+            }
+
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, width, height);
+            context.drawImage(bitmap, 0, 0, width, height);
+
+            if (typeof bitmap.close === 'function') {
+                bitmap.close();
+            }
+
+            const blob = await this.canvasToUploadJpeg(canvas);
+            const name = (file.name || 'image').replace(/\.\w+$/, '') + '.jpg';
+
+            return new File([blob], name, { type: 'image/jpeg' });
+        },
+
         async uploadAll() {
             if (this.queue.length === 0 || this.uploading) {
                 return;
@@ -247,15 +356,27 @@ const registerProductImageAlpineData = () => {
             this.uploadStatus = 'Preparing…';
             this.uploadError = null;
 
-            const files = this.queue.map((item) => item.file);
             const alts = this.queue.map((item) => item.alt);
-            const total = files.length;
+            const total = this.queue.length;
 
             try {
                 // Persist product first so create does not race with temp uploads.
                 await this.wire().ensureProductSaved();
 
                 await this.wire().set('pendingAlts', alts);
+
+                const files = [];
+
+                for (let index = 0; index < this.queue.length; index += 1) {
+                    const item = this.queue[index];
+                    this.uploadStatus = total === 1
+                        ? 'Resizing image…'
+                        : `Resizing image ${index + 1} of ${total}…`;
+                    this.uploadProgress = Math.round(((index + 0.5) / total) * 35);
+
+                    files.push(await this.prepareFileForUpload(item.file));
+                    this.uploadProgress = Math.round(((index + 1) / total) * 35);
+                }
 
                 this.uploadStatus = total === 1
                     ? 'Uploading image…'
@@ -269,7 +390,9 @@ const registerProductImageAlpineData = () => {
                         (error) => reject(error instanceof Error ? error : new Error(String(error || 'Upload failed'))),
                         (event) => {
                             const progress = Number(event?.detail?.progress ?? 0);
-                            this.uploadProgress = Math.max(0, Math.min(100, Number.isFinite(progress) ? progress : 0));
+                            const clamped = Math.max(0, Math.min(100, Number.isFinite(progress) ? progress : 0));
+                            // Reserve 0–35% for client resize; map transfer onto 35–95%.
+                            this.uploadProgress = Math.round(35 + (clamped * 0.6));
                         },
                         () => reject(new Error('Upload cancelled')),
                         false, // replace property — do not append stale temp files

@@ -227,7 +227,7 @@
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <h3 class="text-sm font-medium">Add images</h3>
-                        <p class="text-xs text-[#8C8474] mt-1">JPG, PNG, or WebP up to 5 MB each.</p>
+                        <p class="text-xs text-[#8C8474] mt-1">JPG, PNG, or WebP. Large photos are resized in your browser before upload (max 1600px).</p>
                     </div>
                     <label class="cursor-pointer rounded-full bg-[#FAF6EF] px-4 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#EFE7D6]">
                         Choose files

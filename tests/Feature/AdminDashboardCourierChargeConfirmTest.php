@@ -8,6 +8,7 @@ use App\Models\Area;
 use App\Models\City;
 use App\Models\Courier;
 use App\Models\Order;
+use App\Models\OrderProduct;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -76,8 +77,10 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
         ?string $consignmentId = null,
         string $city = 'Dhaka',
         ?string $area = null,
+        int $productQuantity = 1,
+        float $packagingCost = 0,
     ): Order {
-        return Order::query()->create([
+        $order = Order::query()->create([
             'order_number' => 'DC-'.uniqid(),
             'name' => $name,
             'phone' => '01710000000',
@@ -88,6 +91,7 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
             'subtotal' => 1000,
             'delivery_charge' => 80,
             'courier_charge' => $charge,
+            'packaging_cost' => $packagingCost,
             'total' => 1080,
             'courier_id' => $courier->id,
             'courier_tracker' => 'SF'.random_int(1000, 9999),
@@ -95,6 +99,19 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
             'dispatch_date' => now()->subHour(),
             'placed_at' => now()->subDay(),
         ]);
+
+        if ($productQuantity > 0) {
+            OrderProduct::query()->create([
+                'order_id' => $order->id,
+                'name' => 'Product',
+                'quantity' => $productQuantity,
+                'price' => 1000,
+                'purchase_price' => 400,
+                'line_total' => 1000 * $productQuantity,
+            ]);
+        }
+
+        return $order->fresh(['items']);
     }
 
     #[Test]
@@ -111,6 +128,7 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
             ->assertSeeHtml('href="https://steadfast.com.bd/user/consignment/277193413"')
             ->assertSeeHtml('target="_blank"')
             ->assertSee('Charge ৳')
+            ->assertSee('Pack ৳')
             ->assertSeeHtml('wire:click="confirmCourierCharge(');
     }
 
@@ -176,22 +194,41 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
     }
 
     #[Test]
+    public function dashboard_defaults_packaging_cost_by_product_quantity(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+
+        $one = $this->dispatchedOrder($courier, 'One Item', 60, null, 'Dhaka', null, 1);
+        $two = $this->dispatchedOrder($courier, 'Two Items', 60, null, 'Dhaka', null, 2);
+        $three = $this->dispatchedOrder($courier, 'Three Items', 60, null, 'Dhaka', null, 3);
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSet('pendingPackagingCosts.'.$one->id, '21')
+            ->assertSet('pendingPackagingCosts.'.$two->id, '30')
+            ->assertSet('pendingPackagingCosts.'.$three->id, '41');
+    }
+
+    #[Test]
     public function dashboard_can_edit_and_confirm_courier_charge(): void
     {
         $admin = $this->adminUser();
         $this->actingAs($admin);
         $courier = $this->steadfast();
-        $order = $this->dispatchedOrder($courier, 'Karim Hossain', 60);
+        $order = $this->dispatchedOrder($courier, 'Karim Hossain', 60, null, 'Dhaka', null, 2);
 
         Livewire::test(AdminDashboard::class)
+            ->assertSet('pendingPackagingCosts.'.$order->id, '30')
             ->set('pendingCourierCharges.'.$order->id, '75')
+            ->set('pendingPackagingCosts.'.$order->id, '35')
             ->call('confirmCourierCharge', $order->id)
             ->assertHasNoErrors()
-            ->assertSet('courierChargeMessage', 'Courier charge confirmed for Karim Hossain.')
+            ->assertSet('courierChargeMessage', 'Courier charge and packaging updated for Karim Hossain.')
             ->assertDontSee('Confirm courier charges');
 
         $order->refresh();
         $this->assertSame(75.0, (float) $order->courier_charge);
+        $this->assertSame(35.0, (float) $order->packaging_cost);
         $this->assertNotNull($order->courier_charge_confirmed_at);
         $this->assertSame($admin->id, (int) $order->courier_charge_confirmed_by);
     }

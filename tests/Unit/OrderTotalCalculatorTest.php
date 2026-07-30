@@ -52,9 +52,26 @@ class OrderTotalCalculatorTest extends TestCase
             items: [['purchase_price' => 400, 'quantity' => 1]],
         );
 
-        // 500 - 400 + 0 - 100 + 80 - 120 = -40
+        // 500 - 400 + 0 - 100 + 80 - 120 - packaging 0 = -40
         $this->assertSame(-40.0, $totals->netRevenue);
+        $this->assertSame(0.0, $totals->packagingCost);
         $this->assertSame(-40.0, $totals->deliveryMargin + (500 - 400 - 100));
+    }
+
+    public function test_net_revenue_subtracts_packaging_cost(): void
+    {
+        $totals = $this->calc->calculate(
+            subtotal: 1000,
+            deliveryCharge: 80,
+            courierCharge: 60,
+            adjustments: [],
+            items: [['purchase_price' => 400, 'quantity' => 1]],
+            packagingCost: 21,
+        );
+
+        // 1000 - 400 + 80 - 60 - 21 = 599
+        $this->assertSame(21.0, $totals->packagingCost);
+        $this->assertSame(599.0, $totals->netRevenue);
     }
 
     public function test_delivery_and_courier_are_independent(): void
@@ -97,7 +114,7 @@ class OrderTotalCalculatorTest extends TestCase
             items: [['purchase_price' => 800, 'quantity' => 2]],
         );
 
-        // revenue 2000 - cogs 1600 + charges 40 - discounts 200 + delivery 100 - courier 60 = 280
+        // revenue 2000 - cogs 1600 + charges 40 - discounts 200 + delivery 100 - courier 60 - pack 0 = 280
         $this->assertSame(1600.0, $totals->cogs);
         $this->assertSame(280.0, $totals->netRevenue);
         $this->assertSame(40.0, $totals->deliveryMargin);

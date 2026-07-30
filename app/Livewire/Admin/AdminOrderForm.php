@@ -953,6 +953,7 @@ class AdminOrderForm extends Component
         }
 
         $courierCharge = $this->order ? (float) $this->order->courier_charge : 0.0;
+        $packagingCost = $this->order ? (float) ($this->order->packaging_cost ?? 0) : 0.0;
         $collectedAmount = $this->order ? (float) ($this->order->collected_amount ?? 0) : 0.0;
         $courierSlug = $this->order?->courier?->slug;
         $codPercentage = (float) ($this->order?->courier?->cod_percentage ?? 1);
@@ -972,6 +973,7 @@ class AdminOrderForm extends Component
             collectedAmount: $collectedAmount,
             courierSlug: $courierSlug,
             codPercentage: $codPercentage,
+            packagingCost: $packagingCost,
         )->netRevenue;
     }
 

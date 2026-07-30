@@ -19,6 +19,9 @@ readonly class OrderTotals
         /** What courier charges us for delivery (orders.courier_charge). */
         public float $courierCharge,
 
+        /** Direct packaging cost (orders.packaging_cost). */
+        public float $packagingCost,
+
         /** Courier COD collection fee (derived; not stored on orders). */
         public float $codCharge,
 
@@ -39,7 +42,7 @@ readonly class OrderTotals
 
         /**
          * Net revenue (admin business metric).
-         * netRevenue = subtotal - cogs + charges - discounts + deliveryCharge - courierCharge - codCharge
+         * netRevenue = subtotal - cogs + charges - discounts + deliveryCharge - courierCharge - packagingCost - codCharge
          * May be negative — do NOT clamp.
          */
         public float $netRevenue,

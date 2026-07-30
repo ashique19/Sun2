@@ -6,6 +6,7 @@ use App\Models\AdminAttentionItem;
 use App\Models\Order;
 use App\Services\Admin\AdminAttentionService;
 use App\Services\Orders\OrderCourierChargeSync;
+use App\Services\Orders\OrderPackagingCost;
 use App\Support\AdminAccess;
 use App\Support\AdminDashboardMetrics;
 use App\Support\AdminOrderSegment;
@@ -19,6 +20,9 @@ class AdminDashboard extends Component
 {
     /** @var array<int|string, string> */
     public array $pendingCourierCharges = [];
+
+    /** @var array<int|string, string> */
+    public array $pendingPackagingCosts = [];
 
     public ?string $courierChargeMessage = null;
 
@@ -59,36 +63,49 @@ class AdminDashboard extends Component
         $this->resetValidation('pendingCourierCharges.'.$orderId);
     }
 
-    public function confirmCourierCharge(int $orderId, OrderCourierChargeSync $courierChargeSync): void
-    {
+    public function confirmCourierCharge(
+        int $orderId,
+        OrderCourierChargeSync $courierChargeSync,
+        OrderPackagingCost $packagingCost,
+    ): void {
         AdminAccess::ensureStaffAdmin();
 
         $order = Order::query()
+            ->with('items:id,order_id,quantity')
             ->whereKey($orderId)
             ->where('status', 'dispatched')
             ->whereNull('courier_charge_confirmed_at')
             ->firstOrFail();
 
-        $raw = $this->pendingCourierCharges[$orderId]
+        $chargeRaw = $this->pendingCourierCharges[$orderId]
             ?? (string) (int) round($courierChargeSync->suggestedConfirmAmount($order));
+        $packagingRaw = $this->pendingPackagingCosts[$orderId]
+            ?? (string) (int) round($packagingCost->suggestedAmount($order));
+
+        $this->pendingCourierCharges[$orderId] = $chargeRaw;
+        $this->pendingPackagingCosts[$orderId] = $packagingRaw;
 
         $this->validate([
             'pendingCourierCharges.'.$orderId => ['required', 'numeric', 'min:0'],
+            'pendingPackagingCosts.'.$orderId => ['required', 'numeric', 'min:0'],
         ], [], [
             'pendingCourierCharges.'.$orderId => 'courier charge',
+            'pendingPackagingCosts.'.$orderId => 'packaging cost',
         ]);
 
+        $packagingCost->apply($order, (float) $packagingRaw);
+
         $courierChargeSync->confirm(
-            order: $order,
-            amount: (float) $raw,
+            order: $order->fresh(),
+            amount: (float) $chargeRaw,
             actor: auth()->user(),
         );
 
-        unset($this->pendingCourierCharges[$orderId]);
-        $this->courierChargeMessage = 'Courier charge confirmed for '.$order->name.'.';
+        unset($this->pendingCourierCharges[$orderId], $this->pendingPackagingCosts[$orderId]);
+        $this->courierChargeMessage = 'Courier charge and packaging updated for '.$order->name.'.';
     }
 
-    public function render(OrderCourierChargeSync $courierChargeSync)
+    public function render(OrderCourierChargeSync $courierChargeSync, OrderPackagingCost $packagingCost)
     {
         if (AdminAccess::isModeratorOnly()) {
             return view('livewire.admin.admin-dashboard', [
@@ -132,13 +149,16 @@ class AdminDashboard extends Component
         ];
 
         $unconfirmedCourierCharges = Order::query()
-            ->with(['courier:id,name,slug,charge,osd_charge'])
+            ->with([
+                'courier:id,name,slug,charge,osd_charge',
+                'items:id,order_id,quantity',
+            ])
             ->where('status', 'dispatched')
             ->whereNull('courier_charge_confirmed_at')
             ->orderByDesc('dispatch_date')
             ->orderByDesc('id')
             ->limit(25)
-            ->get(['id', 'order_number', 'name', 'city', 'area', 'courier_id', 'courier_tracker', 'courier_consignment_id', 'courier_charge', 'dispatch_date', 'status']);
+            ->get(['id', 'order_number', 'name', 'city', 'area', 'courier_id', 'courier_tracker', 'courier_consignment_id', 'courier_charge', 'packaging_cost', 'dispatch_date', 'status']);
 
         $courierChargeAreaLabels = [];
         $courierChargeQuickAmounts = [];
@@ -150,6 +170,10 @@ class AdminDashboard extends Component
 
             if (! array_key_exists($order->id, $this->pendingCourierCharges)) {
                 $this->pendingCourierCharges[$order->id] = (string) (int) round($suggested);
+            }
+
+            if (! array_key_exists($order->id, $this->pendingPackagingCosts)) {
+                $this->pendingPackagingCosts[$order->id] = (string) (int) round($packagingCost->suggestedAmount($order));
             }
         }
 

@@ -49,6 +49,7 @@ class Order extends Model
             'delivery_charge' => 'decimal:2',
             'charge' => 'decimal:2',
             'courier_charge' => 'decimal:2',
+            'packaging_cost' => 'decimal:2',
             'courier_charge_confirmed_at' => 'datetime',
             'courier_charge_confirmed_by' => 'integer',
             'discount' => 'decimal:2',
@@ -197,7 +198,7 @@ class Order extends Model
     }
 
     /**
-     * Net revenue = subtotal - COGS + charges - discounts + delivery_charge - courier_charge - COD charge.
+     * Net revenue = subtotal - COGS + charges - discounts + delivery_charge - courier_charge - packaging_cost - COD charge.
      * Requires items loaded. Prefer adjustment lines; fall back to order scalars when
      * adjustments are empty (legacy rows / pre-backfill) so admin never shows wrong 0.
      */
@@ -221,6 +222,7 @@ class Order extends Model
             collectedAmount: (float) ($this->collected_amount ?? 0),
             courierSlug: $this->courier?->slug,
             codPercentage: (float) ($this->courier?->cod_percentage ?? 1),
+            packagingCost: (float) ($this->packaging_cost ?? 0),
         )->netRevenue;
     }
 

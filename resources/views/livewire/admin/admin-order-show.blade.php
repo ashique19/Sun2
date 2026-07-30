@@ -201,6 +201,7 @@
                     @endif
                     <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Customer delivery</span><span class="tabular-nums">&#2547; {{ number_format($order->delivery_charge, 0) }}</span></div>
                     <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Courier cost</span><span class="tabular-nums">&#2547; {{ number_format($order->courier_charge, 0) }}</span></div>
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Packaging</span><span class="tabular-nums">&#2547; {{ number_format((float) ($order->packaging_cost ?? 0), 0) }}</span></div>
                     @php($codCharge = $order->codCharge())
                     <div class="flex justify-between gap-3">
                         <span class="text-[#6B6459]">

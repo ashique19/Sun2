@@ -116,7 +116,7 @@
                     <p class="text-xs text-amber-800/80">
                         {{ $unconfirmedCourierCharges->count() }}{{ $unconfirmedCourierCharges->count() >= 25 ? '+' : '' }}
                         dispatched {{ $unconfirmedCourierCharges->count() === 1 ? 'order needs' : 'orders need' }}
-                        charge review — defaults from area delivery_charge_upto_5
+                        charge + packaging review — packaging defaults 1→21 · 2→30 · 3+→41
                     </p>
                 </div>
                 <a href="{{ route('admin.orders.dispatched') }}"
@@ -188,12 +188,27 @@
                                 <p class="mt-1 text-[11px] text-rose-600">{{ $message }}</p>
                             @enderror
                         </div>
+                        <div class="w-24">
+                            <label for="packaging-cost-{{ $order->id }}" class="block text-[10px] font-medium uppercase tracking-wide text-[#8C8474] mb-1">
+                                Pack ৳
+                            </label>
+                            <input id="packaging-cost-{{ $order->id }}"
+                                type="number"
+                                min="0"
+                                step="1"
+                                inputmode="numeric"
+                                wire:model="pendingPackagingCosts.{{ $order->id }}"
+                                class="w-full rounded-lg border border-[#E0D6C2] px-2.5 py-1.5 text-sm tabular-nums">
+                            @error('pendingPackagingCosts.'.$order->id)
+                                <p class="mt-1 text-[11px] text-rose-600">{{ $message }}</p>
+                            @enderror
+                        </div>
                         <button type="button"
                             wire:click="confirmCourierCharge({{ $order->id }})"
                             wire:loading.attr="disabled"
                             wire:target="confirmCourierCharge({{ $order->id }})"
                             class="rounded-full bg-[#C9A227] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
-                            <span wire:loading.remove wire:target="confirmCourierCharge({{ $order->id }})">Confirm</span>
+                            <span wire:loading.remove wire:target="confirmCourierCharge({{ $order->id }})">Update</span>
                             <span wire:loading wire:target="confirmCourierCharge({{ $order->id }})">Saving…</span>
                         </button>
                     </div>

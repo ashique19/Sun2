@@ -16,6 +16,7 @@ use App\Models\OrderProduct;
  * - COGS uses (quantity - returned_quantity) × purchase_price
  * - Charges cannot be negative (enforced at service layer; not here)
  * - Delivery and courier cost are independent fields, not adjustments
+ * - Packaging cost is a direct attributable cost subtracted from net revenue
  * - COD charge is derived from collected amount × courier COD % (Steadfast excludes delivery)
  */
 class OrderTotalCalculator
@@ -35,6 +36,7 @@ class OrderTotalCalculator
         float $collectedAmount = 0.0,
         ?string $courierSlug = null,
         float $codPercentage = 1.0,
+        float $packagingCost = 0.0,
     ): OrderTotals {
         [$charges, $discounts] = $this->sumAdjustments($adjustments);
         $total = max(0.0, $subtotal + $deliveryCharge + $charges - $discounts);
@@ -45,13 +47,15 @@ class OrderTotalCalculator
             courierSlug: $courierSlug,
             codPercentage: $codPercentage,
         );
-        $netRevenue = $subtotal - $cogs + $charges - $discounts + $deliveryCharge - $courierCharge - $codCharge;
+        $packaging = max(0.0, $packagingCost);
+        $netRevenue = $subtotal - $cogs + $charges - $discounts + $deliveryCharge - $courierCharge - $packaging - $codCharge;
         $deliveryMargin = $deliveryCharge - $courierCharge;
 
         return new OrderTotals(
             subtotal: round($subtotal, 2),
             deliveryCharge: round($deliveryCharge, 2),
             courierCharge: round($courierCharge, 2),
+            packagingCost: round($packaging, 2),
             codCharge: round($codCharge, 2),
             charges: round($charges, 2),
             discounts: round($discounts, 2),

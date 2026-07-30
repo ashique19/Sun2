@@ -160,6 +160,7 @@ class OrderAdjustmentSync
             courierCharge: (float) $order->courier_charge,
             adjustments: $adjustments,
             items: $order->relationLoaded('items') ? $order->items : [],
+            packagingCost: (float) ($order->packaging_cost ?? 0),
         );
 
         $order->charge = $charges;

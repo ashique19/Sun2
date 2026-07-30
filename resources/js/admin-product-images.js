@@ -270,47 +270,80 @@ const registerProductImageAlpineData = () => {
         aiAllowOutsideClose: false,
         aiCropper: null,
         rawUploading: false,
+        rawUploadProgress: 0,
         rawUploadError: null,
+        rawUploadTimer: null,
 
-        async uploadRawPhoto(event) {
-            const file = event.target.files?.[0] ?? null;
-            event.target.value = '';
-            this.rawUploadError = null;
+        armRawUploadTimeout() {
+            this.clearRawUploadTimeout();
+            this.rawUploadTimer = setTimeout(() => {
+                if (! this.rawUploading) {
+                    return;
+                }
 
-            if (! file) {
-                return;
-            }
+                try {
+                    this.$wire.cancelUpload('aiRawImage');
+                } catch {
+                    // ignore — property may already be cleared
+                }
 
-            const looksLikeImage = (file.type || '').startsWith('image/')
-                || /\.(jpe?g|png|webp|gif)$/i.test(file.name);
-
-            if (! looksLikeImage) {
-                this.rawUploadError = 'Use a JPG, PNG, or WebP photo.';
-
-                return;
-            }
-
-            this.rawUploading = true;
-
-            try {
-                await new Promise((resolve, reject) => {
-                    this.$wire.upload(
-                        'aiRawImage',
-                        file,
-                        () => resolve(),
-                        (error) => reject(error instanceof Error ? error : new Error(String(error || 'Upload failed'))),
-                        () => {},
-                        () => reject(new Error('Upload cancelled')),
-                    );
-                });
-            } catch (error) {
-                console.error(error);
-                this.rawUploadError = error?.message && error.message !== 'Upload failed'
-                    ? error.message
-                    : 'Could not upload the raw photo. Try again.';
-            } finally {
                 this.rawUploading = false;
+                this.rawUploadProgress = 0;
+                this.rawUploadError = 'Upload timed out. Check your connection and try a smaller JPG, PNG, or WebP.';
+            }, 90000);
+        },
+
+        clearRawUploadTimeout() {
+            if (this.rawUploadTimer) {
+                clearTimeout(this.rawUploadTimer);
+                this.rawUploadTimer = null;
             }
+        },
+
+        firstAiRawError() {
+            try {
+                const errors = this.$wire.$errors;
+
+                if (! errors || typeof errors.first !== 'function') {
+                    return null;
+                }
+
+                return errors.first('aiRawImage') || null;
+            } catch {
+                return null;
+            }
+        },
+
+        onRawUploadStart() {
+            this.rawUploading = true;
+            this.rawUploadProgress = 0;
+            this.rawUploadError = null;
+            this.armRawUploadTimeout();
+        },
+
+        onRawUploadProgress(event) {
+            this.rawUploadProgress = Math.max(0, Math.min(100, Number(event?.detail?.progress ?? 0)));
+        },
+
+        onRawUploadFinish() {
+            this.clearRawUploadTimeout();
+            this.rawUploading = false;
+            this.rawUploadProgress = 100;
+            this.rawUploadError = null;
+        },
+
+        onRawUploadError() {
+            this.clearRawUploadTimeout();
+            this.rawUploading = false;
+            this.rawUploadProgress = 0;
+            this.rawUploadError = this.firstAiRawError() || 'Could not upload the raw photo. Try again.';
+        },
+
+        onRawUploadCancel() {
+            this.clearRawUploadTimeout();
+            this.rawUploading = false;
+            this.rawUploadProgress = 0;
+            this.rawUploadError = 'Upload cancelled.';
         },
 
         openAiEditor(id) {

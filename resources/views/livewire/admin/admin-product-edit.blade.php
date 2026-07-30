@@ -335,49 +335,64 @@
         </div>
     </form>
 
-    @teleport('body')
-        <div wire:key="ai-generate-modal-host" x-data="aiImageCandidates()">
-            @if ($showAiGenerateModal)
-                <div class="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-4 sm:items-center"
-                    wire:click.self="closeAiGenerateModal"
-                    wire:key="ai-generate-modal"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label="Generate product images with AI">
-                    <div class="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl"
-                        wire:click.stop>
-                        <div class="flex items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
-                            <div>
-                                <h2 class="font-semibold text-lg">Generate with AI</h2>
-                                <p class="mt-1 text-xs text-[#8C8474]">
-                                    Upload a raw photo, write a prompt, then Generate. Candidates stay for this session only until you add them with +.
-                                </p>
-                            </div>
-                            <button type="button" wire:click="closeAiGenerateModal" class="text-sm text-[#8C8474] hover:text-[#1E1E1E]">Close</button>
+    {{-- Keep AI modal in the Livewire/Alpine tree (not body-teleported) so file uploads can finish. --}}
+    <div wire:key="ai-generate-modal-host" x-data="aiImageCandidates()">
+        @if ($showAiGenerateModal)
+            <div class="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+                wire:click.self="closeAiGenerateModal"
+                wire:key="ai-generate-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Generate product images with AI">
+                <div class="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl"
+                    wire:click.stop>
+                    <div class="flex items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
+                        <div>
+                            <h2 class="font-semibold text-lg">Generate with AI</h2>
+                            <p class="mt-1 text-xs text-[#8C8474]">
+                                Upload a raw photo, write a prompt, then Generate. Candidates stay for this session only until you add them with +.
+                            </p>
                         </div>
+                        <button type="button" wire:click="closeAiGenerateModal" class="text-sm text-[#8C8474] hover:text-[#1E1E1E]">Close</button>
+                    </div>
 
-                        <div class="flex-1 space-y-5 overflow-y-auto px-4 py-4">
-                            @unless ($geminiConfigured)
-                                <div class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                                    Gemini is not configured. Set <code class="font-mono text-xs">GEMINI_API_KEY</code> to enable generation.
-                                </div>
-                            @endunless
+                    <div class="flex-1 space-y-5 overflow-y-auto px-4 py-4">
+                        @unless ($geminiConfigured)
+                            <div class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                                Gemini is not configured. Set <code class="font-mono text-xs">GEMINI_API_KEY</code> to enable generation.
+                            </div>
+                        @endunless
 
-                            <div class="grid gap-4 sm:grid-cols-2">
-                                <div>
-                                    <label class="block text-sm font-medium mb-1">Raw photo</label>
-                                    <input type="file"
-                                        accept="image/jpeg,image/png,image/webp"
-                                        @change="uploadRawPhoto($event)"
-                                        :disabled="rawUploading"
-                                        class="block w-full text-sm text-[#6B6459] file:mr-3 file:rounded-full file:border-0 file:bg-[#FAF6EF] file:px-4 file:py-2 file:text-sm file:font-medium file:text-[#C9A227] hover:file:bg-[#EFE7D6] disabled:opacity-60">
-                                    <p x-show="rawUploading" x-cloak class="mt-1 text-xs text-[#8C8474]">Uploading raw photo…</p>
-                                    <p x-show="rawUploadError" x-text="rawUploadError" x-cloak class="mt-1 text-xs text-rose-600"></p>
-                                    @error('aiRawImage') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
-                                    @if ($aiRawImage)
-                                        <p class="mt-2 text-xs text-[#8C8474]">Selected: {{ method_exists($aiRawImage, 'getClientOriginalName') ? $aiRawImage->getClientOriginalName() : 'raw photo' }}</p>
-                                    @endif
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <div
+                                x-on:livewire-upload-start="onRawUploadStart()"
+                                x-on:livewire-upload-progress="onRawUploadProgress($event)"
+                                x-on:livewire-upload-finish="onRawUploadFinish()"
+                                x-on:livewire-upload-error="onRawUploadError()"
+                                x-on:livewire-upload-cancel="onRawUploadCancel()">
+                                <label class="block text-sm font-medium mb-1">Raw photo</label>
+                                <input type="file"
+                                    wire:model="aiRawImage"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    :disabled="rawUploading"
+                                    class="block w-full text-sm text-[#6B6459] file:mr-3 file:rounded-full file:border-0 file:bg-[#FAF6EF] file:px-4 file:py-2 file:text-sm file:font-medium file:text-[#C9A227] hover:file:bg-[#EFE7D6] disabled:opacity-60">
+                                <div x-show="rawUploading" x-cloak class="mt-2 space-y-1">
+                                    <div class="flex items-center justify-between gap-2 text-xs text-[#8C8474]">
+                                        <span>Uploading raw photo…</span>
+                                        <span class="tabular-nums" x-text="`${rawUploadProgress}%`"></span>
+                                    </div>
+                                    <div class="h-1.5 overflow-hidden rounded-full bg-[#EFE7D6]" role="progressbar"
+                                        :aria-valuenow="rawUploadProgress" aria-valuemin="0" aria-valuemax="100">
+                                        <div class="h-full rounded-full bg-[#C9A227] transition-[width] duration-150"
+                                            :style="`width: ${rawUploadProgress}%`"></div>
+                                    </div>
                                 </div>
+                                <p x-show="rawUploadError" x-text="rawUploadError" x-cloak class="mt-1 text-xs text-rose-600"></p>
+                                @error('aiRawImage') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                                @if ($aiRawImage)
+                                    <p class="mt-2 text-xs text-[#8C8474]">Selected: {{ method_exists($aiRawImage, 'getClientOriginalName') ? $aiRawImage->getClientOriginalName() : 'raw photo' }}</p>
+                                @endif
+                            </div>
                                 <div>
                                     <label class="block text-sm font-medium mb-1">Prompt</label>
                                     <textarea wire:model="aiPrompt" rows="4"
@@ -493,9 +508,8 @@
                         </div>
                     </div>
                 </div>
-            @endif
-        </div>
-    @endteleport
+        @endif
+    </div>
 
     @teleport('body')
         <div wire:key="priced-image-modal-host">

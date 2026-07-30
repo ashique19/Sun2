@@ -277,9 +277,18 @@ const registerProductImageAlpineData = () => {
         rawImageBase64: '',
         rawImageMime: 'image/jpeg',
         rawImageName: '',
+        generating: false,
+        generateProgress: 0,
+        generateStatus: '',
+        generateError: null,
+        generateTicker: null,
 
         canGenerate() {
-            return this.geminiConfigured && this.hasRawImage && ! this.rawUploading && this.rawImageBase64 !== '';
+            return this.geminiConfigured
+                && this.hasRawImage
+                && ! this.rawUploading
+                && ! this.generating
+                && this.rawImageBase64 !== '';
         },
 
         clearRawImage() {
@@ -290,6 +299,57 @@ const registerProductImageAlpineData = () => {
             this.rawImageBase64 = '';
             this.rawImageMime = 'image/jpeg';
             this.rawImageName = '';
+        },
+
+        clearGenerateState() {
+            this.generating = false;
+            this.generateProgress = 0;
+            this.generateStatus = '';
+            this.generateError = null;
+
+            if (this.generateTicker) {
+                clearInterval(this.generateTicker);
+                this.generateTicker = null;
+            }
+        },
+
+        firstGenerateError() {
+            try {
+                const errors = this.$wire.$errors;
+
+                if (errors && typeof errors.first === 'function') {
+                    return errors.first('aiRawImage')
+                        || errors.first('aiPrompt')
+                        || null;
+                }
+            } catch {
+                // ignore
+            }
+
+            return this.$wire.aiGenerateError || null;
+        },
+
+        startGenerateProgress() {
+            const startedAt = Date.now();
+            this.generateProgress = 4;
+            this.generateStatus = 'Sending photo to Gemini…';
+
+            if (this.generateTicker) {
+                clearInterval(this.generateTicker);
+            }
+
+            this.generateTicker = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+                this.generateProgress = Math.min(92, 4 + Math.floor(elapsed * 1.6));
+
+                if (elapsed < 8) {
+                    this.generateStatus = `Sending photo to Gemini… (${elapsed}s)`;
+                } else if (elapsed < 45) {
+                    this.generateStatus = `Gemini is generating the image… (${elapsed}s)`;
+                } else {
+                    this.generateStatus = `Still waiting on Gemini… (${elapsed}s). This can take up to about 90 seconds.`;
+                }
+            }, 500);
         },
 
         arrayBufferToBase64(buffer) {
@@ -470,12 +530,47 @@ const registerProductImageAlpineData = () => {
             }
 
             this.rawUploadError = null;
+            this.generateError = null;
+            this.generating = true;
+            this.startGenerateProgress();
+
+            const timeoutMs = 120000;
 
             try {
-                await this.$wire.generateAiImage(this.rawImageBase64, this.rawImageMime);
+                await Promise.race([
+                    this.$wire.generateAiImage(this.rawImageBase64, this.rawImageMime),
+                    new Promise((_, reject) => {
+                        setTimeout(() => {
+                            reject(new Error('Generation timed out after 120 seconds. Try a smaller photo or try again.'));
+                        }, timeoutMs);
+                    }),
+                ]);
+
+                this.generateProgress = 100;
+                this.generateStatus = 'Finishing…';
+
+                await this.$nextTick();
+
+                const serverError = this.firstGenerateError();
+
+                if (serverError) {
+                    this.generateError = serverError;
+                    this.generateStatus = 'Generation failed';
+                } else {
+                    this.generateStatus = 'Image ready';
+                }
             } catch (error) {
                 console.error(error);
-                this.rawUploadError = error?.message || 'Generation failed. Try again.';
+                this.generateError = error?.message || 'Generation failed. Try again.';
+                this.generateStatus = 'Generation failed';
+                this.generateProgress = 0;
+            } finally {
+                if (this.generateTicker) {
+                    clearInterval(this.generateTicker);
+                    this.generateTicker = null;
+                }
+
+                this.generating = false;
             }
         },
 

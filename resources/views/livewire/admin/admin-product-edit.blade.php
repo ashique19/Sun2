@@ -340,7 +340,7 @@
         wire:key="ai-generate-modal-host"
         x-data="aiImageCandidates()"
         x-init="geminiConfigured = {{ $geminiConfigured ? 'true' : 'false' }}"
-        x-effect="if (! $wire.showAiGenerateModal) { clearRawImage() }">
+        x-effect="if (! $wire.showAiGenerateModal) { clearRawImage(); clearGenerateState(); }">
         @if ($showAiGenerateModal)
             <div class="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-4 sm:items-center"
                 wire:click.self="closeAiGenerateModal"
@@ -417,22 +417,36 @@
                             </div>
                         @endif
 
-                        <div class="flex flex-wrap items-center gap-3">
-                            <button type="button"
-                                @click="generateWithRaw()"
-                                wire:loading.attr="disabled"
-                                wire:target="generateAiImage"
-                                :disabled="! canGenerate()"
-                                class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
-                                <span wire:loading.remove wire:target="generateAiImage">Generate</span>
-                                <span wire:loading wire:target="generateAiImage">Generating…</span>
-                            </button>
-                            <p class="text-xs text-[#8C8474]">Each Generate adds another candidate to this session list.</p>
-                        </div>
+                        <div class="space-y-3">
+                            <div class="flex flex-wrap items-center gap-3">
+                                <button type="button"
+                                    @click="generateWithRaw()"
+                                    :disabled="! canGenerate()"
+                                    class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
+                                    <span x-text="generating ? 'Generating…' : 'Generate'"></span>
+                                </button>
+                                <p class="text-xs text-[#8C8474]">Each Generate adds another candidate to this session list.</p>
+                            </div>
+
+                            <div x-show="generating || generateProgress > 0" x-cloak class="max-w-md space-y-1">
+                                <div class="flex items-center justify-between gap-2 text-xs text-[#8C8474]">
+                                    <span x-text="generateStatus || 'Working…'"></span>
+                                    <span class="tabular-nums" x-text="`${generateProgress}%`"></span>
+                                </div>
+                                <div class="h-1.5 overflow-hidden rounded-full bg-[#EFE7D6]" role="progressbar"
+                                    :aria-valuenow="generateProgress" aria-valuemin="0" aria-valuemax="100"
+                                    aria-label="AI generation progress">
+                                    <div class="h-full rounded-full bg-[#C9A227] transition-[width] duration-150"
+                                        :style="`width: ${generateProgress}%`"></div>
+                                </div>
+                            </div>
+
+                            <p x-show="generateError" x-text="generateError" x-cloak class="text-sm text-rose-600"></p>
 
                             @if ($aiGenerateError)
                                 <p class="text-sm text-rose-600">{{ $aiGenerateError }}</p>
                             @endif
+                        </div>
 
                             @if (count($aiCandidates) > 0)
                                 <div>

@@ -231,6 +231,7 @@ class AdminSocialPostsCreate extends Component
             'image_source' => $allPriced ? SocialPost::IMAGE_SOURCE_PRICED : SocialPost::IMAGE_SOURCE_THUMB,
             'layout' => $this->layout,
             'status' => SocialPost::STATUS_PUBLISHED,
+            'show_on_homepage' => true,
             'created_by' => auth()->id(),
         ]);
 

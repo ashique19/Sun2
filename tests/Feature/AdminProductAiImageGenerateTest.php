@@ -48,6 +48,24 @@ class AdminProductAiImageGenerateTest extends TestCase
     }
 
     #[Test]
+    public function ai_modal_exposes_upload_progress_hooks_outside_product_form(): void
+    {
+        $this->actingAs($this->adminUser());
+        $product = $this->product();
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->call('openAiGenerateModal')
+            ->assertSet('showAiGenerateModal', true)
+            ->assertSeeHtml('wire:model="aiRawImage"')
+            ->assertSeeHtml('livewire-upload-start')
+            ->assertSeeHtml('livewire-upload-progress')
+            ->assertSeeHtml('livewire-upload-error')
+            ->assertSeeHtml('Uploading raw photo')
+            ->assertSeeHtml('role="progressbar"')
+            ->assertSeeHtml('ai-generate-modal-host');
+    }
+
+    #[Test]
     public function generate_requires_raw_image_and_surfaces_validation_error(): void
     {
         config(['gemini.api_key' => 'test-key']);

@@ -56,6 +56,7 @@ class AdminProductImageEditTest extends TestCase
         [$product, $image] = $this->productWithImage();
 
         Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->assertSeeHtml('productImageUploader(')
             ->assertSeeHtml('openSavedEditor('.$image->id.',')
             ->assertSeeHtml('products/'.$product->id.'/images/'.$image->id.'/raw')
             ->assertSeeHtml('data-saved-crop-image')
@@ -173,7 +174,9 @@ class AdminProductImageEditTest extends TestCase
         $this->assertStringContainsString("replaceEditedImage(imageId, base64, 'image/jpeg')", $source);
         $this->assertStringContainsString('canvasToSaveJpeg', $source);
         $this->assertStringContainsString('returnedUrl', $source);
-        $this->assertStringContainsString("updatedMessage !== 'Image updated.'", $source);
+        $this->assertStringContainsString('Livewire.find', $source);
+        $this->assertStringContainsString('this.wire().replaceEditedImage', $source);
+        $this->assertStringNotContainsString('this.$wire.message', $source);
         $this->assertStringNotContainsString("\$wire.upload(\n                        'editedImage'", $source);
     }
 }

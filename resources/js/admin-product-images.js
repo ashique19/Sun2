@@ -10,7 +10,8 @@ const afterPaint = (callback) => {
 };
 
 const registerProductImageAlpineData = () => {
-    Alpine.data('productImageUploader', () => ({
+    Alpine.data('productImageUploader', (wireId = null) => ({
+        wireId,
         queue: [],
         editorOpen: false,
         editorIndex: null,
@@ -40,6 +41,24 @@ const registerProductImageAlpineData = () => {
         logoUrl: '/img/settings/logo.png',
         logoImage: null,
         _savedOverlayUnwatch: null,
+
+        wire() {
+            const id = this.wireId
+                || this.$root?.closest?.('[wire\\:id]')?.getAttribute('wire:id')
+                || this.$el?.closest?.('[wire\\:id]')?.getAttribute('wire:id');
+
+            if (! id || typeof Livewire === 'undefined' || typeof Livewire.find !== 'function') {
+                throw new Error('Livewire component is not available. Refresh the page and try again.');
+            }
+
+            const component = Livewire.find(id);
+
+            if (! component) {
+                throw new Error('Livewire component is not available. Refresh the page and try again.');
+            }
+
+            return component;
+        },
 
         addFiles(event) {
             const files = Array.from(event.target.files ?? []);
@@ -212,7 +231,7 @@ const registerProductImageAlpineData = () => {
             if (this.queue.length > 0) {
                 await this.uploadAll();
             } else {
-                await this.$wire.save();
+                await this.wire().save();
             }
         },
 
@@ -232,16 +251,16 @@ const registerProductImageAlpineData = () => {
 
             try {
                 // Persist product first so create does not race with temp uploads.
-                await this.$wire.ensureProductSaved();
+                await this.wire().ensureProductSaved();
 
-                await this.$wire.set('pendingAlts', alts);
+                await this.wire().set('pendingAlts', alts);
 
                 this.uploadStatus = total === 1
                     ? 'Uploading image…'
                     : `Uploading ${total} images…`;
 
                 await new Promise((resolve, reject) => {
-                    this.$wire.uploadMultiple(
+                    this.wire().uploadMultiple(
                         'newImages',
                         files,
                         () => resolve(),
@@ -260,7 +279,7 @@ const registerProductImageAlpineData = () => {
                     ? 'Saving image…'
                     : `Saving ${total} images…`;
 
-                await this.$wire.uploadImages();
+                await this.wire().uploadImages();
 
                 for (const item of this.queue) {
                     if (item.previewUrl) {
@@ -285,7 +304,7 @@ const registerProductImageAlpineData = () => {
 
         firstLivewireError() {
             try {
-                const errors = this.$wire.$errors;
+                const errors = this.wire().$errors;
                 if (!errors || typeof errors.first !== 'function') {
                     return null;
                 }
@@ -811,7 +830,7 @@ const registerProductImageAlpineData = () => {
 
                 // Avoid Livewire temp uploads from the teleported modal — they can hang forever.
                 const result = await Promise.race([
-                    this.$wire.replaceEditedImage(imageId, base64, 'image/jpeg'),
+                    this.wire().replaceEditedImage(imageId, base64, 'image/jpeg'),
                     new Promise((_, reject) => {
                         setTimeout(() => {
                             reject(new Error('Save timed out after 60 seconds. Try again.'));
@@ -825,20 +844,21 @@ const registerProductImageAlpineData = () => {
                     throw new Error(livewireMessage);
                 }
 
-                const updatedMessage = String(this.$wire.message ?? this.$wire.get?.('message') ?? '').trim();
-                const returnedUrl = typeof result === 'object' && result !== null ? String(result.url || '') : '';
-                const returnedPath = typeof result === 'object' && result !== null ? String(result.path || '') : '';
+                const returnedUrl = result && typeof result === 'object' ? String(result.url || '') : '';
+                const returnedPath = result && typeof result === 'object' ? String(result.path || '') : '';
 
-                if (! returnedUrl || ! returnedPath || updatedMessage !== 'Image updated.') {
-                    throw new Error(updatedMessage || 'Image was not updated. Please try again.');
+                if (! returnedUrl || ! returnedPath) {
+                    throw new Error('Image was not updated. Please try again.');
                 }
 
                 this.closeSavedEditor();
             } catch (error) {
                 console.error(error);
                 const livewireMessage = this.firstLivewireError();
-                this.savedError = livewireMessage
-                    || (error?.message ? error.message : 'Could not save the edited image.');
+                const raw = livewireMessage || error?.message || 'Could not save the edited image.';
+                this.savedError = typeof raw === 'string' && ! /^\(\)\s*=>/.test(raw.trim())
+                    ? raw
+                    : 'Could not save the edited image. Refresh the page and try again.';
                 this.savedSaving = false;
             }
         },

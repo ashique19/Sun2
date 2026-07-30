@@ -1,4 +1,4 @@
-<div x-data="productImageUploader()">
+<div x-data="productImageUploader(@js($this->getId()))">
     @assets
         @vite(['resources/js/admin-product-images.js'])
     @endassets

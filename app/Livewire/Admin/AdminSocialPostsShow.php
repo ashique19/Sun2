@@ -15,10 +15,6 @@ class AdminSocialPostsShow extends Component
 
     public ?string $message = null;
 
-    public bool $postToFacebook = true;
-
-    public bool $postToInstagram = true;
-
     /** idle | publishing | done */
     public string $republishPhase = 'idle';
 
@@ -37,17 +33,7 @@ class AdminSocialPostsShow extends Component
      */
     public function selectedChannels(): array
     {
-        $channels = [];
-
-        if ($this->postToFacebook) {
-            $channels[] = SocialPostPublication::CHANNEL_FACEBOOK;
-        }
-
-        if ($this->postToInstagram) {
-            $channels[] = SocialPostPublication::CHANNEL_INSTAGRAM;
-        }
-
-        return $channels;
+        return [SocialPostPublication::CHANNEL_FACEBOOK];
     }
 
     public function startRepublish(): void
@@ -59,12 +45,6 @@ class AdminSocialPostsShow extends Component
         }
 
         $channels = $this->selectedChannels();
-        if ($channels === []) {
-            $this->message = 'Select at least one social network to re-publish.';
-
-            return;
-        }
-
         $this->message = null;
         $this->channelProgress = [];
 
@@ -134,7 +114,7 @@ class AdminSocialPostsShow extends Component
     }
 
     /**
-     * Backward-compatible: re-publish all currently selected channels in one request.
+     * Backward-compatible: re-publish Facebook in one request.
      */
     public function republish(MetaGraphSocialPublisher $publisher): void
     {
@@ -172,7 +152,6 @@ class AdminSocialPostsShow extends Component
 
     private function ensureCanRepublish(): void
     {
-        // Route middleware already restricts access, but keep this as a safe guard.
         abort_unless(auth()->check() && auth()->user()->hasAnyRole(['admin', 'dev']), 403);
     }
 

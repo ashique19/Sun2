@@ -3,8 +3,8 @@
 
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-            <h1 class="font-serif text-3xl font-semibold">Make Social Post</h1>
-            <p class="mt-1 text-xs text-[#8C8474]">Select products, write copy, choose networks, then publish.</p>
+            <h1 class="font-serif text-3xl font-semibold">Make Facebook Post</h1>
+            <p class="mt-1 text-xs text-[#8C8474]">Reorder products, pick images, preview the Facebook post, then publish.</p>
         </div>
 
         <a href="{{ route('admin.products') }}" wire:navigate
@@ -13,168 +13,247 @@
         </a>
     </div>
 
-    <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-6">
-        <h2 class="font-semibold mb-3">Selected products</h2>
-
-        @if ($selectedProducts->isEmpty())
-            <div class="text-sm text-[#8C8474]">No products selected. Return to Products to choose products.</div>
-        @else
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                @foreach ($selectedProducts as $product)
-                    @php
-                        $thumb = $product->primaryImagePath();
-                        $priced = $supportsPricedImages ? ($product->priced_image_path ?? null) : null;
-                    @endphp
-
-                    <div class="rounded-lg border border-[#E7DFCF] p-3">
-                        <div class="h-16 w-16 rounded bg-[#FAF6EF] flex items-center justify-center overflow-hidden">
-                            @if ($thumb)
-                                <img src="{{ \App\Support\StorefrontAssets::url($thumb) }}" alt="" class="h-full w-full object-cover">
-                            @else
-                                <span class="text-[#C9A227] text-xs">No img</span>
-                            @endif
-                        </div>
-
-                        <div class="mt-2">
-                            <div class="text-sm font-medium line-clamp-1">{{ $product->name }}</div>
-                            @if ($imageSource === 'priced' && $supportsPricedImages)
-                                <div class="text-[11px] mt-1 {{ is_string($priced) && trim($priced) !== '' ? 'text-emerald-700' : 'text-rose-600' }}">
-                                    {{ is_string($priced) && trim($priced) !== '' ? 'Priced ready' : 'Missing priced image' }}
-                                </div>
-                            @endif
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-        @endif
-    </div>
-
     @if ($phase === 'compose')
-        <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-6">
-            <h2 class="font-semibold mb-3">Compose</h2>
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+            <div class="space-y-6">
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <h2 class="font-semibold">Products</h2>
+                        <p class="text-xs text-[#8C8474]">Drag to change post image order</p>
+                    </div>
 
-            <div class="mb-4">
-                <label class="block text-sm font-medium mb-1">Post text</label>
-                <textarea
-                    wire:model.live="body"
-                    rows="4"
-                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
-                    placeholder="Write your post copy…"></textarea>
-                @error('body')
-                    <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
-                @enderror
-            </div>
+                    @if ($productRows->isEmpty())
+                        <div class="text-sm text-[#8C8474]">No products selected. Return to Products to choose products.</div>
+                    @else
+                        <div
+                            class="space-y-3"
+                            x-data="{
+                                dragId: null,
+                                order: @js($selectedProducts->pluck('id')->values()->all()),
+                                onDragStart(id) { this.dragId = id },
+                                onDrop(targetId) {
+                                    if (this.dragId === null || this.dragId === targetId) return;
+                                    const from = this.order.indexOf(this.dragId);
+                                    const to = this.order.indexOf(targetId);
+                                    if (from < 0 || to < 0) return;
+                                    const next = [...this.order];
+                                    next.splice(from, 1);
+                                    next.splice(to, 0, this.dragId);
+                                    this.order = next;
+                                    this.dragId = null;
+                                    $wire.reorderProducts(next);
+                                }
+                            }"
+                            x-effect="order = @js($selectedProducts->pluck('id')->values()->all())">
+                            @foreach ($productRows as $row)
+                                @php
+                                    $product = $row['product'];
+                                    $options = $row['options'];
+                                    $selected = $row['selected'];
+                                    $selectedUrl = $row['selected_url'];
+                                @endphp
+                                <div
+                                    wire:key="social-product-{{ $product->id }}"
+                                    class="rounded-lg border border-[#E7DFCF] p-3 bg-[#FAF6EF]/40"
+                                    draggable="true"
+                                    @dragstart="onDragStart({{ $product->id }})"
+                                    @dragover.prevent
+                                    @drop.prevent="onDrop({{ $product->id }})">
+                                    <div class="flex gap-3">
+                                        <div class="flex flex-col items-center gap-2 shrink-0">
+                                            <button type="button" class="cursor-grab text-[#8C8474] text-lg leading-none px-1" title="Drag to reorder" aria-label="Drag to reorder">
+                                                ⋮⋮
+                                            </button>
+                                            <div class="h-16 w-16 rounded bg-white border border-[#E7DFCF] overflow-hidden flex items-center justify-center">
+                                                @if ($selectedUrl)
+                                                    <img src="{{ $selectedUrl }}" alt="" class="h-full w-full object-cover pointer-events-none">
+                                                @else
+                                                    <span class="text-[#C9A227] text-xs">No img</span>
+                                                @endif
+                                            </div>
+                                        </div>
 
-            <div class="mb-4">
-                <div class="font-medium text-sm mb-2">Post to</div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <label class="flex items-start gap-3 rounded-lg border border-[#E7DFCF] p-3 cursor-pointer {{ $postToFacebook ? 'border-[#C9A227] bg-[#FAF6EF]/60' : '' }}">
-                        <input type="checkbox" wire:model.live="postToFacebook" class="mt-1 rounded border-[#E0D6C2] text-[#C9A227] focus:ring-[#C9A227]">
-                        <div>
-                            <div class="font-medium text-sm">Facebook</div>
-                            <div class="text-xs text-[#8C8474]">Page feed / photos via Meta Graph.</div>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-start justify-between gap-2">
+                                                <div class="text-sm font-medium line-clamp-2">{{ $product->name }}</div>
+                                                <button type="button"
+                                                    wire:click="removeProduct({{ $product->id }})"
+                                                    class="text-xs text-[#8C8474] hover:text-rose-600 shrink-0">
+                                                    Remove
+                                                </button>
+                                            </div>
+
+                                            @if ($options === [])
+                                                <p class="mt-2 text-xs text-rose-600">No images available for this product.</p>
+                                            @else
+                                                <div class="mt-2 flex flex-wrap gap-2">
+                                                    @foreach ($options as $option)
+                                                        <button type="button"
+                                                            wire:click="selectProductImage({{ $product->id }}, {{ json_encode($option['path']) }})"
+                                                            class="relative h-12 w-12 rounded border overflow-hidden {{ $selected === $option['path'] ? 'border-[#C9A227] ring-2 ring-[#C9A227]/40' : 'border-[#E7DFCF]' }}"
+                                                            title="{{ $option['label'] }}">
+                                                            @if ($option['url'])
+                                                                <img src="{{ $option['url'] }}" alt="" class="h-full w-full object-cover">
+                                                            @endif
+                                                            @if ($option['kind'] === 'priced')
+                                                                <span class="absolute inset-x-0 bottom-0 bg-black/60 text-[9px] text-white text-center leading-4">৳</span>
+                                                            @endif
+                                                        </button>
+                                                    @endforeach
+                                                </div>
+                                                <p class="mt-1 text-[11px] text-[#8C8474]">Tap an image to use it in the Facebook post.</p>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
                         </div>
-                    </label>
-
-                    <label class="flex items-start gap-3 rounded-lg border border-[#E7DFCF] p-3 cursor-pointer {{ $postToInstagram ? 'border-[#C9A227] bg-[#FAF6EF]/60' : '' }}">
-                        <input type="checkbox" wire:model.live="postToInstagram" class="mt-1 rounded border-[#E0D6C2] text-[#C9A227] focus:ring-[#C9A227]">
-                        <div>
-                            <div class="font-medium text-sm">Instagram</div>
-                            <div class="text-xs text-[#8C8474]">Linked IG business account (single image in v1).</div>
-                        </div>
-                    </label>
+                    @endif
+                    @error('products')
+                        <p class="mt-2 text-xs text-rose-600">{{ $message }}</p>
+                    @enderror
                 </div>
-                @error('postToFacebook')
-                    <p class="mt-2 text-xs text-rose-600">{{ $message }}</p>
-                @enderror
+
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4">
+                    <h2 class="font-semibold mb-3">Compose</h2>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-1">Post text</label>
+                        <textarea
+                            wire:model.live="body"
+                            rows="5"
+                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
+                            placeholder="Write your Facebook post copy…"></textarea>
+                        @error('body')
+                            <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <div class="font-medium text-sm mb-2">Layout</div>
+                        <label class="flex items-start gap-3 rounded-lg border border-[#E7DFCF] p-3 cursor-pointer {{ $layout === 'album' ? 'border-[#C9A227] bg-[#FAF6EF]/60' : '' }}">
+                            <input type="radio" name="layout" wire:model.live="layout" value="album" class="mt-1">
+                            <div>
+                                <div class="font-medium text-sm">Album / multi-photo</div>
+                                <div class="text-xs text-[#8C8474]">Each selected product image posts as a photo in the album.</div>
+                            </div>
+                        </label>
+
+                        <label class="flex items-start gap-3 rounded-lg border border-[#E7DFCF] p-3 cursor-pointer mt-3 {{ $layout === 'collage' ? 'border-[#C9A227] bg-[#FAF6EF]/60' : '' }}">
+                            <input type="radio" name="layout" wire:model.live="layout" value="collage" class="mt-1">
+                            <div>
+                                <div class="font-medium text-sm">Collage</div>
+                                <div class="text-xs text-[#8C8474]">Composes one collage image from the selected product photos.</div>
+                            </div>
+                        </label>
+                        @error('layout')
+                            <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+                </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                    <div class="font-medium text-sm mb-2">Image source</div>
-                    <label class="flex items-start gap-3 rounded-lg border border-[#E7DFCF] p-3 cursor-pointer">
-                        <input type="radio" name="imageSource" wire:model.live="imageSource" value="thumb" class="mt-1">
-                        <div>
-                            <div class="font-medium text-sm">Product thumb</div>
-                            <div class="text-xs text-[#8C8474]">Uses the listing/primary gallery image.</div>
-                        </div>
-                    </label>
+            <div class="xl:sticky xl:top-4 self-start">
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4">
+                    <div class="flex items-center justify-between gap-2 mb-3">
+                        <h2 class="font-semibold">Facebook preview</h2>
+                        <span class="text-[11px] text-[#8C8474]">Approximate look before posting</span>
+                    </div>
 
-                    <label
-                        class="flex items-start gap-3 rounded-lg border border-[#E7DFCF] p-3 cursor-pointer mt-3 {{ ! $supportsPricedImages ? 'opacity-60' : '' }}">
-                        <input
-                            type="radio"
-                            name="imageSource"
-                            wire:model.live="imageSource"
-                            value="priced"
-                            class="mt-1"
-                            {{ $supportsPricedImages ? '' : 'disabled' }}>
-                        <div>
-                            <div class="font-medium text-sm">Images with price</div>
-                            <div class="text-xs text-[#8C8474]">
-                                {{ $supportsPricedImages ? 'Uses each product’s priced image.' : 'Not configured yet (priced-image fields missing).' }}
+                    <div class="rounded-lg border border-[#CCD0D5] bg-white overflow-hidden shadow-sm">
+                        <div class="p-3 flex items-center gap-2.5">
+                            <div class="h-10 w-10 rounded-full bg-[#1877F2] text-white flex items-center justify-center text-sm font-bold shrink-0">
+                                {{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($facebookPageName, 0, 1)) }}
+                            </div>
+                            <div class="min-w-0">
+                                <div class="text-sm font-semibold text-[#050505] truncate">{{ $facebookPageName }}</div>
+                                <div class="text-[12px] text-[#65676B]">Just now · Public</div>
                             </div>
                         </div>
-                    </label>
-                    @error('imageSource')
-                        <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
-                    @enderror
+
+                        <div class="px-3 pb-3 text-[15px] text-[#050505] whitespace-pre-wrap leading-snug min-h-[1.5rem]">
+                            @if (trim($body) !== '')
+                                {{ $body }}
+                            @else
+                                <span class="text-[#65676B]">Your post text will appear here…</span>
+                            @endif
+                        </div>
+
+                        @if ($previewImages === [])
+                            <div class="border-t border-[#E4E6EB] bg-[#F0F2F5] aspect-[1.91/1] flex items-center justify-center text-sm text-[#65676B]">
+                                Select products with images to preview
+                            </div>
+                        @elseif ($layout === 'collage')
+                            <div class="border-t border-[#E4E6EB] grid gap-0.5 bg-[#E4E6EB]
+                                {{ count($previewImages) === 1 ? 'grid-cols-1' : (count($previewImages) === 2 ? 'grid-cols-2' : 'grid-cols-2') }}">
+                                @foreach (array_slice($previewImages, 0, 4) as $index => $image)
+                                    <div class="relative {{ count($previewImages) === 1 ? 'aspect-[1.91/1]' : 'aspect-square' }} {{ count($previewImages) === 3 && $index === 0 ? 'col-span-2 aspect-[2/1]' : '' }} bg-[#F0F2F5]">
+                                        <img src="{{ $image['url'] }}" alt="" class="absolute inset-0 h-full w-full object-cover">
+                                        @if ($index === 3 && count($previewImages) > 4)
+                                            <div class="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-2xl font-semibold">
+                                                +{{ count($previewImages) - 4 }}
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endforeach
+                            </div>
+                            <div class="px-3 py-2 text-[11px] text-[#65676B] border-t border-[#E4E6EB]">
+                                Collage layout will be composed into a single image when you publish.
+                            </div>
+                        @else
+                            @php $count = count($previewImages); @endphp
+                            <div class="border-t border-[#E4E6EB] grid gap-0.5 bg-[#E4E6EB]
+                                {{ $count === 1 ? 'grid-cols-1' : ($count === 2 ? 'grid-cols-2' : ($count === 3 ? 'grid-cols-2' : 'grid-cols-2')) }}">
+                                @foreach (array_slice($previewImages, 0, 4) as $index => $image)
+                                    <div class="relative bg-[#F0F2F5]
+                                        {{ $count === 1 ? 'aspect-[1.91/1]' : '' }}
+                                        {{ $count === 2 ? 'aspect-square' : '' }}
+                                        {{ $count === 3 && $index === 0 ? 'row-span-2 aspect-auto min-h-[220px]' : '' }}
+                                        {{ $count === 3 && $index > 0 ? 'aspect-square' : '' }}
+                                        {{ $count >= 4 ? 'aspect-square' : '' }}">
+                                        <img src="{{ $image['url'] }}" alt="" class="absolute inset-0 h-full w-full object-cover">
+                                        @if ($index === 3 && $count > 4)
+                                            <div class="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-2xl font-semibold">
+                                                +{{ $count - 4 }}
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+
+                        <div class="border-t border-[#E4E6EB] px-3 py-2 flex items-center justify-around text-[13px] text-[#65676B] font-semibold">
+                            <span>Like</span>
+                            <span>Comment</span>
+                            <span>Share</span>
+                        </div>
+                    </div>
                 </div>
 
-                <div>
-                    <div class="font-medium text-sm mb-2">Layout</div>
-                    <label class="flex items-start gap-3 rounded-lg border border-[#E7DFCF] p-3 cursor-pointer">
-                        <input type="radio" name="layout" wire:model.live="layout" value="album" class="mt-1">
-                        <div>
-                            <div class="font-medium text-sm">Album / carousel</div>
-                            <div class="text-xs text-[#8C8474]">One image per product (v1 may publish first image only).</div>
-                        </div>
-                    </label>
-
-                    <label class="flex items-start gap-3 rounded-lg border border-[#E7DFCF] p-3 cursor-pointer mt-3">
-                        <input type="radio" name="layout" wire:model.live="layout" value="collage" class="mt-1">
-                        <div>
-                            <div class="font-medium text-sm">Collage</div>
-                            <div class="text-xs text-[#8C8474]">Composes a single collage image via GD.</div>
-                        </div>
-                    </label>
-                    @error('layout')
-                        <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
-                    @enderror
-                </div>
-            </div>
-
-            {{--
-                Only create the post here. Channel publishing runs on the progress panel
-                after Livewire swaps away this compose UI (Alpine on this button would be destroyed mid-loop).
-            --}}
-            <div class="flex flex-wrap items-center gap-3 justify-end"
-                x-data="{
-                    busy: false,
-                    async runPublish() {
-                        if (this.busy) return;
-                        this.busy = true;
-                        try {
-                            await $wire.createPost();
-                        } finally {
-                            this.busy = false;
+                <div class="mt-4 flex flex-wrap items-center gap-3 justify-end"
+                    x-data="{
+                        busy: false,
+                        async runPublish() {
+                            if (this.busy) return;
+                            this.busy = true;
+                            try {
+                                await $wire.createPost();
+                            } finally {
+                                this.busy = false;
+                            }
                         }
-                    }
-                }">
-                <button type="button"
-                    @click="runPublish()"
-                    :disabled="busy"
-                    class="rounded-full bg-[#C9A227] px-6 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] transition disabled:opacity-60">
-                    <span x-show="!busy">Publish</span>
-                    <span x-cloak x-show="busy">Preparing…</span>
-                </button>
+                    }">
+                    <button type="button"
+                        @click="runPublish()"
+                        :disabled="busy"
+                        class="rounded-full bg-[#C9A227] px-6 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] transition disabled:opacity-60">
+                        <span x-show="!busy">Publish to Facebook</span>
+                        <span x-cloak x-show="busy">Preparing…</span>
+                    </button>
+                </div>
             </div>
         </div>
     @else
-        {{--
-            Mounted after createPost(); auto-publishes waiting channels so progress survives
-            the compose → publishing DOM swap that previously aborted Alpine mid-flight.
-        --}}
         <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-6"
             wire:key="social-publish-progress-{{ $createdPostId }}"
             x-data="{
@@ -198,9 +277,9 @@
                     <h2 class="font-semibold">Publishing progress</h2>
                     <p class="mt-1 text-xs text-[#8C8474]">
                         @if ($phase === 'publishing')
-                            Posting to selected networks…
+                            Posting to Facebook…
                         @else
-                            Finished. Review each network result below.
+                            Finished. Review the result below.
                         @endif
                     </p>
                 </div>
@@ -259,7 +338,7 @@
                     @if ($createdPostId)
                         <a href="{{ route('admin.social-posts.show', $createdPostId) }}" wire:navigate
                             class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] transition">
-                            View details
+                            View details / re-post
                         </a>
                     @endif
                     <a href="{{ route('admin.products') }}" wire:navigate

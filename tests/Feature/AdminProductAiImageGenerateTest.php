@@ -48,7 +48,7 @@ class AdminProductAiImageGenerateTest extends TestCase
     }
 
     #[Test]
-    public function ai_modal_exposes_upload_progress_hooks_outside_product_form(): void
+    public function ai_modal_exposes_upload_progress_and_alpine_generate_gate(): void
     {
         $this->actingAs($this->adminUser());
         $product = $this->product();
@@ -56,13 +56,12 @@ class AdminProductAiImageGenerateTest extends TestCase
         Livewire::test(AdminProductEdit::class, ['product' => $product])
             ->call('openAiGenerateModal')
             ->assertSet('showAiGenerateModal', true)
-            ->assertSeeHtml('wire:model="aiRawImage"')
-            ->assertSeeHtml('livewire-upload-start')
-            ->assertSeeHtml('livewire-upload-progress')
-            ->assertSeeHtml('livewire-upload-error')
+            ->assertSeeHtml('uploadRawPhoto($event)')
             ->assertSeeHtml('Uploading raw photo')
             ->assertSeeHtml('role="progressbar"')
-            ->assertSeeHtml('ai-generate-modal-host');
+            ->assertSeeHtml(':disabled="! canGenerate()"')
+            ->assertSeeHtml('ai-generate-modal-host')
+            ->assertSeeHtml('Raw photo ready.');
     }
 
     #[Test]

@@ -336,7 +336,10 @@
     </form>
 
     {{-- Keep AI modal in the Livewire/Alpine tree (not body-teleported) so file uploads can finish. --}}
-    <div wire:key="ai-generate-modal-host" x-data="aiImageCandidates()">
+    <div
+        wire:key="ai-generate-modal-host"
+        x-data="aiImageCandidates()"
+        x-init="geminiConfigured = {{ $geminiConfigured ? 'true' : 'false' }}; syncRawImageFromWire()">
         @if ($showAiGenerateModal)
             <div class="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-4 sm:items-center"
                 wire:click.self="closeAiGenerateModal"
@@ -364,18 +367,13 @@
                         @endunless
 
                         <div class="grid gap-4 sm:grid-cols-2">
-                            <div
-                                x-on:livewire-upload-start="onRawUploadStart()"
-                                x-on:livewire-upload-progress="onRawUploadProgress($event)"
-                                x-on:livewire-upload-finish="onRawUploadFinish()"
-                                x-on:livewire-upload-error="onRawUploadError()"
-                                x-on:livewire-upload-cancel="onRawUploadCancel()">
+                            <div>
                                 <label class="block text-sm font-medium mb-1">Raw photo</label>
                                 <input type="file"
-                                    wire:model="aiRawImage"
                                     accept="image/jpeg,image/png,image/webp"
-                                    :disabled="rawUploading"
-                                    class="block w-full text-sm text-[#6B6459] file:mr-3 file:rounded-full file:border-0 file:bg-[#FAF6EF] file:px-4 file:py-2 file:text-sm file:font-medium file:text-[#C9A227] hover:file:bg-[#EFE7D6] disabled:opacity-60">
+                                    @change="uploadRawPhoto($event)"
+                                    class="block w-full text-sm text-[#6B6459] file:mr-3 file:rounded-full file:border-0 file:bg-[#FAF6EF] file:px-4 file:py-2 file:text-sm file:font-medium file:text-[#C9A227] hover:file:bg-[#EFE7D6] disabled:opacity-60"
+                                    :disabled="rawUploading">
                                 <div x-show="rawUploading" x-cloak class="mt-2 space-y-1">
                                     <div class="flex items-center justify-between gap-2 text-xs text-[#8C8474]">
                                         <span>Uploading raw photo…</span>
@@ -387,49 +385,47 @@
                                             :style="`width: ${rawUploadProgress}%`"></div>
                                     </div>
                                 </div>
+                                <p x-show="! rawUploading && hasRawImage" x-cloak class="mt-2 text-xs text-[#8C8474]">Raw photo ready.</p>
                                 <p x-show="rawUploadError" x-text="rawUploadError" x-cloak class="mt-1 text-xs text-rose-600"></p>
                                 @error('aiRawImage') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
-                                @if ($aiRawImage)
-                                    <p class="mt-2 text-xs text-[#8C8474]">Selected: {{ method_exists($aiRawImage, 'getClientOriginalName') ? $aiRawImage->getClientOriginalName() : 'raw photo' }}</p>
-                                @endif
                             </div>
-                                <div>
-                                    <label class="block text-sm font-medium mb-1">Prompt</label>
-                                    <textarea wire:model="aiPrompt" rows="4"
-                                        placeholder="Describe how to improve or restyle the product photo…"
-                                        class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm"></textarea>
-                                    @error('aiPrompt') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Prompt</label>
+                                <textarea wire:model="aiPrompt" rows="4"
+                                    placeholder="Describe how to improve or restyle the product photo…"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm"></textarea>
+                                @error('aiPrompt') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                            </div>
+                        </div>
+
+                        @if ($recentAiPrompts->isNotEmpty())
+                            <div>
+                                <p class="text-xs font-medium text-[#6B6459] mb-2">Recent prompts</p>
+                                <div class="flex flex-wrap gap-2">
+                                    @foreach ($recentAiPrompts as $recent)
+                                        <button type="button"
+                                            wire:click="useRecentPrompt(@js($recent->prompt))"
+                                            class="max-w-full truncate rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-3 py-1 text-xs text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]"
+                                            title="{{ $recent->prompt }}">
+                                            {{ \Illuminate\Support\Str::limit($recent->prompt, 48) }}
+                                        </button>
+                                    @endforeach
                                 </div>
                             </div>
+                        @endif
 
-                            @if ($recentAiPrompts->isNotEmpty())
-                                <div>
-                                    <p class="text-xs font-medium text-[#6B6459] mb-2">Recent prompts</p>
-                                    <div class="flex flex-wrap gap-2">
-                                        @foreach ($recentAiPrompts as $recent)
-                                            <button type="button"
-                                                wire:click="useRecentPrompt(@js($recent->prompt))"
-                                                class="max-w-full truncate rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-3 py-1 text-xs text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]"
-                                                title="{{ $recent->prompt }}">
-                                                {{ \Illuminate\Support\Str::limit($recent->prompt, 48) }}
-                                            </button>
-                                        @endforeach
-                                    </div>
-                                </div>
-                            @endif
-
-                            <div class="flex flex-wrap items-center gap-3">
-                                <button type="button"
-                                    wire:click="generateAiImage"
-                                    wire:loading.attr="disabled"
-                                    wire:target="generateAiImage"
-                                    :disabled="rawUploading || {{ json_encode(! $geminiConfigured || ! $aiRawImage) }}"
-                                    class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
-                                    <span wire:loading.remove wire:target="generateAiImage">Generate</span>
-                                    <span wire:loading wire:target="generateAiImage">Generating…</span>
-                                </button>
-                                <p class="text-xs text-[#8C8474]">Each Generate adds another candidate to this session list.</p>
-                            </div>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <button type="button"
+                                wire:click="generateAiImage"
+                                wire:loading.attr="disabled"
+                                wire:target="generateAiImage"
+                                :disabled="! canGenerate()"
+                                class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
+                                <span wire:loading.remove wire:target="generateAiImage">Generate</span>
+                                <span wire:loading wire:target="generateAiImage">Generating…</span>
+                            </button>
+                            <p class="text-xs text-[#8C8474]">Each Generate adds another candidate to this session list.</p>
+                        </div>
 
                             @if ($aiGenerateError)
                                 <p class="text-sm text-rose-600">{{ $aiGenerateError }}</p>

@@ -47,6 +47,15 @@ class AdminProductAiImageGenerateTest extends TestCase
     }
 
     #[Test]
+    public function livewire_payload_limit_allows_compressed_ai_raw_photos(): void
+    {
+        $this->assertGreaterThanOrEqual(
+            2 * 1024 * 1024,
+            (int) config('livewire.payload.max_size'),
+        );
+    }
+
+    #[Test]
     public function ai_modal_prepares_raw_photo_locally_without_livewire_temp_upload(): void
     {
         $this->actingAs($this->adminUser());

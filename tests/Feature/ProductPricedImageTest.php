@@ -210,8 +210,15 @@ class ProductPricedImageTest extends TestCase
         $this->actingAs($this->adminUser());
         $product = $this->productWithPrimaryImage();
 
-        Livewire::test(AdminProductEdit::class, ['product' => $product])
-            ->assertSee('No priced image yet. Use Put price on image to create one.');
+        $html = Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->assertSee('No priced image yet. Use Put price on image to create one.')
+            ->html();
+
+        $this->assertSame(
+            1,
+            substr_count($html, 'wire:click="openPricedImageModal"'),
+            'Product edit should expose a single Put price on image control.',
+        );
     }
 
     #[Test]

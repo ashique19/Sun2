@@ -105,10 +105,6 @@
                     </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
-                    <button type="button" wire:click="openPricedImageModal"
-                        class="rounded-full border border-[#1E1E1E] px-4 py-2 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
-                        {{ $product?->priced_image_path ? 'Edit priced image' : 'Put price on image' }}
-                    </button>
                     <button type="button" wire:click="openAiGenerateModal"
                         class="rounded-full border border-[#C9A227] px-4 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]">
                         Generate with AI

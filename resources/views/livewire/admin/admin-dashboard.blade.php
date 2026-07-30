@@ -116,7 +116,7 @@
                     <p class="text-xs text-amber-800/80">
                         {{ $unconfirmedCourierCharges->count() }}{{ $unconfirmedCourierCharges->count() >= 25 ? '+' : '' }}
                         dispatched {{ $unconfirmedCourierCharges->count() === 1 ? 'order needs' : 'orders need' }}
-                        charge review — defaults use Dhaka / Outside Dhaka catalog rates
+                        charge review — defaults from area delivery_charge_upto_5
                     </p>
                 </div>
                 <a href="{{ route('admin.orders.dispatched') }}"

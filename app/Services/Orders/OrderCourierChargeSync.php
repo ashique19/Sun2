@@ -2,6 +2,7 @@
 
 namespace App\Services\Orders;
 
+use App\Models\Area;
 use App\Models\City;
 use App\Models\Courier;
 use App\Models\Order;
@@ -146,21 +147,66 @@ class OrderCourierChargeSync
 
     /**
      * Area-based default for the confirm-courier-charges UI.
-     * Prefers catalog Dhaka/outside rates so admins start from the expected fee.
+     * Prefer areas.delivery_charge_upto_5 where areas.name matches orders.area.
+     * Fall back to courier Dhaka/outside catalog rates when no area matches.
      */
     public function suggestedConfirmAmount(Order $order, ?Courier $courier = null): float
     {
+        $fromArea = $this->areaDeliveryChargeUpto5($order);
+
+        if ($fromArea !== null) {
+            return round($fromArea, 2);
+        }
+
         $courier ??= $order->relationLoaded('courier') ? $order->courier : $order->courier()->first();
 
         return round($this->estimateFromCatalog($order, $courier), 2);
     }
 
     /**
-     * Human label for the area used by catalog estimate.
+     * Human label for the rate source used by the confirm UI.
      */
     public function areaRateLabel(Order $order): string
     {
+        $areaName = trim((string) ($order->area ?? ''));
+
+        if ($areaName !== '' && $this->areaDeliveryChargeUpto5($order) !== null) {
+            return $areaName;
+        }
+
         return $this->isDhakaOrder($order) ? 'Dhaka' : 'Outside Dhaka';
+    }
+
+    /**
+     * Lookup areas.delivery_charge_upto_5 by orders.area (= areas.name).
+     * Prefer a row whose city also matches orders.city when available.
+     */
+    public function areaDeliveryChargeUpto5(Order $order): ?float
+    {
+        $areaName = trim((string) ($order->area ?? ''));
+
+        if ($areaName === '') {
+            return null;
+        }
+
+        $cityName = trim((string) ($order->city ?? ''));
+
+        if ($cityName !== '') {
+            $scoped = Area::query()
+                ->where('name', $areaName)
+                ->whereHas('city', fn ($query) => $query->where('name', $cityName))
+                ->value('delivery_charge_upto_5');
+
+            if ($scoped !== null) {
+                return (float) $scoped;
+            }
+        }
+
+        $charge = Area::query()
+            ->where('name', $areaName)
+            ->value('delivery_charge_upto_5');
+
+        return $charge !== null ? (float) $charge : null;
     }
 
     /**

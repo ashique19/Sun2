@@ -90,6 +90,11 @@ class AdminProductMultiImageUploadTest extends TestCase
         Livewire::test(AdminProductEdit::class, ['product' => $product])
             ->assertSeeHtml('Upload ${queue.length} image(s)')
             ->assertSeeHtml('@click="uploadAll()"')
+            ->assertSeeHtml('x-show="uploading"')
+            ->assertSeeHtml('role="progressbar"')
+            ->assertSeeHtml(':aria-valuenow="uploadProgress"')
+            ->assertSeeHtml('x-text="`${uploadProgress}%`"')
+            ->assertSeeHtml("uploadStatus || 'Uploading…'")
             ->assertSeeHtml('@click.stop="openEditor(index)"')
             ->assertSeeHtml('@click.self="onEditorOutside()"')
             ->assertDontSeeHtml('@click.outside="closeEditor()"');

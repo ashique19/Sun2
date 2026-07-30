@@ -280,6 +280,29 @@ class Order extends Model
     }
 
     /**
+     * Merchant panel URL for reviewing Steadfast parcel charges.
+     * Uses consignment/parcel id only — never the tracking code.
+     */
+    public function steadfastConsignmentUrl(): ?string
+    {
+        $this->loadMissing('courier');
+
+        if ($this->courier?->slug !== 'steadfast') {
+            return null;
+        }
+
+        $parcelId = filled($this->courier_consignment_id)
+            ? (string) $this->courier_consignment_id
+            : $this->consignmentIdFromCourierLogs();
+
+        if ($parcelId === null || $parcelId === '' || ! ctype_digit($parcelId)) {
+            return null;
+        }
+
+        return 'https://steadfast.com.bd/user/consignment/'.$parcelId;
+    }
+
+    /**
      * Amount the courier should collect.
      *
      * Prefer cod_amount (residual after advances), then due_amount, then total.

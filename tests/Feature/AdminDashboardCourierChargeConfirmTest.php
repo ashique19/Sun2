@@ -40,7 +40,7 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
         ]);
     }
 
-    private function dispatchedOrder(Courier $courier, string $name, float $charge = 60): Order
+    private function dispatchedOrder(Courier $courier, string $name, float $charge = 60, ?string $consignmentId = null): Order
     {
         return Order::query()->create([
             'order_number' => 'DC-'.uniqid(),
@@ -55,6 +55,7 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
             'total' => 1080,
             'courier_id' => $courier->id,
             'courier_tracker' => 'SF'.random_int(1000, 9999),
+            'courier_consignment_id' => $consignmentId,
             'dispatch_date' => now()->subHour(),
             'placed_at' => now()->subDay(),
         ]);
@@ -65,11 +66,14 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
     {
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
-        $this->dispatchedOrder($courier, 'Ayesha Akter', 60);
+        $this->dispatchedOrder($courier, 'Ayesha Akter', 60, '277193413');
 
         Livewire::test(AdminDashboard::class)
             ->assertSee('Confirm courier charges')
             ->assertSee('Ayesha Akter')
+            ->assertSee('Steadfast ↗')
+            ->assertSeeHtml('href="https://steadfast.com.bd/user/consignment/277193413"')
+            ->assertSeeHtml('target="_blank"')
             ->assertSee('Charge ৳')
             ->assertSeeHtml('wire:click="confirmCourierCharge(');
     }

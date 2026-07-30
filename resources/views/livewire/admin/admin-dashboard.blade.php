@@ -134,6 +134,15 @@
                                     class="truncate text-sm font-medium text-[#1E1E1E] hover:text-[#C9A227]">
                                     {{ $order->name }}
                                 </a>
+                                @if ($steadfastUrl = $order->steadfastConsignmentUrl())
+                                    <a href="{{ $steadfastUrl }}"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="shrink-0 text-xs font-medium text-[#C9A227] hover:underline"
+                                        title="Open Steadfast consignment">
+                                        Steadfast ↗
+                                    </a>
+                                @endif
                                 <span class="text-xs text-[#8C8474]">#{{ $order->order_number }}</span>
                             </div>
                             <p class="mt-0.5 text-[11px] text-[#8C8474]">

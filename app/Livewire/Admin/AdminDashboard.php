@@ -113,7 +113,7 @@ class AdminDashboard extends Component
             ->orderByDesc('dispatch_date')
             ->orderByDesc('id')
             ->limit(25)
-            ->get(['id', 'order_number', 'name', 'city', 'courier_id', 'courier_tracker', 'courier_charge', 'dispatch_date', 'status']);
+            ->get(['id', 'order_number', 'name', 'city', 'courier_id', 'courier_tracker', 'courier_consignment_id', 'courier_charge', 'dispatch_date', 'status']);
 
         foreach ($unconfirmedCourierCharges as $order) {
             if (! array_key_exists($order->id, $this->pendingCourierCharges)) {

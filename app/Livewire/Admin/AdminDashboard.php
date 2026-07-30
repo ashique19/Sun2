@@ -47,7 +47,8 @@ class AdminDashboard extends Component
             ->whereNull('courier_charge_confirmed_at')
             ->firstOrFail();
 
-        $raw = $this->pendingCourierCharges[$orderId] ?? (string) (int) round((float) $order->courier_charge);
+        $raw = $this->pendingCourierCharges[$orderId]
+            ?? (string) (int) round($courierChargeSync->suggestedConfirmAmount($order));
 
         $this->validate([
             'pendingCourierCharges.'.$orderId => ['required', 'numeric', 'min:0'],
@@ -65,7 +66,7 @@ class AdminDashboard extends Component
         $this->courierChargeMessage = 'Courier charge confirmed for '.$order->name.'.';
     }
 
-    public function render()
+    public function render(OrderCourierChargeSync $courierChargeSync)
     {
         if (AdminAccess::isModeratorOnly()) {
             return view('livewire.admin.admin-dashboard', [
@@ -85,6 +86,7 @@ class AdminDashboard extends Component
                     'unresolved_by_type' => [],
                 ],
                 'unconfirmedCourierCharges' => collect(),
+                'courierChargeAreaLabels' => [],
             ]);
         }
 
@@ -113,11 +115,16 @@ class AdminDashboard extends Component
             ->orderByDesc('dispatch_date')
             ->orderByDesc('id')
             ->limit(25)
-            ->get(['id', 'order_number', 'name', 'city', 'courier_id', 'courier_tracker', 'courier_consignment_id', 'courier_charge', 'dispatch_date', 'status']);
+            ->get(['id', 'order_number', 'name', 'city', 'area', 'courier_id', 'courier_tracker', 'courier_consignment_id', 'courier_charge', 'dispatch_date', 'status']);
+
+        $courierChargeAreaLabels = [];
 
         foreach ($unconfirmedCourierCharges as $order) {
+            $suggested = $courierChargeSync->suggestedConfirmAmount($order);
+            $courierChargeAreaLabels[$order->id] = $courierChargeSync->areaRateLabel($order);
+
             if (! array_key_exists($order->id, $this->pendingCourierCharges)) {
-                $this->pendingCourierCharges[$order->id] = (string) (int) round((float) $order->courier_charge);
+                $this->pendingCourierCharges[$order->id] = (string) (int) round($suggested);
             }
         }
 
@@ -128,6 +135,7 @@ class AdminDashboard extends Component
             'periodTotals' => $periodTotals,
             'attentionSummary' => $attentionSummary,
             'unconfirmedCourierCharges' => $unconfirmedCourierCharges,
+            'courierChargeAreaLabels' => $courierChargeAreaLabels,
         ]);
     }
 }

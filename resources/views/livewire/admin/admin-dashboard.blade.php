@@ -116,7 +116,7 @@
                     <p class="text-xs text-amber-800/80">
                         {{ $unconfirmedCourierCharges->count() }}{{ $unconfirmedCourierCharges->count() >= 25 ? '+' : '' }}
                         dispatched {{ $unconfirmedCourierCharges->count() === 1 ? 'order needs' : 'orders need' }}
-                        charge review (Steadfast updates weight fees manually)
+                        charge review — defaults use Dhaka / Outside Dhaka catalog rates
                     </p>
                 </div>
                 <a href="{{ route('admin.orders.dispatched') }}"
@@ -161,6 +161,9 @@
                         <div class="w-28">
                             <label for="courier-charge-{{ $order->id }}" class="block text-[10px] font-medium uppercase tracking-wide text-[#8C8474] mb-1">
                                 Charge ৳
+                                <span class="normal-case tracking-normal font-normal">
+                                    · {{ $courierChargeAreaLabels[$order->id] ?? 'Outside Dhaka' }}
+                                </span>
                             </label>
                             <input id="courier-charge-{{ $order->id }}"
                                 type="number"

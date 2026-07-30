@@ -40,14 +40,19 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
         ]);
     }
 
-    private function dispatchedOrder(Courier $courier, string $name, float $charge = 60, ?string $consignmentId = null): Order
-    {
+    private function dispatchedOrder(
+        Courier $courier,
+        string $name,
+        float $charge = 60,
+        ?string $consignmentId = null,
+        string $city = 'Dhaka',
+    ): Order {
         return Order::query()->create([
             'order_number' => 'DC-'.uniqid(),
             'name' => $name,
             'phone' => '01710000000',
             'address' => 'Test address',
-            'city' => 'Dhaka',
+            'city' => $city,
             'status' => 'dispatched',
             'subtotal' => 1000,
             'delivery_charge' => 80,
@@ -76,6 +81,22 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
             ->assertSeeHtml('target="_blank"')
             ->assertSee('Charge ৳')
             ->assertSeeHtml('wire:click="confirmCourierCharge(');
+    }
+
+    #[Test]
+    public function dashboard_defaults_courier_charge_from_area_catalog_rates(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+
+        $dhaka = $this->dispatchedOrder($courier, 'Dhaka Customer', 0, null, 'Dhaka');
+        $outside = $this->dispatchedOrder($courier, 'Chittagong Customer', 0, null, 'Chittagong');
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSet('pendingCourierCharges.'.$dhaka->id, '60')
+            ->assertSet('pendingCourierCharges.'.$outside->id, '110')
+            ->assertSee('Dhaka')
+            ->assertSee('Outside Dhaka');
     }
 
     #[Test]
@@ -113,6 +134,17 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
         Livewire::test(AdminDashboard::class)
             ->assertDontSee('Confirm courier charges')
             ->assertDontSee('Already Confirmed');
+    }
+
+    #[Test]
+    public function order_show_defaults_unconfirmed_charge_from_area(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+        $order = $this->dispatchedOrder($courier, 'Show Default', 0, null, 'Sylhet');
+
+        Livewire::test(AdminOrderShow::class, ['order' => $order])
+            ->assertSet('courierChargeOverride', '110');
     }
 
     #[Test]

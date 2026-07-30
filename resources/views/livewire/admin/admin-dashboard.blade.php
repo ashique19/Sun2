@@ -113,7 +113,7 @@
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#EFE7D6] px-4 py-3">
                 <div class="min-w-0">
                     <h2 class="text-sm font-semibold text-[#1E1E1E]">Expense assistant</h2>
-                    <p class="text-xs text-[#8C8474]">Gentle reminders so monthly costs don’t get forgotten.</p>
+                    <p class="text-xs text-[#8C8474]">Asks from 2 days before each due date (short window) so the dashboard stays clear.</p>
                 </div>
                 <a href="{{ route('admin.expenses') }}" wire:navigate
                     class="shrink-0 text-xs font-medium text-[#C9A227] hover:text-[#B8921F]">

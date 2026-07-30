@@ -2,13 +2,17 @@
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
             <h1 class="font-serif text-3xl font-semibold">Couriers</h1>
-            @php $totalBalance = $couriers->sum(fn ($c) => (float) $c->balance); @endphp
             <p class="text-sm text-[#6B6459] mt-1">
-                Book balance total:
-                <span class="tabular-nums font-medium {{ $totalBalance > 0 ? 'text-amber-700' : ($totalBalance < 0 ? 'text-emerald-700' : '') }}">
-                    &#2547; {{ number_format($totalBalance, 0) }}
-                </span>
-                <span class="text-xs text-[#8C8474]">(positive = couriers owe you)</span>
+                Receivable:
+                <span class="tabular-nums font-medium text-amber-700">&#2547; {{ number_format($totalReceivable ?? 0, 0) }}</span>
+                <span class="text-[#8C8474]">·</span>
+                Pending delivery:
+                <span class="tabular-nums font-medium text-[#6B6459]">&#2547; {{ number_format($totalPending ?? 0, 0) }}</span>
+            </p>
+            <p class="text-xs text-[#8C8474] mt-1">
+                Receivable = delivered COD − courier charge − COD % − withdrawals.
+                Pending = COD still with courier on dispatched parcels.
+                API = live Steadfast wallet.
             </p>
         </div>
         <a href="{{ route('admin.couriers.create') }}" wire:navigate
@@ -26,14 +30,24 @@
 
     <div class="rounded-xl border border-[#EFE7D6] bg-white overflow-hidden">
         <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="w-full text-sm min-w-[64rem]">
                 <thead class="bg-[#FAF6EF] text-left text-[#6B6459]">
                     <tr>
                         <th class="px-4 py-3 font-medium">Name</th>
                         <th class="px-4 py-3 font-medium">Slug</th>
                         <th class="px-4 py-3 font-medium">Charge</th>
-                        <th class="px-4 py-3 font-medium">Book balance</th>
-                        <th class="px-4 py-3 font-medium">API balance</th>
+                        <th class="px-4 py-3 font-medium">
+                            <span title="Delivered COD minus courier fees and withdrawals">Receivable</span>
+                        </th>
+                        <th class="px-4 py-3 font-medium">
+                            <span title="COD still with courier on dispatched orders">Pending</span>
+                        </th>
+                        <th class="px-4 py-3 font-medium">
+                            <span title="Live wallet balance from courier API">API balance</span>
+                        </th>
+                        <th class="px-4 py-3 font-medium">
+                            <span title="Legacy book ledger (dispatch credits − returns − withdrawals)">Book</span>
+                        </th>
                         <th class="px-4 py-3 font-medium">Orders</th>
                         <th class="px-4 py-3 font-medium">Status</th>
                         <th class="px-4 py-3 font-medium"></th>
@@ -41,7 +55,10 @@
                 </thead>
                 <tbody class="divide-y divide-[#E7DFCF]">
                     @forelse ($couriers as $courier)
-                        @php $apiBalance = $apiBalances[$courier->id] ?? null; @endphp
+                        @php
+                            $apiBalance = $apiBalances[$courier->id] ?? null;
+                            $summary = $balanceSummaries[$courier->id] ?? ['pending' => 0, 'receivable' => 0, 'book' => (float) $courier->balance];
+                        @endphp
                         <tr class="hover:bg-[#FAF6EF]/60" wire:key="courier-{{ $courier->id }}">
                             <td class="px-4 py-3 font-medium">
                                 {{ $courier->name }}
@@ -56,8 +73,11 @@
                                 @endif
                             </td>
                             <td class="px-4 py-3">&#2547; {{ number_format($courier->charge, 0) }}</td>
-                            <td class="px-4 py-3 tabular-nums {{ (float) $courier->balance > 0 ? 'text-amber-700 font-medium' : ((float) $courier->balance < 0 ? 'text-emerald-700' : 'text-[#6B6459]') }}">
-                                &#2547; {{ number_format($courier->balance, 0) }}
+                            <td class="px-4 py-3 tabular-nums {{ ($summary['receivable'] ?? 0) > 0 ? 'text-amber-700 font-medium' : 'text-[#6B6459]' }}">
+                                &#2547; {{ number_format($summary['receivable'] ?? 0, 0) }}
+                            </td>
+                            <td class="px-4 py-3 tabular-nums text-[#6B6459]">
+                                &#2547; {{ number_format($summary['pending'] ?? 0, 0) }}
                             </td>
                             <td class="px-4 py-3 tabular-nums text-[#6B6459]">
                                 @if ($apiBalance !== null)
@@ -67,6 +87,9 @@
                                 @else
                                     <span class="text-[#8C8474]">n/a</span>
                                 @endif
+                            </td>
+                            <td class="px-4 py-3 tabular-nums text-[#8C8474]">
+                                &#2547; {{ number_format($summary['book'] ?? $courier->balance, 0) }}
                             </td>
                             <td class="px-4 py-3">{{ $courier->orders_count }}</td>
                             <td class="px-4 py-3">
@@ -94,7 +117,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="px-4 py-8 text-center text-[#8C8474]">No couriers yet.</td>
+                            <td colspan="10" class="px-4 py-8 text-center text-[#8C8474]">No couriers yet.</td>
                         </tr>
                     @endforelse
                 </tbody>

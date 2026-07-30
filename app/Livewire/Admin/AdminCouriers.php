@@ -114,10 +114,15 @@ class AdminCouriers extends Component
             ->orderBy('name')
             ->get();
 
+        $summaries = $balances->summarizeMany($couriers);
+
         return view('livewire.admin.admin-couriers', [
             'couriers' => $couriers,
             'apiSlugs' => config('couriers.api_slugs', []),
             'apiBalances' => $balances->fetchApiBalancesFor($couriers),
+            'balanceSummaries' => $summaries,
+            'totalPending' => array_sum(array_column($summaries, 'pending')),
+            'totalReceivable' => array_sum(array_column($summaries, 'receivable')),
         ]);
     }
 }

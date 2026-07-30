@@ -182,6 +182,66 @@ class CourierBalanceService
         return $balances;
     }
 
+    /**
+     * Admin-facing balance breakdown for a courier.
+     *
+     * - pending: COD still with courier on dispatched parcels (in process)
+     * - receivable: net remittance due for delivered parcels after courier fees, minus withdrawals
+     * - book: running ledger on couriers.balance
+     *
+     * @return array{pending: float, receivable: float, book: float, withdrawn: float}
+     */
+    public function summarize(Courier $courier): array
+    {
+        $pending = (float) Order::query()
+            ->where('courier_id', $courier->id)
+            ->where('status', 'dispatched')
+            ->get(['cod_amount', 'due_amount', 'total'])
+            ->sum(fn (Order $order) => $order->collectableAmount());
+
+        $deliveredOrders = Order::query()
+            ->where('courier_id', $courier->id)
+            ->where('status', 'delivered')
+            ->with('courier:id,slug,cod_percentage')
+            ->get(['id', 'courier_id', 'collected_amount', 'delivery_charge', 'courier_charge', 'cod_amount', 'due_amount', 'total']);
+
+        $grossRemittable = 0.0;
+
+        foreach ($deliveredOrders as $order) {
+            $collected = max(0.0, (float) ($order->collected_amount ?? 0));
+            $courierCharge = max(0.0, (float) ($order->courier_charge ?? 0));
+            $codCharge = $order->codCharge();
+            $grossRemittable += max(0.0, $collected - $courierCharge - $codCharge);
+        }
+
+        $withdrawn = abs((float) CourierBalanceEntry::query()
+            ->where('courier_id', $courier->id)
+            ->where('type', 'withdraw')
+            ->sum('amount'));
+
+        return [
+            'pending' => round($pending, 2),
+            'receivable' => round(max(0.0, $grossRemittable - $withdrawn), 2),
+            'book' => round((float) $courier->balance, 2),
+            'withdrawn' => round($withdrawn, 2),
+        ];
+    }
+
+    /**
+     * @param  iterable<Courier>  $couriers
+     * @return array<int, array{pending: float, receivable: float, book: float, withdrawn: float}>
+     */
+    public function summarizeMany(iterable $couriers): array
+    {
+        $summaries = [];
+
+        foreach ($couriers as $courier) {
+            $summaries[$courier->id] = $this->summarize($courier);
+        }
+
+        return $summaries;
+    }
+
     private function apply(
         Courier $courier,
         string $type,

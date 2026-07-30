@@ -138,6 +138,10 @@
                                         </svg>
                                     </button>
                                 </div>
+                                @php($imageMeta = $image->fileMeta())
+                                @if ($imageMeta && $imageMeta['label'] !== '')
+                                    <p class="text-[11px] tabular-nums text-[#8C8474]" title="Image dimensions and file size">{{ $imageMeta['label'] }}</p>
+                                @endif
                                 <div>
                                     <label class="block text-xs font-medium text-[#6B6459] mb-1">Alt text</label>
                                     <input type="text"
@@ -211,10 +215,16 @@
                     </button>
                 </div>
                 @if ($product?->priced_image_path)
-                    <div class="max-w-sm overflow-hidden rounded-xl border border-[#EFE7D6] bg-[#FAF6EF]">
-                        <img src="{{ \App\Support\StorefrontAssets::url($product->priced_image_path) }}"
-                            alt="Priced image for {{ $product->name }}"
-                            class="w-full object-contain">
+                    <div class="max-w-sm space-y-2">
+                        <div class="overflow-hidden rounded-xl border border-[#EFE7D6] bg-[#FAF6EF]">
+                            <img src="{{ \App\Support\StorefrontAssets::url($product->priced_image_path) }}"
+                                alt="Priced image for {{ $product->name }}"
+                                class="w-full object-contain">
+                        </div>
+                        @php($pricedMeta = \App\Support\ImageFileMeta::forPublicPath($product->priced_image_path))
+                        @if ($pricedMeta && $pricedMeta['label'] !== '')
+                            <p class="text-[11px] tabular-nums text-[#8C8474]" title="Priced image dimensions and file size">{{ $pricedMeta['label'] }}</p>
+                        @endif
                     </div>
                 @else
                     <p class="rounded-lg bg-[#FAF6EF] px-4 py-6 text-center text-sm text-[#8C8474]">
@@ -249,6 +259,7 @@
                                         <span x-show="item.edited" class="absolute top-2 right-2 rounded bg-[#1E1E1E] px-2 py-0.5 text-[10px] font-semibold text-white">Edited</span>
                                     </div>
                                     <p class="text-xs text-[#8C8474] truncate" :title="item.name" x-text="item.name"></p>
+                                    <p class="text-[11px] tabular-nums text-[#8C8474]" x-show="item.metaLabel" x-text="item.metaLabel" title="Image dimensions and file size"></p>
                                     <div>
                                         <label class="block text-xs font-medium text-[#6B6459] mb-1">Alt text</label>
                                         <input type="text" x-model="item.alt" class="w-full rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-xs" placeholder="Optional description">

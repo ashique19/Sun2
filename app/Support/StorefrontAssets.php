@@ -146,7 +146,7 @@ class StorefrontAssets
         return self::CDN_BASE.$path;
     }
 
-    private static function toRelativePath(string $pathOrUrl): ?string
+    public static function toRelativePath(string $pathOrUrl): ?string
     {
         if (str_starts_with($pathOrUrl, 'http://') || str_starts_with($pathOrUrl, 'https://')) {
             $path = parse_url($pathOrUrl, PHP_URL_PATH);

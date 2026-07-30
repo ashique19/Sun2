@@ -76,14 +76,18 @@ const registerProductImageAlpineData = () => {
                     continue;
                 }
 
-                this.queue.push({
+                const item = {
                     id: makeId(),
                     name: file.name,
                     mime: file.type || 'image/jpeg',
                     alt: '',
                     previewUrl: URL.createObjectURL(file),
                     file,
-                });
+                    metaLabel: this.formatBytes(file.size),
+                };
+
+                this.queue.push(item);
+                this.refreshQueueItemMeta(item);
             }
 
             if (skipped > 0 && this.queue.length === 0) {
@@ -91,6 +95,76 @@ const registerProductImageAlpineData = () => {
             }
 
             event.target.value = '';
+        },
+
+        formatBytes(bytes) {
+            const value = Number(bytes);
+
+            if (! Number.isFinite(value) || value < 0) {
+                return '';
+            }
+
+            if (value < 1024) {
+                return `${Math.round(value)} B`;
+            }
+
+            const kilobytes = value / 1024;
+
+            if (kilobytes < 1024) {
+                const rounded = kilobytes >= 100 ? Math.round(kilobytes) : Math.round(kilobytes * 10) / 10;
+
+                return `${rounded} KB`;
+            }
+
+            const megabytes = kilobytes / 1024;
+            const rounded = megabytes >= 10 ? Math.round(megabytes) : Math.round(megabytes * 100) / 100;
+
+            return `${rounded} MB`;
+        },
+
+        metaLabelFrom(width, height, bytes) {
+            const parts = [];
+
+            if (width > 0 && height > 0) {
+                parts.push(`${width} × ${height}`);
+            }
+
+            const size = this.formatBytes(bytes);
+
+            if (size) {
+                parts.push(size);
+            }
+
+            return parts.join(' · ');
+        },
+
+        async refreshQueueItemMeta(item) {
+            if (! item?.file) {
+                return;
+            }
+
+            item.metaLabel = this.formatBytes(item.file.size);
+
+            try {
+                let bitmap = null;
+
+                if (typeof createImageBitmap === 'function') {
+                    bitmap = await createImageBitmap(item.file);
+                } else {
+                    bitmap = await this.loadImageElement(item.file);
+                }
+
+                const width = bitmap.width || bitmap.naturalWidth || 0;
+                const height = bitmap.height || bitmap.naturalHeight || 0;
+
+                if (typeof bitmap.close === 'function') {
+                    bitmap.close();
+                }
+
+                item.metaLabel = this.metaLabelFrom(width, height, item.file.size);
+            } catch {
+                // Keep size-only label when dimensions cannot be read.
+            }
         },
 
         removeFromQueue(index) {
@@ -224,6 +298,7 @@ const registerProductImageAlpineData = () => {
             });
             item.mime = 'image/jpeg';
             item.edited = true;
+            this.refreshQueueItemMeta(item);
 
             this.closeEditor();
         },

@@ -47,6 +47,10 @@
             <div>
                 <label class="block text-sm font-medium mb-1">COD percentage</label>
                 <input type="number" min="0" max="100" step="0.01" wire:model="cod_percentage" class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                <p class="text-xs text-[#8C8474] mt-1">
+                    Fee courier takes for collecting cash.
+                    Steadfast: (collected − delivery) × %. Other couriers: collected × %.
+                </p>
                 @error('cod_percentage') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
             </div>
             <div>

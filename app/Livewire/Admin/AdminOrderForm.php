@@ -150,7 +150,7 @@ class AdminOrderForm extends Component
         $this->orderDate = now('Asia/Dhaka')->toDateString();
 
         if ($order?->exists) {
-            $this->order = $order->load('items.product');
+            $this->order = $order->load(['items.product', 'courier']);
             $this->fillFromOrder($this->order);
             $this->orderDate = $this->order->placed_at?->timezone('Asia/Dhaka')->toDateString()
                 ?? $this->orderDate;
@@ -878,7 +878,7 @@ class AdminOrderForm extends Component
                 return;
             }
 
-            $this->order = $order->load('items.product');
+            $this->order = $order->load(['items.product', 'courier']);
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Throwable $e) {
@@ -953,6 +953,9 @@ class AdminOrderForm extends Component
         }
 
         $courierCharge = $this->order ? (float) $this->order->courier_charge : 0.0;
+        $collectedAmount = $this->order ? (float) ($this->order->collected_amount ?? 0) : 0.0;
+        $courierSlug = $this->order?->courier?->slug;
+        $codPercentage = (float) ($this->order?->courier?->cod_percentage ?? 1);
 
         $items = array_map(fn (array $line) => [
             'purchase_price' => $line['purchase_price'],
@@ -966,6 +969,9 @@ class AdminOrderForm extends Component
             courierCharge: $courierCharge,
             adjustments: $adjustments,
             items: $items,
+            collectedAmount: $collectedAmount,
+            courierSlug: $courierSlug,
+            codPercentage: $codPercentage,
         )->netRevenue;
     }
 

@@ -16,6 +16,7 @@ use App\Models\OrderProduct;
  * - COGS uses (quantity - returned_quantity) × purchase_price
  * - Charges cannot be negative (enforced at service layer; not here)
  * - Delivery and courier cost are independent fields, not adjustments
+ * - COD charge is derived from collected amount × courier COD % (Steadfast excludes delivery)
  */
 class OrderTotalCalculator
 {
@@ -31,17 +32,27 @@ class OrderTotalCalculator
         float $courierCharge,
         iterable $adjustments = [],
         iterable $items = [],
+        float $collectedAmount = 0.0,
+        ?string $courierSlug = null,
+        float $codPercentage = 1.0,
     ): OrderTotals {
         [$charges, $discounts] = $this->sumAdjustments($adjustments);
         $total = max(0.0, $subtotal + $deliveryCharge + $charges - $discounts);
         $cogs = $this->cogsFromItems($items);
-        $netRevenue = $subtotal - $cogs + $charges - $discounts + $deliveryCharge - $courierCharge;
+        $codCharge = $this->codCharge(
+            collectedAmount: $collectedAmount,
+            deliveryCharge: $deliveryCharge,
+            courierSlug: $courierSlug,
+            codPercentage: $codPercentage,
+        );
+        $netRevenue = $subtotal - $cogs + $charges - $discounts + $deliveryCharge - $courierCharge - $codCharge;
         $deliveryMargin = $deliveryCharge - $courierCharge;
 
         return new OrderTotals(
             subtotal: round($subtotal, 2),
             deliveryCharge: round($deliveryCharge, 2),
             courierCharge: round($courierCharge, 2),
+            codCharge: round($codCharge, 2),
             charges: round($charges, 2),
             discounts: round($discounts, 2),
             total: round($total, 2),
@@ -49,6 +60,32 @@ class OrderTotalCalculator
             netRevenue: round($netRevenue, 2),
             deliveryMargin: round($deliveryMargin, 2),
         );
+    }
+
+    /**
+     * Courier COD collection fee.
+     *
+     * Steadfast: max(0, collected_amount - delivery_charge) × cod%
+     * Other couriers: collected_amount × cod%
+     */
+    public function codCharge(
+        float $collectedAmount,
+        float $deliveryCharge,
+        ?string $courierSlug = null,
+        float $codPercentage = 1.0,
+    ): float {
+        $collected = max(0.0, $collectedAmount);
+        $rate = max(0.0, $codPercentage) / 100;
+
+        if ($rate <= 0.0 || $collected <= 0.0) {
+            return 0.0;
+        }
+
+        $base = strtolower(trim((string) $courierSlug)) === 'steadfast'
+            ? max(0.0, $collected - max(0.0, $deliveryCharge))
+            : $collected;
+
+        return round($base * $rate, 2);
     }
 
     /**

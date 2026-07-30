@@ -16,8 +16,11 @@ readonly class OrderTotals
         /** What customer pays for delivery (orders.delivery_charge). */
         public float $deliveryCharge,
 
-        /** What courier charges us (orders.courier_charge). */
+        /** What courier charges us for delivery (orders.courier_charge). */
         public float $courierCharge,
+
+        /** Courier COD collection fee (derived; not stored on orders). */
+        public float $codCharge,
 
         /** Sum of all charge-type adjustment lines. */
         public float $charges,
@@ -36,7 +39,7 @@ readonly class OrderTotals
 
         /**
          * Net revenue (admin business metric).
-         * netRevenue = subtotal - cogs + charges - discounts + deliveryCharge - courierCharge
+         * netRevenue = subtotal - cogs + charges - discounts + deliveryCharge - courierCharge - codCharge
          * May be negative — do NOT clamp.
          */
         public float $netRevenue,

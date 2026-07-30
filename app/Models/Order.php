@@ -180,13 +180,13 @@ class Order extends Model
     }
 
     /**
-     * Net revenue = subtotal - COGS + charges - discounts + delivery_charge - courier_charge.
+     * Net revenue = subtotal - COGS + charges - discounts + delivery_charge - courier_charge - COD charge.
      * Requires items loaded. Prefer adjustment lines; fall back to order scalars when
      * adjustments are empty (legacy rows / pre-backfill) so admin never shows wrong 0.
      */
     public function netRevenue(): float
     {
-        $this->loadMissing(['items', 'adjustments']);
+        $this->loadMissing(['items', 'adjustments', 'courier']);
 
         $adjustments = $this->adjustments->isNotEmpty()
             ? $this->adjustments
@@ -201,6 +201,9 @@ class Order extends Model
             courierCharge: (float) ($this->courier_charge ?? 0),
             adjustments: $adjustments,
             items: $this->items,
+            collectedAmount: (float) ($this->collected_amount ?? 0),
+            courierSlug: $this->courier?->slug,
+            codPercentage: (float) ($this->courier?->cod_percentage ?? 1),
         )->netRevenue;
     }
 
@@ -208,6 +211,22 @@ class Order extends Model
     public function deliveryMargin(): float
     {
         return (float) $this->delivery_charge - (float) ($this->courier_charge ?? 0);
+    }
+
+    /**
+     * Courier COD collection fee (1% by default).
+     * Steadfast: (collected_amount - delivery_charge) × %; others: collected_amount × %.
+     */
+    public function codCharge(): float
+    {
+        $this->loadMissing('courier');
+
+        return app(OrderTotalCalculator::class)->codCharge(
+            collectedAmount: (float) ($this->collected_amount ?? 0),
+            deliveryCharge: (float) $this->delivery_charge,
+            courierSlug: $this->courier?->slug,
+            codPercentage: (float) ($this->courier?->cod_percentage ?? 1),
+        );
     }
 
     public function isDispatchable(): bool

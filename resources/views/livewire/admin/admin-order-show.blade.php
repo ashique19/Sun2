@@ -201,6 +201,18 @@
                     @endif
                     <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Customer delivery</span><span class="tabular-nums">&#2547; {{ number_format($order->delivery_charge, 0) }}</span></div>
                     <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Courier cost</span><span class="tabular-nums">&#2547; {{ number_format($order->courier_charge, 0) }}</span></div>
+                    @php($codCharge = $order->codCharge())
+                    <div class="flex justify-between gap-3">
+                        <span class="text-[#6B6459]">
+                            COD charge
+                            @if ($order->courier)
+                                <span class="text-[11px] font-normal text-[#8C8474]">
+                                    ({{ rtrim(rtrim(number_format((float) $order->courier->cod_percentage, 2, '.', ''), '0'), '.') ?: '0' }}%{{ $order->courier->slug === 'steadfast' ? ' of collected − delivery' : ' of collected' }})
+                                </span>
+                            @endif
+                        </span>
+                        <span class="tabular-nums">&#2547; {{ number_format($codCharge, 2) }}</span>
+                    </div>
                     @php($deliveryMargin = $order->deliveryMargin())
                     <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Delivery margin</span><span @class(['tabular-nums', 'text-rose-600' => $deliveryMargin < 0])>&#2547; {{ number_format($deliveryMargin, 0) }}</span></div>
                     <div class="flex justify-between gap-3 font-medium"><span class="text-[#6B6459]">Net revenue</span><span @class(['tabular-nums', 'text-rose-600' => $order->netRevenue() < 0])>&#2547; {{ number_format($order->netRevenue(), 0) }}</span></div>

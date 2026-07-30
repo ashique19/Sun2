@@ -101,6 +101,57 @@ class OrderTotalCalculatorTest extends TestCase
         $this->assertSame(1600.0, $totals->cogs);
         $this->assertSame(280.0, $totals->netRevenue);
         $this->assertSame(40.0, $totals->deliveryMargin);
+        $this->assertSame(0.0, $totals->codCharge);
         $this->assertSame(1940.0, $totals->total); // 2000+100+40-200
+    }
+
+    public function test_steadfast_cod_charge_excludes_delivery(): void
+    {
+        $charge = $this->calc->codCharge(
+            collectedAmount: 1180,
+            deliveryCharge: 80,
+            courierSlug: 'steadfast',
+            codPercentage: 1,
+        );
+
+        // (1180 - 80) * 1% = 11
+        $this->assertSame(11.0, $charge);
+    }
+
+    public function test_other_courier_cod_charge_uses_full_collected(): void
+    {
+        $charge = $this->calc->codCharge(
+            collectedAmount: 1180,
+            deliveryCharge: 80,
+            courierSlug: 'pathao',
+            codPercentage: 1,
+        );
+
+        // 1180 * 1% = 11.8
+        $this->assertSame(11.8, $charge);
+    }
+
+    public function test_cod_charge_is_zero_without_collection(): void
+    {
+        $this->assertSame(0.0, $this->calc->codCharge(0, 80, 'steadfast', 1));
+        $this->assertSame(0.0, $this->calc->codCharge(500, 80, 'steadfast', 0));
+    }
+
+    public function test_net_revenue_subtracts_cod_charge(): void
+    {
+        $totals = $this->calc->calculate(
+            subtotal: 2000,
+            deliveryCharge: 100,
+            courierCharge: 60,
+            adjustments: [],
+            items: [['purchase_price' => 800, 'quantity' => 2]],
+            collectedAmount: 2100,
+            courierSlug: 'steadfast',
+            codPercentage: 1,
+        );
+
+        // base 2000 - 1600 + 100 - 60 = 440; COD = (2100 - 100) * 1% = 20; net = 420
+        $this->assertSame(20.0, $totals->codCharge);
+        $this->assertSame(420.0, $totals->netRevenue);
     }
 }

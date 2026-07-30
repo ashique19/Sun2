@@ -18,7 +18,10 @@ class AdminOrderSegment
         'all' => 'All',
     ];
 
-    public const COUNTS_CACHE_KEY = 'admin.order_segment_counts.v3';
+    /** Segments that show order value on the dashboard tiles. */
+    public const VALUE_SEGMENTS = ['new', 'dispatched'];
+
+    public const COUNTS_CACHE_KEY = 'admin.order_segment_counts.v4';
 
     public const COUNTS_CACHE_TTL = 60;
 
@@ -56,38 +59,69 @@ class AdminOrderSegment
      */
     public static function counts(bool $fresh = false): array
     {
+        return self::cachedMetrics($fresh)['counts'];
+    }
+
+    /**
+     * Order value (sum of total) for dashboard tiles that show it.
+     *
+     * @return array<string, float>
+     */
+    public static function values(bool $fresh = false): array
+    {
+        return self::cachedMetrics($fresh)['values'];
+    }
+
+    public static function route(string $segment): string
+    {
+        return route('admin.orders.'.$segment);
+    }
+
+    /**
+     * @return array{
+     *     counts: array<string, int>,
+     *     values: array<string, float>
+     * }
+     */
+    private static function cachedMetrics(bool $fresh = false): array
+    {
         if ($fresh) {
             Cache::forget(self::COUNTS_CACHE_KEY);
         }
 
         return Cache::remember(self::COUNTS_CACHE_KEY, self::COUNTS_CACHE_TTL, function () {
-            $statusCounts = Order::query()
-                ->selectRaw('status, COUNT(*) as aggregate')
+            $byStatus = Order::query()
+                ->selectRaw('status, COUNT(*) as aggregate, COALESCE(SUM(total), 0) as value_sum')
                 ->groupBy('status')
-                ->pluck('aggregate', 'status');
+                ->get()
+                ->keyBy('status');
 
             $returnPending = (int) Order::query()
                 ->where('has_return', true)
                 ->where('status', '!=', Order::STATUS_DRAFT)
                 ->count();
 
-            $draft = (int) ($statusCounts[Order::STATUS_DRAFT] ?? 0);
-            $all = (int) $statusCounts->sum() - $draft;
+            $draft = (int) ($byStatus[Order::STATUS_DRAFT]->aggregate ?? 0);
+            $all = (int) $byStatus->sum(fn ($row) => (int) $row->aggregate) - $draft;
+
+            $newValue = (float) ($byStatus['new']->value_sum ?? 0) + (float) ($byStatus['confirmed']->value_sum ?? 0);
+            $dispatchedValue = (float) ($byStatus['dispatched']->value_sum ?? 0);
 
             return [
-                'new' => (int) ($statusCounts['new'] ?? 0) + (int) ($statusCounts['confirmed'] ?? 0),
-                'draft-ai' => $draft,
-                'dispatched' => (int) ($statusCounts['dispatched'] ?? 0),
-                'delivered' => (int) ($statusCounts['delivered'] ?? 0),
-                'cancel-return' => (int) ($statusCounts['cancelled'] ?? 0) + (int) ($statusCounts['returned'] ?? 0),
-                'return-pending' => $returnPending,
-                'all' => max(0, $all),
+                'counts' => [
+                    'new' => (int) ($byStatus['new']->aggregate ?? 0) + (int) ($byStatus['confirmed']->aggregate ?? 0),
+                    'draft-ai' => $draft,
+                    'dispatched' => (int) ($byStatus['dispatched']->aggregate ?? 0),
+                    'delivered' => (int) ($byStatus['delivered']->aggregate ?? 0),
+                    'cancel-return' => (int) ($byStatus['cancelled']->aggregate ?? 0) + (int) ($byStatus['returned']->aggregate ?? 0),
+                    'return-pending' => $returnPending,
+                    'all' => max(0, $all),
+                ],
+                'values' => [
+                    'new' => round($newValue, 2),
+                    'dispatched' => round($dispatchedValue, 2),
+                ],
             ];
         });
-    }
-
-    public static function route(string $segment): string
-    {
-        return route('admin.orders.'.$segment);
     }
 }

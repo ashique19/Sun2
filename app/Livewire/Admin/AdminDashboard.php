@@ -242,6 +242,7 @@ class AdminDashboard extends Component
             return view('livewire.admin.admin-dashboard', [
                 'segments' => [],
                 'segmentCounts' => [],
+                'segmentValues' => [],
                 'orderMonthTiles' => [],
                 'ordersDatePanel' => [
                     'key' => 'last7',
@@ -271,6 +272,7 @@ class AdminDashboard extends Component
         }
 
         $segmentCounts = AdminOrderSegment::counts();
+        $segmentValues = AdminOrderSegment::values();
         $orderActivity = AdminDashboardMetrics::orderActivity();
         $orderMonthTiles = $orderActivity['months'];
         $ordersDatePanel = match ($this->ordersDateRange) {
@@ -330,6 +332,7 @@ class AdminDashboard extends Component
         return view('livewire.admin.admin-dashboard', [
             'segments' => AdminOrderSegment::SEGMENTS,
             'segmentCounts' => $segmentCounts,
+            'segmentValues' => $segmentValues,
             'orderMonthTiles' => $orderMonthTiles,
             'ordersDatePanel' => $ordersDatePanel,
             'attentionSummary' => $attentionSummary,

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Livewire\Admin\AdminDashboard;
 use App\Models\AdminAttentionItem;
+use App\Models\Order;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -72,6 +73,55 @@ class AdminDashboardLayoutTest extends TestCase
             ->assertDontSee('Both months total')
             ->assertDontSee('Current month')
             ->assertDontSee('Previous month');
+    }
+
+    #[Test]
+    public function new_and_dispatched_tiles_show_order_value(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        Order::query()->create([
+            'order_number' => 'NEW-1',
+            'name' => 'Customer',
+            'phone' => '01627237432',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'subtotal' => 1500,
+            'delivery_charge' => 80,
+            'discount' => 0,
+            'total' => 1580,
+            'cod_amount' => 1580,
+            'due_amount' => 1580,
+            'payment_status' => 'unpaid',
+            'payment_method' => 'cod',
+            'status' => 'new',
+            'placed_at' => now(),
+            'placed_via' => Order::PLACED_VIA_STOREFRONT,
+        ]);
+        Order::query()->create([
+            'order_number' => 'DISP-1',
+            'name' => 'Customer 2',
+            'phone' => '01627237433',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'subtotal' => 2000,
+            'delivery_charge' => 80,
+            'discount' => 0,
+            'total' => 2080,
+            'cod_amount' => 2080,
+            'due_amount' => 2080,
+            'payment_status' => 'unpaid',
+            'payment_method' => 'cod',
+            'status' => 'dispatched',
+            'placed_at' => now(),
+            'placed_via' => Order::PLACED_VIA_STOREFRONT,
+        ]);
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSee('New')
+            ->assertSee('Dispatched')
+            ->assertSee('৳1,580')
+            ->assertSee('৳2,080');
     }
 
     #[Test]

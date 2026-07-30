@@ -370,11 +370,20 @@
     <div x-data="{ moreOpen: false }" class="mb-8 space-y-3">
         <div class="grid grid-cols-3 gap-2 sm:gap-3">
             @foreach ($primarySegments as $segmentKey => $segmentLabel)
+                @php
+                    $showValue = in_array($segmentKey, \App\Support\AdminOrderSegment::VALUE_SEGMENTS, true);
+                    $segmentValue = (float) ($segmentValues[$segmentKey] ?? 0);
+                @endphp
                 <a href="{{ route('admin.orders.'.$segmentKey) }}"
                     class="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-[#EFE7D6] bg-white px-3 py-2.5 sm:px-4 hover:border-[#C9A227] hover:bg-[#FAF6EF] transition group"
-                    title="{{ $segmentLabel }}">
+                    title="{{ $segmentLabel }}{{ $showValue ? ' · ৳'.number_format($segmentValue, 0) : '' }}">
                     <span class="truncate text-xs sm:text-sm text-[#8C8474] group-hover:text-[#6B6459]">{{ $segmentLabel }}</span>
-                    <span class="shrink-0 text-lg sm:text-xl font-semibold tabular-nums text-[#1E1E1E]">{{ number_format($segmentCounts[$segmentKey] ?? 0) }}</span>
+                    <span class="shrink-0 text-right">
+                        <span class="block text-lg sm:text-xl font-semibold tabular-nums text-[#1E1E1E] leading-none">{{ number_format($segmentCounts[$segmentKey] ?? 0) }}</span>
+                        @if ($showValue)
+                            <span class="mt-0.5 block text-[10px] sm:text-xs font-medium tabular-nums text-[#8C8474]">৳{{ number_format($segmentValue, 0) }}</span>
+                        @endif
+                    </span>
                 </a>
             @endforeach
         </div>

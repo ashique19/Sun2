@@ -11,19 +11,19 @@ class AdminOrderSegmentDraftAiTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function order(string $status, string $number): Order
+    private function order(string $status, string $number, float $total = 100): Order
     {
         return Order::query()->create([
             'order_number' => $number,
             'name' => 'N',
             'phone' => '01627237432',
             'address' => 'A',
-            'subtotal' => 100,
+            'subtotal' => $total,
             'delivery_charge' => 0,
             'discount' => 0,
-            'total' => 100,
-            'cod_amount' => 100,
-            'due_amount' => 100,
+            'total' => $total,
+            'cod_amount' => $total,
+            'due_amount' => $total,
             'payment_status' => 'unpaid',
             'payment_method' => 'cod',
             'status' => $status,
@@ -48,5 +48,22 @@ class AdminOrderSegmentDraftAiTest extends TestCase
         $this->assertSame(3, $counts['all']);
         $this->assertSame('Draft by AI', AdminOrderSegment::label('draft-ai'));
         $this->assertTrue(AdminOrderSegment::isValid('draft-ai'));
+    }
+
+    public function test_values_sum_totals_for_new_and_dispatched(): void
+    {
+        $this->order('new', '1', 500);
+        $this->order('confirmed', '2', 700);
+        $this->order('dispatched', '3', 1200);
+        $this->order('dispatched', '4', 300);
+        $this->order('delivered', '5', 9999);
+        $this->order(Order::STATUS_DRAFT, '6', 50);
+
+        $values = AdminOrderSegment::values(fresh: true);
+
+        $this->assertSame(1200.0, $values['new']);
+        $this->assertSame(1500.0, $values['dispatched']);
+        $this->assertArrayNotHasKey('delivered', $values);
+        $this->assertArrayNotHasKey('draft-ai', $values);
     }
 }

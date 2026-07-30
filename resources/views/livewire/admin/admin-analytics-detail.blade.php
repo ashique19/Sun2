@@ -1,10 +1,20 @@
 <div>
     <div class="mb-6">
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+            <a href="{{ route('admin.analytics', ['year' => $year, 'month' => $month]) }}" wire:navigate
+                class="rounded-full border border-[#E0D6C2] bg-white px-3 py-1.5 text-xs font-medium text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]">
+                ← Back to {{ $periodLabel }}
+            </a>
+            <a href="{{ route('admin.analytics', ['year' => $year]) }}" wire:navigate
+                class="rounded-full border border-[#E0D6C2] bg-white px-3 py-1.5 text-xs font-medium text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]">
+                {{ $year }} overview
+            </a>
+        </div>
         <div class="mb-2 flex flex-wrap items-center gap-2 text-sm text-[#6B6459]">
             <a href="{{ route('admin.analytics', ['year' => $year]) }}" wire:navigate class="hover:text-[#C9A227]">{{ $year }}</a>
-            <span class="text-[#8C8474]">/</span>
+            <span class="text-[#8C8474]">→</span>
             <a href="{{ route('admin.analytics', ['year' => $year, 'month' => $month]) }}" wire:navigate class="hover:text-[#C9A227]">{{ $periodLabel }}</a>
-            <span class="text-[#8C8474]">/</span>
+            <span class="text-[#8C8474]">→</span>
             <span class="font-semibold text-[#1E1E1E]">{{ $summary['title'] }}</span>
         </div>
         <h1 class="font-serif text-3xl font-semibold">{{ $summary['title'] }}</h1>

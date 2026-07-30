@@ -54,6 +54,38 @@ class AdminAnalytics extends Component
         $this->month = null;
     }
 
+    public function previousMonth(): void
+    {
+        if ($this->month === null) {
+            return;
+        }
+
+        if ($this->month === 1) {
+            $this->year--;
+            $this->month = 12;
+
+            return;
+        }
+
+        $this->month--;
+    }
+
+    public function nextMonth(): void
+    {
+        if ($this->month === null) {
+            return;
+        }
+
+        if ($this->month === 12) {
+            $this->year++;
+            $this->month = 1;
+
+            return;
+        }
+
+        $this->month++;
+    }
+
     public function openMetric(string $metric): void
     {
         if ($this->month === null || ! in_array($metric, AnalyticsService::METRICS, true)) {
@@ -72,7 +104,8 @@ class AdminAnalytics extends Component
         $years = $analytics->availableYears();
 
         if (! in_array($this->year, $years, true)) {
-            $this->year = $years[0] ?? (int) now('Asia/Dhaka')->year;
+            $years[] = $this->year;
+            rsort($years);
         }
 
         $yearOverview = $analytics->yearOverview($this->year);

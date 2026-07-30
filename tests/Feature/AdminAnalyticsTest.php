@@ -87,15 +87,21 @@ class AdminAnalyticsTest extends TestCase
         Livewire::test(AdminAnalytics::class)
             ->set('year', 2026)
             ->assertSee('Analytics')
-            ->assertSee('2026')
+            ->assertSee('Months in 2026')
             ->assertSee('Jul')
+            ->assertSee('Pick a month below')
             ->call('selectMonth', 7)
             ->assertSet('month', 7)
             ->assertSee('July 2026')
+            ->assertSee('Open →')
             ->assertSee('Revenue')
             ->assertSee('Direct cost')
             ->assertSee('Indirect cost')
-            ->assertSee('Profit');
+            ->assertSeeHtml("wire:click=\"openMetric('revenue')\"")
+            ->call('nextMonth')
+            ->assertSet('month', 8)
+            ->call('previousMonth')
+            ->assertSet('month', 7);
     }
 
     #[Test]

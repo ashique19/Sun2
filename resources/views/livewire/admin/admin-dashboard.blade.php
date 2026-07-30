@@ -162,23 +162,29 @@
     </div>
 
     <div class="rounded-xl border border-[#EFE7D6] bg-white overflow-hidden">
-        <div class="px-6 py-5 border-b border-[#E7DFCF]">
-            <h2 class="font-semibold text-lg">Orders by date</h2>
-            <p class="text-sm text-[#8C8474] mt-1">Order qty/value by placed date; delivery qty and collected value by delivery date for delivered orders. Grouped by current and previous month.</p>
+        <div class="px-3 py-3 sm:px-4 sm:py-4 border-b border-[#E7DFCF]">
+            <h2 class="font-semibold text-base sm:text-lg">Orders by date</h2>
         </div>
 
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+        <div>
+            <table class="w-full table-fixed text-xs sm:text-sm">
+                <colgroup>
+                    <col class="w-[18%]">
+                    <col class="w-[20.5%]">
+                    <col class="w-[20.5%]">
+                    <col class="w-[20.5%]">
+                    <col class="w-[20.5%]">
+                </colgroup>
                 <thead class="bg-[#FAF6EF] text-left text-[#6B6459]">
                     <tr>
-                        <th class="px-4 py-3 font-medium whitespace-nowrap">Date</th>
+                        <th class="px-1.5 py-2 sm:px-2 font-medium">Date</th>
                         @foreach ([
                             ['abbr' => 'OQ', 'label' => 'Order quantity'],
                             ['abbr' => 'OV', 'label' => 'Order value'],
                             ['abbr' => 'DQ', 'label' => 'Delivered quantity'],
                             ['abbr' => 'CV', 'label' => 'Collected value'],
                         ] as $column)
-                            <th class="px-4 py-3 font-medium text-right whitespace-nowrap" scope="col">
+                            <th class="px-1 py-2 sm:px-2 font-medium text-right" scope="col">
                                 <span
                                     x-data="{ open: false }"
                                     tabindex="0"
@@ -201,7 +207,7 @@
                                         x-show="open"
                                         x-transition.opacity.duration.150ms
                                         role="tooltip"
-                                        class="pointer-events-none absolute left-1/2 top-full z-20 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#1E1E1E] px-2 py-1 text-xs font-normal normal-case tracking-normal text-white shadow-sm"
+                                        class="pointer-events-none absolute right-0 top-full z-20 mt-1 whitespace-nowrap rounded-md bg-[#1E1E1E] px-2 py-1 text-xs font-normal normal-case tracking-normal text-white shadow-sm"
                                     >{{ $column['label'] }}</span>
                                 </span>
                             </th>
@@ -211,40 +217,40 @@
                 <tbody class="divide-y divide-[#E7DFCF]">
                     @forelse ($monthlyTotals as $month)
                         <tr class="bg-[#FAF6EF]/80">
-                            <td colspan="5" class="px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-[#6B6459]">
+                            <td colspan="5" class="px-1.5 py-1.5 sm:px-2 text-[11px] font-semibold uppercase tracking-wide text-[#6B6459]">
                                 {{ $month['label'] }}
                             </td>
                         </tr>
                         @foreach ($month['days'] as $day)
                             <tr class="hover:bg-[#FAF6EF]/50">
-                                <td class="px-4 py-3 whitespace-nowrap font-medium">{{ $day['label'] }}</td>
-                                <td class="px-4 py-3 text-right tabular-nums">{{ number_format($day['order_qty']) }}</td>
-                                <td class="px-4 py-3 text-right tabular-nums">&#2547; {{ number_format($day['order_value'], 0) }}</td>
-                                <td class="px-4 py-3 text-right tabular-nums">{{ number_format($day['delivery_qty']) }}</td>
-                                <td class="px-4 py-3 text-right tabular-nums">&#2547; {{ number_format($day['delivery_value'], 0) }}</td>
+                                <td class="px-1.5 py-1.5 sm:px-2 font-medium tabular-nums">{{ $day['label'] }}</td>
+                                <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($day['order_qty']) }}</td>
+                                <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($day['order_value'], 0) }}</td>
+                                <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($day['delivery_qty']) }}</td>
+                                <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($day['delivery_value'], 0) }}</td>
                             </tr>
                         @endforeach
                         <tr class="bg-[#FAF6EF]/50 font-medium">
-                            <td class="px-4 py-2.5 text-[#6B6459]">{{ $month['label'] }} total</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">{{ number_format($month['totals']['order_qty']) }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">&#2547; {{ number_format($month['totals']['order_value'], 0) }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">{{ number_format($month['totals']['delivery_qty']) }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">&#2547; {{ number_format($month['totals']['delivery_value'], 0) }}</td>
+                            <td class="px-1.5 py-1.5 sm:px-2 text-[#6B6459]">Total</td>
+                            <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($month['totals']['order_qty']) }}</td>
+                            <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($month['totals']['order_value'], 0) }}</td>
+                            <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($month['totals']['delivery_qty']) }}</td>
+                            <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($month['totals']['delivery_value'], 0) }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="px-4 py-8 text-center text-[#8C8474]">No orders in the current or previous month.</td>
+                            <td colspan="5" class="px-3 py-8 text-center text-[#8C8474]">No orders in the current or previous month.</td>
                         </tr>
                     @endforelse
                 </tbody>
                 @if ($monthlyTotals !== [])
                     <tfoot class="bg-[#FAF6EF] font-semibold border-t border-[#E7DFCF]">
                         <tr>
-                            <td class="px-4 py-3">Both months total</td>
-                            <td class="px-4 py-3 text-right tabular-nums">{{ number_format($periodTotals['order_qty']) }}</td>
-                            <td class="px-4 py-3 text-right tabular-nums">&#2547; {{ number_format($periodTotals['order_value'], 0) }}</td>
-                            <td class="px-4 py-3 text-right tabular-nums">{{ number_format($periodTotals['delivery_qty']) }}</td>
-                            <td class="px-4 py-3 text-right tabular-nums">&#2547; {{ number_format($periodTotals['delivery_value'], 0) }}</td>
+                            <td class="px-1.5 py-2 sm:px-2">All</td>
+                            <td class="px-1 py-2 sm:px-2 text-right tabular-nums">{{ number_format($periodTotals['order_qty']) }}</td>
+                            <td class="px-1 py-2 sm:px-2 text-right tabular-nums">{{ number_format($periodTotals['order_value'], 0) }}</td>
+                            <td class="px-1 py-2 sm:px-2 text-right tabular-nums">{{ number_format($periodTotals['delivery_qty']) }}</td>
+                            <td class="px-1 py-2 sm:px-2 text-right tabular-nums">{{ number_format($periodTotals['delivery_value'], 0) }}</td>
                         </tr>
                     </tfoot>
                 @endif

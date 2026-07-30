@@ -359,5 +359,8 @@ class OrderDispatchService
             meta: $apiResponse ? ['source' => 'dispatch_api'] : ['source' => 'catalog_estimate'],
             courierDataId: $courierDataId,
         );
+
+        // Fresh dispatch estimates always need manual confirmation (esp. Steadfast weight review).
+        $this->courierChargeSync->clearConfirmation($order->fresh());
     }
 }

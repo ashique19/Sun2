@@ -403,6 +403,18 @@
 
                 <form wire:submit="updateCourierCharge" class="space-y-3 border-b border-[#E7DFCF] pb-4 text-sm">
                     <p class="text-xs font-medium uppercase tracking-wide text-[#8C8474]">Courier cost override</p>
+                    @if ($order->isCourierChargeConfirmed())
+                        <p class="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                            Confirmed {{ $order->courier_charge_confirmed_at?->format('d M Y, h:i A') }}
+                            @if ($order->courierChargeConfirmedBy)
+                                by {{ $order->courierChargeConfirmedBy->name }}
+                            @endif
+                        </p>
+                    @elseif ($order->status === 'dispatched')
+                        <p class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            Not confirmed yet. Check the courier panel for the final weight-based charge, then confirm.
+                        </p>
+                    @endif
                     <div>
                         <label class="block text-[#6B6459] mb-1">Courier charge (&#2547;)</label>
                         <input type="number" min="0" step="1" wire:model="courierChargeOverride"
@@ -414,13 +426,25 @@
                         <input type="text" wire:model="courierChargeReason" placeholder="Why this override?"
                             class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
                     </div>
-                    <button type="submit"
-                        wire:loading.attr="disabled"
-                        wire:target="updateCourierCharge"
-                        class="w-full rounded-full border border-[#C9A227] px-4 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF] transition disabled:opacity-60">
-                        <span wire:loading.remove wire:target="updateCourierCharge">Update courier cost</span>
-                        <span wire:loading wire:target="updateCourierCharge">Saving…</span>
-                    </button>
+                    <div class="grid gap-2 sm:grid-cols-2">
+                        <button type="submit"
+                            wire:loading.attr="disabled"
+                            wire:target="updateCourierCharge"
+                            class="w-full rounded-full border border-[#C9A227] px-4 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF] transition disabled:opacity-60">
+                            <span wire:loading.remove wire:target="updateCourierCharge">Update courier cost</span>
+                            <span wire:loading wire:target="updateCourierCharge">Saving…</span>
+                        </button>
+                        @if (! $order->isCourierChargeConfirmed() && in_array($order->status, ['dispatched', 'delivered'], true))
+                            <button type="button"
+                                wire:click="confirmCourierCharge"
+                                wire:loading.attr="disabled"
+                                wire:target="confirmCourierCharge"
+                                class="w-full rounded-full bg-[#C9A227] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] transition disabled:opacity-60">
+                                <span wire:loading.remove wire:target="confirmCourierCharge">Confirm charge</span>
+                                <span wire:loading wire:target="confirmCourierCharge">Confirming…</span>
+                            </button>
+                        @endif
+                    </div>
                 </form>
 
                 @if ($order->courier_tracker)

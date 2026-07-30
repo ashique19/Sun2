@@ -49,6 +49,8 @@ class Order extends Model
             'delivery_charge' => 'decimal:2',
             'charge' => 'decimal:2',
             'courier_charge' => 'decimal:2',
+            'courier_charge_confirmed_at' => 'datetime',
+            'courier_charge_confirmed_by' => 'integer',
             'discount' => 'decimal:2',
             'total' => 'decimal:2',
             'cod_amount' => 'decimal:2',
@@ -133,6 +135,21 @@ class Order extends Model
     public function courier(): BelongsTo
     {
         return $this->belongsTo(Courier::class);
+    }
+
+    public function courierChargeConfirmedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'courier_charge_confirmed_by');
+    }
+
+    public function isCourierChargeConfirmed(): bool
+    {
+        return $this->courier_charge_confirmed_at !== null;
+    }
+
+    public function needsCourierChargeConfirmation(): bool
+    {
+        return $this->status === 'dispatched' && ! $this->isCourierChargeConfirmed();
     }
 
     public function items(): HasMany

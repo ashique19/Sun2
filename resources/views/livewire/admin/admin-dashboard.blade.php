@@ -104,6 +104,80 @@
         </div>
     @endif
 
+    @if ($courierChargeMessage)
+        <div class="mb-4 rounded-lg bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">{{ $courierChargeMessage }}</div>
+    @endif
+
+    @if (($unconfirmedCourierCharges ?? collect())->isNotEmpty())
+        <div class="mb-6 rounded-xl border border-amber-200 bg-white overflow-hidden">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-amber-100 px-4 py-3">
+                <div class="min-w-0">
+                    <h2 class="text-sm font-semibold text-amber-950">Confirm courier charges</h2>
+                    <p class="text-xs text-amber-800/80">
+                        {{ $unconfirmedCourierCharges->count() }}{{ $unconfirmedCourierCharges->count() >= 25 ? '+' : '' }}
+                        dispatched {{ $unconfirmedCourierCharges->count() === 1 ? 'order needs' : 'orders need' }}
+                        charge review (Steadfast updates weight fees manually)
+                    </p>
+                </div>
+                <a href="{{ route('admin.orders.dispatched') }}"
+                    class="shrink-0 text-xs font-medium text-[#C9A227] hover:text-[#B8921F]">
+                    Dispatched list &rarr;
+                </a>
+            </div>
+
+            <div class="divide-y divide-[#EFE7D6]">
+                @foreach ($unconfirmedCourierCharges as $order)
+                    <div wire:key="confirm-courier-charge-{{ $order->id }}" class="flex flex-wrap items-end gap-3 px-4 py-3 hover:bg-[#FAF6EF]/50">
+                        <div class="min-w-0 flex-1 basis-40">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <a href="{{ route('admin.orders.show', $order) }}" wire:navigate
+                                    class="truncate text-sm font-medium text-[#1E1E1E] hover:text-[#C9A227]">
+                                    {{ $order->name }}
+                                </a>
+                                <span class="text-xs text-[#8C8474]">#{{ $order->order_number }}</span>
+                            </div>
+                            <p class="mt-0.5 text-[11px] text-[#8C8474]">
+                                {{ $order->courier?->name ?? 'No courier' }}
+                                @if ($order->courier_tracker)
+                                    · {{ $order->courier_tracker }}
+                                @endif
+                                @if ($order->city)
+                                    · {{ $order->city }}
+                                @endif
+                                @if ($order->dispatch_date)
+                                    · {{ $order->dispatch_date->format('d M, h:i A') }}
+                                @endif
+                            </p>
+                        </div>
+                        <div class="w-28">
+                            <label for="courier-charge-{{ $order->id }}" class="block text-[10px] font-medium uppercase tracking-wide text-[#8C8474] mb-1">
+                                Charge ৳
+                            </label>
+                            <input id="courier-charge-{{ $order->id }}"
+                                type="number"
+                                min="0"
+                                step="1"
+                                inputmode="numeric"
+                                wire:model="pendingCourierCharges.{{ $order->id }}"
+                                class="w-full rounded-lg border border-[#E0D6C2] px-2.5 py-1.5 text-sm tabular-nums">
+                            @error('pendingCourierCharges.'.$order->id)
+                                <p class="mt-1 text-[11px] text-rose-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+                        <button type="button"
+                            wire:click="confirmCourierCharge({{ $order->id }})"
+                            wire:loading.attr="disabled"
+                            wire:target="confirmCourierCharge({{ $order->id }})"
+                            class="rounded-full bg-[#C9A227] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
+                            <span wire:loading.remove wire:target="confirmCourierCharge({{ $order->id }})">Confirm</span>
+                            <span wire:loading wire:target="confirmCourierCharge({{ $order->id }})">Saving…</span>
+                        </button>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     @php
         $primaryKeys = ['new', 'draft-ai', 'dispatched'];
         $primarySegments = collect($segments)->only($primaryKeys);

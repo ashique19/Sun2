@@ -12,7 +12,7 @@ use App\Models\User;
  * Only updates the column (and appends an audit log) when the value actually changes.
  * Never touches orders.delivery_charge — the two fields are independent.
  *
- * Phases: dispatch | webhook | tracking | delivered | cancelled | manual
+ * Phases: dispatch | webhook | tracking | delivered | cancelled | manual | confirm
  */
 class OrderCourierChargeSync
 {
@@ -23,7 +23,7 @@ class OrderCourierChargeSync
     /**
      * Set courier_charge when a fee is known; no-op when fee is null.
      *
-     * @param  string  $phase  dispatch|webhook|tracking|delivered|cancelled|manual
+     * @param  string  $phase  dispatch|webhook|tracking|delivered|cancelled|manual|confirm
      */
     public function sync(
         Order $order,
@@ -56,6 +56,13 @@ class OrderCourierChargeSync
         }
 
         $order->courier_charge = $after;
+
+        // API/manual amount changes after a prior confirm need re-review.
+        if ($order->courier_charge_confirmed_at !== null && $phase !== 'confirm') {
+            $order->courier_charge_confirmed_at = null;
+            $order->courier_charge_confirmed_by = null;
+        }
+
         $order->save();
 
         $this->auditor->logField($order, [
@@ -67,6 +74,59 @@ class OrderCourierChargeSync
             'meta_after' => $meta,
             'note' => "Courier charge updated at phase '{$phase}'.",
         ], $actor);
+    }
+
+    /**
+     * Persist the reviewed courier charge and mark it confirmed.
+     */
+    public function confirm(Order $order, float $amount, ?User $actor = null, ?string $reason = null): void
+    {
+        $before = round((float) $order->courier_charge, 2);
+        $after = round($amount, 2);
+        $meta = array_filter([
+            'source' => 'manual_confirm',
+            'reason' => filled($reason) ? trim((string) $reason) : null,
+            'confirmed' => true,
+        ], fn ($value) => $value !== null && $value !== '');
+
+        if ($before !== $after) {
+            $order->courier_charge = $after;
+            $this->auditor->logField($order, [
+                'field' => 'courier_charge',
+                'phase' => 'confirm',
+                'amount_before' => $before,
+                'amount_after' => $after,
+                'meta_after' => $meta,
+                'note' => 'Courier charge confirmed after manual review.',
+            ], $actor);
+        } else {
+            $this->auditor->logField($order, [
+                'field' => 'courier_charge',
+                'phase' => 'confirm',
+                'amount_before' => $before,
+                'amount_after' => $after,
+                'meta_after' => $meta,
+                'note' => 'Courier charge confirmed (amount unchanged).',
+            ], $actor);
+        }
+
+        $order->courier_charge_confirmed_at = now();
+        $order->courier_charge_confirmed_by = $actor?->id;
+        $order->save();
+    }
+
+    /**
+     * Clear confirmation when an order is (re)dispatched with a fresh estimate.
+     */
+    public function clearConfirmation(Order $order): void
+    {
+        if ($order->courier_charge_confirmed_at === null && $order->courier_charge_confirmed_by === null) {
+            return;
+        }
+
+        $order->courier_charge_confirmed_at = null;
+        $order->courier_charge_confirmed_by = null;
+        $order->save();
     }
 
     /**

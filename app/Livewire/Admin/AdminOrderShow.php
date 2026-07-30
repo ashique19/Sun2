@@ -68,6 +68,7 @@ class AdminOrderShow extends Component
             'adjustmentLogs.actor',
             'paymentTransactions.receivedBy',
             'courier',
+            'courierChargeConfirmedBy:id,name',
             'createdBy:id,name',
             'statusHistory.changedBy',
             'courierLogs.courier',
@@ -345,10 +346,35 @@ class AdminOrderShow extends Component
             meta: $meta,
         );
 
-        $this->order->refresh()->load(['adjustmentLogs.actor']);
+        $this->order->refresh()->load(['adjustmentLogs.actor', 'courierChargeConfirmedBy']);
         $this->courierChargeOverride = (string) (int) round((float) $this->order->courier_charge);
         $this->courierChargeReason = '';
         $this->message = 'Courier charge updated.';
+    }
+
+    public function confirmCourierCharge(OrderCourierChargeSync $courierSync): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        $this->validate([
+            'courierChargeOverride' => ['required', 'numeric', 'min:0'],
+            'courierChargeReason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $courierSync->confirm(
+            order: $this->order,
+            amount: (float) $this->courierChargeOverride,
+            actor: auth()->user(),
+            reason: $this->courierChargeReason !== '' ? $this->courierChargeReason : null,
+        );
+
+        $this->order->refresh()->load(['adjustmentLogs.actor', 'courierChargeConfirmedBy']);
+        $this->courierChargeOverride = (string) (int) round((float) $this->order->courier_charge);
+        $this->courierChargeReason = '';
+        $this->message = 'Courier charge confirmed.';
     }
 
     public function render(CourierApiRegistry $courierRegistry)

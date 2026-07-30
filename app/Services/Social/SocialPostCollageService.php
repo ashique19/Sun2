@@ -2,6 +2,7 @@
 
 namespace App\Services\Social;
 
+use App\Support\CleanJpegWriter;
 use Illuminate\Support\Str;
 
 class SocialPostCollageService
@@ -97,7 +98,7 @@ class SocialPostCollageService
             mkdir($outDir, 0775, true);
         }
 
-        imagejpeg($canvas, $outAbsolute, 86);
+        CleanJpegWriter::write($canvas, $outAbsolute, 86);
         imagedestroy($canvas);
 
         return $outputRelativePath;
@@ -124,6 +125,7 @@ class SocialPostCollageService
 
         // Store as relative-to-public, but DB often stores without a leading slash.
         $relative = ltrim(str_replace('\\', '/', $pathOrUrl), '/');
+
         return public_path($relative);
     }
 
@@ -145,4 +147,3 @@ class SocialPostCollageService
         };
     }
 }
-

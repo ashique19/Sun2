@@ -3,6 +3,7 @@
 namespace App\Services\Admin;
 
 use App\Models\Product;
+use App\Support\CleanJpegWriter;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -273,7 +274,7 @@ class ProductPricedImageService
             $cursorY += $lineHeight + $lineGap;
         }
 
-        imagejpeg($canvas, $destination, 90);
+        CleanJpegWriter::write($canvas, $destination, 90);
         imagedestroy($canvas);
     }
 

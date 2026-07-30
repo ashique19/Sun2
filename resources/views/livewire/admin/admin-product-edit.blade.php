@@ -404,6 +404,33 @@
                                     </div>
 
                                     <div class="space-y-5 border-t border-[#EFE7D6] px-4 py-4">
+                                        <div class="space-y-3 rounded-xl border border-[#EFE7D6] bg-[#FAF6EF]/px-4 py-3">
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <p class="text-xs font-medium text-[#6B6459]">Adjust tone</p>
+                                                <button type="button" @click="resetToneAdjustments()" :disabled="savedSaving || (editBrightness === 0 && editRedTone === 0)"
+                                                    class="text-[11px] text-[#C9A227] hover:underline disabled:opacity-40 disabled:no-underline">
+                                                    Reset
+                                                </button>
+                                            </div>
+                                            <div>
+                                                <label class="mb-1 flex items-center justify-between gap-2 text-[11px] text-[#8C8474]" for="saved-edit-brightness">
+                                                    <span>Brightness</span>
+                                                    <span class="tabular-nums text-[#6B6459]" x-text="editBrightness === 0 ? '0' : (editBrightness > 0 ? `+${editBrightness}` : `${editBrightness}`)"></span>
+                                                </label>
+                                                <input id="saved-edit-brightness" type="range" min="-40" max="40" step="1" x-model.number="editBrightness" :disabled="savedSaving"
+                                                    class="w-full accent-[#C9A227] disabled:opacity-60">
+                                            </div>
+                                            <div>
+                                                <label class="mb-1 flex items-center justify-between gap-2 text-[11px] text-[#8C8474]" for="saved-edit-red-tone">
+                                                    <span>Red tone</span>
+                                                    <span class="tabular-nums text-[#6B6459]" x-text="editRedTone === 0 ? 'Neutral' : (editRedTone > 0 ? `Warm +${editRedTone}` : `Cool ${editRedTone}`)"></span>
+                                                </label>
+                                                <input id="saved-edit-red-tone" type="range" min="-40" max="40" step="1" x-model.number="editRedTone" :disabled="savedSaving"
+                                                    class="w-full accent-[#C9A227] disabled:opacity-60">
+                                                <p class="mt-1 text-[10px] text-[#8C8474]">Positive warms toward red · negative cools.</p>
+                                            </div>
+                                        </div>
+
                                         <div class="grid gap-4 sm:grid-cols-2">
                                             <div class="space-y-3">
                                                 <p class="text-xs font-medium text-[#6B6459]">Put text on image</p>

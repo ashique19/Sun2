@@ -3,6 +3,7 @@
 namespace App\Services\Admin;
 
 use App\Models\HeroSlide;
+use App\Support\CleanJpegWriter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -104,11 +105,7 @@ class HeroSlideImageService
         imagecopyresampled($canvas, $image, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
         imagedestroy($image);
 
-        $saved = imagejpeg($canvas, $destination, 85);
+        CleanJpegWriter::write($canvas, $destination, 85);
         imagedestroy($canvas);
-
-        if (! $saved) {
-            throw new RuntimeException('Could not save hero image.');
-        }
     }
 }

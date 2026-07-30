@@ -4,6 +4,7 @@ namespace App\Services\Admin;
 
 use App\Models\Product;
 use App\Models\ProductImage;
+use App\Support\CleanJpegWriter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -366,17 +367,13 @@ class ProductImageService
                 $filename = $basename.'_'.$variant.'.jpg';
                 $destination = $directory.DIRECTORY_SEPARATOR.$filename;
 
-                if (function_exists('imageinterlace')) {
-                    imageinterlace($canvas, true);
-                }
-
-                $saved = imagejpeg($canvas, $destination, self::JPEG_QUALITY);
+                CleanJpegWriter::write($canvas, $destination, self::JPEG_QUALITY);
 
                 if ($ownsCanvas) {
                     imagedestroy($canvas);
                 }
 
-                if (! $saved || ! is_file($destination)) {
+                if (! is_file($destination)) {
                     throw new RuntimeException('Could not save product image variant.');
                 }
 

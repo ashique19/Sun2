@@ -70,6 +70,8 @@ class AdminProductImageEditTest extends TestCase
             ->assertSeeHtml('Drag the crop box')
             ->assertSeeHtml('Put text on image')
             ->assertSeeHtml('Put logo on image')
+            ->assertSeeHtml('Adjust tone')
+            ->assertSeeHtml('editBrightness')
             ->assertSeeHtml('overlayLogoPosition')
             ->assertSeeHtml('saveSavedEdit()')
             ->assertSeeHtml('wire:ignore')

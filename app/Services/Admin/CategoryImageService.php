@@ -3,6 +3,7 @@
 namespace App\Services\Admin;
 
 use App\Models\Category;
+use App\Support\CleanJpegWriter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -115,11 +116,7 @@ class CategoryImageService
         imagecopyresampled($canvas, $image, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
         imagedestroy($image);
 
-        $saved = imagejpeg($canvas, $destination, 82);
+        CleanJpegWriter::write($canvas, $destination, 82);
         imagedestroy($canvas);
-
-        if (! $saved) {
-            throw new RuntimeException('Could not save category thumbnail.');
-        }
     }
 }

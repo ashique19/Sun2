@@ -32,6 +32,8 @@ const registerProductImageAlpineData = () => {
         savedPreviewPending: false,
         savedPreviewTimer: null,
         savedAspect: 'free',
+        editBrightness: 0,
+        editRedTone: 0,
         overlayText: '',
         overlayTextSize: 48,
         overlayTextPosition: 'bottom-left',
@@ -330,6 +332,8 @@ const registerProductImageAlpineData = () => {
             this.savedPreviewUrl = '';
             this.savedPreviewPending = false;
             this.savedAspect = 'free';
+            this.editBrightness = 0;
+            this.editRedTone = 0;
             this.overlayText = '';
             this.overlayTextSize = 48;
             this.overlayTextPosition = 'bottom-left';
@@ -356,6 +360,8 @@ const registerProductImageAlpineData = () => {
 
             this._savedOverlayUnwatch = this.$watch(
                 () => [
+                    this.editBrightness,
+                    this.editRedTone,
                     this.overlayText,
                     this.overlayTextSize,
                     this.overlayTextPosition,
@@ -738,11 +744,71 @@ const registerProductImageAlpineData = () => {
 
             context.fillStyle = '#ffffff';
             context.fillRect(0, 0, output.width, output.height);
+
+            const brightness = Number(this.editBrightness) || 0;
+            const brightnessFactor = Math.max(0.5, Math.min(1.5, 1 + (brightness / 100)));
+
+            if (brightness !== 0) {
+                context.filter = `brightness(${brightnessFactor})`;
+            }
+
             context.drawImage(canvas, 0, 0);
+            context.filter = 'none';
+
+            this.applyRedTone(context, output);
             this.drawTextOverlay(context, output);
             await this.drawLogoOverlay(context, output);
 
             return output;
+        },
+
+        applyRedTone(context, canvas) {
+            const tone = Math.max(-50, Math.min(50, Number(this.editRedTone) || 0));
+
+            if (tone === 0 || canvas.width < 1 || canvas.height < 1) {
+                return;
+            }
+
+            let imageData;
+
+            try {
+                imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+            } catch {
+                return;
+            }
+
+            const data = imageData.data;
+            const amount = tone / 50; // -1 … 1
+
+            for (let i = 0; i < data.length; i += 4) {
+                let r = data[i];
+                let g = data[i + 1];
+                let b = data[i + 2];
+
+                if (amount > 0) {
+                    // Warm / red shift: lift red, gently pull blue.
+                    r = r + (255 - r) * amount * 0.28;
+                    b = b * (1 - amount * 0.22);
+                    g = g * (1 - amount * 0.06);
+                } else {
+                    // Cool shift: lift blue, pull red.
+                    const cool = -amount;
+                    b = b + (255 - b) * cool * 0.22;
+                    r = r * (1 - cool * 0.18);
+                }
+
+                data[i] = Math.max(0, Math.min(255, Math.round(r)));
+                data[i + 1] = Math.max(0, Math.min(255, Math.round(g)));
+                data[i + 2] = Math.max(0, Math.min(255, Math.round(b)));
+            }
+
+            context.putImageData(imageData, 0, 0);
+        },
+
+        resetToneAdjustments() {
+            this.editBrightness = 0;
+            this.editRedTone = 0;
+            this.schedulePreview();
         },
 
         arrayBufferToBase64(buffer) {
@@ -1026,29 +1092,23 @@ const registerProductImageAlpineData = () => {
         async fileToPreparedImage(file, onProgress) {
             onProgress(8);
 
-            if (typeof createImageBitmap !== 'function') {
-                const buffer = await file.arrayBuffer();
-                const base64 = this.arrayBufferToBase64(buffer);
-                onProgress(90);
+            // Always redraw through canvas so EXIF/XMP never rides along to Gemini or later promote→store.
+            let bitmap = null;
 
-                if (base64.length > this.maxRawBase64Chars()) {
-                    throw new Error('Photo is too large for AI generate in this browser. Try a smaller JPG.');
-                }
-
-                return {
-                    base64,
-                    mime: file.type || 'image/jpeg',
-                    name: file.name || 'raw-photo.jpg',
-                };
+            if (typeof createImageBitmap === 'function') {
+                bitmap = await createImageBitmap(file);
+            } else {
+                bitmap = await this.loadImageElement(file);
             }
 
-            const bitmap = await createImageBitmap(file);
             onProgress(30);
 
             const maxDim = 1600;
-            const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
-            const width = Math.max(1, Math.round(bitmap.width * scale));
-            const height = Math.max(1, Math.round(bitmap.height * scale));
+            const sourceWidth = bitmap.width || bitmap.naturalWidth || 0;
+            const sourceHeight = bitmap.height || bitmap.naturalHeight || 0;
+            const scale = Math.min(1, maxDim / Math.max(1, sourceWidth, sourceHeight));
+            const width = Math.max(1, Math.round(sourceWidth * scale));
+            const height = Math.max(1, Math.round(sourceHeight * scale));
             const canvas = document.createElement('canvas');
             canvas.width = width;
             canvas.height = height;
@@ -1056,14 +1116,20 @@ const registerProductImageAlpineData = () => {
             const context = canvas.getContext('2d', { alpha: false });
 
             if (! context) {
-                bitmap.close();
+                if (typeof bitmap.close === 'function') {
+                    bitmap.close();
+                }
                 throw new Error('Could not prepare the raw photo in this browser.');
             }
 
             context.fillStyle = '#ffffff';
             context.fillRect(0, 0, width, height);
             context.drawImage(bitmap, 0, 0, width, height);
-            bitmap.close();
+
+            if (typeof bitmap.close === 'function') {
+                bitmap.close();
+            }
+
             onProgress(55);
 
             const base64 = await this.canvasToConstrainedJpeg(canvas, onProgress);
@@ -1074,6 +1140,23 @@ const registerProductImageAlpineData = () => {
                 mime: 'image/jpeg',
                 name: (file.name || 'raw-photo').replace(/\.\w+$/, '') + '.jpg',
             };
+        },
+
+        loadImageElement(file) {
+            return new Promise((resolve, reject) => {
+                const url = URL.createObjectURL(file);
+                const image = new Image();
+                image.decoding = 'async';
+                image.onload = () => {
+                    URL.revokeObjectURL(url);
+                    resolve(image);
+                };
+                image.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    reject(new Error('Could not read that photo in this browser.'));
+                };
+                image.src = url;
+            });
         },
 
         async uploadRawPhoto(event) {

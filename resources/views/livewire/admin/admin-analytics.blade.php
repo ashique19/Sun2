@@ -79,8 +79,8 @@
                 <div>
                     <h2 class="text-sm font-semibold text-[#1E1E1E]">{{ $monthBreakdown['label'] }} · P&amp;L</h2>
                     <p class="mt-1 text-xs text-[#8C8474]">
-                        Revenue = collected · Direct = COGS + pack + courier + COD · Indirect not tracked yet.
-                        Click a head for the order list.
+                        Revenue = collected · Direct = COGS + pack + courier + COD · Indirect = expenses.
+                        Click a head for details.
                     </p>
                 </div>
                 <button type="button" wire:click="clearMonth"

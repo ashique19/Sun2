@@ -20,6 +20,7 @@ use App\Livewire\Admin\AdminCourierEdit;
 use App\Livewire\Admin\AdminCouriers;
 use App\Livewire\Admin\AdminCustomerShow;
 use App\Livewire\Admin\AdminDashboard;
+use App\Livewire\Admin\AdminExpenses;
 use App\Livewire\Admin\AdminHeroSlideEdit;
 use App\Livewire\Admin\AdminHeroSlides;
 use App\Livewire\Admin\AdminInbox;
@@ -243,6 +244,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
             ->whereNumber('month')
             ->where('metric', 'revenue|direct|indirect|profit')
             ->name('analytics.detail');
+        Route::get('/expenses', AdminExpenses::class)->name('expenses');
         Route::get('/reports/sales-by-month', AdminSalesByMonth::class)->name('reports.sales-by-month');
         Route::get('/sitemap', AdminSitemap::class)->name('sitemap');
         Route::get('/image-hashes', AdminProductImageHashes::class)->name('image-hashes');

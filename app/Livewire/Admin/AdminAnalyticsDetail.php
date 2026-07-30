@@ -38,6 +38,7 @@ class AdminAnalyticsDetail extends Component
         return view('livewire.admin.admin-analytics-detail', [
             'summary' => $detail['summary'],
             'orders' => $detail['orders'],
+            'expenses' => $detail['expenses'],
             'periodLabel' => $detail['label'],
         ]);
     }

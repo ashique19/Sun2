@@ -42,6 +42,10 @@
         class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.analytics*') ? $active : $inactive }}">
         Analytics
     </a>
+    <a href="{{ route('admin.expenses') }}" wire:navigate {!! $click !!}
+        class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.expenses*') ? $active : $inactive }}">
+        Expenses
+    </a>
 
     @php
         $socialLinks = [

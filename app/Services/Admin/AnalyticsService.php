@@ -2,6 +2,7 @@
 
 namespace App\Services\Admin;
 
+use App\Models\Expense;
 use App\Models\Order;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -114,7 +115,7 @@ class AnalyticsService
     public function monthBreakdown(int $year, int $month): array
     {
         $orders = $this->deliveredOrdersForMonth($year, $month);
-        $totals = $this->sumOrderEconomics($orders);
+        $totals = $this->sumOrderEconomics($orders, $year, $month);
 
         $profitLabel = $totals['profit'] >= 0 ? 'Profit' : 'Loss';
         $profitColor = $totals['profit'] >= 0 ? '#2F6F4E' : '#B42318';
@@ -139,9 +140,22 @@ class AnalyticsService
     }
 
     /**
+     * Sum of expenses with spent_on in the given calendar month.
+     */
+    public function indirectForMonth(int $year, int $month): float
+    {
+        return round((float) Expense::query()->forMonth($year, $month)->sum('amount'), 2);
+    }
+
+    /**
      * Detail rows for a metric within a month.
      *
-     * @return array{summary: array<string, float|int|string>, orders: Collection<int, array<string, mixed>>}
+     * @return array{
+     *     summary: array<string, float|int|string>,
+     *     orders: Collection<int, array<string, mixed>>,
+     *     expenses: Collection<int, array<string, mixed>>,
+     *     label: string
+     * }
      */
     public function metricDetail(int $year, int $month, string $metric): array
     {
@@ -152,9 +166,9 @@ class AnalyticsService
         }
 
         $orders = $this->deliveredOrdersForMonth($year, $month);
-        $totals = $this->sumOrderEconomics($orders);
+        $totals = $this->sumOrderEconomics($orders, $year, $month);
 
-        $rows = $orders->map(function (Order $order): array {
+        $orderRows = $orders->map(function (Order $order): array {
             $line = $this->orderEconomics($order);
 
             return [
@@ -168,10 +182,25 @@ class AnalyticsService
                 'courier' => $line['courier'],
                 'cod' => $line['cod'],
                 'direct' => $line['direct'],
-                'indirect' => $line['indirect'],
                 'profit' => $line['profit'],
             ];
         })->values();
+
+        $expenseRows = Expense::query()
+            ->forMonth($year, $month)
+            ->orderBy('spent_on')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Expense $expense) => [
+                'id' => $expense->id,
+                'title' => $expense->title,
+                'category' => $expense->categoryLabel(),
+                'kind' => $expense->kindLabel(),
+                'spent_on' => $expense->spent_on?->format('d M Y'),
+                'amount' => (float) $expense->amount,
+                'notes' => $expense->notes,
+            ])
+            ->values();
 
         $summary = match ($metric) {
             'revenue' => [
@@ -190,19 +219,21 @@ class AnalyticsService
             ],
             'indirect' => [
                 'title' => 'Indirect cost',
-                'blurb' => 'Not tracked yet (ads, salaries, rent, etc.). Showing ৳0 until you add those costs.',
+                'blurb' => 'Business expenses (salary, rent, ads…) recorded for this month.',
                 'total' => $totals['indirect'],
             ],
             'profit' => [
                 'title' => $totals['profit'] >= 0 ? 'Profit' : 'Loss',
-                'blurb' => 'Revenue − direct cost − indirect cost.',
+                'blurb' => 'Revenue − direct cost − indirect expenses. Order rows show contribution before indirect.',
                 'total' => $totals['profit'],
+                'indirect' => $totals['indirect'],
             ],
         };
 
         return [
             'summary' => $summary,
-            'orders' => $rows,
+            'orders' => $orderRows,
+            'expenses' => $expenseRows,
             'label' => Carbon::create($year, $month, 1)->format('F Y'),
         ];
     }
@@ -250,7 +281,7 @@ class AnalyticsService
      *     profit: float
      * }
      */
-    private function sumOrderEconomics(Collection $orders): array
+    private function sumOrderEconomics(Collection $orders, int $year, int $month): array
     {
         $revenue = 0.0;
         $cogs = 0.0;
@@ -268,7 +299,7 @@ class AnalyticsService
         }
 
         $direct = $cogs + $packaging + $courier + $cod;
-        $indirect = 0.0;
+        $indirect = $this->indirectForMonth($year, $month);
         $profit = $revenue - $direct - $indirect;
 
         return [
@@ -286,6 +317,8 @@ class AnalyticsService
     }
 
     /**
+     * Per-order contribution (before business-level indirect expenses).
+     *
      * @return array{
      *     revenue: float,
      *     cogs: float,
@@ -293,7 +326,6 @@ class AnalyticsService
      *     courier: float,
      *     cod: float,
      *     direct: float,
-     *     indirect: float,
      *     profit: float
      * }
      */
@@ -305,7 +337,6 @@ class AnalyticsService
         $courier = (float) ($order->courier_charge ?? 0);
         $cod = $order->codCharge();
         $direct = $cogs + $packaging + $courier + $cod;
-        $indirect = 0.0;
 
         return [
             'revenue' => round($revenue, 2),
@@ -314,8 +345,7 @@ class AnalyticsService
             'courier' => round($courier, 2),
             'cod' => round($cod, 2),
             'direct' => round($direct, 2),
-            'indirect' => round($indirect, 2),
-            'profit' => round($revenue - $direct - $indirect, 2),
+            'profit' => round($revenue - $direct, 2),
         ];
     }
 }

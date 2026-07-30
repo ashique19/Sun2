@@ -526,6 +526,7 @@ class AdminInbox extends Component
             return;
         }
 
+        $this->ensureConversationSelected((int) $message->channel_conversation_id);
         $this->closePricedImageSend();
         $this->editedReplyImage = null;
         $this->imageEditMessageId = $message->id;
@@ -544,14 +545,7 @@ class AdminInbox extends Component
         $this->error = null;
         $this->statusMessage = null;
 
-        if (! $this->selectedConversationId || ! $this->imageEditMessageId) {
-            return;
-        }
-
-        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
-        if (! $conversation) {
-            $this->error = 'Conversation not found.';
-
+        if (! $this->imageEditMessageId) {
             return;
         }
 
@@ -559,6 +553,15 @@ class AdminInbox extends Component
         if (! $replyTo) {
             $this->error = 'Image message not found.';
             $this->closeImageEdit();
+
+            return;
+        }
+
+        $this->ensureConversationSelected((int) $replyTo->channel_conversation_id);
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+        if (! $conversation) {
+            $this->error = 'Conversation not found.';
 
             return;
         }
@@ -599,6 +602,7 @@ class AdminInbox extends Component
             return;
         }
 
+        $this->ensureConversationSelected((int) $message->channel_conversation_id);
         $this->closeImageEdit();
         $this->pricedSendMessageId = $message->id;
         $this->pricedSendSearch = '';
@@ -648,14 +652,7 @@ class AdminInbox extends Component
         $this->error = null;
         $this->statusMessage = null;
 
-        if (! $this->selectedConversationId || ! $this->pricedSendMessageId) {
-            return;
-        }
-
-        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
-        if (! $conversation) {
-            $this->error = 'Conversation not found.';
-
+        if (! $this->pricedSendMessageId) {
             return;
         }
 
@@ -663,6 +660,15 @@ class AdminInbox extends Component
         if (! $replyTo) {
             $this->error = 'Image message not found.';
             $this->closePricedImageSend();
+
+            return;
+        }
+
+        $this->ensureConversationSelected((int) $replyTo->channel_conversation_id);
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+        if (! $conversation) {
+            $this->error = 'Conversation not found.';
 
             return;
         }
@@ -1012,14 +1018,11 @@ class AdminInbox extends Component
 
     private function inboundImageMessage(int $messageId): ?ChannelMessage
     {
-        if (! $this->selectedConversationId || $messageId <= 0) {
+        if ($messageId <= 0) {
             return null;
         }
 
-        $message = ChannelMessage::query()
-            ->where('channel_conversation_id', $this->selectedConversationId)
-            ->whereKey($messageId)
-            ->first();
+        $message = ChannelMessage::query()->whereKey($messageId)->first();
 
         if (! $message
             || $message->direction !== ChannelMessage::DIRECTION_INBOUND
@@ -1027,7 +1030,31 @@ class AdminInbox extends Component
             return null;
         }
 
+        // When a conversation is explicitly selected, keep tools scoped to it.
+        if ($this->selectedConversationId
+            && (int) $message->channel_conversation_id !== (int) $this->selectedConversationId) {
+            return null;
+        }
+
         return $message;
+    }
+
+    /**
+     * Desktop preview can show a thread without writing ?conversation= into the URL.
+     * Image tools still need a selected conversation id for send/reply actions.
+     */
+    private function ensureConversationSelected(int $conversationId): void
+    {
+        if ($conversationId <= 0) {
+            return;
+        }
+
+        if ($this->selectedConversationId === $conversationId) {
+            return;
+        }
+
+        $this->selectedConversationId = $conversationId;
+        $this->mobileThreadOpen = true;
     }
 
     private function refreshPricedSendResults(): void

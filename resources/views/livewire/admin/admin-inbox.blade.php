@@ -616,24 +616,29 @@
                                             draggable="false"
                                             loading="lazy">
                                         @if (! $isOutbound)
-                                            <div class="absolute right-2 top-2 flex gap-1.5">
+                                            <div
+                                                class="absolute right-2 top-2 z-20 flex gap-1.5"
+                                                @click.stop
+                                                @mousedown.stop
+                                                @touchstart.stop
+                                                @touchend.stop
+                                                @contextmenu.stop.prevent
+                                            >
                                                 <button type="button"
-                                                    wire:click="openImageEdit({{ $messageRow->id }})"
-                                                    @click.stop
+                                                    wire:click.stop="openImageEdit({{ $messageRow->id }})"
                                                     title="Edit &amp; send"
                                                     aria-label="Edit image and send"
                                                     class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white shadow hover:bg-black/70">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="pointer-events-none h-4 w-4" aria-hidden="true">
                                                         <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z"/>
                                                     </svg>
                                                 </button>
                                                 <button type="button"
-                                                    wire:click="openPricedImageSend({{ $messageRow->id }})"
-                                                    @click.stop
+                                                    wire:click.stop="openPricedImageSend({{ $messageRow->id }})"
                                                     title="Send priced product image"
                                                     aria-label="Search products and send priced image"
                                                     class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white shadow hover:bg-black/70">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="pointer-events-none h-4 w-4" aria-hidden="true">
                                                         <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/>
                                                     </svg>
                                                 </button>

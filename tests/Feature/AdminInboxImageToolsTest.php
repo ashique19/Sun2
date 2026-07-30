@@ -112,10 +112,35 @@ class AdminInboxImageToolsTest extends TestCase
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
-            ->assertSeeHtml('wire:click="openImageEdit('.$inbound->id.')"')
-            ->assertSeeHtml('wire:click="openPricedImageSend('.$inbound->id.')"')
+            ->assertSeeHtml('wire:click.stop="openImageEdit('.$inbound->id.')"')
+            ->assertSeeHtml('wire:click.stop="openPricedImageSend('.$inbound->id.')"')
             ->assertSeeHtml('aria-label="Edit image and send"')
             ->assertSeeHtml('aria-label="Search products and send priced image"');
+    }
+
+    #[Test]
+    public function image_tools_open_from_desktop_preview_without_selected_conversation(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+        $inbound = $this->inboundImage($conversation);
+
+        // Desktop preview shows the first thread without setting selectedConversationId.
+        Livewire::test(AdminInbox::class)
+            ->assertSet('selectedConversationId', null)
+            ->assertSeeHtml('wire:click.stop="openImageEdit('.$inbound->id.')"')
+            ->call('openImageEdit', $inbound->id)
+            ->assertHasNoErrors()
+            ->assertSet('selectedConversationId', $conversation->id)
+            ->assertSet('imageEditMessageId', $inbound->id)
+            ->assertSeeHtml('data-inbox-image-edit-modal')
+            ->assertSeeHtml('Edit &amp; send image')
+            ->call('closeImageEdit')
+            ->call('openPricedImageSend', $inbound->id)
+            ->assertHasNoErrors()
+            ->assertSet('pricedSendMessageId', $inbound->id)
+            ->assertSeeHtml('data-inbox-priced-send-modal')
+            ->assertSee('Send priced product image');
     }
 
     #[Test]

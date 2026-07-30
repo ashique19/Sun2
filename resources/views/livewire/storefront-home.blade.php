@@ -80,9 +80,9 @@
         @endif
     </section>
 
-    <section id="latest-posts" class="mx-auto max-w-6xl px-4 py-12">
+    <section id="recent-posts" class="mx-auto max-w-6xl px-4 py-12">
         <div class="flex items-end justify-between gap-4 mb-6">
-            <h2 class="font-serif text-2xl font-semibold">Latest posts</h2>
+            <h2 class="font-serif text-2xl font-semibold">Recent posts</h2>
         </div>
 
         @if ($latestSocialPosts->isEmpty())

@@ -4,7 +4,7 @@
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
             <h1 class="font-serif text-3xl font-semibold">Social Post #{{ $post->id }}</h1>
-            <p class="mt-1 text-xs text-[#8C8474]">Compose → choose networks → publish with live status.</p>
+            <p class="mt-1 text-xs text-[#8C8474]">Saved on-site post — re-publish to Facebook anytime.</p>
         </div>
 
         <a href="{{ route('admin.products') }}" wire:navigate
@@ -69,10 +69,10 @@
                 }
             }
         }">
-        <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+            <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
             <div>
-                <h2 class="font-semibold">Re-publish</h2>
-                <p class="mt-1 text-xs text-[#8C8474]">Choose networks, then watch each attempt succeed or fail.</p>
+                <h2 class="font-semibold">Re-publish to Facebook</h2>
+                <p class="mt-1 text-xs text-[#8C8474]">Posts a new Facebook attempt using the saved copy and product images.</p>
             </div>
             <button type="button"
                 @click="runRepublish()"
@@ -81,25 +81,6 @@
                 <span x-show="!busy && $wire.republishPhase !== 'publishing'">Re-publish</span>
                 <span x-cloak x-show="busy || $wire.republishPhase === 'publishing'">Posting…</span>
             </button>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-            <label class="flex items-start gap-3 rounded-lg border border-[#E7DFCF] p-3 cursor-pointer {{ $postToFacebook ? 'border-[#C9A227] bg-[#FAF6EF]/60' : '' }}">
-                <input type="checkbox" wire:model.live="postToFacebook" class="mt-1 rounded border-[#E0D6C2] text-[#C9A227] focus:ring-[#C9A227]"
-                    @disabled($republishPhase === 'publishing')>
-                <div>
-                    <div class="font-medium text-sm">Facebook</div>
-                    <div class="text-xs text-[#8C8474]">Page feed / photos</div>
-                </div>
-            </label>
-            <label class="flex items-start gap-3 rounded-lg border border-[#E7DFCF] p-3 cursor-pointer {{ $postToInstagram ? 'border-[#C9A227] bg-[#FAF6EF]/60' : '' }}">
-                <input type="checkbox" wire:model.live="postToInstagram" class="mt-1 rounded border-[#E0D6C2] text-[#C9A227] focus:ring-[#C9A227]"
-                    @disabled($republishPhase === 'publishing')>
-                <div>
-                    <div class="font-medium text-sm">Instagram</div>
-                    <div class="text-xs text-[#8C8474]">Linked IG business account</div>
-                </div>
-            </label>
         </div>
 
         @if ($channelProgress !== [])
@@ -150,12 +131,15 @@
             <div class="font-semibold mb-3">Products</div>
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 @foreach ($post->products as $product)
-                    @php $thumb = $product->primaryImagePath(); @endphp
+                    @php
+                        $path = \App\Models\SocialPost::pivotSelectedImagePath($product->pivot)
+                            ?? $product->primaryImagePath();
+                    @endphp
                     <a href="{{ route('product.show', $product) }}" wire:navigate
                         class="rounded-lg border border-[#E7DFCF] p-3 hover:bg-[#FAF6EF]/50 transition">
                         <div class="h-16 w-16 rounded bg-[#FAF6EF] flex items-center justify-center overflow-hidden">
-                            @if ($thumb)
-                                <img src="{{ \App\Support\StorefrontAssets::url($thumb) }}" alt="" class="h-full w-full object-cover">
+                            @if ($path)
+                                <img src="{{ \App\Support\StorefrontAssets::url($path) }}" alt="" class="h-full w-full object-cover">
                             @else
                                 <span class="text-[#C9A227] text-xs">No img</span>
                             @endif

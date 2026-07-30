@@ -26,7 +26,6 @@ class MetaGraphSocialPublisher
      */
     public function publish(SocialPost $post, array $channels = [
         SocialPostPublication::CHANNEL_FACEBOOK,
-        SocialPostPublication::CHANNEL_INSTAGRAM,
     ]): array
     {
         $post->loadMissing(['products', 'publications']);
@@ -117,11 +116,16 @@ class MetaGraphSocialPublisher
 
         foreach ($post->products as $product) {
             $pivot = $product->pivot;
+            $path = $pivot ? SocialPost::pivotSelectedImagePath($pivot) : null;
 
-            $path = match ((string) $post->image_source) {
-                SocialPost::IMAGE_SOURCE_PRICED => $pivot?->priced_snapshot_path,
-                default => $pivot?->thumb_snapshot_path,
-            };
+            // Legacy posts without selected_image_path honor the post-level image_source.
+            if ($path === null && $pivot) {
+                $path = match ((string) $post->image_source) {
+                    SocialPost::IMAGE_SOURCE_PRICED => $pivot->priced_snapshot_path,
+                    default => $pivot->thumb_snapshot_path,
+                };
+                $path = is_string($path) && trim($path) !== '' ? trim($path) : null;
+            }
 
             $url = StorefrontAssets::mediumUrl($path) ?? StorefrontAssets::url($path);
 
@@ -467,4 +471,3 @@ class MetaGraphSocialPublisher
         return is_string($id) ? $id : '';
     }
 }
-

@@ -103,8 +103,13 @@ class AdminSocialPostsManageTest extends TestCase
         $this->actingAs($admin)
             ->get(route('admin.dashboard'))
             ->assertOk()
+            ->assertSee('Social')
+            ->assertSee(route('admin.inbox'), false)
+            ->assertSee(route('admin.inbox.quick-replies'), false)
             ->assertSee(route('admin.social-posts'), false)
-            ->assertSee('Social Posts');
+            ->assertSee('Social Posts')
+            ->assertSee('Quick replies')
+            ->assertSee('Inbox');
     }
 
     #[Test]

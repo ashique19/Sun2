@@ -38,14 +38,53 @@
         class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.dashboard') ? $active : $inactive }}">
         Dashboard
     </a>
-    <a href="{{ route('admin.inbox') }}" wire:navigate {!! $click !!}
-        class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.inbox') && ! request()->routeIs('admin.inbox.quick-replies') ? $active : $inactive }}">
-        Inbox
-    </a>
-    <a href="{{ route('admin.inbox.quick-replies') }}" wire:navigate {!! $click !!}
-        class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.inbox.quick-replies') ? $active : $inactive }}">
-        Quick replies
-    </a>
+
+    @php
+        $socialLinks = [
+            'admin.inbox' => 'Inbox',
+            'admin.inbox.quick-replies' => 'Quick replies',
+            'admin.social-posts' => 'Social Posts',
+        ];
+    @endphp
+
+    @if ($isMobile)
+        <p class="{{ $sectionLabel }}">Social</p>
+        @foreach ($socialLinks as $routeName => $label)
+            @php
+                $isActive = match ($routeName) {
+                    'admin.inbox' => request()->routeIs('admin.inbox') && ! request()->routeIs('admin.inbox.quick-replies'),
+                    'admin.inbox.quick-replies' => request()->routeIs('admin.inbox.quick-replies'),
+                    'admin.social-posts' => request()->routeIs('admin.social-posts*'),
+                    default => request()->routeIs($routeName),
+                };
+            @endphp
+            <a href="{{ route($routeName) }}" wire:navigate {!! $click !!}
+                class="{{ $linkBase }} {{ $linkPadSm }} {{ $isActive ? $active : $inactive }}">
+                {{ $label }}
+            </a>
+        @endforeach
+    @else
+        <div class="space-y-1">
+            <p class="{{ $sectionLabel }}">Social</p>
+            <div class="ml-3 space-y-0.5 border-l border-[#E7DFCF] pl-2">
+                @foreach ($socialLinks as $routeName => $label)
+                    @php
+                        $isActive = match ($routeName) {
+                            'admin.inbox' => request()->routeIs('admin.inbox') && ! request()->routeIs('admin.inbox.quick-replies'),
+                            'admin.inbox.quick-replies' => request()->routeIs('admin.inbox.quick-replies'),
+                            'admin.social-posts' => request()->routeIs('admin.social-posts*'),
+                            default => request()->routeIs($routeName),
+                        };
+                    @endphp
+                    <a href="{{ route($routeName) }}" wire:navigate
+                        class="block rounded-lg px-3 {{ $linkPadSm }} {{ $isActive ? $active : $inactive }}">
+                        {{ $label }}
+                    </a>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     <a href="{{ route('admin.issues.index') }}" wire:navigate {!! $click !!}
         class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.issues*') ? $active : $inactive }}">
         Issues
@@ -82,10 +121,6 @@
     <a href="{{ route('admin.products') }}" wire:navigate {!! $click !!}
         class="{{ $isMobile ? 'mt-2 ' : '' }}{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.products') || request()->routeIs('admin.products.create') || request()->routeIs('admin.products.edit') || request()->routeIs('admin.products*') ? $active : $inactive }}">
         Products
-    </a>
-    <a href="{{ route('admin.social-posts') }}" wire:navigate {!! $click !!}
-        class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.social-posts*') ? $active : $inactive }}">
-        Social Posts
     </a>
     <a href="{{ route('admin.categories') }}" wire:navigate {!! $click !!}
         class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.categories*') ? $active : $inactive }}">

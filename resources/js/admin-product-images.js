@@ -309,7 +309,7 @@ const registerProductImageAlpineData = () => {
             this.savedEditorId = id;
             this.savedEditorSrc = src;
             this.savedPreviewUrl = '';
-            this.savedPreviewPending = true;
+            this.savedPreviewPending = false;
             this.savedAspect = 'free';
             this.overlayText = '';
             this.overlayTextSize = 48;
@@ -324,7 +324,7 @@ const registerProductImageAlpineData = () => {
             this.$nextTick(() => {
                 afterPaint(() => {
                     this.savedAllowOutsideClose = true;
-                    this.bootSavedCropper();
+                    this.bootSavedCropper(0);
                 });
             });
         },
@@ -344,7 +344,11 @@ const registerProductImageAlpineData = () => {
                     this.overlayLogoSize,
                     this.overlayLogoPosition,
                 ].join('|'),
-                () => this.schedulePreview(),
+                () => {
+                    if (this.savedCropper) {
+                        this.schedulePreview();
+                    }
+                },
             );
         },
 
@@ -360,10 +364,27 @@ const registerProductImageAlpineData = () => {
             this.logoImage = image;
         },
 
-        bootSavedCropper() {
-            const image = this.$refs.savedCropImage;
+        savedCropImageEl() {
+            return document.querySelector('[data-saved-editor] [data-saved-crop-image]');
+        },
 
-            if (!image || !this.savedEditorOpen) {
+        bootSavedCropper(attempt = 0) {
+            if (! this.savedEditorOpen) {
+                return;
+            }
+
+            const image = this.savedCropImageEl();
+
+            if (! image) {
+                if (attempt < 20) {
+                    setTimeout(() => this.bootSavedCropper(attempt + 1), 50);
+
+                    return;
+                }
+
+                this.savedError = 'Could not open the image editor. Refresh and try again.';
+                this.savedPreviewPending = false;
+
                 return;
             }
 
@@ -371,44 +392,77 @@ const registerProductImageAlpineData = () => {
 
             if (image.complete && image.naturalWidth > 0) {
                 start();
-            } else {
-                image.onload = start;
+
+                return;
+            }
+
+            image.onload = () => start();
+            image.onerror = () => {
+                this.savedError = 'Could not load this product image for editing.';
+                this.savedPreviewPending = false;
+            };
+
+            // Force reload if src is set but the browser cached a failure.
+            if (image.src && ! image.complete) {
+                const current = image.src;
+                image.src = '';
+                image.src = current;
             }
         },
 
         initSavedCropper() {
             this.destroySavedCropper();
 
-            const image = this.$refs.savedCropImage;
+            const image = this.savedCropImageEl();
 
-            if (!image || !this.savedEditorOpen) {
+            if (! image || ! this.savedEditorOpen) {
+                this.savedPreviewPending = false;
+
                 return;
             }
 
-            this.savedCropper = new Cropper(image, {
-                viewMode: 1,
-                dragMode: 'crop',
-                autoCropArea: 0.8,
-                responsive: true,
-                background: true,
-                guides: true,
-                center: true,
-                highlight: true,
-                movable: true,
-                rotatable: true,
-                scalable: true,
-                zoomable: true,
-                zoomOnWheel: true,
-                cropBoxMovable: true,
-                cropBoxResizable: true,
-                toggleDragModeOnDblclick: true,
-                ready: () => {
-                    this.schedulePreview();
-                },
-                crop: () => {
-                    this.schedulePreview();
-                },
-            });
+            if (! image.naturalWidth) {
+                this.savedError = 'Could not load this product image for editing.';
+                this.savedPreviewPending = false;
+
+                return;
+            }
+
+            try {
+                this.savedCropper = new Cropper(image, {
+                    viewMode: 1,
+                    dragMode: 'crop',
+                    autoCropArea: 0.75,
+                    responsive: true,
+                    background: true,
+                    guides: true,
+                    center: true,
+                    highlight: true,
+                    movable: true,
+                    rotatable: true,
+                    scalable: true,
+                    zoomable: true,
+                    zoomOnWheel: true,
+                    cropBoxMovable: true,
+                    cropBoxResizable: true,
+                    toggleDragModeOnDblclick: true,
+                    ready: () => {
+                        try {
+                            this.savedCropper?.resize();
+                        } catch {
+                            // ignore resize probe failures
+                        }
+                        this.schedulePreview();
+                    },
+                    crop: () => {
+                        this.schedulePreview();
+                    },
+                });
+            } catch (error) {
+                console.error(error);
+                this.savedError = 'Could not start the crop tool. Refresh and try again.';
+                this.savedPreviewPending = false;
+            }
         },
 
         destroySavedCropper() {
@@ -465,7 +519,7 @@ const registerProductImageAlpineData = () => {
         },
 
         schedulePreview() {
-            if (! this.savedEditorOpen) {
+            if (! this.savedEditorOpen || ! this.savedCropper) {
                 return;
             }
 
@@ -478,11 +532,19 @@ const registerProductImageAlpineData = () => {
             this.savedPreviewTimer = setTimeout(() => {
                 this.savedPreviewTimer = null;
                 this.refreshPreview();
-            }, 100);
+            }, 120);
         },
 
         async refreshPreview() {
-            if (! this.savedCropper || ! this.savedEditorOpen) {
+            if (! this.savedEditorOpen) {
+                this.savedPreviewPending = false;
+
+                return;
+            }
+
+            if (! this.savedCropper) {
+                this.savedPreviewPending = false;
+
                 return;
             }
 
@@ -490,16 +552,20 @@ const registerProductImageAlpineData = () => {
                 const output = await this.composeEditedCanvas(720);
 
                 if (! output || ! this.savedEditorOpen) {
+                    if (this.savedEditorOpen && ! this.savedPreviewUrl) {
+                        this.savedError = this.savedError || 'Could not build a preview from this crop.';
+                    }
+
                     return;
                 }
 
                 this.savedPreviewUrl = output.toDataURL('image/jpeg', 0.86);
+                this.savedError = null;
             } catch (error) {
                 console.error(error);
+                this.savedError = error?.message || 'Could not build a preview from this crop.';
             } finally {
-                if (this.savedEditorOpen) {
-                    this.savedPreviewPending = false;
-                }
+                this.savedPreviewPending = false;
             }
         },
 
@@ -625,11 +691,17 @@ const registerProductImageAlpineData = () => {
                 return null;
             }
 
-            const canvas = this.savedCropper.getCroppedCanvas({
-                maxWidth: maxEdge,
-                maxHeight: maxEdge,
-                fillColor: '#ffffff',
-            });
+            let canvas;
+
+            try {
+                canvas = this.savedCropper.getCroppedCanvas({
+                    maxWidth: maxEdge,
+                    maxHeight: maxEdge,
+                    fillColor: '#ffffff',
+                });
+            } catch (error) {
+                throw new Error(error?.message || 'Crop preview failed (image may be blocked by the browser).');
+            }
 
             if (! canvas) {
                 return null;

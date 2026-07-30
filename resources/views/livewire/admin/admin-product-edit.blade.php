@@ -129,7 +129,7 @@
                                         <span class="absolute top-2 left-2 rounded bg-[#C9A227] px-2 py-0.5 text-[10px] font-semibold text-white">Primary</span>
                                     @endif
                                     <button type="button"
-                                        @click.stop="openSavedEditor({{ $image->id }}, @js(asset(ltrim($image->path, '/'))))"
+                                        @click.stop="openSavedEditor({{ $image->id }}, @js(route('admin.products.images.raw', [$product, $image])))"
                                         class="absolute top-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-[#1E1E1E] shadow-sm ring-1 ring-[#E0D6C2] hover:bg-[#FAF6EF]"
                                         title="Edit image"
                                         aria-label="Edit image">
@@ -357,8 +357,10 @@
                                                 <p class="text-xs font-medium text-[#6B6459]">Crop</p>
                                                 <p class="text-[11px] text-[#8C8474]">Drag corners to crop · scroll to zoom</p>
                                             </div>
-                                            <div class="saved-cropper-wrap relative min-h-[280px] bg-[#2A2A2A]">
-                                                <img x-ref="savedCropImage" :src="savedEditorSrc" alt="" class="block max-h-[46vh] max-w-full mx-auto">
+                                            <div class="saved-cropper-wrap relative min-h-[280px] bg-[#2A2A2A]" data-saved-editor>
+                                                <img data-saved-crop-image :src="savedEditorSrc" alt=""
+                                                    class="block max-h-[46vh] max-w-full mx-auto"
+                                                    crossorigin="anonymous">
                                             </div>
                                             <div class="space-y-3 border-t border-[#EFE7D6] px-4 py-3">
                                                 <div class="flex flex-wrap gap-2">

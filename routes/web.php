@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminProductImageFileController;
 use App\Http\Controllers\ChannelMessageMediaController;
 use App\Http\Controllers\MessengerConversationSyncController;
 use App\Http\Controllers\ProductImageHashRebuildController;
@@ -202,6 +203,9 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
             return redirect()->route('admin.products.show', $product);
         })->whereNumber('product')->name('products.performance');
         Route::get('/products/{product:id}/edit', AdminProductEdit::class)->name('products.edit');
+        Route::get('/products/{product:id}/images/{image}/raw', AdminProductImageFileController::class)
+            ->whereNumber('image')
+            ->name('products.images.raw');
         Route::get('/products/{product:id}', AdminProductShow::class)->whereNumber('product')->name('products.show');
         Route::get('/categories', AdminCategories::class)->name('categories');
         Route::get('/categories/create', AdminCategoryEdit::class)->name('categories.create');

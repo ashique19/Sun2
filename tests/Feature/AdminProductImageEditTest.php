@@ -57,6 +57,9 @@ class AdminProductImageEditTest extends TestCase
 
         Livewire::test(AdminProductEdit::class, ['product' => $product])
             ->assertSeeHtml('openSavedEditor('.$image->id.',')
+            ->assertSeeHtml('products\\/'.$product->id.'\\/images\\/'.$image->id.'\\/raw')
+            ->assertSeeHtml('data-saved-crop-image')
+            ->assertSeeHtml('data-saved-editor')
             ->assertSeeHtml('aria-label="Edit image"')
             ->assertSeeHtml('x-if="savedEditorOpen"')
             ->assertSeeHtml('rotateSaved(-90)')

@@ -4,6 +4,7 @@ namespace App\Services\Admin;
 
 use App\Models\Expense;
 use App\Models\Order;
+use App\Models\OrderProduct;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -105,7 +106,9 @@ class AnalyticsService
     }
 
     /**
-     * Monthly ordered (by placed_at) vs delivered (by actual_delivery_date).
+     * Monthly ordered vs delivered cohort by placement month (placed_at).
+     * Delivered count/value are from orders placed that month that later reached delivered status
+     * (not when the delivery date fell).
      *
      * @return array{
      *     year: int,
@@ -145,29 +148,22 @@ class AnalyticsService
 
         $placed = Order::query()
             ->whereNotNull('placed_at')
+            ->where('status', '!=', Order::STATUS_DRAFT)
             ->whereBetween('placed_at', [
                 $start->format('Y-m-d H:i:s'),
                 $end->format('Y-m-d H:i:s'),
             ])
-            ->get(['id', 'total', 'placed_at']);
+            ->get(['id', 'total', 'placed_at', 'status', 'collected_amount']);
 
         foreach ($placed as $order) {
             $month = (int) $order->placed_at->timezone('Asia/Dhaka')->month;
             $months[$month]['ordered_count']++;
             $months[$month]['ordered_value'] += (float) ($order->total ?? 0);
-        }
 
-        $delivered = Order::query()
-            ->where('status', 'delivered')
-            ->whereNotNull('actual_delivery_date')
-            ->whereBetween('actual_delivery_date', [
-                $start->format('Y-m-d H:i:s'),
-                $end->format('Y-m-d H:i:s'),
-            ])
-            ->get(['id', 'collected_amount', 'total', 'actual_delivery_date']);
+            if ($order->status !== 'delivered') {
+                continue;
+            }
 
-        foreach ($delivered as $order) {
-            $month = (int) $order->actual_delivery_date->timezone('Asia/Dhaka')->month;
             $months[$month]['delivered_count']++;
             $collected = (float) ($order->collected_amount ?? 0);
             $months[$month]['delivered_value'] += $collected > 0
@@ -191,6 +187,106 @@ class AnalyticsService
                 'delivered_count' => (int) array_sum(array_column($rows, 'delivered_count')),
                 'delivered_value' => round(array_sum(array_column($rows, 'delivered_value')), 2),
             ],
+        ];
+    }
+
+    /**
+     * Delivered line revenue by product category × month (actual_delivery_date).
+     * Values are order-line `line_total` sums (not prorated collected amounts).
+     *
+     * @return array{
+     *     year: int,
+     *     months: list<string>,
+     *     categories: list<array{id: int|null, name: string, color: string, values: list<float>, total: float}>,
+     *     month_totals: list<float>,
+     *     grand_total: float
+     * }
+     */
+    public function revenueByCategoryByMonth(int $year): array
+    {
+        $start = Carbon::create($year, 1, 1, 0, 0, 0, 'Asia/Dhaka')->startOfDay();
+        $end = $start->copy()->endOfYear();
+        $palette = [
+            '#1F4E79', '#C9A227', '#2F6F4E', '#C45C26', '#6B8F71',
+            '#8B5E3C', '#3D6B8E', '#A04820', '#7A4E3A', '#4F7A5A',
+            '#B8956A', '#8C8474',
+        ];
+
+        $lines = OrderProduct::query()
+            ->with(['product:id,category_id', 'product.category:id,name', 'order:id,status,actual_delivery_date'])
+            ->whereHas('order', function ($query) use ($start, $end) {
+                $query->where('status', 'delivered')
+                    ->whereNotNull('actual_delivery_date')
+                    ->whereBetween('actual_delivery_date', [
+                        $start->format('Y-m-d H:i:s'),
+                        $end->format('Y-m-d H:i:s'),
+                    ]);
+            })
+            ->get(['id', 'order_id', 'product_id', 'line_total']);
+
+        /** @var array<string, array<int, float>> $matrix categoryKey => [month => amount] */
+        $matrix = [];
+        $names = [];
+
+        foreach ($lines as $line) {
+            $order = $line->order;
+
+            if (! $order?->actual_delivery_date) {
+                continue;
+            }
+
+            $month = (int) $order->actual_delivery_date->timezone('Asia/Dhaka')->month;
+            $category = $line->product?->category;
+            $categoryId = $category?->id;
+            $key = $categoryId !== null ? (string) $categoryId : 'none';
+            $names[$key] = $category?->name ?: 'Uncategorized';
+            $matrix[$key] ??= array_fill(1, 12, 0.0);
+            $matrix[$key][$month] += (float) ($line->line_total ?? 0);
+        }
+
+        uasort($matrix, function (array $a, array $b): int {
+            return array_sum($b) <=> array_sum($a);
+        });
+
+        $months = [];
+        for ($month = 1; $month <= 12; $month++) {
+            $months[] = Carbon::create($year, $month, 1)->format('M');
+        }
+
+        $categories = [];
+        $colorIndex = 0;
+
+        foreach ($matrix as $key => $byMonth) {
+            $values = [];
+            for ($month = 1; $month <= 12; $month++) {
+                $values[] = round($byMonth[$month], 2);
+            }
+
+            $categories[] = [
+                'id' => $key === 'none' ? null : (int) $key,
+                'name' => $names[$key],
+                'color' => $palette[$colorIndex % count($palette)],
+                'values' => $values,
+                'total' => round(array_sum($values), 2),
+            ];
+            $colorIndex++;
+        }
+
+        $monthTotals = [];
+        for ($i = 0; $i < 12; $i++) {
+            $sum = 0.0;
+            foreach ($categories as $category) {
+                $sum += $category['values'][$i];
+            }
+            $monthTotals[] = round($sum, 2);
+        }
+
+        return [
+            'year' => $year,
+            'months' => $months,
+            'categories' => $categories,
+            'month_totals' => $monthTotals,
+            'grand_total' => round(array_sum($monthTotals), 2),
         ];
     }
 

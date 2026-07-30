@@ -277,6 +277,9 @@
     <div class="rounded-xl border border-[#EFE7D6] bg-white overflow-hidden">
         <div class="px-3 py-3 sm:px-4 sm:py-4 border-b border-[#E7DFCF]">
             <h2 class="font-semibold text-base sm:text-lg">Orders by date</h2>
+            <p class="mt-1 text-xs text-[#8C8474]">
+                DQ / CV are from orders placed that day that were later delivered (not deliveries that happened that day).
+            </p>
         </div>
 
         <div>
@@ -292,10 +295,10 @@
                     <tr>
                         <th class="px-1.5 py-2 sm:px-2 font-medium">Date</th>
                         @foreach ([
-                            ['abbr' => 'OQ', 'label' => 'Order quantity'],
-                            ['abbr' => 'OV', 'label' => 'Order value'],
-                            ['abbr' => 'DQ', 'label' => 'Delivered quantity'],
-                            ['abbr' => 'CV', 'label' => 'Collected value'],
+                            ['abbr' => 'OQ', 'label' => 'Order quantity (placed that day)'],
+                            ['abbr' => 'OV', 'label' => 'Order value (placed that day)'],
+                            ['abbr' => 'DQ', 'label' => 'Delivered quantity (of orders placed that day)'],
+                            ['abbr' => 'CV', 'label' => 'Collected value (of orders placed that day)'],
                         ] as $column)
                             <th class="px-1 py-2 sm:px-2 font-medium text-right" scope="col">
                                 <span

@@ -39,6 +39,10 @@ class AdminProducts extends Component
     /** @var list<int> */
     public array $selected = [];
 
+    public bool $bulkStockOpen = false;
+
+    public string $bulkStockQuantity = '';
+
     public ?int $editingProductId = null;
 
     public ?string $editingField = null;
@@ -109,6 +113,56 @@ class AdminProducts extends Component
     public function clearSelected(): void
     {
         $this->selected = [];
+        $this->closeBulkStock();
+    }
+
+    public function openBulkStock(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->selected === []) {
+            return;
+        }
+
+        $this->bulkStockOpen = true;
+        $this->bulkStockQuantity = '';
+        $this->resetValidation('bulkStockQuantity');
+        $this->message = null;
+    }
+
+    public function closeBulkStock(): void
+    {
+        $this->bulkStockOpen = false;
+        $this->bulkStockQuantity = '';
+        $this->resetValidation('bulkStockQuantity');
+    }
+
+    public function applyBulkStock(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->selected === []) {
+            $this->closeBulkStock();
+
+            return;
+        }
+
+        $this->validate([
+            'bulkStockQuantity' => ['required', 'integer', 'min:0'],
+        ]);
+
+        $ids = array_values(array_unique(array_map('intval', $this->selected)));
+        $stock = (int) $this->bulkStockQuantity;
+
+        $updated = Product::query()
+            ->whereIn('id', $ids)
+            ->update(['stock_quantity' => $stock]);
+
+        $this->selected = [];
+        $this->closeBulkStock();
+        $this->message = $updated === 1
+            ? 'Stock set to '.$stock.' for 1 product.'
+            : 'Stock set to '.$stock.' for '.$updated.' products.';
     }
 
     public function makePost(): mixed

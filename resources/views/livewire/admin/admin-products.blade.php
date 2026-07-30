@@ -5,6 +5,13 @@
             <p class="mt-1 text-xs text-[#8C8474]">Double-click price, regular price, cost, commission, max discount, or stock to edit inline.</p>
         </div>
         <div class="flex flex-wrap items-center gap-3">
+            <button type="button" wire:click="openBulkStock" @disabled($selected === [])
+                class="rounded-full px-5 py-2 text-sm font-semibold transition border
+                    {{ $selected === []
+                        ? 'border-[#E0D6C2] text-[#B0A898] cursor-not-allowed bg-white'
+                        : 'border-[#C9A227] text-[#C9A227] bg-white hover:bg-[#FAF6EF]' }}">
+                Change stock ({{ count($selected) }})
+            </button>
             <button type="button" wire:click="makePost" @disabled($selected === [])
                 class="rounded-full px-5 py-2 text-sm font-semibold text-white transition
                     {{ $selected === [] ? 'bg-[#D8CDB6] cursor-not-allowed' : 'bg-[#C9A227] hover:bg-[#b8931f]' }}">
@@ -16,6 +23,39 @@
             </a>
         </div>
     </div>
+
+    @if ($bulkStockOpen)
+        <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-4 flex flex-wrap items-end gap-3"
+            role="dialog"
+            aria-label="Change stock quantity for selected products">
+            <div class="min-w-[10rem]">
+                <label for="bulk-stock-quantity" class="block text-xs font-medium text-[#6B6459] mb-1">
+                    New stock quantity for {{ count($selected) }} selected
+                </label>
+                <input id="bulk-stock-quantity"
+                    type="number"
+                    min="0"
+                    step="1"
+                    inputmode="numeric"
+                    wire:model="bulkStockQuantity"
+                    wire:keydown.enter.prevent="applyBulkStock"
+                    class="w-36 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums"
+                    placeholder="e.g. 10"
+                    autofocus>
+                @if ($errors->has('bulkStockQuantity'))
+                    <p class="mt-1 text-[11px] text-rose-600">{{ $errors->first('bulkStockQuantity') }}</p>
+                @endif
+            </div>
+            <button type="button" wire:click="applyBulkStock"
+                class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">
+                Apply
+            </button>
+            <button type="button" wire:click="closeBulkStock"
+                class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
+                Cancel
+            </button>
+        </div>
+    @endif
 
     @if ($message)
         <div class="rounded-lg bg-emerald-50 text-emerald-700 text-sm px-4 py-3 mb-4">{{ $message }}</div>

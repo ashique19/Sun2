@@ -28,6 +28,64 @@ class GeminiClientFailoverTest extends TestCase
     }
 
     #[Test]
+    public function default_config_includes_recommended_text_and_image_failover_models(): void
+    {
+        $source = (string) file_get_contents(config_path('gemini.php'));
+
+        foreach ([
+            'gemini-2.5-flash',
+            'gemini-2.5-flash-lite',
+            'gemini-3.1-flash-lite',
+            'gemini-3-flash-preview',
+            'gemini-2.0-flash',
+            'gemini-2.5-flash-image',
+            'gemini-3.1-flash-image',
+            'gemini-3.1-flash-image-preview',
+            'gemini-3-pro-image',
+            'gemini-3-pro-image-preview',
+        ] as $model) {
+            $this->assertStringContainsString($model, $source);
+        }
+
+        config([
+            'gemini.model' => 'gemini-2.5-flash',
+            'gemini.models' => [
+                'gemini-2.5-flash',
+                'gemini-2.5-flash-lite',
+                'gemini-3.1-flash-lite',
+                'gemini-3-flash-preview',
+                'gemini-2.0-flash',
+            ],
+            'gemini.image_model' => 'gemini-2.5-flash-image',
+            'gemini.image_models' => [
+                'gemini-2.5-flash-image',
+                'gemini-3.1-flash-image',
+                'gemini-3.1-flash-image-preview',
+                'gemini-3-pro-image',
+                'gemini-3-pro-image-preview',
+            ],
+        ]);
+
+        $client = app(GeminiClient::class);
+
+        $this->assertSame([
+            'gemini-2.5-flash',
+            'gemini-2.5-flash-lite',
+            'gemini-3.1-flash-lite',
+            'gemini-3-flash-preview',
+            'gemini-2.0-flash',
+        ], $client->textModels());
+
+        $this->assertSame([
+            'gemini-2.5-flash-image',
+            'gemini-3.1-flash-image',
+            'gemini-3.1-flash-image-preview',
+            'gemini-3-pro-image',
+            'gemini-3-pro-image-preview',
+        ], $client->imageModels());
+    }
+
+    #[Test]
     public function generate_image_falls_over_to_next_model_on_rate_limit(): void
     {
         config([

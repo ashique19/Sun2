@@ -80,7 +80,7 @@
                                 <div class="flex items-center gap-3">
                                     @php $thumb = $product->images->first()?->path @endphp
                                     @if ($thumb)
-                                        <img src="{{ \App\Support\StorefrontAssets::url($thumb) }}" alt="" class="h-30 w-30 rounded object-cover bg-[#FAF6EF]">
+                                        <img src="{{ \App\Support\StorefrontAssets::url($thumb) }}" alt="" class="h-[7.5rem] w-[7.5rem] shrink-0 rounded object-cover bg-[#FAF6EF]">
                                     @endif
                                     <div>
                                         <a href="{{ route('admin.products.show', $product) }}" wire:navigate
@@ -183,7 +183,7 @@
                                             title="View priced image">
                                             <img src="{{ \App\Support\StorefrontAssets::url($product->priced_image_path) }}"
                                                 alt="Priced image for {{ $product->name }}"
-                                                class="h-30 w-30 rounded object-cover border border-[#E7DFCF] bg-[#FAF6EF]">
+                                                class="h-[7.5rem] w-[7.5rem] shrink-0 rounded object-cover border border-[#E7DFCF] bg-[#FAF6EF]">
                                         </a>
                                     @endif
                                     <button type="button"

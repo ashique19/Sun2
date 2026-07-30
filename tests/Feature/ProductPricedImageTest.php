@@ -121,7 +121,7 @@ class ProductPricedImageTest extends TestCase
         Livewire::test(AdminProducts::class)
             ->assertSeeHtml('alt="Priced image for List Product"')
             ->assertSeeHtml($product->priced_image_path)
-            ->assertSeeHtml('h-30 w-30')
+            ->assertSeeHtml('h-[7.5rem] w-[7.5rem]')
             ->assertSee('Rebuild');
     }
 

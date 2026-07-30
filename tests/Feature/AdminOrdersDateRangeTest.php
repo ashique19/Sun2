@@ -144,4 +144,36 @@ class AdminOrdersDateRangeTest extends TestCase
             ->assertSet('dateTo', '')
             ->assertSee('Old Order');
     }
+
+    #[Test]
+    public function date_range_uses_asia_dhaka_day_bounds_not_utc_midnight(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-29 12:00:00', 'Asia/Dhaka')->utc());
+
+        $this->actingAs($this->adminUser());
+
+        // Store real UTC instants (same as storefront now()).
+        $this->order([
+            'order_number' => 'EARLY-DHAKA',
+            'name' => 'Early Dhaka',
+            'status' => 'new',
+            'placed_at' => Carbon::parse('2026-07-28 01:30:00', 'Asia/Dhaka')->utc(),
+        ]);
+        $this->order([
+            'order_number' => 'PREV-EVENING',
+            'name' => 'Prev Evening',
+            'status' => 'new',
+            'placed_at' => Carbon::parse('2026-07-27 23:00:00', 'Asia/Dhaka')->utc(),
+        ]);
+
+        Livewire::test(AdminOrders::class, ['segment' => 'all'])
+            ->set('dateFrom', '2026-07-28')
+            ->set('dateTo', '2026-07-28')
+            ->assertSee('Early Dhaka')
+            ->assertSee('EARLY-DHAKA')
+            ->assertDontSee('Prev Evening')
+            ->assertDontSee('PREV-EVENING');
+
+        Carbon::setTestNow();
+    }
 }

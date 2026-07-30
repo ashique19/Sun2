@@ -70,15 +70,28 @@ class AdminDashboardMetricsTest extends TestCase
     {
         Carbon::setTestNow(Carbon::parse('2026-07-30 12:00:00', 'Asia/Dhaka'));
 
-        $july28 = Carbon::parse('2026-07-28 10:00:00', 'Asia/Dhaka');
-        $july29 = Carbon::parse('2026-07-29 15:00:00', 'Asia/Dhaka');
+        $july28 = Carbon::parse('2026-07-28 10:00:00', 'Asia/Dhaka')->utc();
+        $july29 = Carbon::parse('2026-07-29 15:00:00', 'Asia/Dhaka')->utc();
+        $july30 = Carbon::parse('2026-07-30 09:00:00', 'Asia/Dhaka')->utc();
 
-        // 9 orders placed on Jul-28; 6 delivered later, 3 still open
-        for ($i = 0; $i < 6; $i++) {
+        // Jul-28 had 9 orders. DQ = how many of those 9 later became delivered
+        // (delivery dates may be Jul-29 / Jul-30 — still count on Jul-28).
+        for ($i = 0; $i < 4; $i++) {
             $this->order([
                 'placed_at' => $july28->copy()->addMinutes($i),
                 'status' => 'delivered',
                 'actual_delivery_date' => $july29,
+                'paid_amount' => 1000,
+                'collected_amount' => 1000,
+                'total' => 1100,
+            ]);
+        }
+        for ($i = 0; $i < 2; $i++) {
+            $this->order([
+                'placed_at' => $july28->copy()->addMinutes(30 + $i),
+                'status' => 'delivered',
+                'actual_delivery_date' => $july30, // delivered two days later
+                'paid_amount' => 1000,
                 'collected_amount' => 1000,
                 'total' => 1100,
             ]);
@@ -88,6 +101,7 @@ class AdminDashboardMetricsTest extends TestCase
                 'placed_at' => $july28->copy()->addHours(1)->addMinutes($i),
                 'status' => 'dispatched',
                 'collected_amount' => 0,
+                'paid_amount' => 0,
                 'total' => 900,
             ]);
         }
@@ -97,6 +111,7 @@ class AdminDashboardMetricsTest extends TestCase
             'placed_at' => $july29,
             'status' => 'delivered',
             'actual_delivery_date' => $july29,
+            'paid_amount' => 500,
             'collected_amount' => 500,
             'total' => 500,
         ]);
@@ -107,8 +122,35 @@ class AdminDashboardMetricsTest extends TestCase
         $this->assertNotNull($row);
         $this->assertSame(9, $row['order_qty']);
         $this->assertSame(6 * 1100.0 + 3 * 900.0, $row['order_value']);
-        $this->assertSame(6, $row['delivery_qty']);
+        $this->assertSame(6, $row['delivery_qty']); // 4 on Jul-29 + 2 on Jul-30
         $this->assertSame(6000.0, $row['delivery_value']);
+
+        Carbon::setTestNow();
+    }
+
+    #[Test]
+    public function delivered_value_prefers_paid_amount_over_cod_only_collected(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-30 12:00:00', 'Asia/Dhaka'));
+
+        $day = Carbon::parse('2026-07-28 10:00:00', 'Asia/Dhaka')->utc();
+
+        // Prepaid + COD: paid_amount is full receipt; collected_amount is COD-only.
+        $this->order([
+            'placed_at' => $day,
+            'status' => 'delivered',
+            'actual_delivery_date' => $day->copy()->addDay(),
+            'total' => 2000,
+            'paid_amount' => 2000,
+            'collected_amount' => 500,
+        ]);
+
+        $activity = AdminDashboardMetrics::orderActivity(fresh: true);
+        $row = $this->dayRow($activity['months'][0]['days'], '2026-07-28');
+
+        $this->assertNotNull($row);
+        $this->assertSame(1, $row['delivery_qty']);
+        $this->assertSame(2000.0, $row['delivery_value']);
 
         Carbon::setTestNow();
     }
@@ -127,6 +169,7 @@ class AdminDashboardMetricsTest extends TestCase
             'placed_at' => $today,
             'status' => 'delivered',
             'actual_delivery_date' => $today,
+            'paid_amount' => 1200,
             'collected_amount' => 1200,
             'total' => 1590,
         ]);
@@ -134,6 +177,7 @@ class AdminDashboardMetricsTest extends TestCase
             'placed_at' => $yesterday,
             'status' => 'delivered',
             'actual_delivery_date' => $today, // delivered next day — still Jul-28 cohort
+            'paid_amount' => 300,
             'collected_amount' => 300,
             'total' => 870,
         ]);
@@ -141,6 +185,7 @@ class AdminDashboardMetricsTest extends TestCase
             'placed_at' => $yesterday,
             'status' => 'delivered',
             'actual_delivery_date' => $yesterday,
+            'paid_amount' => 450,
             'collected_amount' => 450,
             'total' => 560,
         ]);
@@ -160,6 +205,7 @@ class AdminDashboardMetricsTest extends TestCase
             'placed_at' => $eightDaysAgo,
             'status' => 'delivered',
             'actual_delivery_date' => $eightDaysAgo,
+            'paid_amount' => 200,
             'collected_amount' => 200,
             'total' => 250,
         ]);
@@ -167,6 +213,7 @@ class AdminDashboardMetricsTest extends TestCase
             'placed_at' => $previousMonthDay,
             'status' => 'delivered',
             'actual_delivery_date' => $previousMonthDay,
+            'paid_amount' => 700,
             'collected_amount' => 700,
             'total' => 800,
         ]);
@@ -228,7 +275,11 @@ class AdminDashboardMetricsTest extends TestCase
             ->assertSee('Last month')
             ->assertSee('Orders by date')
             ->assertSee('Last 7 days')
-            ->assertSeeHtml('aria-label="Of those orders, how many later delivered"')
+            ->assertSeeHtml('aria-label="Of those orders, how many later became delivered (even on a later date)"')
+            ->assertSee(route('admin.orders.all', [
+                'dateFrom' => now('Asia/Dhaka')->subDays(2)->toDateString(),
+                'dateTo' => now('Asia/Dhaka')->subDays(2)->toDateString(),
+            ], false))
             ->call('showOrdersDateRange', 'previous')
             ->assertSet('ordersDateRange', 'previous')
             ->assertSee('Back to last 7 days')

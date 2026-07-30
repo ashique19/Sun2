@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Cache;
 
 class AdminDashboardMetrics
 {
-    public const DAILY_CACHE_KEY = 'admin.dashboard_daily_totals.v2';
+    public const DAILY_CACHE_KEY = 'admin.dashboard_daily_totals.v3';
 
     public const DAILY_CACHE_TTL = 60;
 
@@ -21,8 +21,11 @@ class AdminDashboardMetrics
     /**
      * Month tiles + last-7-days / month day breakdowns for the dashboard.
      *
-     * Delivered qty/value are the placement cohort: of orders placed that day,
-     * how many later reached delivered status, and how much was collected from them.
+     * Placement-day cohort:
+     * - OQ / OV: orders placed that Asia/Dhaka calendar day
+     * - DQ: how many of those orders later reached status=delivered
+     *   (actual delivery may be on a later date — still counted on the placement day)
+     * - CV: money received on those delivered orders (paid_amount, else collected, else total)
      *
      * @return array{
      *     months: list<array{
@@ -80,6 +83,24 @@ class AdminDashboardMetrics
     }
 
     /**
+     * Collected / paid value for a delivered order in the placement cohort.
+     */
+    public static function deliveredOrderValue(Order $order): float
+    {
+        $paid = (float) ($order->paid_amount ?? 0);
+        if ($paid > 0) {
+            return $paid;
+        }
+
+        $collected = (float) ($order->collected_amount ?? 0);
+        if ($collected > 0) {
+            return $collected;
+        }
+
+        return (float) ($order->total ?? 0);
+    }
+
+    /**
      * @return array{
      *     months: list<array{
      *         key: string,
@@ -111,15 +132,12 @@ class AdminDashboardMetrics
         $byDay = [];
 
         $orders = Order::query()
+            ->whereNotNull('placed_at')
             ->where('placed_at', '>=', $queryFrom->copy()->timezone('UTC'))
             ->where('status', '!=', Order::STATUS_DRAFT)
-            ->get(['id', 'status', 'total', 'collected_amount', 'placed_at']);
+            ->get(['id', 'status', 'total', 'paid_amount', 'collected_amount', 'placed_at']);
 
         foreach ($orders as $order) {
-            if (! $order->placed_at) {
-                continue;
-            }
-
             $date = $order->placed_at->timezone('Asia/Dhaka')->toDateString();
             $byDay[$date] ??= [
                 'order_qty' => 0,
@@ -128,6 +146,7 @@ class AdminDashboardMetrics
                 'delivery_value' => 0.0,
             ];
 
+            // OQ: one per placed order (not line-item pieces).
             $byDay[$date]['order_qty']++;
             $byDay[$date]['order_value'] += (float) ($order->total ?? 0);
 
@@ -135,12 +154,9 @@ class AdminDashboardMetrics
                 continue;
             }
 
-            // Cohort: still counted on the placement day even if delivery was later.
+            // DQ: still on the placement day when delivery happened later.
             $byDay[$date]['delivery_qty']++;
-            $collected = (float) ($order->collected_amount ?? 0);
-            $byDay[$date]['delivery_value'] += $collected > 0
-                ? $collected
-                : (float) ($order->total ?? 0);
+            $byDay[$date]['delivery_value'] += self::deliveredOrderValue($order);
         }
 
         $buildDays = function (Carbon $from, Carbon $to) use ($byDay): array {

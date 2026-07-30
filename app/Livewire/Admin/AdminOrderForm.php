@@ -1185,7 +1185,7 @@ class AdminOrderForm extends Component
         $selected = Carbon::createFromFormat('Y-m-d', $this->orderDate, $dhaka)->startOfDay();
         $today = now($dhaka)->startOfDay();
 
-        // Today: keep existing timestamp when editing, otherwise now.
+        // Today: keep existing timestamp when editing, otherwise now (UTC instant).
         if ($selected->equalTo($today)) {
             if ($this->order?->placed_at && $this->order->placed_at->timezone($dhaka)->toDateString() === $this->orderDate) {
                 return $this->order->placed_at;
@@ -1194,7 +1194,8 @@ class AdminOrderForm extends Component
             return now();
         }
 
-        // Past calendar day in Dhaka — store noon local so the day groups cleanly.
-        return $selected->setTime(12, 0, 0);
+        // Past calendar day in Dhaka — store noon local as a real UTC instant
+        // so Asia/Dhaka day grouping on the dashboard stays correct.
+        return $selected->copy()->setTime(12, 0, 0)->utc();
     }
 }

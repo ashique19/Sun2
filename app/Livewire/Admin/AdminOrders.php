@@ -882,12 +882,21 @@ class AdminOrders extends Component
             [$from, $to] = [$to, $from];
         }
 
+        // Bounds are Asia/Dhaka calendar days; store/compare as UTC instants.
         if ($from !== '') {
-            $query->where($column, '>=', Carbon::createFromFormat('Y-m-d', $from, 'Asia/Dhaka')->startOfDay());
+            $query->where(
+                $column,
+                '>=',
+                Carbon::createFromFormat('Y-m-d', $from, 'Asia/Dhaka')->startOfDay()->timezone('UTC'),
+            );
         }
 
         if ($to !== '') {
-            $query->where($column, '<=', Carbon::createFromFormat('Y-m-d', $to, 'Asia/Dhaka')->endOfDay());
+            $query->where(
+                $column,
+                '<=',
+                Carbon::createFromFormat('Y-m-d', $to, 'Asia/Dhaka')->endOfDay()->timezone('UTC'),
+            );
         }
     }
 

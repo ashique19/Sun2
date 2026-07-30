@@ -423,7 +423,7 @@
             <div>
                 <h2 class="font-semibold text-base sm:text-lg">Orders</h2>
                 <p class="mt-0.5 text-xs text-[#8C8474]">
-                    Month tiles for totals · day table for a quick status check. DQ / CV = of orders placed that day, how many later delivered and how much collected.
+                    Month tiles for totals · day table for a quick status check. DQ = of that day's orders, how many later became delivered (even on a later date). CV = money received on those.
                 </p>
             </div>
         </div>
@@ -500,8 +500,8 @@
                             @foreach ([
                                 ['abbr' => 'OQ', 'label' => 'Orders placed that day'],
                                 ['abbr' => 'OV', 'label' => 'Value of orders placed that day'],
-                                ['abbr' => 'DQ', 'label' => 'Of those orders, how many later delivered'],
-                                ['abbr' => 'CV', 'label' => 'Collected from those delivered orders'],
+                                ['abbr' => 'DQ', 'label' => 'Of those orders, how many later became delivered (even on a later date)'],
+                                ['abbr' => 'CV', 'label' => 'Money received on those delivered orders'],
                             ] as $column)
                                 <th class="px-1 py-2 sm:px-2 font-medium text-right" scope="col">
                                     <span
@@ -537,9 +537,17 @@
                         @forelse ($ordersDatePanel['days'] as $day)
                             <tr class="hover:bg-[#FAF6EF]/50" wire:key="orders-day-{{ $ordersDatePanel['key'] }}-{{ $day['date'] }}">
                                 <td class="px-1.5 py-1.5 sm:px-2 font-medium tabular-nums">{{ $day['label'] }}</td>
-                                <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($day['order_qty']) }}</td>
+                                <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">
+                                    <a href="{{ route('admin.orders.all', ['dateFrom' => $day['date'], 'dateTo' => $day['date']]) }}"
+                                        class="underline decoration-[#E0D6C2] underline-offset-2 hover:text-[#C9A227]"
+                                        title="Orders placed on {{ $day['label'] }}">{{ number_format($day['order_qty']) }}</a>
+                                </td>
                                 <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($day['order_value'], 0) }}</td>
-                                <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($day['delivery_qty']) }}</td>
+                                <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">
+                                    <a href="{{ route('admin.orders.delivered', ['dateFrom' => $day['date'], 'dateTo' => $day['date']]) }}"
+                                        class="underline decoration-[#E0D6C2] underline-offset-2 hover:text-[#C9A227]"
+                                        title="Of {{ $day['label'] }} orders, later delivered">{{ number_format($day['delivery_qty']) }}</a>
+                                </td>
                                 <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($day['delivery_value'], 0) }}</td>
                             </tr>
                         @empty

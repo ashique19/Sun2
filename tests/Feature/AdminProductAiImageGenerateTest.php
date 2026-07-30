@@ -67,6 +67,8 @@ class AdminProductAiImageGenerateTest extends TestCase
             ->assertSeeHtml('uploadRawPhoto($event)')
             ->assertSeeHtml('generateWithRaw()')
             ->assertSeeHtml('Preparing raw photo')
+            ->assertSeeHtml('AI generation progress')
+            ->assertSeeHtml('generateStatus')
             ->assertSeeHtml('role="progressbar"')
             ->assertSeeHtml(':disabled="! canGenerate()"')
             ->assertSeeHtml('Raw photo ready')
@@ -212,6 +214,57 @@ class AdminProductAiImageGenerateTest extends TestCase
         $recent = AiImagePrompt::query()->recent(12)->pluck('prompt')->all();
 
         $this->assertSame(['Newer prompt', 'Older prompt'], $recent);
+    }
+
+    #[Test]
+    public function generate_surfaces_gemini_errors_without_hanging(): void
+    {
+        config(['gemini.api_key' => 'test-key']);
+
+        $gemini = Mockery::mock(GeminiClient::class);
+        $gemini->shouldReceive('isConfigured')->andReturn(true);
+        $gemini->shouldReceive('generateImage')->once()->andThrow(
+            new \RuntimeException('Gemini image API error (503): temporary unavailable'),
+        );
+        $this->app->instance(GeminiClient::class, $gemini);
+
+        $this->actingAs($this->adminUser());
+        $product = $this->product();
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->set('aiPrompt', 'Studio lighting for necklace')
+            ->call('generateAiImage', $this->tinyPngBase64(), 'image/png')
+            ->assertSet('aiGenerateError', 'Gemini image API error (503): temporary unavailable')
+            ->assertCount('aiCandidates', 0);
+    }
+
+    #[Test]
+    public function gemini_client_truncates_verbose_http_errors(): void
+    {
+        config([
+            'gemini.api_key' => 'test-key',
+            'gemini.image_model' => 'gemini-2.5-flash-image',
+            'gemini.base_url' => 'https://example.test/v1beta',
+        ]);
+
+        Http::fake([
+            'https://example.test/v1beta/models/gemini-2.5-flash-image:generateContent*' => Http::response([
+                'error' => [
+                    'message' => str_repeat('x', 400),
+                ],
+            ], 500),
+        ]);
+
+        try {
+            app(GeminiClient::class)->generateImage([
+                ['text' => 'Make it nicer'],
+            ]);
+            $this->fail('Expected RuntimeException was not thrown.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('Gemini image API error (500):', $e->getMessage());
+            $this->assertLessThanOrEqual(320, strlen($e->getMessage()));
+            $this->assertStringEndsWith('…', $e->getMessage());
+        }
     }
 
     #[Test]

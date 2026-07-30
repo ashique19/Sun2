@@ -67,7 +67,7 @@ class GeminiClient
             ]);
 
         if (! $response->successful()) {
-            throw new RuntimeException('Gemini API error ('.$response->status().'): '.$response->body());
+            throw new RuntimeException($this->formatHttpError('Gemini API', $response->status(), $response->body()));
         }
 
         $text = (string) data_get($response->json(), 'candidates.0.content.parts.0.text', '');
@@ -135,7 +135,7 @@ class GeminiClient
             ->post($url, $payload);
 
         if (! $response->successful()) {
-            throw new RuntimeException('Gemini image API error ('.$response->status().'): '.$response->body());
+            throw new RuntimeException($this->formatHttpError('Gemini image API', $response->status(), $response->body()));
         }
 
         $responseParts = data_get($response->json(), 'candidates.0.content.parts', []);
@@ -169,5 +169,36 @@ class GeminiClient
         }
 
         throw new RuntimeException('Gemini did not return an image.');
+    }
+
+    private function formatHttpError(string $label, int $status, string $body): string
+    {
+        $body = trim($body);
+
+        if ($body === '') {
+            return "{$label} error ({$status}).";
+        }
+
+        $decoded = json_decode($body, true);
+        $message = is_array($decoded)
+            ? (string) (data_get($decoded, 'error.message') ?: data_get($decoded, 'message') ?: '')
+            : '';
+
+        if ($message !== '') {
+            return "{$label} error ({$status}): ".$this->truncateError($message);
+        }
+
+        return "{$label} error ({$status}): ".$this->truncateError($body);
+    }
+
+    private function truncateError(string $message, int $max = 280): string
+    {
+        $message = trim(preg_replace('/\s+/', ' ', $message) ?? $message);
+
+        if (strlen($message) <= $max) {
+            return $message;
+        }
+
+        return substr($message, 0, $max - 1).'…';
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Services\Orders;
 
+use App\Models\City;
 use App\Models\Courier;
 use App\Models\Order;
 use App\Models\User;
@@ -144,6 +145,25 @@ class OrderCourierChargeSync
     }
 
     /**
+     * Area-based default for the confirm-courier-charges UI.
+     * Prefers catalog Dhaka/outside rates so admins start from the expected fee.
+     */
+    public function suggestedConfirmAmount(Order $order, ?Courier $courier = null): float
+    {
+        $courier ??= $order->relationLoaded('courier') ? $order->courier : $order->courier()->first();
+
+        return round($this->estimateFromCatalog($order, $courier), 2);
+    }
+
+    /**
+     * Human label for the area used by catalog estimate.
+     */
+    public function areaRateLabel(Order $order): string
+    {
+        return $this->isDhakaOrder($order) ? 'Dhaka' : 'Outside Dhaka';
+    }
+
+    /**
      * Parse a courier fee from common API / webhook payload keys.
      *
      * @param  array<string, mixed>  $payload
@@ -183,11 +203,26 @@ class OrderCourierChargeSync
         return null;
     }
 
-    private function isDhakaOrder(Order $order): bool
+    public function isDhakaOrder(Order $order): bool
     {
-        $city = strtolower(trim((string) ($order->city ?? '')));
-        $dhakaCities = array_map('strtolower', config('checkout.dhaka_cities', ['dhaka']));
+        $cityName = trim((string) ($order->city ?? ''));
 
-        return in_array($city, $dhakaCities, true);
+        if ($cityName === '') {
+            return false;
+        }
+
+        $normalized = mb_strtolower($cityName);
+        $dhakaCities = array_map(
+            fn (string $city): string => mb_strtolower(trim($city)),
+            config('checkout.dhaka_cities', ['dhaka']),
+        );
+
+        if (in_array($normalized, $dhakaCities, true)) {
+            return true;
+        }
+
+        return (bool) City::query()
+            ->whereRaw('LOWER(name) = ?', [$normalized])
+            ->value('is_dhaka');
     }
 }

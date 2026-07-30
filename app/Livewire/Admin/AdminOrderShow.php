@@ -56,7 +56,7 @@ class AdminOrderShow extends Component
 
     public string $replyText = '';
 
-    public function mount(Order $order, CourierApiRegistry $courierRegistry): void
+    public function mount(Order $order, CourierApiRegistry $courierRegistry, OrderCourierChargeSync $courierChargeSync): void
     {
         AdminAccess::ensureCanViewOrder($order);
 
@@ -81,7 +81,11 @@ class AdminOrderShow extends Component
             ?? Courier::query()->where('is_active', true)->where('is_default', true)->value('id')
             ?? Courier::query()->where('is_active', true)->where('slug', 'steadfast')->value('id')
             ?? Courier::query()->where('is_active', true)->orderBy('name')->value('id');
-        $this->courierChargeOverride = (string) (int) round((float) $order->courier_charge);
+
+        $chargeDefault = $order->isCourierChargeConfirmed()
+            ? (float) $order->courier_charge
+            : $courierChargeSync->suggestedConfirmAmount($this->order);
+        $this->courierChargeOverride = (string) (int) round($chargeDefault);
 
         $defaultPaymentMethod = PaymentMethod::query()->active()->value('code');
         $this->paymentMethod = is_string($defaultPaymentMethod) && $defaultPaymentMethod !== ''

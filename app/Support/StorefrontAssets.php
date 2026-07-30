@@ -27,7 +27,9 @@ class StorefrontAssets
             return null;
         }
 
-        if (self::shouldProbeLocalFiles() && is_file(public_path($relative))) {
+        // Prefer a file that exists locally (e.g. freshly replaced gallery edits)
+        // so the UI does not keep serving a missing/stale CDN object.
+        if (is_file(public_path($relative))) {
             return asset($relative);
         }
 
@@ -57,15 +59,13 @@ class StorefrontAssets
             ];
         }
 
-        if (self::shouldProbeLocalFiles()) {
-            foreach (array_unique($candidates) as $candidate) {
-                if (is_file(public_path($candidate))) {
-                    return self::url($candidate);
-                }
+        foreach (array_unique($candidates) as $candidate) {
+            if (is_file(public_path($candidate))) {
+                return self::url($candidate);
             }
         }
 
-        // CDN: prefer largest candidate without disk probes.
+        // CDN / remote: prefer largest candidate path.
         return self::url($candidates[0] ?? $path);
     }
 
@@ -139,16 +139,11 @@ class StorefrontAssets
             $path = 'img/thumb/'.$matches[1];
         }
 
-        if (self::shouldProbeLocalFiles() && is_file(public_path($path))) {
+        if (is_file(public_path($path))) {
             return asset($path);
         }
 
         return self::CDN_BASE.$path;
-    }
-
-    private static function shouldProbeLocalFiles(): bool
-    {
-        return app()->environment('local', 'testing');
     }
 
     private static function toRelativePath(string $pathOrUrl): ?string

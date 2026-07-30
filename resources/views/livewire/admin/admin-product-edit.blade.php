@@ -118,10 +118,10 @@
                     <h3 class="text-sm font-medium mb-3">Saved images</h3>
                     <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                         @foreach ($product->images as $image)
-                            <li wire:key="product-image-{{ $image->id }}" class="rounded-xl border border-[#EFE7D6] p-3 space-y-3">
+                            <li wire:key="product-image-{{ $image->id }}-{{ md5((string) $image->path) }}" class="rounded-xl border border-[#EFE7D6] p-3 space-y-3">
                                 <div class="relative aspect-square rounded-lg overflow-hidden bg-[#FAF6EF]">
                                     @if ($url = \App\Support\StorefrontAssets::url($image->path))
-                                        <img src="{{ $url }}" alt="{{ $image->alt }}" class="w-full h-full object-cover">
+                                        <img src="{{ $url }}" alt="{{ $image->alt }}" class="w-full h-full object-cover" loading="eager">
                                     @else
                                         <div class="w-full h-full flex items-center justify-center text-xs text-[#8C8474]">No preview</div>
                                     @endif

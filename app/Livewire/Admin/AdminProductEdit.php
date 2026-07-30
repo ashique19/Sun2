@@ -467,7 +467,6 @@ class AdminProductEdit extends Component
 
     public function replaceEditedImage(
         int $imageId,
-        ProductImageService $images,
         string $imageBase64 = '',
         string $mime = 'image/jpeg',
     ): void {
@@ -529,13 +528,14 @@ class AdminProductEdit extends Component
                 true,
             );
 
-            $images->replace($image, $upload);
+            app(ProductImageService::class)->replace($image, $upload);
         } finally {
             if (is_file($pathWithExt)) {
                 @unlink($pathWithExt);
             }
         }
 
+        $image->refresh();
         $this->refreshImages();
         $this->syncImageAlts();
 

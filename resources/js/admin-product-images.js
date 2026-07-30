@@ -825,6 +825,12 @@ const registerProductImageAlpineData = () => {
                     throw new Error(livewireMessage);
                 }
 
+                const updatedMessage = String(this.$wire.get?.('message') ?? '').trim();
+
+                if (updatedMessage !== 'Image updated.') {
+                    throw new Error(updatedMessage || 'Image was not updated. Please try again.');
+                }
+
                 this.closeSavedEditor();
             } catch (error) {
                 console.error(error);

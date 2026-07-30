@@ -130,6 +130,11 @@ class AdminProductImageEditTest extends TestCase
         $this->assertNotSame($oldPath, $image->path);
         $this->assertFileDoesNotExist($oldAbsolute);
         $this->assertFileExists(public_path(ltrim($image->path, '/')));
+
+        $html = Livewire::test(AdminProductEdit::class, ['product' => $product->fresh(['images'])])->html();
+        $this->assertStringContainsString('product-image-'.$image->id.'-'.md5($image->path), $html);
+        $this->assertStringContainsString($image->path, $html);
+        $this->assertStringNotContainsString('sundoritoma.com/public/'.$image->path, $html);
     }
 
     #[Test]
@@ -159,6 +164,7 @@ class AdminProductImageEditTest extends TestCase
         $this->assertIsString($source);
         $this->assertStringContainsString("replaceEditedImage(imageId, base64, 'image/jpeg')", $source);
         $this->assertStringContainsString('canvasToSaveJpeg', $source);
+        $this->assertStringContainsString("updatedMessage !== 'Image updated.'", $source);
         $this->assertStringNotContainsString("\$wire.upload(\n                        'editedImage'", $source);
     }
 }

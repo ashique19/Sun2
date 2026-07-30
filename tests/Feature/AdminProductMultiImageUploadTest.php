@@ -70,8 +70,13 @@ class AdminProductMultiImageUploadTest extends TestCase
         ]);
 
         foreach (ProductImage::query()->where('product_id', $product->id)->get() as $image) {
+            $this->assertStringEndsWith('_lg.jpg', (string) $image->path);
             $absolute = public_path(ltrim((string) $image->path, '/'));
             $this->assertFileExists($absolute);
+            $base = preg_replace('/_lg\.jpg$/i', '', $absolute);
+            $this->assertFileExists($base.'_md.jpg');
+            $this->assertFileExists($base.'_sm.jpg');
+            $this->assertFileExists($base.'_xs.jpg');
         }
     }
 

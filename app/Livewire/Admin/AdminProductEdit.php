@@ -658,8 +658,8 @@ class AdminProductEdit extends Component
             ->all();
 
         foreach ($this->product->images as $image) {
-            $this->resizeMaxWidths[$image->id] ??= '1200';
-            $this->resizeMaxHeights[$image->id] ??= '1200';
+            $this->resizeMaxWidths[$image->id] ??= (string) ProductImageService::EDGE_LG;
+            $this->resizeMaxHeights[$image->id] ??= (string) ProductImageService::EDGE_LG;
         }
     }
 

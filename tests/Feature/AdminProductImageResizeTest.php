@@ -92,6 +92,7 @@ class AdminProductImageResizeTest extends TestCase
 
         $image->refresh();
         $this->assertNotSame('/img/products/'.$product->id.'/large.jpg', $image->path);
+        $this->assertStringEndsWith('_lg.jpg', $image->path);
         $this->assertFileDoesNotExist($oldAbsolute);
         $this->assertFileExists(public_path(ltrim($image->path, '/')));
 
@@ -99,6 +100,11 @@ class AdminProductImageResizeTest extends TestCase
         $this->assertNotFalse($info);
         $this->assertSame(800, $info[0]);
         $this->assertSame(600, $info[1]);
+
+        $base = preg_replace('/_lg\.jpg$/i', '', public_path(ltrim($image->path, '/')));
+        $this->assertFileExists($base.'_md.jpg');
+        $this->assertFileExists($base.'_sm.jpg');
+        $this->assertFileExists($base.'_xs.jpg');
     }
 
     #[Test]

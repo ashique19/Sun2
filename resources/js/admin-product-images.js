@@ -274,74 +274,91 @@ const registerProductImageAlpineData = () => {
         rawUploading: false,
         rawUploadProgress: 0,
         rawUploadError: null,
-        rawUploadTimer: null,
-        rawUploadWatchRegistered: false,
-
-        init() {
-            this.syncRawImageFromWire();
-
-            if (! this.rawUploadWatchRegistered) {
-                this.rawUploadWatchRegistered = true;
-                this.$wire.$watch('aiRawImage', () => {
-                    this.syncRawImageFromWire();
-                });
-            }
-        },
-
-        syncRawImageFromWire() {
-            const value = this.$wire.aiRawImage;
-            this.hasRawImage = value !== null && value !== undefined && value !== '';
-
-            if (this.hasRawImage) {
-                this.clearRawUploadTimeout();
-                this.rawUploading = false;
-                this.rawUploadProgress = 100;
-                this.rawUploadError = null;
-            }
-        },
+        rawImageBase64: '',
+        rawImageMime: 'image/jpeg',
+        rawImageName: '',
 
         canGenerate() {
-            return this.geminiConfigured && this.hasRawImage && ! this.rawUploading;
+            return this.geminiConfigured && this.hasRawImage && ! this.rawUploading && this.rawImageBase64 !== '';
         },
 
-        armRawUploadTimeout() {
-            this.clearRawUploadTimeout();
-            this.rawUploadTimer = setTimeout(() => {
-                if (! this.rawUploading) {
-                    return;
-                }
-
-                try {
-                    this.$wire.cancelUpload('aiRawImage');
-                } catch {
-                    // ignore — property may already be cleared
-                }
-
-                this.rawUploading = false;
-                this.rawUploadProgress = 0;
-                this.rawUploadError = 'Upload timed out. Check your connection and try a smaller JPG, PNG, or WebP.';
-            }, 90000);
+        clearRawImage() {
+            this.hasRawImage = false;
+            this.rawUploading = false;
+            this.rawUploadProgress = 0;
+            this.rawUploadError = null;
+            this.rawImageBase64 = '';
+            this.rawImageMime = 'image/jpeg';
+            this.rawImageName = '';
         },
 
-        clearRawUploadTimeout() {
-            if (this.rawUploadTimer) {
-                clearTimeout(this.rawUploadTimer);
-                this.rawUploadTimer = null;
+        arrayBufferToBase64(buffer) {
+            const bytes = new Uint8Array(buffer);
+            const chunkSize = 0x8000;
+            let binary = '';
+
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
             }
+
+            return btoa(binary);
         },
 
-        firstAiRawError() {
-            try {
-                const errors = this.$wire.$errors;
+        async fileToPreparedImage(file, onProgress) {
+            onProgress(8);
 
-                if (! errors || typeof errors.first !== 'function') {
-                    return null;
-                }
+            if (typeof createImageBitmap !== 'function') {
+                const buffer = await file.arrayBuffer();
+                onProgress(90);
 
-                return errors.first('aiRawImage') || null;
-            } catch {
-                return null;
+                return {
+                    base64: this.arrayBufferToBase64(buffer),
+                    mime: file.type || 'image/jpeg',
+                    name: file.name || 'raw-photo.jpg',
+                };
             }
+
+            const bitmap = await createImageBitmap(file);
+            onProgress(30);
+
+            const maxDim = 2048;
+            const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+            const width = Math.max(1, Math.round(bitmap.width * scale));
+            const height = Math.max(1, Math.round(bitmap.height * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+
+            const context = canvas.getContext('2d', { alpha: false });
+
+            if (! context) {
+                bitmap.close();
+                throw new Error('Could not prepare the raw photo in this browser.');
+            }
+
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, width, height);
+            context.drawImage(bitmap, 0, 0, width, height);
+            bitmap.close();
+            onProgress(65);
+
+            const blob = await new Promise((resolve, reject) => {
+                canvas.toBlob(
+                    (result) => (result ? resolve(result) : reject(new Error('Could not compress the raw photo.'))),
+                    'image/jpeg',
+                    0.88,
+                );
+            });
+            onProgress(85);
+
+            const buffer = await blob.arrayBuffer();
+            onProgress(100);
+
+            return {
+                base64: this.arrayBufferToBase64(buffer),
+                mime: 'image/jpeg',
+                name: (file.name || 'raw-photo').replace(/\.\w+$/, '') + '.jpg',
+            };
         },
 
         async uploadRawPhoto(event) {
@@ -362,55 +379,49 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
+            if (file.size > 20 * 1024 * 1024) {
+                this.rawUploadError = 'Choose a photo smaller than 20 MB.';
+
+                return;
+            }
+
             this.rawUploading = true;
             this.hasRawImage = false;
+            this.rawImageBase64 = '';
             this.rawUploadProgress = 0;
-            this.armRawUploadTimeout();
 
             try {
-                await new Promise((resolve, reject) => {
-                    let settled = false;
-
-                    const settle = (fn) => (arg) => {
-                        if (settled) {
-                            return;
-                        }
-
-                        settled = true;
-                        fn(arg);
-                    };
-
-                    this.$wire.upload(
-                        'aiRawImage',
-                        file,
-                        settle(() => resolve()),
-                        settle(() => {
-                            reject(new Error(this.firstAiRawError() || 'Could not upload the raw photo. Try again.'));
-                        }),
-                        (progressEvent) => {
-                            this.rawUploadProgress = Math.max(
-                                0,
-                                Math.min(100, Number(progressEvent?.detail?.progress ?? 0)),
-                            );
-                        },
-                        settle(() => reject(new Error('Upload cancelled.'))),
-                    );
+                const prepared = await this.fileToPreparedImage(file, (progress) => {
+                    this.rawUploadProgress = Math.max(0, Math.min(100, Number(progress) || 0));
                 });
 
-                this.syncRawImageFromWire();
+                this.rawImageBase64 = prepared.base64;
+                this.rawImageMime = prepared.mime;
+                this.rawImageName = prepared.name;
                 this.hasRawImage = true;
                 this.rawUploadProgress = 100;
                 this.rawUploadError = null;
             } catch (error) {
                 console.error(error);
-                this.hasRawImage = false;
-                this.rawUploadProgress = 0;
-                this.rawUploadError = error?.message && error.message !== 'Upload failed'
-                    ? error.message
-                    : 'Could not upload the raw photo. Try again.';
+                this.clearRawImage();
+                this.rawUploadError = error?.message || 'Could not prepare the raw photo. Try again.';
             } finally {
-                this.clearRawUploadTimeout();
                 this.rawUploading = false;
+            }
+        },
+
+        async generateWithRaw() {
+            if (! this.canGenerate()) {
+                return;
+            }
+
+            this.rawUploadError = null;
+
+            try {
+                await this.$wire.generateAiImage(this.rawImageBase64, this.rawImageMime);
+            } catch (error) {
+                console.error(error);
+                this.rawUploadError = error?.message || 'Generation failed. Try again.';
             }
         },
 

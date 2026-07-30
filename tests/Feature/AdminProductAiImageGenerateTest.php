@@ -9,7 +9,6 @@ use App\Models\ProductImage;
 use App\Models\User;
 use App\Services\Admin\GeminiClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 use Mockery;
@@ -48,7 +47,7 @@ class AdminProductAiImageGenerateTest extends TestCase
     }
 
     #[Test]
-    public function ai_modal_exposes_upload_progress_and_alpine_generate_gate(): void
+    public function ai_modal_prepares_raw_photo_locally_without_livewire_temp_upload(): void
     {
         $this->actingAs($this->adminUser());
         $product = $this->product();
@@ -57,11 +56,13 @@ class AdminProductAiImageGenerateTest extends TestCase
             ->call('openAiGenerateModal')
             ->assertSet('showAiGenerateModal', true)
             ->assertSeeHtml('uploadRawPhoto($event)')
-            ->assertSeeHtml('Uploading raw photo')
+            ->assertSeeHtml('generateWithRaw()')
+            ->assertSeeHtml('Preparing raw photo')
             ->assertSeeHtml('role="progressbar"')
             ->assertSeeHtml(':disabled="! canGenerate()"')
-            ->assertSeeHtml('ai-generate-modal-host')
-            ->assertSeeHtml('Raw photo ready.');
+            ->assertSeeHtml('Raw photo ready')
+            ->assertDontSeeHtml('$wire.upload(')
+            ->assertDontSeeHtml('wire:model="aiRawImage"');
     }
 
     #[Test]
@@ -81,7 +82,7 @@ class AdminProductAiImageGenerateTest extends TestCase
             ->call('openAiGenerateModal')
             ->set('aiPrompt', 'Clean white background jewelry photo')
             ->call('generateAiImage')
-            ->assertHasErrors(['aiRawImage' => 'required'])
+            ->assertHasErrors(['aiRawImage'])
             ->assertSet('aiGenerateError', null)
             ->assertCount('aiCandidates', 0);
     }
@@ -101,15 +102,14 @@ class AdminProductAiImageGenerateTest extends TestCase
 
         $this->actingAs($this->adminUser());
         $product = $this->product();
-        $raw = UploadedFile::fake()->image('raw.jpg', 40, 40);
 
         Livewire::test(AdminProductEdit::class, ['product' => $product])
             ->call('openAiGenerateModal')
             ->assertSet('showAiGenerateModal', true)
-            ->set('aiRawImage', $raw)
             ->set('aiPrompt', 'Clean white background jewelry photo')
-            ->call('generateAiImage')
+            ->call('generateAiImage', $this->tinyPngBase64(), 'image/png')
             ->assertSet('aiGenerateError', null)
+            ->assertHasNoErrors()
             ->assertCount('aiCandidates', 1);
 
         $this->assertDatabaseHas('ai_image_prompts', [
@@ -137,10 +137,9 @@ class AdminProductAiImageGenerateTest extends TestCase
         $product = $this->product();
 
         Livewire::test(AdminProductEdit::class, ['product' => $product])
-            ->set('aiRawImage', UploadedFile::fake()->image('raw.jpg'))
             ->set('aiPrompt', 'Studio lighting')
-            ->call('generateAiImage')
-            ->call('generateAiImage')
+            ->call('generateAiImage', $this->tinyPngBase64(), 'image/png')
+            ->call('generateAiImage', $this->tinyPngBase64(), 'image/png')
             ->assertCount('aiCandidates', 2);
 
         $this->assertSame(2, (int) AiImagePrompt::query()->where('prompt', 'Studio lighting')->value('use_count'));
@@ -184,8 +183,7 @@ class AdminProductAiImageGenerateTest extends TestCase
             ]])
             ->call('closeAiGenerateModal')
             ->assertSet('showAiGenerateModal', false)
-            ->assertCount('aiCandidates', 0)
-            ->assertSet('aiRawImage', null);
+            ->assertCount('aiCandidates', 0);
     }
 
     #[Test]

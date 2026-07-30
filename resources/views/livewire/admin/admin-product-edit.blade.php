@@ -339,7 +339,8 @@
     <div
         wire:key="ai-generate-modal-host"
         x-data="aiImageCandidates()"
-        x-init="geminiConfigured = {{ $geminiConfigured ? 'true' : 'false' }}; syncRawImageFromWire()">
+        x-init="geminiConfigured = {{ $geminiConfigured ? 'true' : 'false' }}"
+        x-effect="if (! $wire.showAiGenerateModal) { clearRawImage() }">
         @if ($showAiGenerateModal)
             <div class="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-4 sm:items-center"
                 wire:click.self="closeAiGenerateModal"
@@ -353,7 +354,7 @@
                         <div>
                             <h2 class="font-semibold text-lg">Generate with AI</h2>
                             <p class="mt-1 text-xs text-[#8C8474]">
-                                Upload a raw photo, write a prompt, then Generate. Candidates stay for this session only until you add them with +.
+                                Choose a raw photo, write a prompt, then Generate. Candidates stay for this session only until you add them with +.
                             </p>
                         </div>
                         <button type="button" wire:click="closeAiGenerateModal" class="text-sm text-[#8C8474] hover:text-[#1E1E1E]">Close</button>
@@ -376,7 +377,7 @@
                                     :disabled="rawUploading">
                                 <div x-show="rawUploading" x-cloak class="mt-2 space-y-1">
                                     <div class="flex items-center justify-between gap-2 text-xs text-[#8C8474]">
-                                        <span>Uploading raw photo…</span>
+                                        <span>Preparing raw photo…</span>
                                         <span class="tabular-nums" x-text="`${rawUploadProgress}%`"></span>
                                     </div>
                                     <div class="h-1.5 overflow-hidden rounded-full bg-[#EFE7D6]" role="progressbar"
@@ -385,7 +386,9 @@
                                             :style="`width: ${rawUploadProgress}%`"></div>
                                     </div>
                                 </div>
-                                <p x-show="! rawUploading && hasRawImage" x-cloak class="mt-2 text-xs text-[#8C8474]">Raw photo ready.</p>
+                                <p x-show="! rawUploading && hasRawImage" x-cloak class="mt-2 text-xs text-[#8C8474]">
+                                    Raw photo ready<span x-show="rawImageName" x-text="`: ${rawImageName}`"></span>.
+                                </p>
                                 <p x-show="rawUploadError" x-text="rawUploadError" x-cloak class="mt-1 text-xs text-rose-600"></p>
                                 @error('aiRawImage') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
                             </div>
@@ -416,7 +419,7 @@
 
                         <div class="flex flex-wrap items-center gap-3">
                             <button type="button"
-                                wire:click="generateAiImage"
+                                @click="generateWithRaw()"
                                 wire:loading.attr="disabled"
                                 wire:target="generateAiImage"
                                 :disabled="! canGenerate()"

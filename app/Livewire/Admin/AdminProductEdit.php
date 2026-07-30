@@ -79,9 +79,6 @@ class AdminProductEdit extends Component
 
     public string $aiPrompt = '';
 
-    /** @var TemporaryUploadedFile|null */
-    public $aiRawImage = null;
-
     /** @var list<array{id: string, mime: string, base64: string, name: string}> */
     public array $aiCandidates = [];
 
@@ -155,7 +152,6 @@ class AdminProductEdit extends Component
         $this->showAiGenerateModal = false;
         $this->aiGenerateError = null;
         $this->aiGenerating = false;
-        $this->aiRawImage = null;
         $this->aiCandidates = [];
         $this->resetValidation(['aiRawImage', 'aiPrompt']);
     }
@@ -237,7 +233,7 @@ class AdminProductEdit extends Component
         $this->message = 'Priced image deleted.';
     }
 
-    public function generateAiImage(GeminiClient $gemini): void
+    public function generateAiImage(GeminiClient $gemini, string $rawImageBase64 = '', string $rawImageMime = 'image/jpeg'): void
     {
         $this->aiGenerateError = null;
 
@@ -245,11 +241,37 @@ class AdminProductEdit extends Component
             $this->ensureProductSaved();
         }
 
-        // Validate outside the catch-all so Livewire can surface field errors.
         $this->validate([
-            'aiRawImage' => Fileinfo::storedImageRules(8192, true),
             'aiPrompt' => ['required', 'string', 'min:3', 'max:4000'],
         ]);
+
+        $rawImageBase64 = trim($rawImageBase64);
+
+        if ($rawImageBase64 === '') {
+            $this->addError('aiRawImage', 'The raw photo is required.');
+
+            return;
+        }
+
+        $binary = base64_decode($rawImageBase64, true);
+
+        if ($binary === false || $binary === '') {
+            $this->addError('aiRawImage', 'The raw photo data is invalid.');
+
+            return;
+        }
+
+        if (strlen($binary) > 8 * 1024 * 1024) {
+            $this->addError('aiRawImage', 'The raw photo must be 8 MB or smaller.');
+
+            return;
+        }
+
+        $mime = strtolower(trim($rawImageMime));
+
+        if (! in_array($mime, ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'], true)) {
+            $mime = 'image/jpeg';
+        }
 
         $this->aiGenerating = true;
 
@@ -258,22 +280,12 @@ class AdminProductEdit extends Component
                 throw new RuntimeException('Gemini API key is not configured (GEMINI_API_KEY).');
             }
 
-            /** @var TemporaryUploadedFile $raw */
-            $raw = $this->aiRawImage;
-            $binary = file_get_contents($raw->getRealPath());
-
-            if ($binary === false || $binary === '') {
-                throw new RuntimeException('Could not read the raw photo.');
-            }
-
-            $mime = $raw->getMimeType() ?: 'image/jpeg';
-
             $result = $gemini->generateImage([
                 ['text' => trim($this->aiPrompt)],
                 [
                     'inline_data' => [
-                        'mime_type' => $mime,
-                        'data' => base64_encode($binary),
+                        'mime_type' => $mime === 'image/jpg' ? 'image/jpeg' : $mime,
+                        'data' => $rawImageBase64,
                     ],
                 ],
             ], 'You enhance product photos for a Bangladeshi jewelry e-commerce catalog. Preserve the product identity from the reference photo. Return one polished product image.');

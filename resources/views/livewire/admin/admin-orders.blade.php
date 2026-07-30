@@ -35,14 +35,36 @@
     @endunless
 
     @unless ($readOnly)
-        <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-6">
+        <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-6 space-y-3">
             <input type="search" wire:model.live.debounce.300ms="search" placeholder="Search order #, name, phone…"
                 class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+            <div class="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                <div>
+                    <label class="mb-1 block text-xs font-medium text-[#6B6459]">
+                        {{ $segment === 'dispatched' ? 'Dispatch from' : 'Order from' }}
+                    </label>
+                    <input type="date" wire:model.live="dateFrom"
+                        class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-medium text-[#6B6459]">
+                        {{ $segment === 'dispatched' ? 'Dispatch to' : 'Order to' }}
+                    </label>
+                    <input type="date" wire:model.live="dateTo"
+                        class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                </div>
+                @if ($dateFrom !== '' || $dateTo !== '')
+                    <button type="button" wire:click="clearDateRange"
+                        class="rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
+                        Clear dates
+                    </button>
+                @endif
+            </div>
         </div>
     @endunless
 
     @if ($readOnly)
-        <div class="space-y-3" wire:loading.class="opacity-60" wire:target="switchSegment,search,nextPage,previousPage,gotoPage" wire:key="moderator-orders-{{ $segment }}-{{ $listRevision }}">
+        <div class="space-y-3" wire:loading.class="opacity-60" wire:target="switchSegment,search,dateFrom,dateTo,clearDateRange,nextPage,previousPage,gotoPage" wire:key="moderator-orders-{{ $segment }}-{{ $listRevision }}">
             @php($lastGroupKey = null)
             @forelse ($orders as $order)
                 @php($adminNote = filled($order->admin_note) ? \Illuminate\Support\Str::of($order->admin_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
@@ -141,7 +163,7 @@
             </label>
         </div>
 
-        <div class="space-y-3" wire:loading.class="opacity-60" wire:target="switchSegment,search,nextPage,previousPage,gotoPage,refreshCourierStatuses" wire:key="staff-orders-{{ $segment }}-{{ $listRevision }}">
+        <div class="space-y-3" wire:loading.class="opacity-60" wire:target="switchSegment,search,dateFrom,dateTo,clearDateRange,nextPage,previousPage,gotoPage,refreshCourierStatuses" wire:key="staff-orders-{{ $segment }}-{{ $listRevision }}">
             @php($lastGroupKey = null)
             @php($groupByDate = in_array($segment, ['new', 'dispatched'], true))
             @forelse ($orders as $order)

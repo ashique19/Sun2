@@ -33,6 +33,12 @@ class AdminOrders extends Component
     #[Url]
     public string $search = '';
 
+    #[Url]
+    public string $dateFrom = '';
+
+    #[Url]
+    public string $dateTo = '';
+
     /** @var list<int> */
     public array $selected = [];
 
@@ -149,10 +155,49 @@ class AdminOrders extends Component
 
     public function updatedSearch(): void
     {
+        $this->resetListFilters();
+    }
+
+    public function updatedDateFrom(): void
+    {
+        $this->dateFrom = $this->normalizedDate($this->dateFrom);
+        $this->resetListFilters();
+    }
+
+    public function updatedDateTo(): void
+    {
+        $this->dateTo = $this->normalizedDate($this->dateTo);
+        $this->resetListFilters();
+    }
+
+    public function clearDateRange(): void
+    {
+        $this->dateFrom = '';
+        $this->dateTo = '';
+        $this->resetListFilters();
+    }
+
+    private function resetListFilters(): void
+    {
         $this->resetPage();
         $this->selected = [];
         $this->courierLiveStatuses = [];
         $this->queueCourierStatusRefresh();
+    }
+
+    private function normalizedDate(string $value): string
+    {
+        $value = trim($value);
+
+        if ($value === '') {
+            return '';
+        }
+
+        try {
+            return Carbon::createFromFormat('Y-m-d', $value, 'Asia/Dhaka')->toDateString();
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     public function toggleOrder(int $orderId): void
@@ -816,6 +861,8 @@ class AdminOrders extends Component
             $this->segment
         );
 
+        $this->applyDateRangeFilter($query);
+
         // Dispatched: newest dispatch date first (for date grouping).
         // Other segments: newest order date first.
         if ($this->segment === 'dispatched') {
@@ -823,6 +870,25 @@ class AdminOrders extends Component
         }
 
         return $query->latest('placed_at')->latest('id');
+    }
+
+    private function applyDateRangeFilter(Builder $query): void
+    {
+        $column = $this->segment === 'dispatched' ? 'dispatch_date' : 'placed_at';
+        $from = $this->normalizedDate($this->dateFrom);
+        $to = $this->normalizedDate($this->dateTo);
+
+        if ($from !== '' && $to !== '' && $from > $to) {
+            [$from, $to] = [$to, $from];
+        }
+
+        if ($from !== '') {
+            $query->where($column, '>=', Carbon::createFromFormat('Y-m-d', $from, 'Asia/Dhaka')->startOfDay());
+        }
+
+        if ($to !== '') {
+            $query->where($column, '<=', Carbon::createFromFormat('Y-m-d', $to, 'Asia/Dhaka')->endOfDay());
+        }
     }
 
     /**

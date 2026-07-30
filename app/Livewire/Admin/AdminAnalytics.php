@@ -109,6 +109,7 @@ class AdminAnalytics extends Component
         }
 
         $yearOverview = $analytics->yearOverview($this->year);
+        $orderedVsDelivered = $analytics->orderedVsDeliveredByMonth($this->year);
         $monthBreakdown = $this->month
             ? $analytics->monthBreakdown($this->year, $this->month)
             : null;
@@ -116,6 +117,7 @@ class AdminAnalytics extends Component
         return view('livewire.admin.admin-analytics', [
             'years' => $years,
             'yearOverview' => $yearOverview,
+            'orderedVsDelivered' => $orderedVsDelivered,
             'monthBreakdown' => $monthBreakdown,
         ]);
     }

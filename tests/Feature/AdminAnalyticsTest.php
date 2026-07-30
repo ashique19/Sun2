@@ -38,6 +38,7 @@ class AdminAnalyticsTest extends TestCase
         int $qty,
         float $purchasePrice,
         string $deliveredAt,
+        ?string $placedAt = null,
     ): Order {
         $order = Order::query()->create([
             'order_number' => 'AN-'.uniqid(),
@@ -54,7 +55,7 @@ class AdminAnalyticsTest extends TestCase
             'total' => $collected,
             'courier_id' => $courier->id,
             'actual_delivery_date' => $deliveredAt,
-            'placed_at' => now()->subDays(5),
+            'placed_at' => $placedAt ?? $deliveredAt,
         ]);
 
         OrderProduct::query()->create([
@@ -88,6 +89,9 @@ class AdminAnalyticsTest extends TestCase
             ->set('year', 2026)
             ->assertSee('Analytics')
             ->assertSee('Months in 2026')
+            ->assertSee('Ordered vs delivered')
+            ->assertSee('Order count')
+            ->assertSee('Order value')
             ->assertSee('Jul')
             ->assertSee('Pick a month below')
             ->call('selectMonth', 7)
@@ -102,6 +106,55 @@ class AdminAnalyticsTest extends TestCase
             ->assertSet('month', 8)
             ->call('previousMonth')
             ->assertSet('month', 7);
+    }
+
+    #[Test]
+    public function ordered_vs_delivered_splits_by_placement_and_delivery_month(): void
+    {
+        $courier = Courier::query()->create([
+            'name' => 'Steadfast',
+            'slug' => 'steadfast',
+            'cod_percentage' => 1,
+            'is_active' => true,
+        ]);
+
+        // Placed in June, delivered in July
+        $this->seedDeliveredOrder(
+            $courier,
+            'Ayesha',
+            1080,
+            65,
+            21,
+            1,
+            400,
+            '2026-07-15 10:00:00',
+            '2026-06-20 09:00:00',
+        );
+
+        // Placed and delivered in July
+        $this->seedDeliveredOrder(
+            $courier,
+            'Karim',
+            2160,
+            75,
+            30,
+            2,
+            400,
+            '2026-07-22 12:00:00',
+            '2026-07-01 08:00:00',
+        );
+
+        $report = app(AnalyticsService::class)->orderedVsDeliveredByMonth(2026);
+        $byMonth = collect($report['months'])->keyBy('month');
+
+        $this->assertSame(1, $byMonth[6]['ordered_count']);
+        $this->assertSame(1080.0, $byMonth[6]['ordered_value']);
+        $this->assertSame(0, $byMonth[6]['delivered_count']);
+
+        $this->assertSame(1, $byMonth[7]['ordered_count']);
+        $this->assertSame(2160.0, $byMonth[7]['ordered_value']);
+        $this->assertSame(2, $byMonth[7]['delivered_count']);
+        $this->assertSame(3240.0, $byMonth[7]['delivered_value']);
     }
 
     #[Test]

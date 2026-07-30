@@ -12,17 +12,25 @@ class AnalyticsService
     public const METRICS = ['revenue', 'direct', 'indirect', 'profit'];
 
     /**
-     * Years that have at least one delivered order with an actual delivery date.
+     * Years that have placed or delivered orders.
      *
      * @return list<int>
      */
     public function availableYears(): array
     {
-        $years = Order::query()
+        $deliveryYears = Order::query()
             ->where('status', 'delivered')
             ->whereNotNull('actual_delivery_date')
             ->get(['actual_delivery_date'])
-            ->map(fn (Order $order) => (int) $order->actual_delivery_date->timezone('Asia/Dhaka')->year)
+            ->map(fn (Order $order) => (int) $order->actual_delivery_date->timezone('Asia/Dhaka')->year);
+
+        $placedYears = Order::query()
+            ->whereNotNull('placed_at')
+            ->get(['placed_at'])
+            ->map(fn (Order $order) => (int) $order->placed_at->timezone('Asia/Dhaka')->year);
+
+        $years = $deliveryYears
+            ->merge($placedYears)
             ->unique()
             ->sortDesc()
             ->values()
@@ -93,6 +101,96 @@ class AnalyticsService
             'revenue' => round(array_sum(array_column($months, 'revenue')), 2),
             'order_count' => (int) array_sum(array_column($months, 'order_count')),
             'months' => $months,
+        ];
+    }
+
+    /**
+     * Monthly ordered (by placed_at) vs delivered (by actual_delivery_date).
+     *
+     * @return array{
+     *     year: int,
+     *     months: list<array{
+     *         month: int,
+     *         label: string,
+     *         ordered_count: int,
+     *         ordered_value: float,
+     *         delivered_count: int,
+     *         delivered_value: float
+     *     }>,
+     *     totals: array{
+     *         ordered_count: int,
+     *         ordered_value: float,
+     *         delivered_count: int,
+     *         delivered_value: float
+     *     }
+     * }
+     */
+    public function orderedVsDeliveredByMonth(int $year): array
+    {
+        $start = Carbon::create($year, 1, 1, 0, 0, 0, 'Asia/Dhaka')->startOfDay();
+        $end = $start->copy()->endOfYear();
+
+        $months = [];
+
+        for ($month = 1; $month <= 12; $month++) {
+            $months[$month] = [
+                'month' => $month,
+                'label' => Carbon::create($year, $month, 1)->format('M'),
+                'ordered_count' => 0,
+                'ordered_value' => 0.0,
+                'delivered_count' => 0,
+                'delivered_value' => 0.0,
+            ];
+        }
+
+        $placed = Order::query()
+            ->whereNotNull('placed_at')
+            ->whereBetween('placed_at', [
+                $start->format('Y-m-d H:i:s'),
+                $end->format('Y-m-d H:i:s'),
+            ])
+            ->get(['id', 'total', 'placed_at']);
+
+        foreach ($placed as $order) {
+            $month = (int) $order->placed_at->timezone('Asia/Dhaka')->month;
+            $months[$month]['ordered_count']++;
+            $months[$month]['ordered_value'] += (float) ($order->total ?? 0);
+        }
+
+        $delivered = Order::query()
+            ->where('status', 'delivered')
+            ->whereNotNull('actual_delivery_date')
+            ->whereBetween('actual_delivery_date', [
+                $start->format('Y-m-d H:i:s'),
+                $end->format('Y-m-d H:i:s'),
+            ])
+            ->get(['id', 'collected_amount', 'total', 'actual_delivery_date']);
+
+        foreach ($delivered as $order) {
+            $month = (int) $order->actual_delivery_date->timezone('Asia/Dhaka')->month;
+            $months[$month]['delivered_count']++;
+            $collected = (float) ($order->collected_amount ?? 0);
+            $months[$month]['delivered_value'] += $collected > 0
+                ? $collected
+                : (float) ($order->total ?? 0);
+        }
+
+        $rows = array_values(array_map(function (array $row): array {
+            $row['ordered_value'] = round($row['ordered_value'], 2);
+            $row['delivered_value'] = round($row['delivered_value'], 2);
+
+            return $row;
+        }, $months));
+
+        return [
+            'year' => $year,
+            'months' => $rows,
+            'totals' => [
+                'ordered_count' => (int) array_sum(array_column($rows, 'ordered_count')),
+                'ordered_value' => round(array_sum(array_column($rows, 'ordered_value')), 2),
+                'delivered_count' => (int) array_sum(array_column($rows, 'delivered_count')),
+                'delivered_value' => round(array_sum(array_column($rows, 'delivered_value')), 2),
+            ],
         ];
     }
 

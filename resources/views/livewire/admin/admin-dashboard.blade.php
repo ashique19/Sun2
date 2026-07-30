@@ -258,6 +258,7 @@
                 <div class="min-w-0">
                     <h2 class="text-sm font-semibold text-amber-950">Confirm courier charges</h2>
                     <p class="text-xs text-amber-800/80">
+                        What the courier charges us (not customer delivery).
                         {{ $unconfirmedCourierCharges->count() }}{{ $unconfirmedCourierCharges->count() >= 25 ? '+' : '' }}
                         dispatched {{ $unconfirmedCourierCharges->count() === 1 ? 'order needs' : 'orders need' }}
                         charge + packaging review — packaging defaults 1→21 · 2→30 · 3+→41
@@ -316,7 +317,7 @@
                         </div>
                         <div class="w-28">
                             <label for="courier-charge-{{ $order->id }}" class="block text-[10px] font-medium uppercase tracking-wide text-[#8C8474] mb-1">
-                                Charge ৳
+                                Courier ৳
                                 <span class="normal-case tracking-normal font-normal">
                                     · {{ $courierChargeAreaLabels[$order->id] ?? 'Outside Dhaka' }}
                                 </span>

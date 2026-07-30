@@ -127,26 +127,30 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
             ->assertSee('Steadfast ↗')
             ->assertSeeHtml('href="https://steadfast.com.bd/user/consignment/277193413"')
             ->assertSeeHtml('target="_blank"')
-            ->assertSee('Charge ৳')
+            ->assertSee('Courier ৳')
             ->assertSee('Pack ৳')
             ->assertSeeHtml('wire:click="confirmCourierCharge(');
     }
 
     #[Test]
-    public function dashboard_defaults_courier_charge_from_area_delivery_charge_upto_5(): void
+    public function dashboard_defaults_courier_charge_from_existing_or_catalog_not_customer_delivery(): void
     {
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
 
+        // Customer delivery catalog rates — must NOT become courier confirm defaults.
         $this->area('Dhaka', 'Mirpur', 70, true, 'thana');
         $this->area('Chittagong', 'Agrabad', 130, false, 'thana');
 
-        $mirpur = $this->dispatchedOrder($courier, 'Mirpur Customer', 0, null, 'Dhaka', 'Mirpur');
-        $agrabad = $this->dispatchedOrder($courier, 'Agrabad Customer', 0, null, 'Chittagong', 'Agrabad');
+        $withEstimate = $this->dispatchedOrder($courier, 'Has Estimate', 72, null, 'Dhaka', 'Mirpur');
+        $dhakaZero = $this->dispatchedOrder($courier, 'Mirpur Customer', 0, null, 'Dhaka', 'Mirpur');
+        $outsideZero = $this->dispatchedOrder($courier, 'Agrabad Customer', 0, null, 'Chittagong', 'Agrabad');
 
         Livewire::test(AdminDashboard::class)
-            ->assertSet('pendingCourierCharges.'.$mirpur->id, '70')
-            ->assertSet('pendingCourierCharges.'.$agrabad->id, '130')
+            ->assertSet('pendingCourierCharges.'.$withEstimate->id, '72')
+            ->assertSet('pendingCourierCharges.'.$dhakaZero->id, '60')
+            ->assertSet('pendingCourierCharges.'.$outsideZero->id, '110')
+            ->assertSee('What the courier charges us')
             ->assertSee('Mirpur')
             ->assertSee('Agrabad');
     }
@@ -250,7 +254,7 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
     }
 
     #[Test]
-    public function order_show_defaults_unconfirmed_charge_from_area_delivery_charge(): void
+    public function order_show_defaults_unconfirmed_charge_from_courier_catalog_not_customer_delivery(): void
     {
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
@@ -258,7 +262,7 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
         $order = $this->dispatchedOrder($courier, 'Show Default', 0, null, 'Sylhet', 'Zindabazar');
 
         Livewire::test(AdminOrderShow::class, ['order' => $order])
-            ->assertSet('courierChargeOverride', '95');
+            ->assertSet('courierChargeOverride', '110');
     }
 
     #[Test]

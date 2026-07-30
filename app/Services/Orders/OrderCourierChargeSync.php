@@ -146,16 +146,19 @@ class OrderCourierChargeSync
     }
 
     /**
-     * Area-based default for the confirm-courier-charges UI.
-     * Prefer areas.delivery_charge_upto_5 where areas.name matches orders.area.
-     * Fall back to courier Dhaka/outside catalog rates when no area matches.
+     * Default for the confirm-courier-charges UI: what the courier charges us.
+     *
+     * Prefer the order's existing courier_charge (dispatch/API estimate).
+     * Otherwise fall back to courier Dhaka/outside catalog rates.
+     *
+     * Never uses areas.delivery_charge_* — that is what we charge the customer.
      */
     public function suggestedConfirmAmount(Order $order, ?Courier $courier = null): float
     {
-        $fromArea = $this->areaDeliveryChargeUpto5($order);
+        $existing = round((float) ($order->courier_charge ?? 0), 2);
 
-        if ($fromArea !== null) {
-            return round($fromArea, 2);
+        if ($existing > 0) {
+            return $existing;
         }
 
         $courier ??= $order->relationLoaded('courier') ? $order->courier : $order->courier()->first();
@@ -164,7 +167,7 @@ class OrderCourierChargeSync
     }
 
     /**
-     * Human label for the rate source used by the confirm UI.
+     * Human label for the location used by the confirm UI (area name or Dhaka/outside).
      */
     public function areaRateLabel(Order $order): string
     {
@@ -179,6 +182,9 @@ class OrderCourierChargeSync
 
     /**
      * Quick-pick courier charge amounts for the confirm UI, by area type.
+     *
+     * These are Steadfast-style merchant costs (what courier charges us), not
+     * customer delivery fees from areas.delivery_charge_*.
      *
      * - Dhaka thana: 65, 75
      * - Dhaka upazila: 125
@@ -201,20 +207,6 @@ class OrderCourierChargeSync
         }
 
         return [135, 155];
-    }
-
-    /**
-     * Lookup areas.delivery_charge_upto_5 by orders.area (= areas.name).
-     */
-    public function areaDeliveryChargeUpto5(Order $order): ?float
-    {
-        $area = $this->resolveArea($order);
-
-        if (! $area || $area->delivery_charge_upto_5 === null) {
-            return null;
-        }
-
-        return (float) $area->delivery_charge_upto_5;
     }
 
     /**

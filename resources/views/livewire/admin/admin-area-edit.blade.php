@@ -54,13 +54,13 @@
                 @error('unit_type') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium mb-1">Delivery ≤5 items (&#2547;)</label>
+                <label class="block text-sm font-medium mb-1">Customer delivery ≤5 items (&#2547;)</label>
                 <input type="number" min="0" step="1" wire:model="delivery_charge_upto_5"
                     class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
                 @error('delivery_charge_upto_5') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium mb-1">Delivery &gt;5 items (&#2547;)</label>
+                <label class="block text-sm font-medium mb-1">Customer delivery &gt;5 items (&#2547;)</label>
                 <input type="number" min="0" step="1" wire:model="delivery_charge_over_5"
                     class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
                 @error('delivery_charge_over_5') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror

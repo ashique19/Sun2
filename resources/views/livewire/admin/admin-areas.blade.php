@@ -44,8 +44,8 @@
                         <th class="px-4 py-3 font-medium">Area</th>
                         <th class="px-4 py-3 font-medium">City</th>
                         <th class="px-4 py-3 font-medium">Type</th>
-                        <th class="px-4 py-3 font-medium">Delivery ≤5</th>
-                        <th class="px-4 py-3 font-medium">Delivery &gt;5</th>
+                        <th class="px-4 py-3 font-medium">Customer del ≤5</th>
+                        <th class="px-4 py-3 font-medium">Customer del &gt;5</th>
                         <th class="px-4 py-3 font-medium">Status</th>
                         <th class="px-4 py-3 font-medium"></th>
                     </tr>

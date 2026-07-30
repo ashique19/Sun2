@@ -37,6 +37,28 @@ class AdminDashboard extends Component
         $this->dispatch('attention-item-resolved');
     }
 
+    public function applyCourierChargePreset(int $orderId, int $amount): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($amount < 0) {
+            return;
+        }
+
+        $exists = Order::query()
+            ->whereKey($orderId)
+            ->where('status', 'dispatched')
+            ->whereNull('courier_charge_confirmed_at')
+            ->exists();
+
+        if (! $exists) {
+            return;
+        }
+
+        $this->pendingCourierCharges[$orderId] = (string) $amount;
+        $this->resetValidation('pendingCourierCharges.'.$orderId);
+    }
+
     public function confirmCourierCharge(int $orderId, OrderCourierChargeSync $courierChargeSync): void
     {
         AdminAccess::ensureStaffAdmin();
@@ -87,6 +109,7 @@ class AdminDashboard extends Component
                 ],
                 'unconfirmedCourierCharges' => collect(),
                 'courierChargeAreaLabels' => [],
+                'courierChargeQuickAmounts' => [],
             ]);
         }
 
@@ -118,10 +141,12 @@ class AdminDashboard extends Component
             ->get(['id', 'order_number', 'name', 'city', 'area', 'courier_id', 'courier_tracker', 'courier_consignment_id', 'courier_charge', 'dispatch_date', 'status']);
 
         $courierChargeAreaLabels = [];
+        $courierChargeQuickAmounts = [];
 
         foreach ($unconfirmedCourierCharges as $order) {
             $suggested = $courierChargeSync->suggestedConfirmAmount($order);
             $courierChargeAreaLabels[$order->id] = $courierChargeSync->areaRateLabel($order);
+            $courierChargeQuickAmounts[$order->id] = $courierChargeSync->quickConfirmAmounts($order);
 
             if (! array_key_exists($order->id, $this->pendingCourierCharges)) {
                 $this->pendingCourierCharges[$order->id] = (string) (int) round($suggested);
@@ -136,6 +161,7 @@ class AdminDashboard extends Component
             'attentionSummary' => $attentionSummary,
             'unconfirmedCourierCharges' => $unconfirmedCourierCharges,
             'courierChargeAreaLabels' => $courierChargeAreaLabels,
+            'courierChargeQuickAmounts' => $courierChargeQuickAmounts,
         ]);
     }
 }

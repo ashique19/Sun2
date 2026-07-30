@@ -168,20 +168,60 @@ class OrderCourierChargeSync
      */
     public function areaRateLabel(Order $order): string
     {
-        $areaName = trim((string) ($order->area ?? ''));
+        $area = $this->resolveArea($order);
 
-        if ($areaName !== '' && $this->areaDeliveryChargeUpto5($order) !== null) {
-            return $areaName;
+        if ($area) {
+            return (string) $area->name;
         }
 
         return $this->isDhakaOrder($order) ? 'Dhaka' : 'Outside Dhaka';
     }
 
     /**
+     * Quick-pick courier charge amounts for the confirm UI, by area type.
+     *
+     * - Dhaka thana: 65, 75
+     * - Dhaka upazila: 125
+     * - Outside Dhaka: 135, 155
+     *
+     * @return list<int>
+     */
+    public function quickConfirmAmounts(Order $order): array
+    {
+        $area = $this->resolveArea($order);
+        $unitType = strtolower(trim((string) ($area?->unit_type ?? '')));
+        $isDhaka = (bool) ($area?->city?->is_dhaka) || $this->isDhakaOrder($order);
+
+        if ($isDhaka && $unitType === 'upazila') {
+            return [125];
+        }
+
+        if ($isDhaka) {
+            return [65, 75];
+        }
+
+        return [135, 155];
+    }
+
+    /**
      * Lookup areas.delivery_charge_upto_5 by orders.area (= areas.name).
-     * Prefer a row whose city also matches orders.city when available.
      */
     public function areaDeliveryChargeUpto5(Order $order): ?float
+    {
+        $area = $this->resolveArea($order);
+
+        if (! $area || $area->delivery_charge_upto_5 === null) {
+            return null;
+        }
+
+        return (float) $area->delivery_charge_upto_5;
+    }
+
+    /**
+     * Resolve areas row where areas.name matches orders.area.
+     * Prefer a row whose city also matches orders.city when available.
+     */
+    public function resolveArea(Order $order): ?Area
     {
         $areaName = trim((string) ($order->area ?? ''));
 
@@ -193,20 +233,20 @@ class OrderCourierChargeSync
 
         if ($cityName !== '') {
             $scoped = Area::query()
+                ->with('city:id,name,is_dhaka')
                 ->where('name', $areaName)
                 ->whereHas('city', fn ($query) => $query->where('name', $cityName))
-                ->value('delivery_charge_upto_5');
+                ->first();
 
-            if ($scoped !== null) {
-                return (float) $scoped;
+            if ($scoped) {
+                return $scoped;
             }
         }
 
-        $charge = Area::query()
+        return Area::query()
+            ->with('city:id,name,is_dhaka')
             ->where('name', $areaName)
-            ->value('delivery_charge_upto_5');
-
-        return $charge !== null ? (float) $charge : null;
+            ->first();
     }
 
     /**

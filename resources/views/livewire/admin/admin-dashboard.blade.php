@@ -134,6 +134,18 @@
                                     class="truncate text-sm font-medium text-[#1E1E1E] hover:text-[#C9A227]">
                                     {{ $order->name }}
                                 </a>
+                                @foreach (($courierChargeQuickAmounts[$order->id] ?? []) as $quickAmount)
+                                    <button type="button"
+                                        wire:click="applyCourierChargePreset({{ $order->id }}, {{ $quickAmount }})"
+                                        wire:key="courier-charge-preset-{{ $order->id }}-{{ $quickAmount }}"
+                                        title="Set charge to ৳{{ $quickAmount }}"
+                                        class="inline-flex h-5 min-w-5 items-center justify-center rounded-md border px-1 text-[10px] font-semibold tabular-nums transition
+                                            {{ (string) ($pendingCourierCharges[$order->id] ?? '') === (string) $quickAmount
+                                                ? 'border-amber-500 bg-amber-100 text-amber-900'
+                                                : 'border-[#E0D6C2] bg-[#FAF6EF] text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]' }}">
+                                        {{ $quickAmount }}
+                                    </button>
+                                @endforeach
                                 @if ($steadfastUrl = $order->steadfastConsignmentUrl())
                                     <a href="{{ $steadfastUrl }}"
                                         target="_blank"

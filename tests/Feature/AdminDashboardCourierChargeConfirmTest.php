@@ -42,8 +42,13 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
         ]);
     }
 
-    private function area(string $cityName, string $areaName, int $upto5, bool $isDhaka = false): Area
-    {
+    private function area(
+        string $cityName,
+        string $areaName,
+        int $upto5,
+        bool $isDhaka = false,
+        ?string $unitType = null,
+    ): Area {
         $city = City::query()->firstOrCreate(
             ['name' => $cityName],
             [
@@ -57,6 +62,7 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
             'city_id' => $city->id,
             'name' => $areaName,
             'slug' => strtolower(str_replace(' ', '-', $areaName)).'-'.uniqid(),
+            'unit_type' => $unitType,
             'is_active' => true,
             'delivery_charge_upto_5' => $upto5,
             'delivery_charge_over_5' => $upto5 + 40,
@@ -114,8 +120,8 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
 
-        $this->area('Dhaka', 'Mirpur', 70, true);
-        $this->area('Chittagong', 'Agrabad', 130);
+        $this->area('Dhaka', 'Mirpur', 70, true, 'thana');
+        $this->area('Chittagong', 'Agrabad', 130, false, 'thana');
 
         $mirpur = $this->dispatchedOrder($courier, 'Mirpur Customer', 0, null, 'Dhaka', 'Mirpur');
         $agrabad = $this->dispatchedOrder($courier, 'Agrabad Customer', 0, null, 'Chittagong', 'Agrabad');
@@ -125,6 +131,34 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
             ->assertSet('pendingCourierCharges.'.$agrabad->id, '130')
             ->assertSee('Mirpur')
             ->assertSee('Agrabad');
+    }
+
+    #[Test]
+    public function dashboard_shows_area_based_quick_charge_badges_and_applies_them(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+
+        $this->area('Dhaka', 'Mirpur', 70, true, 'thana');
+        $this->area('Dhaka', 'Savar', 120, true, 'upazila');
+        $this->area('Chittagong', 'Agrabad', 130, false, 'thana');
+
+        $thana = $this->dispatchedOrder($courier, 'Thana Customer', 0, null, 'Dhaka', 'Mirpur');
+        $upazila = $this->dispatchedOrder($courier, 'Upazila Customer', 0, null, 'Dhaka', 'Savar');
+        $outside = $this->dispatchedOrder($courier, 'Outside Customer', 0, null, 'Chittagong', 'Agrabad');
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSeeHtml('wire:click="applyCourierChargePreset('.$thana->id.', 65)"')
+            ->assertSeeHtml('wire:click="applyCourierChargePreset('.$thana->id.', 75)"')
+            ->assertSeeHtml('wire:click="applyCourierChargePreset('.$upazila->id.', 125)"')
+            ->assertSeeHtml('wire:click="applyCourierChargePreset('.$outside->id.', 135)"')
+            ->assertSeeHtml('wire:click="applyCourierChargePreset('.$outside->id.', 155)"')
+            ->call('applyCourierChargePreset', $thana->id, 75)
+            ->assertSet('pendingCourierCharges.'.$thana->id, '75')
+            ->call('applyCourierChargePreset', $upazila->id, 125)
+            ->assertSet('pendingCourierCharges.'.$upazila->id, '125')
+            ->call('applyCourierChargePreset', $outside->id, 155)
+            ->assertSet('pendingCourierCharges.'.$outside->id, '155');
     }
 
     #[Test]

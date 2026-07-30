@@ -418,103 +418,149 @@
         @endif
     </div>
 
-    <div class="rounded-xl border border-[#EFE7D6] bg-white overflow-hidden">
-        <div class="px-3 py-3 sm:px-4 sm:py-4 border-b border-[#E7DFCF]">
-            <h2 class="font-semibold text-base sm:text-lg">Orders by date</h2>
-            <p class="mt-1 text-xs text-[#8C8474]">
-                DQ / CV are from orders placed that day that were later delivered (not deliveries that happened that day).
-            </p>
+    <div class="space-y-3">
+        <div class="flex flex-wrap items-end justify-between gap-2">
+            <div>
+                <h2 class="font-semibold text-base sm:text-lg">Orders</h2>
+                <p class="mt-0.5 text-xs text-[#8C8474]">
+                    Month tiles for totals · day table for a quick status check. DQ / CV follow the placement cohort.
+                </p>
+            </div>
         </div>
 
-        <div>
-            <table class="w-full table-fixed text-xs sm:text-sm">
-                <colgroup>
-                    <col class="w-[18%]">
-                    <col class="w-[20.5%]">
-                    <col class="w-[20.5%]">
-                    <col class="w-[20.5%]">
-                    <col class="w-[20.5%]">
-                </colgroup>
-                <thead class="bg-[#FAF6EF] text-left text-[#6B6459]">
-                    <tr>
-                        <th class="px-1.5 py-2 sm:px-2 font-medium">Date</th>
-                        @foreach ([
-                            ['abbr' => 'OQ', 'label' => 'Order quantity (placed that day)'],
-                            ['abbr' => 'OV', 'label' => 'Order value (placed that day)'],
-                            ['abbr' => 'DQ', 'label' => 'Delivered quantity (of orders placed that day)'],
-                            ['abbr' => 'CV', 'label' => 'Collected value (of orders placed that day)'],
-                        ] as $column)
-                            <th class="px-1 py-2 sm:px-2 font-medium text-right" scope="col">
-                                <span
-                                    x-data="{ open: false }"
-                                    tabindex="0"
-                                    role="button"
-                                    class="relative inline-flex cursor-help rounded outline-none focus-visible:ring-2 focus-visible:ring-[#C9A227]/60"
-                                    :aria-expanded="open"
-                                    aria-label="{{ $column['label'] }}"
-                                    title="{{ $column['label'] }}"
-                                    @mouseenter="open = true"
-                                    @mouseleave="open = false"
-                                    @focus="open = true"
-                                    @blur="open = false"
-                                    @keydown.space.prevent="open = ! open"
-                                    @keydown.enter.prevent="open = ! open"
-                                    @keydown.escape="open = false"
-                                >
-                                    {{ $column['abbr'] }}
+        <div class="grid gap-3 sm:grid-cols-2">
+            @foreach ($orderMonthTiles as $tile)
+                @php
+                    $isActive = $ordersDateRange === $tile['range'];
+                @endphp
+                <button type="button"
+                    wire:click="showOrdersDateRange('{{ $tile['range'] }}')"
+                    wire:key="order-month-tile-{{ $tile['key'] }}"
+                    @class([
+                        'rounded-xl border px-4 py-3 text-left transition',
+                        'border-[#C9A227] bg-[#FAF6EF] ring-1 ring-[#C9A227]/30' => $isActive,
+                        'border-[#EFE7D6] bg-white hover:border-[#C9A227] hover:bg-[#FAF6EF]/50' => ! $isActive,
+                    ])>
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-sm font-semibold text-[#1E1E1E]">{{ $tile['label'] }}</span>
+                        <span class="text-[10px] font-medium text-[#C9A227]">
+                            {{ $isActive ? 'Showing days' : 'Show by date →' }}
+                        </span>
+                    </div>
+                    <div class="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                        <div>
+                            <p class="text-[#8C8474]">Ordered</p>
+                            <p class="font-semibold tabular-nums text-[#1E1E1E]">
+                                {{ number_format($tile['totals']['order_qty']) }}
+                                · ৳{{ number_format($tile['totals']['order_value'], 0) }}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-[#8C8474]">Delivered</p>
+                            <p class="font-semibold tabular-nums text-[#1E1E1E]">
+                                {{ number_format($tile['totals']['delivery_qty']) }}
+                                · ৳{{ number_format($tile['totals']['delivery_value'], 0) }}
+                            </p>
+                        </div>
+                    </div>
+                </button>
+            @endforeach
+        </div>
+
+        <div class="rounded-xl border border-[#EFE7D6] bg-white overflow-hidden">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#E7DFCF] px-3 py-3 sm:px-4">
+                <div>
+                    <h3 class="text-sm font-semibold text-[#1E1E1E]">Orders by date</h3>
+                    <p class="mt-0.5 text-xs text-[#8C8474]">{{ $ordersDatePanel['label'] }}</p>
+                </div>
+                @if ($ordersDateRange !== 'last7')
+                    <button type="button" wire:click="showOrdersDateRange('last7')"
+                        class="rounded-full border border-[#E0D6C2] px-3 py-1 text-xs font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
+                        Back to last 7 days
+                    </button>
+                @else
+                    <span class="rounded-full bg-[#FAF6EF] px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-[#8C8474]">
+                        Default view
+                    </span>
+                @endif
+            </div>
+
+            <div>
+                <table class="w-full table-fixed text-xs sm:text-sm">
+                    <colgroup>
+                        <col class="w-[18%]">
+                        <col class="w-[20.5%]">
+                        <col class="w-[20.5%]">
+                        <col class="w-[20.5%]">
+                        <col class="w-[20.5%]">
+                    </colgroup>
+                    <thead class="bg-[#FAF6EF] text-left text-[#6B6459]">
+                        <tr>
+                            <th class="px-1.5 py-2 sm:px-2 font-medium">Date</th>
+                            @foreach ([
+                                ['abbr' => 'OQ', 'label' => 'Order quantity (placed that day)'],
+                                ['abbr' => 'OV', 'label' => 'Order value (placed that day)'],
+                                ['abbr' => 'DQ', 'label' => 'Delivered quantity (of orders placed that day)'],
+                                ['abbr' => 'CV', 'label' => 'Collected value (of orders placed that day)'],
+                            ] as $column)
+                                <th class="px-1 py-2 sm:px-2 font-medium text-right" scope="col">
                                     <span
-                                        x-cloak
-                                        x-show="open"
-                                        x-transition.opacity.duration.150ms
-                                        role="tooltip"
-                                        class="pointer-events-none absolute right-0 top-full z-20 mt-1 whitespace-nowrap rounded-md bg-[#1E1E1E] px-2 py-1 text-xs font-normal normal-case tracking-normal text-white shadow-sm"
-                                    >{{ $column['label'] }}</span>
-                                </span>
-                            </th>
-                        @endforeach
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-[#E7DFCF]">
-                    @forelse ($monthlyTotals as $month)
-                        <tr class="bg-[#FAF6EF]/80">
-                            <td colspan="5" class="px-1.5 py-1.5 sm:px-2 text-[11px] font-semibold uppercase tracking-wide text-[#6B6459]">
-                                {{ $month['label'] }}
-                            </td>
+                                        x-data="{ open: false }"
+                                        tabindex="0"
+                                        role="button"
+                                        class="relative inline-flex cursor-help rounded outline-none focus-visible:ring-2 focus-visible:ring-[#C9A227]/60"
+                                        :aria-expanded="open"
+                                        aria-label="{{ $column['label'] }}"
+                                        title="{{ $column['label'] }}"
+                                        @mouseenter="open = true"
+                                        @mouseleave="open = false"
+                                        @focus="open = true"
+                                        @blur="open = false"
+                                        @keydown.space.prevent="open = ! open"
+                                        @keydown.enter.prevent="open = ! open"
+                                        @keydown.escape="open = false"
+                                    >
+                                        {{ $column['abbr'] }}
+                                        <span
+                                            x-cloak
+                                            x-show="open"
+                                            x-transition.opacity.duration.150ms
+                                            role="tooltip"
+                                            class="pointer-events-none absolute right-0 top-full z-20 mt-1 whitespace-nowrap rounded-md bg-[#1E1E1E] px-2 py-1 text-xs font-normal normal-case tracking-normal text-white shadow-sm"
+                                        >{{ $column['label'] }}</span>
+                                    </span>
+                                </th>
+                            @endforeach
                         </tr>
-                        @foreach ($month['days'] as $day)
-                            <tr class="hover:bg-[#FAF6EF]/50">
+                    </thead>
+                    <tbody class="divide-y divide-[#E7DFCF]">
+                        @forelse ($ordersDatePanel['days'] as $day)
+                            <tr class="hover:bg-[#FAF6EF]/50" wire:key="orders-day-{{ $ordersDatePanel['key'] }}-{{ $day['date'] }}">
                                 <td class="px-1.5 py-1.5 sm:px-2 font-medium tabular-nums">{{ $day['label'] }}</td>
                                 <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($day['order_qty']) }}</td>
                                 <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($day['order_value'], 0) }}</td>
                                 <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($day['delivery_qty']) }}</td>
                                 <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($day['delivery_value'], 0) }}</td>
                             </tr>
-                        @endforeach
-                        <tr class="bg-[#FAF6EF]/50 font-medium">
-                            <td class="px-1.5 py-1.5 sm:px-2 text-[#6B6459]">Total</td>
-                            <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($month['totals']['order_qty']) }}</td>
-                            <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($month['totals']['order_value'], 0) }}</td>
-                            <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($month['totals']['delivery_qty']) }}</td>
-                            <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($month['totals']['delivery_value'], 0) }}</td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="5" class="px-3 py-8 text-center text-[#8C8474]">No orders in the current or previous month.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-                @if ($monthlyTotals !== [])
-                    <tfoot class="bg-[#FAF6EF] font-semibold border-t border-[#E7DFCF]">
-                        <tr>
-                            <td class="px-1.5 py-2 sm:px-2">All</td>
-                            <td class="px-1 py-2 sm:px-2 text-right tabular-nums">{{ number_format($periodTotals['order_qty']) }}</td>
-                            <td class="px-1 py-2 sm:px-2 text-right tabular-nums">{{ number_format($periodTotals['order_value'], 0) }}</td>
-                            <td class="px-1 py-2 sm:px-2 text-right tabular-nums">{{ number_format($periodTotals['delivery_qty']) }}</td>
-                            <td class="px-1 py-2 sm:px-2 text-right tabular-nums">{{ number_format($periodTotals['delivery_value'], 0) }}</td>
-                        </tr>
-                    </tfoot>
-                @endif
-            </table>
+                        @empty
+                            <tr>
+                                <td colspan="5" class="px-3 py-8 text-center text-[#8C8474]">No orders in this period.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                    @if (($ordersDatePanel['days'] ?? []) !== [])
+                        <tfoot class="bg-[#FAF6EF] font-semibold border-t border-[#E7DFCF]">
+                            <tr>
+                                <td class="px-1.5 py-2 sm:px-2">Total</td>
+                                <td class="px-1 py-2 sm:px-2 text-right tabular-nums">{{ number_format($ordersDatePanel['totals']['order_qty']) }}</td>
+                                <td class="px-1 py-2 sm:px-2 text-right tabular-nums">{{ number_format($ordersDatePanel['totals']['order_value'], 0) }}</td>
+                                <td class="px-1 py-2 sm:px-2 text-right tabular-nums">{{ number_format($ordersDatePanel['totals']['delivery_qty']) }}</td>
+                                <td class="px-1 py-2 sm:px-2 text-right tabular-nums">{{ number_format($ordersDatePanel['totals']['delivery_value'], 0) }}</td>
+                            </tr>
+                        </tfoot>
+                    @endif
+                </table>
+            </div>
         </div>
     </div>
 </div>

@@ -42,11 +42,27 @@ class AdminDashboard extends Component
 
     public string $eveningExpenseCategory = 'other';
 
+    /** @var 'last7'|'current'|'previous' */
+    public string $ordersDateRange = AdminDashboardMetrics::RANGE_LAST7;
+
     public function mount(): void
     {
         if (AdminAccess::isModeratorOnly()) {
             $this->redirect(route('admin.orders.new'), navigate: true);
         }
+    }
+
+    public function showOrdersDateRange(string $range): void
+    {
+        if (! in_array($range, [
+            AdminDashboardMetrics::RANGE_LAST7,
+            AdminDashboardMetrics::RANGE_CURRENT,
+            AdminDashboardMetrics::RANGE_PREVIOUS,
+        ], true)) {
+            return;
+        }
+
+        $this->ordersDateRange = $range;
     }
 
     public function markResolved(int $itemId): void
@@ -226,12 +242,18 @@ class AdminDashboard extends Component
             return view('livewire.admin.admin-dashboard', [
                 'segments' => [],
                 'segmentCounts' => [],
-                'monthlyTotals' => [],
-                'periodTotals' => [
-                    'order_qty' => 0,
-                    'order_value' => 0,
-                    'delivery_qty' => 0,
-                    'delivery_value' => 0,
+                'orderMonthTiles' => [],
+                'ordersDatePanel' => [
+                    'key' => 'last7',
+                    'range' => AdminDashboardMetrics::RANGE_LAST7,
+                    'label' => 'Last 7 days',
+                    'days' => [],
+                    'totals' => [
+                        'order_qty' => 0,
+                        'order_value' => 0,
+                        'delivery_qty' => 0,
+                        'delivery_value' => 0,
+                    ],
                 ],
                 'attentionSummary' => [
                     'unresolved_count' => 0,
@@ -249,7 +271,13 @@ class AdminDashboard extends Component
         }
 
         $segmentCounts = AdminOrderSegment::counts();
-        $monthlyTotals = AdminDashboardMetrics::dailyTotals();
+        $orderActivity = AdminDashboardMetrics::orderActivity();
+        $orderMonthTiles = $orderActivity['months'];
+        $ordersDatePanel = match ($this->ordersDateRange) {
+            AdminDashboardMetrics::RANGE_CURRENT => $orderMonthTiles[0],
+            AdminDashboardMetrics::RANGE_PREVIOUS => $orderMonthTiles[1],
+            default => $orderActivity['last7'],
+        };
         $expenseAssistant = app(ExpenseAssistantService::class);
         $dueExpenseReminders = $expenseAssistant->dueReminders(auth()->user());
         $showEveningExpensePrompt = $expenseAssistant->shouldShowEveningPrompt(auth()->user());
@@ -269,13 +297,6 @@ class AdminDashboard extends Component
             ->latest()
             ->limit(10)
             ->get();
-
-        $periodTotals = [
-            'order_qty' => (int) array_sum(array_column(array_column($monthlyTotals, 'totals'), 'order_qty')),
-            'order_value' => (float) array_sum(array_column(array_column($monthlyTotals, 'totals'), 'order_value')),
-            'delivery_qty' => (int) array_sum(array_column(array_column($monthlyTotals, 'totals'), 'delivery_qty')),
-            'delivery_value' => (float) array_sum(array_column(array_column($monthlyTotals, 'totals'), 'delivery_value')),
-        ];
 
         $unconfirmedCourierCharges = Order::query()
             ->with([
@@ -309,8 +330,8 @@ class AdminDashboard extends Component
         return view('livewire.admin.admin-dashboard', [
             'segments' => AdminOrderSegment::SEGMENTS,
             'segmentCounts' => $segmentCounts,
-            'monthlyTotals' => $monthlyTotals,
-            'periodTotals' => $periodTotals,
+            'orderMonthTiles' => $orderMonthTiles,
+            'ordersDatePanel' => $ordersDatePanel,
             'attentionSummary' => $attentionSummary,
             'unconfirmedCourierCharges' => $unconfirmedCourierCharges,
             'courierChargeAreaLabels' => $courierChargeAreaLabels,

@@ -6,6 +6,8 @@ use App\Http\Controllers\MessengerConversationSyncController;
 use App\Http\Controllers\ProductImageHashRebuildController;
 use App\Http\Controllers\RobotsController;
 use App\Http\Controllers\SitemapController;
+use App\Livewire\Admin\AdminAnalytics;
+use App\Livewire\Admin\AdminAnalyticsDetail;
 use App\Livewire\Admin\AdminAreaEdit;
 use App\Livewire\Admin\AdminAreas;
 use App\Livewire\Admin\AdminCategories;
@@ -235,6 +237,12 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/users/create', AdminUserEdit::class)->name('users.create');
         Route::get('/customers/{user}', AdminCustomerShow::class)->whereNumber('user')->name('customers.show');
         Route::get('/users/{user}/edit', AdminUserEdit::class)->whereNumber('user')->name('users.edit');
+        Route::get('/analytics', AdminAnalytics::class)->name('analytics');
+        Route::get('/analytics/{year}/{month}/{metric}', AdminAnalyticsDetail::class)
+            ->whereNumber('year')
+            ->whereNumber('month')
+            ->where('metric', 'revenue|direct|indirect|profit')
+            ->name('analytics.detail');
         Route::get('/reports/sales-by-month', AdminSalesByMonth::class)->name('reports.sales-by-month');
         Route::get('/sitemap', AdminSitemap::class)->name('sitemap');
         Route::get('/image-hashes', AdminProductImageHashes::class)->name('image-hashes');

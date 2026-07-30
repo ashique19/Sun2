@@ -7,10 +7,16 @@
             <p class="mt-1 text-xs text-[#8C8474]">Saved on-site post — re-publish to Facebook anytime.</p>
         </div>
 
-        <a href="{{ route('admin.products') }}" wire:navigate
-            class="rounded-full border border-[#E0D6C2] px-5 py-2 text-sm font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
-            Back
-        </a>
+        <div class="flex flex-wrap gap-2">
+            <a href="{{ route('admin.social-posts.edit', $post) }}" wire:navigate
+                class="rounded-full border border-[#E0D6C2] px-5 py-2 text-sm font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                Edit
+            </a>
+            <a href="{{ route('admin.social-posts') }}" wire:navigate
+                class="rounded-full border border-[#E0D6C2] px-5 py-2 text-sm font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                All posts
+            </a>
+        </div>
     </div>
 
     @if ($message)

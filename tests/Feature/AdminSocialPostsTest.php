@@ -337,6 +337,7 @@ class AdminSocialPostsTest extends TestCase
             'image_source' => 'thumb',
             'layout' => 'album',
             'status' => SocialPost::STATUS_PUBLISHED,
+            'show_on_homepage' => true,
             'created_by' => $admin->id,
             'thumbnail_path' => 'img/products/p3.jpg',
         ]);

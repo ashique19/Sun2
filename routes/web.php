@@ -33,7 +33,9 @@ use App\Livewire\Admin\AdminProductShow;
 use App\Livewire\Admin\AdminReviews;
 use App\Livewire\Admin\AdminSalesByMonth;
 use App\Livewire\Admin\AdminSitemap;
+use App\Livewire\Admin\AdminSocialPosts;
 use App\Livewire\Admin\AdminSocialPostsCreate;
+use App\Livewire\Admin\AdminSocialPostsEdit;
 use App\Livewire\Admin\AdminSocialPostsShow;
 use App\Livewire\Admin\AdminUserEdit;
 use App\Livewire\Admin\AdminUsers;
@@ -236,7 +238,11 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/reports/sales-by-month', AdminSalesByMonth::class)->name('reports.sales-by-month');
         Route::get('/sitemap', AdminSitemap::class)->name('sitemap');
         Route::get('/image-hashes', AdminProductImageHashes::class)->name('image-hashes');
+        Route::get('/social-posts', AdminSocialPosts::class)->name('social-posts');
         Route::get('/social-posts/create', AdminSocialPostsCreate::class)->name('social-posts.create');
+        Route::get('/social-posts/{socialPost}/edit', AdminSocialPostsEdit::class)
+            ->whereNumber('socialPost')
+            ->name('social-posts.edit');
         Route::get('/social-posts/{socialPost}', AdminSocialPostsShow::class)
             ->whereNumber('socialPost')
             ->name('social-posts.show');

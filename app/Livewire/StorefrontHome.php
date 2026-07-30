@@ -23,7 +23,7 @@ class StorefrontHome extends Component
             ->get();
 
         $latestSocialPosts = SocialPost::query()
-            ->published()
+            ->onHomepage()
             ->orderByDesc('id')
             ->limit(6)
             ->get(['id', 'body', 'thumbnail_path', 'created_at', 'layout']);

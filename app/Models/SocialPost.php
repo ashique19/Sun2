@@ -10,6 +10,13 @@ class SocialPost extends Model
 {
     protected $guarded = [];
 
+    protected function casts(): array
+    {
+        return [
+            'show_on_homepage' => 'boolean',
+        ];
+    }
+
     public const STATUS_DRAFT = 'draft';
 
     public const STATUS_PUBLISHED = 'published';
@@ -60,6 +67,11 @@ class SocialPost extends Model
     public function scopePublished($query)
     {
         return $query->where('status', self::STATUS_PUBLISHED);
+    }
+
+    public function scopeOnHomepage($query)
+    {
+        return $query->published()->where('show_on_homepage', true);
     }
 
     public function facebookPublication(): ?SocialPostPublication

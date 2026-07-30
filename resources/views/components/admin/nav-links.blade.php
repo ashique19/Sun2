@@ -83,6 +83,10 @@
         class="{{ $isMobile ? 'mt-2 ' : '' }}{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.products') || request()->routeIs('admin.products.create') || request()->routeIs('admin.products.edit') || request()->routeIs('admin.products*') ? $active : $inactive }}">
         Products
     </a>
+    <a href="{{ route('admin.social-posts') }}" wire:navigate {!! $click !!}
+        class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.social-posts*') ? $active : $inactive }}">
+        Social Posts
+    </a>
     <a href="{{ route('admin.categories') }}" wire:navigate {!! $click !!}
         class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.categories*') ? $active : $inactive }}">
         Categories

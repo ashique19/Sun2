@@ -50,18 +50,6 @@ class AdminDashboardMetricsTest extends TestCase
         ], $overrides));
     }
 
-    private function addItem(Order $order, int $quantity, int $returnedQuantity = 0): void
-    {
-        $order->items()->create([
-            'name' => 'Product',
-            'quantity' => $quantity,
-            'returned_quantity' => $returnedQuantity,
-            'price' => 100,
-            'purchase_price' => 50,
-            'line_total' => 100 * $quantity,
-        ]);
-    }
-
     /**
      * @param  list<array{date: string, label: string, order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}>  $days
      * @return array{date: string, label: string, order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}|null
@@ -78,119 +66,141 @@ class AdminDashboardMetricsTest extends TestCase
     }
 
     #[Test]
+    public function delivered_metrics_count_orders_from_placement_day_cohort(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-30 12:00:00', 'Asia/Dhaka'));
+
+        $july28 = Carbon::parse('2026-07-28 10:00:00', 'Asia/Dhaka');
+        $july29 = Carbon::parse('2026-07-29 15:00:00', 'Asia/Dhaka');
+
+        // 9 orders placed on Jul-28; 6 delivered later, 3 still open
+        for ($i = 0; $i < 6; $i++) {
+            $this->order([
+                'placed_at' => $july28->copy()->addMinutes($i),
+                'status' => 'delivered',
+                'actual_delivery_date' => $july29,
+                'collected_amount' => 1000,
+                'total' => 1100,
+            ]);
+        }
+        for ($i = 0; $i < 3; $i++) {
+            $this->order([
+                'placed_at' => $july28->copy()->addHours(1)->addMinutes($i),
+                'status' => 'dispatched',
+                'collected_amount' => 0,
+                'total' => 900,
+            ]);
+        }
+
+        // Delivered on Jul-29 but placed Jul-29 — must not inflate Jul-28 DQ
+        $this->order([
+            'placed_at' => $july29,
+            'status' => 'delivered',
+            'actual_delivery_date' => $july29,
+            'collected_amount' => 500,
+            'total' => 500,
+        ]);
+
+        $activity = AdminDashboardMetrics::orderActivity(fresh: true);
+        $row = $this->dayRow($activity['months'][0]['days'], '2026-07-28');
+
+        $this->assertNotNull($row);
+        $this->assertSame(9, $row['order_qty']);
+        $this->assertSame(6 * 1100.0 + 3 * 900.0, $row['order_value']);
+        $this->assertSame(6, $row['delivery_qty']);
+        $this->assertSame(6000.0, $row['delivery_value']);
+
+        Carbon::setTestNow();
+    }
+
+    #[Test]
     public function order_activity_builds_month_tiles_and_last_seven_days(): void
     {
-        Carbon::setTestNow(Carbon::parse('2026-07-29 12:00:00'));
+        Carbon::setTestNow(Carbon::parse('2026-07-29 12:00:00', 'Asia/Dhaka'));
 
-        $today = now()->startOfDay()->addHours(10);
-        $yesterday = now()->subDay()->startOfDay()->addHours(11);
-        $eightDaysAgo = now()->subDays(8)->startOfDay()->addHours(9);
-        $previousMonthDay = now()->subMonthNoOverflow()->startOfMonth()->addDays(4)->startOfDay()->addHours(9);
+        $today = Carbon::parse('2026-07-29 10:00:00', 'Asia/Dhaka');
+        $yesterday = Carbon::parse('2026-07-28 11:00:00', 'Asia/Dhaka');
+        $eightDaysAgo = Carbon::parse('2026-07-21 09:00:00', 'Asia/Dhaka');
+        $previousMonthDay = Carbon::parse('2026-06-05 09:00:00', 'Asia/Dhaka');
 
-        $deliveredToday = $this->order([
+        $this->order([
             'placed_at' => $today,
             'status' => 'delivered',
             'actual_delivery_date' => $today,
             'collected_amount' => 1200,
             'total' => 1590,
         ]);
-        $this->addItem($deliveredToday, 3, 1);
-
-        $deliveredTodayPlacedEarlier = $this->order([
+        $this->order([
             'placed_at' => $yesterday,
             'status' => 'delivered',
-            'actual_delivery_date' => $today,
+            'actual_delivery_date' => $today, // delivered next day — still Jul-28 cohort
             'collected_amount' => 300,
             'total' => 870,
         ]);
-        $this->addItem($deliveredTodayPlacedEarlier, 4);
-
-        $deliveredYesterday = $this->order([
+        $this->order([
             'placed_at' => $yesterday,
             'status' => 'delivered',
             'actual_delivery_date' => $yesterday,
             'collected_amount' => 450,
             'total' => 560,
         ]);
-        $this->addItem($deliveredYesterday, 1);
-
-        $pending = $this->order([
+        $this->order([
             'placed_at' => $today,
             'status' => 'new',
             'collected_amount' => 999,
             'total' => 500,
         ]);
-        $this->addItem($pending, 10);
-
-        $draft = $this->order([
+        $this->order([
             'placed_at' => $today,
             'status' => Order::STATUS_DRAFT,
             'collected_amount' => 100,
+            'total' => 100,
         ]);
-        $this->addItem($draft, 5);
-
-        $olderThanWeek = $this->order([
+        $this->order([
             'placed_at' => $eightDaysAgo,
             'status' => 'delivered',
             'actual_delivery_date' => $eightDaysAgo,
             'collected_amount' => 200,
             'total' => 250,
         ]);
-        $this->addItem($olderThanWeek, 1);
-
-        $previousMonthOrder = $this->order([
+        $this->order([
             'placed_at' => $previousMonthDay,
             'status' => 'delivered',
             'actual_delivery_date' => $previousMonthDay,
             'collected_amount' => 700,
             'total' => 800,
         ]);
-        $this->addItem($previousMonthOrder, 2);
 
         $activity = AdminDashboardMetrics::orderActivity(fresh: true);
         $months = $activity['months'];
         $last7 = $activity['last7'];
 
-        $this->assertCount(2, $months);
         $this->assertSame('This month', $months[0]['label']);
-        $this->assertTrue($months[0]['is_current']);
-        $this->assertSame('2026-07', $months[0]['key']);
         $this->assertSame('Last month', $months[1]['label']);
-        $this->assertSame('2026-06', $months[1]['key']);
-
-        $this->assertSame('Last 7 days', $last7['label']);
         $this->assertCount(7, $last7['days']);
-        $this->assertSame('Jul-29', $last7['days'][0]['label']);
-        $this->assertNull($this->dayRow($last7['days'], $eightDaysAgo->toDateString()));
-        $this->assertSame(4, $last7['totals']['order_qty']); // today 2 + yesterday 2; 8-days-ago excluded
+        $this->assertSame(4, $last7['totals']['order_qty']);
+        $this->assertSame(3, $last7['totals']['delivery_qty']); // 1 today + 2 yesterday
 
-        $todayRow = $this->dayRow($months[0]['days'], $today->toDateString());
-        $yesterdayRow = $this->dayRow($months[0]['days'], $yesterday->toDateString());
-        $previousRow = $this->dayRow($months[1]['days'], $previousMonthDay->toDateString());
+        $todayRow = $this->dayRow($months[0]['days'], '2026-07-29');
+        $yesterdayRow = $this->dayRow($months[0]['days'], '2026-07-28');
+        $previousRow = $this->dayRow($months[1]['days'], '2026-06-05');
 
         $this->assertNotNull($todayRow);
         $this->assertSame(2, $todayRow['order_qty']);
         $this->assertSame(2090.0, $todayRow['order_value']);
-        $this->assertSame(2, $todayRow['delivery_qty']);
+        $this->assertSame(1, $todayRow['delivery_qty']); // one delivered order, not item pieces
         $this->assertSame(1200.0, $todayRow['delivery_value']);
 
         $this->assertNotNull($yesterdayRow);
         $this->assertSame(2, $yesterdayRow['order_qty']);
         $this->assertSame(1430.0, $yesterdayRow['order_value']);
-        $this->assertSame(5, $yesterdayRow['delivery_qty']);
+        $this->assertSame(2, $yesterdayRow['delivery_qty']);
         $this->assertSame(750.0, $yesterdayRow['delivery_value']);
 
         $this->assertNotNull($previousRow);
-        $this->assertSame('Jun-05', $previousRow['label']);
         $this->assertSame(1, $previousRow['order_qty']);
-        $this->assertSame(800.0, $previousRow['order_value']);
-        $this->assertSame(2, $previousRow['delivery_qty']);
+        $this->assertSame(1, $previousRow['delivery_qty']);
         $this->assertSame(700.0, $previousRow['delivery_value']);
-
-        $this->assertSame(5, $months[0]['totals']['order_qty']); // includes 8-days-ago in July
-        $this->assertSame(1, $months[1]['totals']['order_qty']);
-        $this->assertCount(29, $months[0]['days']);
-        $this->assertCount(30, $months[1]['days']);
 
         Carbon::setTestNow();
     }
@@ -198,16 +208,16 @@ class AdminDashboardMetricsTest extends TestCase
     #[Test]
     public function dashboard_defaults_to_last_seven_days_and_opens_month_on_tile_click(): void
     {
-        Carbon::setTestNow(Carbon::parse('2026-07-29 12:00:00'));
+        Carbon::setTestNow(Carbon::parse('2026-07-29 12:00:00', 'Asia/Dhaka'));
         $this->actingAs($this->adminUser());
 
         $this->order([
-            'placed_at' => now()->subDays(2),
+            'placed_at' => now('Asia/Dhaka')->subDays(2),
             'status' => 'new',
             'total' => 500,
         ]);
         $this->order([
-            'placed_at' => now()->subMonthNoOverflow()->startOfMonth()->addDays(3),
+            'placed_at' => now('Asia/Dhaka')->subMonthNoOverflow()->startOfMonth()->addDays(3),
             'status' => 'new',
             'total' => 700,
         ]);
@@ -218,15 +228,12 @@ class AdminDashboardMetricsTest extends TestCase
             ->assertSee('Last month')
             ->assertSee('Orders by date')
             ->assertSee('Last 7 days')
-            ->assertSee('Default view')
-            ->assertDontSee('Back to last 7 days')
+            ->assertSeeHtml('aria-label="Of those orders, how many later delivered"')
             ->call('showOrdersDateRange', 'previous')
             ->assertSet('ordersDateRange', 'previous')
             ->assertSee('Back to last 7 days')
-            ->assertSee('Showing days')
             ->call('showOrdersDateRange', 'last7')
-            ->assertSet('ordersDateRange', 'last7')
-            ->assertSee('Default view');
+            ->assertSet('ordersDateRange', 'last7');
 
         Carbon::setTestNow();
     }

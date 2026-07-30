@@ -423,7 +423,7 @@
             <div>
                 <h2 class="font-semibold text-base sm:text-lg">Orders</h2>
                 <p class="mt-0.5 text-xs text-[#8C8474]">
-                    Month tiles for totals · day table for a quick status check. DQ / CV follow the placement cohort.
+                    Month tiles for totals · day table for a quick status check. DQ / CV = of orders placed that day, how many later delivered and how much collected.
                 </p>
             </div>
         </div>
@@ -498,10 +498,10 @@
                         <tr>
                             <th class="px-1.5 py-2 sm:px-2 font-medium">Date</th>
                             @foreach ([
-                                ['abbr' => 'OQ', 'label' => 'Order quantity (placed that day)'],
-                                ['abbr' => 'OV', 'label' => 'Order value (placed that day)'],
-                                ['abbr' => 'DQ', 'label' => 'Delivered quantity (of orders placed that day)'],
-                                ['abbr' => 'CV', 'label' => 'Collected value (of orders placed that day)'],
+                                ['abbr' => 'OQ', 'label' => 'Orders placed that day'],
+                                ['abbr' => 'OV', 'label' => 'Value of orders placed that day'],
+                                ['abbr' => 'DQ', 'label' => 'Of those orders, how many later delivered'],
+                                ['abbr' => 'CV', 'label' => 'Collected from those delivered orders'],
                             ] as $column)
                                 <th class="px-1 py-2 sm:px-2 font-medium text-right" scope="col">
                                     <span

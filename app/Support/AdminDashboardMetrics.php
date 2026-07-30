@@ -5,11 +5,10 @@ namespace App\Support;
 use App\Models\Order;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 
 class AdminDashboardMetrics
 {
-    public const DAILY_CACHE_KEY = 'admin.dashboard_daily_totals';
+    public const DAILY_CACHE_KEY = 'admin.dashboard_daily_totals.v2';
 
     public const DAILY_CACHE_TTL = 60;
 
@@ -21,6 +20,9 @@ class AdminDashboardMetrics
 
     /**
      * Month tiles + last-7-days / month day breakdowns for the dashboard.
+     *
+     * Delivered qty/value are the placement cohort: of orders placed that day,
+     * how many later reached delivered status, and how much was collected from them.
      *
      * @return array{
      *     months: list<array{
@@ -42,7 +44,7 @@ class AdminDashboardMetrics
      */
     public static function orderActivity(bool $fresh = false): array
     {
-        $cacheKey = self::DAILY_CACHE_KEY.':activity:'.now()->toDateString();
+        $cacheKey = self::DAILY_CACHE_KEY.':activity:'.now('Asia/Dhaka')->toDateString();
 
         if ($fresh) {
             Cache::forget($cacheKey);
@@ -98,61 +100,64 @@ class AdminDashboardMetrics
      */
     private static function computeOrderActivity(): array
     {
-        $today = now()->startOfDay();
+        $today = now('Asia/Dhaka')->startOfDay();
         $currentMonthStart = $today->copy()->startOfMonth();
         $previousMonthStart = $today->copy()->subMonthNoOverflow()->startOfMonth();
         $previousMonthEnd = $currentMonthStart->copy()->subDay();
         $last7Start = $today->copy()->subDays(6);
-
         $queryFrom = $previousMonthStart->lt($last7Start) ? $previousMonthStart : $last7Start;
 
-        $ordersByDay = Order::query()
-            ->where('placed_at', '>=', $queryFrom)
+        /** @var array<string, array{order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}> $byDay */
+        $byDay = [];
+
+        $orders = Order::query()
+            ->where('placed_at', '>=', $queryFrom->copy()->timezone('UTC'))
             ->where('status', '!=', Order::STATUS_DRAFT)
-            ->selectRaw('DATE(placed_at) as day')
-            ->selectRaw('COUNT(*) as order_qty')
-            ->selectRaw('COALESCE(SUM(total), 0) as order_value')
-            ->groupByRaw('DATE(placed_at)')
-            ->get()
-            ->keyBy('day');
+            ->get(['id', 'status', 'total', 'collected_amount', 'placed_at']);
 
-        // Delivery Qty / Collected Value: among orders placed that day, those now delivered.
-        $deliveredByDay = Order::query()
-            ->where('status', 'delivered')
-            ->where('placed_at', '>=', $queryFrom)
-            ->selectRaw('DATE(placed_at) as day')
-            ->selectRaw('COALESCE(SUM(collected_amount), 0) as delivery_value')
-            ->groupByRaw('DATE(placed_at)')
-            ->get()
-            ->keyBy('day');
+        foreach ($orders as $order) {
+            if (! $order->placed_at) {
+                continue;
+            }
 
-        $deliveredItemsByDay = DB::table('order_products')
-            ->join('orders', 'orders.id', '=', 'order_products.order_id')
-            ->where('orders.status', 'delivered')
-            ->where('orders.placed_at', '>=', $queryFrom)
-            ->selectRaw('DATE(orders.placed_at) as day')
-            ->selectRaw('COALESCE(SUM(CASE WHEN order_products.quantity > COALESCE(order_products.returned_quantity, 0) THEN order_products.quantity - COALESCE(order_products.returned_quantity, 0) ELSE 0 END), 0) as delivery_qty')
-            ->groupByRaw('DATE(orders.placed_at)')
-            ->get()
-            ->keyBy('day');
+            $date = $order->placed_at->timezone('Asia/Dhaka')->toDateString();
+            $byDay[$date] ??= [
+                'order_qty' => 0,
+                'order_value' => 0.0,
+                'delivery_qty' => 0,
+                'delivery_value' => 0.0,
+            ];
 
-        $buildDays = function (Carbon $from, Carbon $to) use ($ordersByDay, $deliveredByDay, $deliveredItemsByDay): array {
+            $byDay[$date]['order_qty']++;
+            $byDay[$date]['order_value'] += (float) ($order->total ?? 0);
+
+            if ($order->status !== 'delivered') {
+                continue;
+            }
+
+            // Cohort: still counted on the placement day even if delivery was later.
+            $byDay[$date]['delivery_qty']++;
+            $collected = (float) ($order->collected_amount ?? 0);
+            $byDay[$date]['delivery_value'] += $collected > 0
+                ? $collected
+                : (float) ($order->total ?? 0);
+        }
+
+        $buildDays = function (Carbon $from, Carbon $to) use ($byDay): array {
             $days = [];
             $cursor = $to->copy()->startOfDay();
 
             while ($cursor->gte($from)) {
                 $date = $cursor->toDateString();
-                $orderRow = $ordersByDay->get($date);
-                $deliveredRow = $deliveredByDay->get($date);
-                $itemRow = $deliveredItemsByDay->get($date);
+                $row = $byDay[$date] ?? null;
 
                 $days[] = [
                     'date' => $date,
                     'label' => $cursor->format('M-d'),
-                    'order_qty' => (int) ($orderRow->order_qty ?? 0),
-                    'order_value' => (float) ($orderRow->order_value ?? 0),
-                    'delivery_qty' => (int) ($itemRow->delivery_qty ?? 0),
-                    'delivery_value' => (float) ($deliveredRow->delivery_value ?? 0),
+                    'order_qty' => (int) ($row['order_qty'] ?? 0),
+                    'order_value' => round((float) ($row['order_value'] ?? 0), 2),
+                    'delivery_qty' => (int) ($row['delivery_qty'] ?? 0),
+                    'delivery_value' => round((float) ($row['delivery_value'] ?? 0), 2),
                 ];
 
                 $cursor->subDay();
@@ -164,9 +169,9 @@ class AdminDashboardMetrics
         $sumDays = function (array $days): array {
             return [
                 'order_qty' => (int) array_sum(array_column($days, 'order_qty')),
-                'order_value' => (float) array_sum(array_column($days, 'order_value')),
+                'order_value' => round((float) array_sum(array_column($days, 'order_value')), 2),
                 'delivery_qty' => (int) array_sum(array_column($days, 'delivery_qty')),
-                'delivery_value' => (float) array_sum(array_column($days, 'delivery_value')),
+                'delivery_value' => round((float) array_sum(array_column($days, 'delivery_value')), 2),
             ];
         };
 

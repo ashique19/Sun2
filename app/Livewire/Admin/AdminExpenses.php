@@ -3,6 +3,7 @@
 namespace App\Livewire\Admin;
 
 use App\Models\Expense;
+use App\Models\ExpenseRecurringReminder;
 use App\Support\AdminAccess;
 use Carbon\Carbon;
 use Livewire\Attributes\Layout;
@@ -36,6 +37,22 @@ class AdminExpenses extends Component
     public string $notes = '';
 
     public ?string $message = null;
+
+    public ?int $editingReminderId = null;
+
+    public string $reminderTitle = '';
+
+    public string $reminderCategory = 'other';
+
+    public string $reminderDefaultAmount = '';
+
+    public string $reminderDueDay = '1';
+
+    public string $reminderPromptType = ExpenseRecurringReminder::PROMPT_PAYMENT;
+
+    public string $reminderNotes = '';
+
+    public bool $reminderIsActive = true;
 
     public function mount(): void
     {
@@ -102,6 +119,111 @@ class AdminExpenses extends Component
 
         Expense::query()->whereKey($expenseId)->delete();
         $this->message = 'Expense deleted.';
+    }
+
+    public function editReminder(int $reminderId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $reminder = ExpenseRecurringReminder::query()->findOrFail($reminderId);
+
+        $this->editingReminderId = $reminder->id;
+        $this->reminderTitle = $reminder->title;
+        $this->reminderCategory = $reminder->category;
+        $this->reminderDefaultAmount = $reminder->default_amount !== null
+            ? (string) (int) round((float) $reminder->default_amount)
+            : '';
+        $this->reminderDueDay = (string) $reminder->due_day;
+        $this->reminderPromptType = $reminder->prompt_type;
+        $this->reminderNotes = (string) ($reminder->notes ?? '');
+        $this->reminderIsActive = (bool) $reminder->is_active;
+    }
+
+    public function cancelReminderEdit(): void
+    {
+        $this->resetReminderForm();
+    }
+
+    public function saveReminder(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $validated = $this->validate([
+            'reminderTitle' => ['required', 'string', 'max:160'],
+            'reminderCategory' => ['required', 'in:'.implode(',', array_keys(Expense::CATEGORIES))],
+            'reminderDefaultAmount' => ['nullable', 'numeric', 'min:0.01'],
+            'reminderDueDay' => ['required', 'integer', 'min:1', 'max:28'],
+            'reminderPromptType' => ['required', 'in:'.implode(',', array_keys(ExpenseRecurringReminder::PROMPT_TYPES))],
+            'reminderNotes' => ['nullable', 'string', 'max:1000'],
+            'reminderIsActive' => ['boolean'],
+        ], [], [
+            'reminderTitle' => 'title',
+            'reminderCategory' => 'category',
+            'reminderDefaultAmount' => 'default amount',
+            'reminderDueDay' => 'due day',
+            'reminderPromptType' => 'prompt type',
+            'reminderNotes' => 'notes',
+        ]);
+
+        $payload = [
+            'title' => trim($validated['reminderTitle']),
+            'category' => $validated['reminderCategory'],
+            'default_amount' => filled($validated['reminderDefaultAmount'] ?? null)
+                ? round((float) $validated['reminderDefaultAmount'], 2)
+                : null,
+            'due_day' => (int) $validated['reminderDueDay'],
+            'prompt_type' => $validated['reminderPromptType'],
+            'notes' => filled($validated['reminderNotes'] ?? null) ? trim((string) $validated['reminderNotes']) : null,
+            'is_active' => (bool) $validated['reminderIsActive'],
+        ];
+
+        if ($this->editingReminderId) {
+            ExpenseRecurringReminder::query()->whereKey($this->editingReminderId)->update($payload);
+            $this->message = 'Reminder updated.';
+        } else {
+            $maxSort = (int) ExpenseRecurringReminder::query()->max('sort_order');
+            ExpenseRecurringReminder::query()->create([
+                ...$payload,
+                'sort_order' => $maxSort + 10,
+            ]);
+            $this->message = 'Reminder added.';
+        }
+
+        $this->resetReminderForm();
+    }
+
+    public function deleteReminder(int $reminderId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        ExpenseRecurringReminder::query()->whereKey($reminderId)->delete();
+
+        if ($this->editingReminderId === $reminderId) {
+            $this->resetReminderForm();
+        }
+
+        $this->message = 'Reminder deleted.';
+    }
+
+    private function resetReminderForm(): void
+    {
+        $this->editingReminderId = null;
+        $this->reminderTitle = '';
+        $this->reminderCategory = 'other';
+        $this->reminderDefaultAmount = '';
+        $this->reminderDueDay = '1';
+        $this->reminderPromptType = ExpenseRecurringReminder::PROMPT_PAYMENT;
+        $this->reminderNotes = '';
+        $this->reminderIsActive = true;
+        $this->resetValidation([
+            'reminderTitle',
+            'reminderCategory',
+            'reminderDefaultAmount',
+            'reminderDueDay',
+            'reminderPromptType',
+            'reminderNotes',
+            'reminderIsActive',
+        ]);
     }
 
     /**
@@ -175,10 +297,17 @@ class AdminExpenses extends Component
             ->forMonth($this->year, $this->month)
             ->sum('amount');
 
+        $reminders = ExpenseRecurringReminder::query()
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
         return view('livewire.admin.admin-expenses', [
             'expenses' => $expenses,
             'monthTotal' => $monthTotal,
             'categories' => Expense::CATEGORIES,
+            'reminders' => $reminders,
+            'promptTypes' => ExpenseRecurringReminder::PROMPT_TYPES,
         ]);
     }
 }

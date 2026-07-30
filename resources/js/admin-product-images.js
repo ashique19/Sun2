@@ -27,6 +27,10 @@ const registerProductImageAlpineData = () => {
         savedCropper: null,
         savedSaving: false,
         savedError: null,
+        savedPreviewUrl: '',
+        savedPreviewPending: false,
+        savedPreviewTimer: null,
+        savedAspect: 'free',
         overlayText: '',
         overlayTextSize: 48,
         overlayTextPosition: 'bottom-left',
@@ -35,6 +39,7 @@ const registerProductImageAlpineData = () => {
         overlayLogoPosition: 'top-right',
         logoUrl: '/img/settings/logo.png',
         logoImage: null,
+        _savedOverlayUnwatch: null,
 
         addFiles(event) {
             const files = Array.from(event.target.files ?? []);
@@ -303,6 +308,9 @@ const registerProductImageAlpineData = () => {
             this.savedAllowOutsideClose = false;
             this.savedEditorId = id;
             this.savedEditorSrc = src;
+            this.savedPreviewUrl = '';
+            this.savedPreviewPending = true;
+            this.savedAspect = 'free';
             this.overlayText = '';
             this.overlayTextSize = 48;
             this.overlayTextPosition = 'bottom-left';
@@ -311,6 +319,7 @@ const registerProductImageAlpineData = () => {
             this.overlayLogoPosition = 'top-right';
             this.savedEditorOpen = true;
             this.preloadLogo();
+            this.bindSavedOverlayWatchers();
 
             this.$nextTick(() => {
                 afterPaint(() => {
@@ -320,6 +329,25 @@ const registerProductImageAlpineData = () => {
             });
         },
 
+        bindSavedOverlayWatchers() {
+            if (typeof this._savedOverlayUnwatch === 'function') {
+                this._savedOverlayUnwatch();
+                this._savedOverlayUnwatch = null;
+            }
+
+            this._savedOverlayUnwatch = this.$watch(
+                () => [
+                    this.overlayText,
+                    this.overlayTextSize,
+                    this.overlayTextPosition,
+                    this.overlayLogoEnabled,
+                    this.overlayLogoSize,
+                    this.overlayLogoPosition,
+                ].join('|'),
+                () => this.schedulePreview(),
+            );
+        },
+
         preloadLogo() {
             if (this.logoImage && this.logoImage.complete) {
                 return;
@@ -327,6 +355,7 @@ const registerProductImageAlpineData = () => {
 
             const image = new Image();
             image.decoding = 'async';
+            image.crossOrigin = 'anonymous';
             image.src = this.logoUrl;
             this.logoImage = image;
         },
@@ -358,14 +387,36 @@ const registerProductImageAlpineData = () => {
 
             this.savedCropper = new Cropper(image, {
                 viewMode: 1,
-                dragMode: 'move',
-                autoCropArea: 1,
+                dragMode: 'crop',
+                autoCropArea: 0.8,
                 responsive: true,
-                background: false,
+                background: true,
+                guides: true,
+                center: true,
+                highlight: true,
+                movable: true,
+                rotatable: true,
+                scalable: true,
+                zoomable: true,
+                zoomOnWheel: true,
+                cropBoxMovable: true,
+                cropBoxResizable: true,
+                toggleDragModeOnDblclick: true,
+                ready: () => {
+                    this.schedulePreview();
+                },
+                crop: () => {
+                    this.schedulePreview();
+                },
             });
         },
 
         destroySavedCropper() {
+            if (this.savedPreviewTimer) {
+                clearTimeout(this.savedPreviewTimer);
+                this.savedPreviewTimer = null;
+            }
+
             if (this.savedCropper) {
                 this.savedCropper.destroy();
                 this.savedCropper = null;
@@ -373,10 +424,17 @@ const registerProductImageAlpineData = () => {
         },
 
         closeSavedEditor() {
+            if (typeof this._savedOverlayUnwatch === 'function') {
+                this._savedOverlayUnwatch();
+                this._savedOverlayUnwatch = null;
+            }
+
             this.destroySavedCropper();
             this.savedEditorOpen = false;
             this.savedEditorId = null;
             this.savedEditorSrc = '';
+            this.savedPreviewUrl = '';
+            this.savedPreviewPending = false;
             this.savedAllowOutsideClose = false;
             this.savedSaving = false;
             this.savedError = null;
@@ -390,10 +448,59 @@ const registerProductImageAlpineData = () => {
 
         rotateSaved(degrees) {
             this.savedCropper?.rotate(degrees);
+            this.schedulePreview();
         },
 
         resetSavedCrop() {
+            this.savedAspect = 'free';
             this.savedCropper?.reset();
+            this.savedCropper?.setAspectRatio(NaN);
+            this.schedulePreview();
+        },
+
+        setSavedAspect(ratio) {
+            this.savedAspect = ratio;
+            this.savedCropper?.setAspectRatio(ratio === 'free' ? NaN : ratio);
+            this.schedulePreview();
+        },
+
+        schedulePreview() {
+            if (! this.savedEditorOpen) {
+                return;
+            }
+
+            this.savedPreviewPending = true;
+
+            if (this.savedPreviewTimer) {
+                clearTimeout(this.savedPreviewTimer);
+            }
+
+            this.savedPreviewTimer = setTimeout(() => {
+                this.savedPreviewTimer = null;
+                this.refreshPreview();
+            }, 100);
+        },
+
+        async refreshPreview() {
+            if (! this.savedCropper || ! this.savedEditorOpen) {
+                return;
+            }
+
+            try {
+                const output = await this.composeEditedCanvas(720);
+
+                if (! output || ! this.savedEditorOpen) {
+                    return;
+                }
+
+                this.savedPreviewUrl = output.toDataURL('image/jpeg', 0.86);
+            } catch (error) {
+                console.error(error);
+            } finally {
+                if (this.savedEditorOpen) {
+                    this.savedPreviewPending = false;
+                }
+            }
         },
 
         overlayPositions() {
@@ -419,6 +526,12 @@ const registerProductImageAlpineData = () => {
             }
         },
 
+        scaledTextSize(canvasWidth) {
+            const base = Math.max(16, Math.min(120, Number(this.overlayTextSize) || 48));
+
+            return Math.max(12, Math.round(base * (Math.max(1, canvasWidth) / 1600)));
+        },
+
         drawTextOverlay(context, canvas) {
             const text = String(this.overlayText || '').trim();
 
@@ -426,7 +539,7 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
-            const fontSize = Math.max(16, Math.min(120, Number(this.overlayTextSize) || 48));
+            const fontSize = this.scaledTextSize(canvas.width);
             context.font = `700 ${fontSize}px "DejaVu Sans", "Segoe UI", sans-serif`;
             context.textBaseline = 'top';
 
@@ -507,6 +620,40 @@ const registerProductImageAlpineData = () => {
             });
         },
 
+        async composeEditedCanvas(maxEdge) {
+            if (! this.savedCropper) {
+                return null;
+            }
+
+            const canvas = this.savedCropper.getCroppedCanvas({
+                maxWidth: maxEdge,
+                maxHeight: maxEdge,
+                fillColor: '#ffffff',
+            });
+
+            if (! canvas) {
+                return null;
+            }
+
+            const output = document.createElement('canvas');
+            output.width = canvas.width;
+            output.height = canvas.height;
+
+            const context = output.getContext('2d', { alpha: false });
+
+            if (! context) {
+                return null;
+            }
+
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, output.width, output.height);
+            context.drawImage(canvas, 0, 0);
+            this.drawTextOverlay(context, output);
+            await this.drawLogoOverlay(context, output);
+
+            return output;
+        },
+
         async saveSavedEdit() {
             if (! this.savedCropper || ! this.savedEditorId || this.savedSaving) {
                 return;
@@ -516,31 +663,11 @@ const registerProductImageAlpineData = () => {
             this.savedError = null;
 
             try {
-                const canvas = this.savedCropper.getCroppedCanvas({
-                    maxWidth: 1600,
-                    maxHeight: 1600,
-                    fillColor: '#ffffff',
-                });
+                const output = await this.composeEditedCanvas(1600);
 
-                if (! canvas) {
+                if (! output) {
                     throw new Error('Could not crop the image.');
                 }
-
-                const output = document.createElement('canvas');
-                output.width = canvas.width;
-                output.height = canvas.height;
-
-                const context = output.getContext('2d', { alpha: false });
-
-                if (! context) {
-                    throw new Error('Could not prepare the edited image.');
-                }
-
-                context.fillStyle = '#ffffff';
-                context.fillRect(0, 0, output.width, output.height);
-                context.drawImage(canvas, 0, 0);
-                this.drawTextOverlay(context, output);
-                await this.drawLogoOverlay(context, output);
 
                 const blob = await new Promise((resolve) => {
                     output.toBlob(resolve, 'image/jpeg', 0.88);

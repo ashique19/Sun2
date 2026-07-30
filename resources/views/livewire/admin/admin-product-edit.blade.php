@@ -341,27 +341,67 @@
                             role="dialog"
                             aria-modal="true"
                             aria-label="Edit saved image">
-                            <div class="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-xl" @click.stop>
+                            <div class="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-xl" @click.stop>
                                 <div class="flex items-center justify-between border-b border-[#EFE7D6] px-4 py-3">
-                                    <h3 class="font-semibold">Edit image</h3>
+                                    <div>
+                                        <h3 class="font-semibold">Edit image</h3>
+                                        <p class="text-xs text-[#8C8474]">Drag the crop box, then check the live preview with text/logo.</p>
+                                    </div>
                                     <button type="button" @click="closeSavedEditor()" :disabled="savedSaving" class="text-sm text-[#6B6459] hover:text-[#1E1E1E] disabled:opacity-60">Close</button>
                                 </div>
 
                                 <div class="min-h-0 flex-1 overflow-y-auto">
-                                    <div class="bg-[#FAF6EF]">
-                                        <img x-ref="savedCropImage" :src="savedEditorSrc" alt="" class="block max-h-[46vh] max-w-full mx-auto">
-                                    </div>
-
-                                    <div class="space-y-5 border-t border-[#EFE7D6] px-4 py-4">
-                                        <div>
-                                            <p class="mb-2 text-xs font-medium text-[#6B6459]">Crop &amp; rotate</p>
-                                            <div class="flex flex-wrap gap-2">
-                                                <button type="button" @click="rotateSaved(-90)" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Rotate left</button>
-                                                <button type="button" @click="rotateSaved(90)" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Rotate right</button>
-                                                <button type="button" @click="resetSavedCrop()" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Reset crop</button>
+                                    <div class="grid gap-0 lg:grid-cols-2">
+                                        <div class="border-b border-[#EFE7D6] lg:border-b-0 lg:border-r">
+                                            <div class="flex items-center justify-between gap-2 border-b border-[#EFE7D6] bg-[#FAF6EF] px-4 py-2">
+                                                <p class="text-xs font-medium text-[#6B6459]">Crop</p>
+                                                <p class="text-[11px] text-[#8C8474]">Drag corners to crop · scroll to zoom</p>
+                                            </div>
+                                            <div class="saved-cropper-wrap relative min-h-[280px] bg-[#2A2A2A]">
+                                                <img x-ref="savedCropImage" :src="savedEditorSrc" alt="" class="block max-h-[46vh] max-w-full mx-auto">
+                                            </div>
+                                            <div class="space-y-3 border-t border-[#EFE7D6] px-4 py-3">
+                                                <div class="flex flex-wrap gap-2">
+                                                    <button type="button" @click="rotateSaved(-90)" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Rotate left</button>
+                                                    <button type="button" @click="rotateSaved(90)" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Rotate right</button>
+                                                    <button type="button" @click="resetSavedCrop()" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Reset crop</button>
+                                                </div>
+                                                <div>
+                                                    <p class="mb-1.5 text-[11px] text-[#8C8474]">Aspect ratio</p>
+                                                    <div class="flex flex-wrap gap-2">
+                                                        <button type="button" @click="setSavedAspect('free')" :disabled="savedSaving"
+                                                            class="rounded border px-2.5 py-1 text-xs disabled:opacity-60"
+                                                            :class="savedAspect === 'free' ? 'border-[#C9A227] bg-[#FAF6EF] text-[#C9A227]' : 'border-[#E0D6C2] hover:bg-[#FAF6EF]'">Free</button>
+                                                        <button type="button" @click="setSavedAspect(1)" :disabled="savedSaving"
+                                                            class="rounded border px-2.5 py-1 text-xs disabled:opacity-60"
+                                                            :class="savedAspect === 1 ? 'border-[#C9A227] bg-[#FAF6EF] text-[#C9A227]' : 'border-[#E0D6C2] hover:bg-[#FAF6EF]'">1:1</button>
+                                                        <button type="button" @click="setSavedAspect(4/3)" :disabled="savedSaving"
+                                                            class="rounded border px-2.5 py-1 text-xs disabled:opacity-60"
+                                                            :class="savedAspect === 4/3 ? 'border-[#C9A227] bg-[#FAF6EF] text-[#C9A227]' : 'border-[#E0D6C2] hover:bg-[#FAF6EF]'">4:3</button>
+                                                        <button type="button" @click="setSavedAspect(3/4)" :disabled="savedSaving"
+                                                            class="rounded border px-2.5 py-1 text-xs disabled:opacity-60"
+                                                            :class="savedAspect === 3/4 ? 'border-[#C9A227] bg-[#FAF6EF] text-[#C9A227]' : 'border-[#E0D6C2] hover:bg-[#FAF6EF]'">3:4</button>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
 
+                                        <div>
+                                            <div class="flex items-center justify-between gap-2 border-b border-[#EFE7D6] bg-[#FAF6EF] px-4 py-2">
+                                                <p class="text-xs font-medium text-[#6B6459]">Live preview</p>
+                                                <p class="text-[11px] text-[#8C8474]" x-show="savedPreviewPending" x-cloak>Updating…</p>
+                                            </div>
+                                            <div class="flex min-h-[280px] items-center justify-center bg-[#FAF6EF] px-4 py-4">
+                                                <template x-if="savedPreviewUrl">
+                                                    <img :src="savedPreviewUrl" alt="Edited image preview"
+                                                        class="max-h-[46vh] max-w-full rounded-lg border border-[#E0D6C2] object-contain shadow-sm">
+                                                </template>
+                                                <p x-show="! savedPreviewUrl" class="text-sm text-[#8C8474]" x-cloak>Preview will appear here.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="space-y-5 border-t border-[#EFE7D6] px-4 py-4">
                                         <div class="grid gap-4 sm:grid-cols-2">
                                             <div class="space-y-3">
                                                 <p class="text-xs font-medium text-[#6B6459]">Put text on image</p>

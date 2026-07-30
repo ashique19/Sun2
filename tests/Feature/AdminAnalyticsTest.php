@@ -147,7 +147,7 @@ class AdminAnalyticsTest extends TestCase
     }
 
     #[Test]
-    public function ordered_vs_delivered_splits_by_placement_and_delivery_month(): void
+    public function ordered_vs_delivered_uses_placement_month_cohort(): void
     {
         $courier = Courier::query()->create([
             'name' => 'Steadfast',
@@ -182,17 +182,35 @@ class AdminAnalyticsTest extends TestCase
             '2026-07-01 08:00:00',
         );
 
+        // Still open — placed in July, not delivered
+        Order::query()->create([
+            'order_number' => 'AN-pending-'.uniqid(),
+            'name' => 'Pending',
+            'phone' => '01710000001',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'new',
+            'subtotal' => 500,
+            'delivery_charge' => 80,
+            'total' => 580,
+            'courier_id' => $courier->id,
+            'placed_at' => '2026-07-10 08:00:00',
+        ]);
+
         $report = app(AnalyticsService::class)->orderedVsDeliveredByMonth(2026);
         $byMonth = collect($report['months'])->keyBy('month');
 
+        // June cohort: one order placed, later delivered (even though delivery was in July)
         $this->assertSame(1, $byMonth[6]['ordered_count']);
         $this->assertSame(1080.0, $byMonth[6]['ordered_value']);
-        $this->assertSame(0, $byMonth[6]['delivered_count']);
+        $this->assertSame(1, $byMonth[6]['delivered_count']);
+        $this->assertSame(1080.0, $byMonth[6]['delivered_value']);
 
-        $this->assertSame(1, $byMonth[7]['ordered_count']);
-        $this->assertSame(2160.0, $byMonth[7]['ordered_value']);
-        $this->assertSame(2, $byMonth[7]['delivered_count']);
-        $this->assertSame(3240.0, $byMonth[7]['delivered_value']);
+        // July cohort: two placed, one delivered so far
+        $this->assertSame(2, $byMonth[7]['ordered_count']);
+        $this->assertSame(2740.0, $byMonth[7]['ordered_value']);
+        $this->assertSame(1, $byMonth[7]['delivered_count']);
+        $this->assertSame(2160.0, $byMonth[7]['delivered_value']);
     }
 
     #[Test]

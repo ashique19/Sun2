@@ -106,7 +106,9 @@ class AnalyticsService
     }
 
     /**
-     * Monthly ordered (by placed_at) vs delivered (by actual_delivery_date).
+     * Monthly ordered vs delivered cohort by placement month (placed_at).
+     * Delivered count/value are from orders placed that month that later reached delivered status
+     * (not when the delivery date fell).
      *
      * @return array{
      *     year: int,
@@ -146,29 +148,22 @@ class AnalyticsService
 
         $placed = Order::query()
             ->whereNotNull('placed_at')
+            ->where('status', '!=', Order::STATUS_DRAFT)
             ->whereBetween('placed_at', [
                 $start->format('Y-m-d H:i:s'),
                 $end->format('Y-m-d H:i:s'),
             ])
-            ->get(['id', 'total', 'placed_at']);
+            ->get(['id', 'total', 'placed_at', 'status', 'collected_amount']);
 
         foreach ($placed as $order) {
             $month = (int) $order->placed_at->timezone('Asia/Dhaka')->month;
             $months[$month]['ordered_count']++;
             $months[$month]['ordered_value'] += (float) ($order->total ?? 0);
-        }
 
-        $delivered = Order::query()
-            ->where('status', 'delivered')
-            ->whereNotNull('actual_delivery_date')
-            ->whereBetween('actual_delivery_date', [
-                $start->format('Y-m-d H:i:s'),
-                $end->format('Y-m-d H:i:s'),
-            ])
-            ->get(['id', 'collected_amount', 'total', 'actual_delivery_date']);
+            if ($order->status !== 'delivered') {
+                continue;
+            }
 
-        foreach ($delivered as $order) {
-            $month = (int) $order->actual_delivery_date->timezone('Asia/Dhaka')->month;
             $months[$month]['delivered_count']++;
             $collected = (float) ($order->collected_amount ?? 0);
             $months[$month]['delivered_value'] += $collected > 0

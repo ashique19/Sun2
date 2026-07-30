@@ -87,25 +87,23 @@ class AdminDashboardMetrics
             ->get()
             ->keyBy('day');
 
-        // Delivery Qty / Collected Value: delivered orders only, by actual delivery date.
+        // Delivery Qty / Collected Value: among orders placed that day, those now delivered.
         $deliveredByDay = Order::query()
             ->where('status', 'delivered')
-            ->whereNotNull('actual_delivery_date')
-            ->where('actual_delivery_date', '>=', $previousMonthStart)
-            ->selectRaw('DATE(actual_delivery_date) as day')
+            ->where('placed_at', '>=', $previousMonthStart)
+            ->selectRaw('DATE(placed_at) as day')
             ->selectRaw('COALESCE(SUM(collected_amount), 0) as delivery_value')
-            ->groupByRaw('DATE(actual_delivery_date)')
+            ->groupByRaw('DATE(placed_at)')
             ->get()
             ->keyBy('day');
 
         $deliveredItemsByDay = DB::table('order_products')
             ->join('orders', 'orders.id', '=', 'order_products.order_id')
             ->where('orders.status', 'delivered')
-            ->whereNotNull('orders.actual_delivery_date')
-            ->where('orders.actual_delivery_date', '>=', $previousMonthStart)
-            ->selectRaw('DATE(orders.actual_delivery_date) as day')
+            ->where('orders.placed_at', '>=', $previousMonthStart)
+            ->selectRaw('DATE(orders.placed_at) as day')
             ->selectRaw('COALESCE(SUM(CASE WHEN order_products.quantity > COALESCE(order_products.returned_quantity, 0) THEN order_products.quantity - COALESCE(order_products.returned_quantity, 0) ELSE 0 END), 0) as delivery_qty')
-            ->groupByRaw('DATE(orders.actual_delivery_date)')
+            ->groupByRaw('DATE(orders.placed_at)')
             ->get()
             ->keyBy('day');
 

@@ -141,17 +141,18 @@ class AdminDashboardMetricsTest extends TestCase
         $yesterdayRow = $this->dayRow($months[0]['days'], $yesterday->toDateString());
         $previousRow = $this->dayRow($months[1]['days'], $previousMonthDay->toDateString());
 
+        // DQ/CV follow placement day cohort (of orders placed that day, how many delivered / collected).
         $this->assertNotNull($todayRow);
         $this->assertSame(2, $todayRow['order_qty']);
         $this->assertSame(2090.0, $todayRow['order_value']);
-        $this->assertSame(6, $todayRow['delivery_qty']);
-        $this->assertSame(1500.0, $todayRow['delivery_value']);
+        $this->assertSame(2, $todayRow['delivery_qty']); // deliveredToday net items (3-1); pending excluded
+        $this->assertSame(1200.0, $todayRow['delivery_value']);
 
         $this->assertNotNull($yesterdayRow);
         $this->assertSame(2, $yesterdayRow['order_qty']);
         $this->assertSame(1430.0, $yesterdayRow['order_value']);
-        $this->assertSame(1, $yesterdayRow['delivery_qty']);
-        $this->assertSame(450.0, $yesterdayRow['delivery_value']);
+        $this->assertSame(5, $yesterdayRow['delivery_qty']); // 4 + 1 from both delivered orders placed yesterday
+        $this->assertSame(750.0, $yesterdayRow['delivery_value']); // 300 + 450
 
         $this->assertNotNull($previousRow);
         $this->assertSame('Jun-05', $previousRow['label']);

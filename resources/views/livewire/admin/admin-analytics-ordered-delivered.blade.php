@@ -15,7 +15,7 @@
             </div>
             <h1 class="font-serif text-3xl font-semibold">Ordered vs delivered</h1>
             <p class="mt-1 text-sm text-[#8C8474]">
-                Ordered by placement month · Delivered by delivery month (not the same cohort).
+                Same cohort: of orders placed that month, how many were delivered and how much was collected.
             </p>
         </div>
         <div>

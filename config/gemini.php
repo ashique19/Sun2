@@ -1,12 +1,50 @@
 <?php
 
 return [
+    /*
+    |--------------------------------------------------------------------------
+    | Gemini API keys
+    |--------------------------------------------------------------------------
+    |
+    | Primary key plus optional extras. Requests try keys in order when one
+    | is rate-limited, unauthorized, or otherwise unavailable.
+    |
+    | GEMINI_API_KEYS=key-a,key-b,key-c
+    |
+    */
     'api_key' => env('GEMINI_API_KEY', env('GOOGLE_GEMINI_API_KEY', env('GOOGLE_API_KEY'))),
 
+    'api_keys' => array_values(array_filter(array_map(
+        static fn (string $key): string => trim($key),
+        explode(',', (string) env('GEMINI_API_KEYS', '')),
+    ))),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Text / JSON models (tried in order)
+    |--------------------------------------------------------------------------
+    */
     'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
 
-    // Image-capable model for product photo generation / edit (Nano Banana family).
+    'models' => array_values(array_filter(array_map(
+        static fn (string $model): string => trim($model),
+        explode(',', (string) env('GEMINI_MODELS', 'gemini-2.5-flash,gemini-2.0-flash')),
+    ))),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Image models (tried in order)
+    |--------------------------------------------------------------------------
+    */
     'image_model' => env('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image'),
+
+    'image_models' => array_values(array_filter(array_map(
+        static fn (string $model): string => trim($model),
+        explode(',', (string) env(
+            'GEMINI_IMAGE_MODELS',
+            'gemini-2.5-flash-image,gemini-3.1-flash-image-preview,gemini-3-pro-image-preview',
+        )),
+    ))),
 
     'base_url' => rtrim(env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'), '/'),
 

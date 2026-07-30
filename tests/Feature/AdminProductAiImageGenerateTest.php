@@ -243,7 +243,9 @@ class AdminProductAiImageGenerateTest extends TestCase
     {
         config([
             'gemini.api_key' => 'test-key',
+            'gemini.api_keys' => [],
             'gemini.image_model' => 'gemini-2.5-flash-image',
+            'gemini.image_models' => ['gemini-2.5-flash-image'],
             'gemini.base_url' => 'https://example.test/v1beta',
         ]);
 
@@ -252,7 +254,7 @@ class AdminProductAiImageGenerateTest extends TestCase
                 'error' => [
                     'message' => str_repeat('x', 400),
                 ],
-            ], 500),
+            ], 400),
         ]);
 
         try {
@@ -261,7 +263,7 @@ class AdminProductAiImageGenerateTest extends TestCase
             ]);
             $this->fail('Expected RuntimeException was not thrown.');
         } catch (\RuntimeException $e) {
-            $this->assertStringContainsString('Gemini image API error (500):', $e->getMessage());
+            $this->assertStringContainsString('Gemini image API error (400):', $e->getMessage());
             $this->assertLessThanOrEqual(320, strlen($e->getMessage()));
             $this->assertStringEndsWith('…', $e->getMessage());
         }
@@ -272,7 +274,9 @@ class AdminProductAiImageGenerateTest extends TestCase
     {
         config([
             'gemini.api_key' => 'test-key',
+            'gemini.api_keys' => [],
             'gemini.image_model' => 'gemini-2.5-flash-image',
+            'gemini.image_models' => ['gemini-2.5-flash-image'],
             'gemini.base_url' => 'https://example.test/v1beta',
         ]);
 

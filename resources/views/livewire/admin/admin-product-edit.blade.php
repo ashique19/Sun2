@@ -561,7 +561,8 @@
                     <div class="flex-1 space-y-5 overflow-y-auto px-4 py-4">
                         @unless ($geminiConfigured)
                             <div class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                                Gemini is not configured. Set <code class="font-mono text-xs">GEMINI_API_KEY</code> to enable generation.
+                                Gemini is not configured. Set <code class="font-mono text-xs">GEMINI_API_KEY</code>
+                                (and optional <code class="font-mono text-xs">GEMINI_API_KEYS</code>) to enable generation.
                             </div>
                         @endunless
 

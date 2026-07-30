@@ -94,7 +94,7 @@
             <div>
                 <h2 class="text-sm font-semibold">Monthly reminders</h2>
                 <p class="mt-1 text-xs text-[#8C8474]">
-                    Due days are editable. The dashboard asks from that day until you record, check, or skip.
+                    Due days are editable. The dashboard asks from 2 days before the due day through 2 days after, until you record, check, or skip.
                 </p>
             </div>
         </div>

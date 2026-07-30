@@ -11,9 +11,29 @@ use Illuminate\Support\Collection;
 
 class ExpenseAssistantService
 {
+    /** How many days before due day prompting begins. */
+    public const PROMPT_LEAD_DAYS = 2;
+
+    /** How many days after due day prompting continues if still unpaid. */
+    public const PROMPT_GRACE_DAYS = 2;
+
     public function now(): Carbon
     {
         return now('Asia/Dhaka');
+    }
+
+    public function isWithinPromptWindow(ExpenseRecurringReminder $reminder, ?Carbon $at = null): bool
+    {
+        $at = $at ?? $this->now();
+        $dueDay = $reminder->dueDayForMonth((int) $at->year, (int) $at->month);
+        $day = (int) $at->day;
+        $windowStart = max(1, $dueDay - self::PROMPT_LEAD_DAYS);
+        $windowEnd = min(
+            (int) $at->copy()->endOfMonth()->day,
+            $dueDay + self::PROMPT_GRACE_DAYS,
+        );
+
+        return $day >= $windowStart && $day <= $windowEnd;
     }
 
     public function isEveningWindow(?Carbon $at = null): bool
@@ -43,7 +63,7 @@ class ExpenseAssistantService
     }
 
     /**
-     * Active reminders due today or earlier this month that still need action.
+     * Active reminders in the short prompt window (2 days before due through 2 days after).
      *
      * @return Collection<int, ExpenseRecurringReminder>
      */
@@ -52,7 +72,6 @@ class ExpenseAssistantService
         $at = $at ?? $this->now();
         $year = (int) $at->year;
         $month = (int) $at->month;
-        $day = (int) $at->day;
         $monthKey = $this->monthPeriodKey($at);
 
         $skippedIds = [];
@@ -85,10 +104,8 @@ class ExpenseAssistantService
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
-            ->filter(function (ExpenseRecurringReminder $reminder) use ($year, $month, $day, $skippedIds, $checkedIds) {
-                $dueDay = $reminder->dueDayForMonth($year, $month);
-
-                if ($day < $dueDay) {
+            ->filter(function (ExpenseRecurringReminder $reminder) use ($year, $month, $at, $skippedIds, $checkedIds) {
+                if (! $this->isWithinPromptWindow($reminder, $at)) {
                     return false;
                 }
 

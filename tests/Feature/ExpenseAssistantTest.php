@@ -53,16 +53,22 @@ class ExpenseAssistantTest extends TestCase
     }
 
     #[Test]
-    public function due_reminders_appear_from_due_day_until_recorded_or_skipped(): void
+    public function due_reminders_appear_from_two_days_before_due_through_short_grace(): void
     {
-        Carbon::setTestNow(Carbon::parse('2026-07-05 10:00:00', 'Asia/Dhaka'));
-
         $admin = $this->adminUser();
         $assistant = app(ExpenseAssistantService::class);
 
-        $salary = ExpenseRecurringReminder::query()->where('title', 'Salary')->firstOrFail();
-        $internet = ExpenseRecurringReminder::query()->where('title', 'Internet')->firstOrFail();
+        $salary = ExpenseRecurringReminder::query()->where('title', 'Salary')->firstOrFail(); // due day 5
+        $internet = ExpenseRecurringReminder::query()->where('title', 'Internet')->firstOrFail(); // due day 9
 
+        // Too early for salary (due 5 → window starts 3)
+        Carbon::setTestNow(Carbon::parse('2026-07-02 10:00:00', 'Asia/Dhaka'));
+        $due = $assistant->dueReminders($admin);
+        $this->assertFalse($due->contains('id', $salary->id));
+        $this->assertFalse($due->contains('id', $internet->id));
+
+        // Two days before salary due
+        Carbon::setTestNow(Carbon::parse('2026-07-03 10:00:00', 'Asia/Dhaka'));
         $due = $assistant->dueReminders($admin);
         $this->assertTrue($due->contains('id', $salary->id));
         $this->assertFalse($due->contains('id', $internet->id));
@@ -71,11 +77,13 @@ class ExpenseAssistantTest extends TestCase
         $due = $assistant->dueReminders($admin);
         $this->assertFalse($due->contains('id', $salary->id));
 
+        // Internet due 9 → window 7–11; still in window on day 9
         Carbon::setTestNow(Carbon::parse('2026-07-09 10:00:00', 'Asia/Dhaka'));
         $due = $assistant->dueReminders($admin);
         $this->assertTrue($due->contains('id', $internet->id));
 
-        $assistant->skipReminder($internet, $admin);
+        // Past grace (due 9 + 2 = 11) — stop nagging so the dashboard stays clear
+        Carbon::setTestNow(Carbon::parse('2026-07-12 10:00:00', 'Asia/Dhaka'));
         $due = $assistant->dueReminders($admin);
         $this->assertFalse($due->contains('id', $internet->id));
 
@@ -112,33 +120,39 @@ class ExpenseAssistantTest extends TestCase
     #[Test]
     public function dashboard_can_record_skip_and_check_reminders(): void
     {
-        Carbon::setTestNow(Carbon::parse('2026-07-05 10:00:00', 'Asia/Dhaka'));
         $this->actingAs($this->adminUser());
 
         $salary = ExpenseRecurringReminder::query()->where('title', 'Salary')->firstOrFail();
         $electricity = ExpenseRecurringReminder::query()->where('title', 'Electricity (prepaid)')->firstOrFail();
 
+        // Electricity due day 1 → prompt window days 1–3
+        Carbon::setTestNow(Carbon::parse('2026-07-02 10:00:00', 'Asia/Dhaka'));
+        Livewire::test(AdminDashboard::class)
+            ->assertSee('Electricity (prepaid) checked?')
+            ->call('markExpenseReminderChecked', $electricity->id)
+            ->assertSee('marked as checked');
+
+        $this->assertDatabaseHas('expense_assistant_dismissals', [
+            'scope' => ExpenseAssistantDismissal::SCOPE_REMINDER_CHECKED,
+            'reminder_id' => $electricity->id,
+            'period_key' => '2026-07',
+        ]);
+
+        // Salary due day 5 → prompt window days 3–7
+        Carbon::setTestNow(Carbon::parse('2026-07-05 10:00:00', 'Asia/Dhaka'));
         Livewire::test(AdminDashboard::class)
             ->assertSee('Expense assistant')
             ->assertSee('Salary paid?')
-            ->assertSee('Electricity (prepaid) checked?')
+            ->assertDontSee('Electricity (prepaid) checked?')
             ->set('expenseReminderAmounts.'.$salary->id, '40000')
             ->call('recordExpenseReminder', $salary->id)
-            ->assertSee('Salary recorded.')
-            ->call('markExpenseReminderChecked', $electricity->id)
-            ->assertSee('marked as checked');
+            ->assertSee('Salary recorded.');
 
         $this->assertDatabaseHas('expenses', [
             'title' => 'Salary',
             'amount' => 40000,
             'category' => 'salary',
             'kind' => Expense::KIND_RECURRING,
-        ]);
-
-        $this->assertDatabaseHas('expense_assistant_dismissals', [
-            'scope' => ExpenseAssistantDismissal::SCOPE_REMINDER_CHECKED,
-            'reminder_id' => $electricity->id,
-            'period_key' => '2026-07',
         ]);
 
         Carbon::setTestNow();

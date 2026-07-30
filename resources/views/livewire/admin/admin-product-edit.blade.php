@@ -128,6 +128,15 @@
                                     @if ($image->is_primary)
                                         <span class="absolute top-2 left-2 rounded bg-[#C9A227] px-2 py-0.5 text-[10px] font-semibold text-white">Primary</span>
                                     @endif
+                                    <button type="button"
+                                        @click.stop="openSavedEditor({{ $image->id }}, @js(asset(ltrim($image->path, '/'))))"
+                                        class="absolute top-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-[#1E1E1E] shadow-sm ring-1 ring-[#E0D6C2] hover:bg-[#FAF6EF]"
+                                        title="Edit image"
+                                        aria-label="Edit image">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                                            <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
+                                        </svg>
+                                    </button>
                                 </div>
                                 <div>
                                     <label class="block text-xs font-medium text-[#6B6459] mb-1">Alt text</label>
@@ -317,6 +326,118 @@
                                         <button type="button" @click="closeEditor()" class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm">Cancel</button>
                                         <button type="button" @click="applyCrop()" class="rounded-full bg-[#C9A227] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">Apply</button>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </template>
+
+                <template x-teleport="body">
+                    <template x-if="savedEditorOpen">
+                        <div
+                            class="fixed inset-0 z-[85] flex items-center justify-center bg-black/60 p-4"
+                            @keydown.escape.window="if (! savedSaving) closeSavedEditor()"
+                            @click.self="onSavedEditorOutside()"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label="Edit saved image">
+                            <div class="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-xl" @click.stop>
+                                <div class="flex items-center justify-between border-b border-[#EFE7D6] px-4 py-3">
+                                    <h3 class="font-semibold">Edit image</h3>
+                                    <button type="button" @click="closeSavedEditor()" :disabled="savedSaving" class="text-sm text-[#6B6459] hover:text-[#1E1E1E] disabled:opacity-60">Close</button>
+                                </div>
+
+                                <div class="min-h-0 flex-1 overflow-y-auto">
+                                    <div class="bg-[#FAF6EF]">
+                                        <img x-ref="savedCropImage" :src="savedEditorSrc" alt="" class="block max-h-[46vh] max-w-full mx-auto">
+                                    </div>
+
+                                    <div class="space-y-5 border-t border-[#EFE7D6] px-4 py-4">
+                                        <div>
+                                            <p class="mb-2 text-xs font-medium text-[#6B6459]">Crop &amp; rotate</p>
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="button" @click="rotateSaved(-90)" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Rotate left</button>
+                                                <button type="button" @click="rotateSaved(90)" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Rotate right</button>
+                                                <button type="button" @click="resetSavedCrop()" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Reset crop</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="grid gap-4 sm:grid-cols-2">
+                                            <div class="space-y-3">
+                                                <p class="text-xs font-medium text-[#6B6459]">Put text on image</p>
+                                                <div>
+                                                    <label class="mb-1 block text-[11px] text-[#8C8474]" for="saved-overlay-text">Text</label>
+                                                    <input id="saved-overlay-text" type="text" x-model="overlayText" :disabled="savedSaving"
+                                                        placeholder="Optional overlay text"
+                                                        class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm disabled:opacity-60">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-[11px] text-[#8C8474]" for="saved-overlay-text-size">
+                                                        Text size <span class="tabular-nums" x-text="`${overlayTextSize}px`"></span>
+                                                    </label>
+                                                    <input id="saved-overlay-text-size" type="range" min="20" max="96" step="1" x-model.number="overlayTextSize" :disabled="savedSaving"
+                                                        class="w-full accent-[#C9A227] disabled:opacity-60">
+                                                </div>
+                                                <div>
+                                                    <p class="mb-1 text-[11px] text-[#8C8474]">Text position</p>
+                                                    <div class="grid grid-cols-2 gap-2">
+                                                        <template x-for="option in overlayPositions()" :key="`text-${option.value}`">
+                                                            <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-[#E0D6C2] px-2 py-1.5 text-xs hover:bg-[#FAF6EF]">
+                                                                <input type="radio" name="overlay-text-position" :value="option.value" x-model="overlayTextPosition" :disabled="savedSaving" class="text-[#C9A227]">
+                                                                <span x-text="option.label"></span>
+                                                            </label>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="space-y-3">
+                                                <div class="flex items-center justify-between gap-2">
+                                                    <p class="text-xs font-medium text-[#6B6459]">Put logo on image</p>
+                                                    <label class="flex items-center gap-2 text-xs text-[#6B6459]">
+                                                        <input type="checkbox" x-model="overlayLogoEnabled" :disabled="savedSaving" class="rounded border-[#E0D6C2] text-[#C9A227]">
+                                                        Enable
+                                                    </label>
+                                                </div>
+                                                <div class="overflow-hidden rounded-lg border border-[#EFE7D6] bg-[#FAF6EF] px-3 py-2">
+                                                    <img :src="logoUrl" alt="Brand logo" class="mx-auto h-8 w-auto object-contain opacity-90">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-[11px] text-[#8C8474]" for="saved-overlay-logo-size">
+                                                        Logo size <span class="tabular-nums" x-text="`${overlayLogoSize}%`"></span>
+                                                    </label>
+                                                    <input id="saved-overlay-logo-size" type="range" min="8" max="50" step="1" x-model.number="overlayLogoSize"
+                                                        :disabled="savedSaving || ! overlayLogoEnabled"
+                                                        class="w-full accent-[#C9A227] disabled:opacity-60">
+                                                </div>
+                                                <div>
+                                                    <p class="mb-1 text-[11px] text-[#8C8474]">Logo position</p>
+                                                    <div class="grid grid-cols-2 gap-2">
+                                                        <template x-for="option in overlayPositions()" :key="`logo-${option.value}`">
+                                                            <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-[#E0D6C2] px-2 py-1.5 text-xs hover:bg-[#FAF6EF]"
+                                                                :class="{ 'opacity-60': ! overlayLogoEnabled }">
+                                                                <input type="radio" name="overlay-logo-position" :value="option.value" x-model="overlayLogoPosition"
+                                                                    :disabled="savedSaving || ! overlayLogoEnabled" class="text-[#C9A227]">
+                                                                <span x-text="option.label"></span>
+                                                            </label>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <p x-show="savedError" x-text="savedError" class="text-xs text-rose-600" x-cloak></p>
+                                    </div>
+                                </div>
+
+                                <div class="flex flex-wrap items-center justify-end gap-2 border-t border-[#EFE7D6] px-4 py-3">
+                                    <button type="button" @click="closeSavedEditor()" :disabled="savedSaving"
+                                        class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm disabled:opacity-60">Cancel</button>
+                                    <button type="button" @click="saveSavedEdit()" :disabled="savedSaving"
+                                        class="rounded-full bg-[#C9A227] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
+                                        <span x-show="! savedSaving">Save changes</span>
+                                        <span x-show="savedSaving" x-cloak>Saving…</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>

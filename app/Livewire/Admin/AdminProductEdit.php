@@ -58,6 +58,8 @@ class AdminProductEdit extends Component
     /** @var array<int, TemporaryUploadedFile> */
     public array $newImages = [];
 
+    public mixed $editedImage = null;
+
     /** @var array<int, string> */
     public array $pendingAlts = [];
 
@@ -463,6 +465,31 @@ class AdminProductEdit extends Component
         }
 
         $this->message = $count === 1 ? 'Image uploaded.' : "{$count} images uploaded.";
+    }
+
+    public function replaceEditedImage(int $imageId, ProductImageService $images): void
+    {
+        $image = $this->findOwnedImage($imageId);
+        $wasPrimary = $image->is_primary;
+
+        $this->validate([
+            'editedImage' => Fileinfo::storedImageRules(5120),
+        ]);
+
+        /** @var TemporaryUploadedFile|UploadedFile $file */
+        $file = $this->editedImage;
+        $images->replace($image, $file);
+        $this->editedImage = null;
+
+        $this->refreshImages();
+        $this->syncImageAlts();
+
+        if ($wasPrimary && $this->product?->priced_image_path) {
+            app(ProductPricedImageService::class)->generate($this->product->fresh());
+            $this->product->refresh();
+        }
+
+        $this->message = 'Image updated.';
     }
 
     /**

@@ -104,6 +104,35 @@ class ProductImageService
     }
 
     /**
+     * Replace an existing gallery image with a new upload (same DB row), rebuilding compressed variants.
+     */
+    public function replace(ProductImage $image, UploadedFile $file): ProductImage
+    {
+        $directory = $this->productDirectory((int) $image->product_id);
+        File::ensureDirectoryExists($directory);
+
+        $basename = now()->format('YmdHis').'_'.Str::lower(Str::random(6));
+        $newPath = $this->persistCompressedVariants(
+            $file->getRealPath() ?: '',
+            $directory,
+            $basename,
+            (int) $image->product_id,
+        );
+        $oldPath = $image->path;
+
+        $image->update([
+            'path' => $newPath,
+            'perceptual_hash' => $this->safeHash(public_path(ltrim($newPath, '/'))),
+        ]);
+
+        if ($oldPath !== $newPath) {
+            $this->deleteLocalFile($oldPath);
+        }
+
+        return $image->refresh();
+    }
+
+    /**
      * Downscale an existing gallery image to fit within max width/height (aspect preserved, never upscaled),
      * then rewrite compressed `_lg` / `_md` / `_sm` / `_xs` variants.
      */

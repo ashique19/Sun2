@@ -40,11 +40,13 @@ class AdminProductEditImageModalTest extends TestCase
         Livewire::test(AdminProductEdit::class, ['product' => $product])
             ->assertSeeHtml('wire:ignore')
             ->assertSeeHtml('x-if="editorOpen"')
+            ->assertSeeHtml('x-if="savedEditorOpen"')
             ->assertSeeHtml('x-teleport="body"')
             ->assertSeeHtml('@click.self="onEditorOutside()"')
             ->assertSeeHtml('@click.stop="openEditor(index)"')
             ->assertDontSeeHtml('@click.outside="closeEditor()"')
             ->assertDontSeeHtml('x-show="editorOpen"')
+            ->assertDontSeeHtml('x-show="savedEditorOpen"')
             ->assertDontSeeHtml('x-show="editorOpen" x-cloak');
     }
 

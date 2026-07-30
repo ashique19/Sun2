@@ -20,6 +20,21 @@ const registerProductImageAlpineData = () => {
         uploadProgress: 0,
         uploadStatus: '',
         uploadError: null,
+        savedEditorOpen: false,
+        savedEditorId: null,
+        savedEditorSrc: '',
+        savedAllowOutsideClose: false,
+        savedCropper: null,
+        savedSaving: false,
+        savedError: null,
+        overlayText: '',
+        overlayTextSize: 48,
+        overlayTextPosition: 'bottom-left',
+        overlayLogoEnabled: false,
+        overlayLogoSize: 22,
+        overlayLogoPosition: 'top-right',
+        logoUrl: '/img/settings/logo.png',
+        logoImage: null,
 
         addFiles(event) {
             const files = Array.from(event.target.files ?? []);
@@ -272,12 +287,293 @@ const registerProductImageAlpineData = () => {
 
                 return errors.first('newImages')
                     || errors.first('newImages.0')
+                    || errors.first('editedImage')
                     || errors.first('name')
                     || errors.first('slug')
                     || errors.first('price')
                     || null;
             } catch {
                 return null;
+            }
+        },
+
+        openSavedEditor(id, src) {
+            this.savedError = null;
+            this.savedSaving = false;
+            this.savedAllowOutsideClose = false;
+            this.savedEditorId = id;
+            this.savedEditorSrc = src;
+            this.overlayText = '';
+            this.overlayTextSize = 48;
+            this.overlayTextPosition = 'bottom-left';
+            this.overlayLogoEnabled = false;
+            this.overlayLogoSize = 22;
+            this.overlayLogoPosition = 'top-right';
+            this.savedEditorOpen = true;
+            this.preloadLogo();
+
+            this.$nextTick(() => {
+                afterPaint(() => {
+                    this.savedAllowOutsideClose = true;
+                    this.bootSavedCropper();
+                });
+            });
+        },
+
+        preloadLogo() {
+            if (this.logoImage && this.logoImage.complete) {
+                return;
+            }
+
+            const image = new Image();
+            image.decoding = 'async';
+            image.src = this.logoUrl;
+            this.logoImage = image;
+        },
+
+        bootSavedCropper() {
+            const image = this.$refs.savedCropImage;
+
+            if (!image || !this.savedEditorOpen) {
+                return;
+            }
+
+            const start = () => this.initSavedCropper();
+
+            if (image.complete && image.naturalWidth > 0) {
+                start();
+            } else {
+                image.onload = start;
+            }
+        },
+
+        initSavedCropper() {
+            this.destroySavedCropper();
+
+            const image = this.$refs.savedCropImage;
+
+            if (!image || !this.savedEditorOpen) {
+                return;
+            }
+
+            this.savedCropper = new Cropper(image, {
+                viewMode: 1,
+                dragMode: 'move',
+                autoCropArea: 1,
+                responsive: true,
+                background: false,
+            });
+        },
+
+        destroySavedCropper() {
+            if (this.savedCropper) {
+                this.savedCropper.destroy();
+                this.savedCropper = null;
+            }
+        },
+
+        closeSavedEditor() {
+            this.destroySavedCropper();
+            this.savedEditorOpen = false;
+            this.savedEditorId = null;
+            this.savedEditorSrc = '';
+            this.savedAllowOutsideClose = false;
+            this.savedSaving = false;
+            this.savedError = null;
+        },
+
+        onSavedEditorOutside() {
+            if (this.savedAllowOutsideClose && ! this.savedSaving) {
+                this.closeSavedEditor();
+            }
+        },
+
+        rotateSaved(degrees) {
+            this.savedCropper?.rotate(degrees);
+        },
+
+        resetSavedCrop() {
+            this.savedCropper?.reset();
+        },
+
+        overlayPositions() {
+            return [
+                { value: 'top-left', label: 'Top left' },
+                { value: 'top-right', label: 'Top right' },
+                { value: 'bottom-left', label: 'Bottom left' },
+                { value: 'bottom-right', label: 'Bottom right' },
+            ];
+        },
+
+        cornerOrigin(position, width, height, boxWidth, boxHeight, pad) {
+            switch (position) {
+                case 'top-right':
+                    return { x: width - boxWidth - pad, y: pad };
+                case 'bottom-left':
+                    return { x: pad, y: height - boxHeight - pad };
+                case 'bottom-right':
+                    return { x: width - boxWidth - pad, y: height - boxHeight - pad };
+                case 'top-left':
+                default:
+                    return { x: pad, y: pad };
+            }
+        },
+
+        drawTextOverlay(context, canvas) {
+            const text = String(this.overlayText || '').trim();
+
+            if (text === '') {
+                return;
+            }
+
+            const fontSize = Math.max(16, Math.min(120, Number(this.overlayTextSize) || 48));
+            context.font = `700 ${fontSize}px "DejaVu Sans", "Segoe UI", sans-serif`;
+            context.textBaseline = 'top';
+
+            const metrics = context.measureText(text);
+            const textWidth = Math.ceil(metrics.width);
+            const textHeight = Math.ceil(fontSize * 1.25);
+            const padX = Math.round(fontSize * 0.45);
+            const padY = Math.round(fontSize * 0.3);
+            const boxWidth = textWidth + padX * 2;
+            const boxHeight = textHeight + padY * 2;
+            const pad = Math.round(Math.min(canvas.width, canvas.height) * 0.03);
+            const origin = this.cornerOrigin(
+                this.overlayTextPosition,
+                canvas.width,
+                canvas.height,
+                boxWidth,
+                boxHeight,
+                pad,
+            );
+
+            context.fillStyle = 'rgba(255, 255, 255, 0.82)';
+            context.fillRect(origin.x, origin.y, boxWidth, boxHeight);
+            context.fillStyle = '#1E1E1E';
+            context.fillText(text, origin.x + padX, origin.y + padY);
+        },
+
+        async drawLogoOverlay(context, canvas) {
+            if (! this.overlayLogoEnabled) {
+                return;
+            }
+
+            await this.ensureLogoLoaded();
+
+            const logo = this.logoImage;
+
+            if (! logo || ! logo.naturalWidth) {
+                throw new Error('Could not load the brand logo for overlay.');
+            }
+
+            const targetWidth = Math.max(
+                24,
+                Math.round(canvas.width * (Math.max(8, Math.min(60, Number(this.overlayLogoSize) || 22)) / 100)),
+            );
+            const scale = targetWidth / logo.naturalWidth;
+            const targetHeight = Math.max(12, Math.round(logo.naturalHeight * scale));
+            const pad = Math.round(Math.min(canvas.width, canvas.height) * 0.03);
+            const origin = this.cornerOrigin(
+                this.overlayLogoPosition,
+                canvas.width,
+                canvas.height,
+                targetWidth,
+                targetHeight,
+                pad,
+            );
+
+            context.drawImage(logo, origin.x, origin.y, targetWidth, targetHeight);
+        },
+
+        ensureLogoLoaded() {
+            return new Promise((resolve, reject) => {
+                this.preloadLogo();
+                const logo = this.logoImage;
+
+                if (! logo) {
+                    reject(new Error('Logo is not available.'));
+
+                    return;
+                }
+
+                if (logo.complete && logo.naturalWidth > 0) {
+                    resolve();
+
+                    return;
+                }
+
+                logo.onload = () => resolve();
+                logo.onerror = () => reject(new Error('Could not load the brand logo.'));
+            });
+        },
+
+        async saveSavedEdit() {
+            if (! this.savedCropper || ! this.savedEditorId || this.savedSaving) {
+                return;
+            }
+
+            this.savedSaving = true;
+            this.savedError = null;
+
+            try {
+                const canvas = this.savedCropper.getCroppedCanvas({
+                    maxWidth: 1600,
+                    maxHeight: 1600,
+                    fillColor: '#ffffff',
+                });
+
+                if (! canvas) {
+                    throw new Error('Could not crop the image.');
+                }
+
+                const output = document.createElement('canvas');
+                output.width = canvas.width;
+                output.height = canvas.height;
+
+                const context = output.getContext('2d', { alpha: false });
+
+                if (! context) {
+                    throw new Error('Could not prepare the edited image.');
+                }
+
+                context.fillStyle = '#ffffff';
+                context.fillRect(0, 0, output.width, output.height);
+                context.drawImage(canvas, 0, 0);
+                this.drawTextOverlay(context, output);
+                await this.drawLogoOverlay(context, output);
+
+                const blob = await new Promise((resolve) => {
+                    output.toBlob(resolve, 'image/jpeg', 0.88);
+                });
+
+                if (! blob) {
+                    throw new Error('Could not encode the edited image.');
+                }
+
+                const file = new File([blob], `edited-${this.savedEditorId}.jpg`, {
+                    type: 'image/jpeg',
+                });
+                const imageId = this.savedEditorId;
+
+                await new Promise((resolve, reject) => {
+                    this.$wire.upload(
+                        'editedImage',
+                        file,
+                        () => resolve(),
+                        (error) => reject(error instanceof Error ? error : new Error(String(error || 'Upload failed'))),
+                        () => {},
+                        () => reject(new Error('Upload cancelled')),
+                    );
+                });
+
+                await this.$wire.replaceEditedImage(imageId);
+                this.closeSavedEditor();
+            } catch (error) {
+                console.error(error);
+                const livewireMessage = this.firstLivewireError();
+                this.savedError = livewireMessage
+                    || (error?.message ? error.message : 'Could not save the edited image.');
+                this.savedSaving = false;
             }
         },
     }));

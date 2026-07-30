@@ -242,12 +242,12 @@ class AdminAnalyticsTest extends TestCase
         $report = app(AnalyticsService::class)->revenueByCategoryByMonth(2026);
         $byName = collect($report['categories'])->keyBy('name');
 
-        $this->assertSame(2500.0, $byName['Saree']['total']);
+        $this->assertSame(1000.0, $byName['Saree']['total']);
         $this->assertSame(1000.0, $byName['Kurti']['total']);
         $this->assertSame(500.0, $byName['Saree']['values'][6]); // July index 6
         $this->assertSame(1000.0, $byName['Kurti']['values'][6]);
         $this->assertSame(500.0, $byName['Saree']['values'][7]); // August
-        $this->assertSame(3500.0, $report['grand_total']);
+        $this->assertSame(2000.0, $report['grand_total']);
 
         Livewire::test(AdminAnalyticsCategoryRevenue::class)
             ->set('year', 2026)

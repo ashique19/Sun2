@@ -1,10 +1,24 @@
-<div>
+<div
+    x-data="{ lightboxSrc: null, lightboxAlt: '' }"
+    @keydown.escape.window="lightboxSrc = null">
     <div class="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div class="flex items-start gap-4 min-w-0">
-            @php $thumb = $product->images->first()?->path @endphp
-            @if ($thumb)
-                <img src="{{ \App\Support\StorefrontAssets::mediumUrl($thumb) ?? \App\Support\StorefrontAssets::url($thumb) }}"
-                    alt="" class="h-16 w-16 rounded-lg object-cover border border-[#E7DFCF] bg-[#FAF6EF] shrink-0">
+            @php
+                $thumb = $product->images->first()?->path;
+                $thumbPreview = $thumb
+                    ? (\App\Support\StorefrontAssets::mediumUrl($thumb) ?? \App\Support\StorefrontAssets::url($thumb))
+                    : null;
+                $thumbLarge = $thumb
+                    ? (\App\Support\StorefrontAssets::largestAvailableUrl($thumb) ?? \App\Support\StorefrontAssets::url($thumb))
+                    : null;
+            @endphp
+            @if ($thumbPreview && $thumbLarge)
+                <button type="button"
+                    @click="lightboxSrc = @js($thumbLarge); lightboxAlt = @js($product->name)"
+                    class="shrink-0 rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] p-0 overflow-hidden hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A227]"
+                    aria-label="View product image larger">
+                    <img src="{{ $thumbPreview }}" alt="" class="h-16 w-16 object-cover">
+                </button>
             @endif
             <div class="min-w-0">
                 <a href="{{ route('admin.products') }}" wire:navigate class="text-sm text-[#C9A227] hover:underline">&larr; Products</a>
@@ -82,14 +96,24 @@
                 <p class="text-sm text-[#8C8474]">No images.</p>
             @else
                 <div class="grid grid-cols-3 gap-2">
-                    @foreach ($product->images->take(6) as $image)
-                        <img src="{{ \App\Support\StorefrontAssets::url($image->path) }}" alt=""
-                            class="aspect-square w-full rounded-lg object-cover border border-[#E7DFCF] bg-[#FAF6EF]">
+                    @foreach ($product->images as $image)
+                        @php
+                            $preview = \App\Support\StorefrontAssets::mediumUrl($image->path)
+                                ?? \App\Support\StorefrontAssets::url($image->path);
+                            $large = \App\Support\StorefrontAssets::largestAvailableUrl($image->path)
+                                ?? \App\Support\StorefrontAssets::url($image->path);
+                        @endphp
+                        @if ($preview && $large)
+                            <button type="button"
+                                @click="lightboxSrc = @js($large); lightboxAlt = @js($image->alt ?: $product->name)"
+                                class="aspect-square w-full overflow-hidden rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] p-0 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A227]"
+                                aria-label="View image larger">
+                                <img src="{{ $preview }}" alt="{{ $image->alt }}"
+                                    class="h-full w-full object-cover">
+                            </button>
+                        @endif
                     @endforeach
                 </div>
-                @if ($product->images->count() > 6)
-                    <p class="mt-2 text-xs text-[#8C8474]">+{{ $product->images->count() - 6 }} more</p>
-                @endif
             @endif
 
             <div class="mt-5 border-t border-[#EFE7D6] pt-4">
@@ -101,11 +125,19 @@
                     </a>
                 </div>
                 @if ($product->priced_image_path)
-                    <div class="overflow-hidden rounded-lg border border-[#E7DFCF] bg-[#FAF6EF]">
-                        <img src="{{ \App\Support\StorefrontAssets::url($product->priced_image_path) }}"
-                            alt="Priced image for {{ $product->name }}"
-                            class="w-full object-contain">
-                    </div>
+                    @php
+                        $pricedUrl = \App\Support\StorefrontAssets::url($product->priced_image_path);
+                    @endphp
+                    @if ($pricedUrl)
+                        <button type="button"
+                            @click="lightboxSrc = @js($pricedUrl); lightboxAlt = @js('Priced image for '.$product->name)"
+                            class="w-full overflow-hidden rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] p-0 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A227]"
+                            aria-label="View priced image larger">
+                            <img src="{{ $pricedUrl }}"
+                                alt="Priced image for {{ $product->name }}"
+                                class="w-full object-contain">
+                        </button>
+                    @endif
                 @else
                     <p class="text-sm text-[#8C8474]">None yet. Create one from Edit product.</p>
                 @endif
@@ -115,7 +147,7 @@
 
     <div class="mb-3">
         <h2 class="font-semibold">Analytics</h2>
-        <p class="text-sm text-[#8C8474]">Lifetime sales, delivery, and placement channel mix.</p>
+        <p class="text-sm text-[#8C8474]">Reseller sales, delivery, and placement channel mix.</p>
     </div>
 
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
@@ -216,5 +248,31 @@
                 </tfoot>
             </table>
         </div>
+    </div>
+
+    <div wire:ignore>
+        <template x-teleport="body">
+            <div
+                x-show="lightboxSrc"
+                x-cloak
+                class="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4"
+                @click.self="lightboxSrc = null"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Enlarged product image">
+                <button type="button"
+                    @click="lightboxSrc = null"
+                    class="absolute right-4 top-4 rounded-full bg-white/95 px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-white"
+                    aria-label="Close enlarged image">
+                    Close
+                </button>
+                <img
+                    x-show="lightboxSrc"
+                    :src="lightboxSrc"
+                    :alt="lightboxAlt"
+                    class="max-h-[90vh] max-w-[95vw] rounded-lg object-contain shadow-2xl"
+                    @click.stop>
+            </div>
+        </template>
     </div>
 </div>

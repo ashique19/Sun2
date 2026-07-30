@@ -89,6 +89,40 @@ class AdminProductShowTest extends TestCase
             ->assertDontSee('None yet. Create one from Edit product.');
     }
 
+    public function test_product_detail_images_open_in_lightbox_on_click(): void
+    {
+        $this->actingAs($this->adminUser());
+        $product = $this->product();
+
+        $product->images()->create([
+            'path' => '/img/products/'.$product->id.'/front_lg.jpg',
+            'alt' => 'Front view',
+            'is_primary' => true,
+            'sort_order' => 0,
+        ]);
+        $product->images()->create([
+            'path' => '/img/products/'.$product->id.'/side_lg.jpg',
+            'alt' => 'Side view',
+            'is_primary' => false,
+            'sort_order' => 1,
+        ]);
+        $product->update([
+            'priced_image_path' => '/img/products-priced/'.$product->id.'/preview.jpg',
+        ]);
+
+        Livewire::test(AdminProductShow::class, ['product' => $product->fresh(['images'])])
+            ->assertSuccessful()
+            ->assertSeeHtml('lightboxSrc')
+            ->assertSeeHtml('aria-label="View image larger"')
+            ->assertSeeHtml('aria-label="View product image larger"')
+            ->assertSeeHtml('aria-label="View priced image larger"')
+            ->assertSeeHtml('aria-label="Enlarged product image"')
+            ->assertSeeHtml('x-teleport="body"')
+            ->assertDontSee('more')
+            ->assertSeeHtml('alt="Front view"')
+            ->assertSeeHtml('alt="Side view"');
+    }
+
     public function test_legacy_performance_route_redirects_to_show(): void
     {
         $this->actingAs($this->adminUser());

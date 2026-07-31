@@ -4,6 +4,7 @@ namespace App\Livewire\Admin;
 
 use App\Models\Courier;
 use App\Services\Admin\CourierBalanceService;
+use App\Services\Couriers\CourierApiRegistry;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -27,6 +28,15 @@ class AdminCouriers extends Component
     public string $withdrawAmount = '';
 
     public string $withdrawNote = '';
+
+    /** @var array<int, float|null> */
+    public array $apiBalances = [];
+
+    public bool $apiBalancesLoaded = false;
+
+    public bool $apiBalancesLoading = false;
+
+    public ?string $apiBalanceError = null;
 
     public function delete(int $courierId): void
     {
@@ -106,6 +116,39 @@ class AdminCouriers extends Component
         $this->message = 'Withdrawal recorded for '.$courier->name.'.';
     }
 
+    /**
+     * Fetch live courier wallet balances after the page has rendered.
+     * Keeps /admin/couriers usable when Steadfast/Packzy is slow or down.
+     */
+    public function loadApiBalances(CourierBalanceService $balances, CourierApiRegistry $registry): void
+    {
+        if ($this->apiBalancesLoading || $this->apiBalancesLoaded) {
+            return;
+        }
+
+        $this->apiBalancesLoading = true;
+        $this->apiBalanceError = null;
+
+        $couriers = Courier::query()
+            ->orderByDesc('is_default')
+            ->orderBy('name')
+            ->get(['id', 'slug']);
+
+        $configuredCourier = $couriers->first(
+            fn (Courier $courier) => filled($courier->slug) && $registry->isConfigured(strtolower((string) $courier->slug))
+        );
+
+        $fetched = $balances->fetchApiBalancesFor($couriers);
+        $this->apiBalances = $fetched;
+
+        if ($configuredCourier !== null && ($fetched[$configuredCourier->id] ?? null) === null) {
+            $this->apiBalanceError = 'API balance unavailable right now.';
+        }
+
+        $this->apiBalancesLoaded = true;
+        $this->apiBalancesLoading = false;
+    }
+
     public function render(CourierBalanceService $balances)
     {
         $couriers = Courier::query()
@@ -119,7 +162,6 @@ class AdminCouriers extends Component
         return view('livewire.admin.admin-couriers', [
             'couriers' => $couriers,
             'apiSlugs' => config('couriers.api_slugs', []),
-            'apiBalances' => $balances->fetchApiBalancesFor($couriers),
             'balanceSummaries' => $summaries,
             'totalPending' => array_sum(array_column($summaries, 'pending')),
             'totalReceivable' => array_sum(array_column($summaries, 'receivable')),

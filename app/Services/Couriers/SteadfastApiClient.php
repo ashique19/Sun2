@@ -32,10 +32,12 @@ class SteadfastApiClient
 
     /**
      * Current merchant wallet balance at Steadfast/Packzy.
+     *
+     * Uses a short timeout so admin list pages stay responsive when the API is slow.
      */
     public function getBalance(): float
     {
-        $response = $this->request('get', '/get_balance');
+        $response = $this->request('get', '/get_balance', timeout: 5);
 
         $balance = $response['current_balance']
             ?? $response['balance']
@@ -76,7 +78,7 @@ class SteadfastApiClient
     /**
      * @return array<string, mixed>
      */
-    private function request(string $method, string $path, array $payload = []): array
+    private function request(string $method, string $path, array $payload = [], ?int $timeout = null): array
     {
         $apiKey = config('steadfast.api_key');
         $secretKey = config('steadfast.secret_key');
@@ -87,7 +89,7 @@ class SteadfastApiClient
 
         $url = config('steadfast.base_url').$path;
 
-        $pending = Http::timeout(config('steadfast.timeout', 30))
+        $pending = Http::timeout($timeout ?? (int) config('steadfast.timeout', 30))
             ->withHeaders([
                 'Api-Key' => $apiKey,
                 'Secret-Key' => $secretKey,

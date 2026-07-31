@@ -9,7 +9,6 @@ use App\Services\Couriers\CourierApiRegistry;
 use App\Services\Couriers\SteadfastApiClient;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use RuntimeException;
 
 class CourierBalanceService
 {
@@ -149,6 +148,8 @@ class CourierBalanceService
 
     /**
      * Live wallet balance from the courier API, if available.
+     *
+     * Never throws — API/network failures return null so admin pages stay usable.
      */
     public function fetchApiBalance(Courier $courier): ?float
     {
@@ -163,7 +164,7 @@ class CourierBalanceService
                 'steadfast' => $this->steadfast->getBalance(),
                 default => null,
             };
-        } catch (RuntimeException) {
+        } catch (\Throwable) {
             return null;
         }
     }

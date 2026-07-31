@@ -299,6 +299,38 @@ class AdminAnalyticsTest extends TestCase
         $this->assertSame(496.0, $breakdown['direct']);
         $this->assertSame(0.0, $breakdown['indirect']);
         $this->assertSame(584.0, $breakdown['profit']);
+
+        $money = $breakdown['money'];
+        $this->assertSame(1080.0, $money['bill_to_customer']);
+        $this->assertSame(1000.0, $money['product_price']);
+        $this->assertSame(80.0, $money['customer_delivery']);
+        $this->assertSame(1080.0, $money['remittance_base']);
+        $this->assertSame(1005.0, $money['courier_receivable']); // 1080 - 65 - 10
+        $this->assertSame(584.0, $money['gross_profit']); // 1005 - 400 - 21
+    }
+
+    #[Test]
+    public function pnl_month_view_shows_money_stacks(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $courier = Courier::query()->create([
+            'name' => 'Steadfast',
+            'slug' => 'steadfast',
+            'cod_percentage' => 1,
+            'is_active' => true,
+        ]);
+
+        $this->seedDeliveredOrder($courier, 'Ayesha', 1080, 65, 21, 1, 400, '2026-07-15 10:00:00');
+
+        Livewire::test(AdminAnalyticsPnl::class)
+            ->set('year', 2026)
+            ->call('selectMonth', 7)
+            ->assertSee('Bill to customer')
+            ->assertSee('Receivable from courier')
+            ->assertSee('Gross profit')
+            ->assertSee('Product price')
+            ->assertSee('Customer delivery');
     }
 
     #[Test]

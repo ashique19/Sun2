@@ -223,6 +223,54 @@
                 @endforeach
             </div>
 
+            @php($money = $activeMonth['money'])
+            <div class="mb-6 grid gap-3 lg:grid-cols-3">
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 text-sm space-y-2">
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Bill to customer</p>
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Product price</span><span class="tabular-nums">&#2547; {{ number_format($money['product_price'], 0) }}</span></div>
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ Customer delivery</span><span class="tabular-nums">&#2547; {{ number_format($money['customer_delivery'], 0) }}</span></div>
+                    @if ($money['other_charges'] > 0)
+                        <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ Other charges</span><span class="tabular-nums">&#2547; {{ number_format($money['other_charges'], 0) }}</span></div>
+                    @endif
+                    @if ($money['discounts'] > 0)
+                        <div class="flex justify-between gap-3 text-emerald-700"><span>− Discounts / coupons</span><span class="tabular-nums">&#2547; {{ number_format($money['discounts'], 0) }}</span></div>
+                    @endif
+                    <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 font-semibold">
+                        <span>Bill to customer</span>
+                        <span class="tabular-nums">&#2547; {{ number_format($money['bill_to_customer'], 0) }}</span>
+                    </div>
+                </div>
+
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 text-sm space-y-2">
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Receivable from courier</p>
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Collected / COD remittance</span><span class="tabular-nums">&#2547; {{ number_format($money['remittance_base'], 0) }}</span></div>
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Courier charge</span><span class="tabular-nums">&#2547; {{ number_format($money['courier_charge'], 0) }}</span></div>
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− COD charge</span><span class="tabular-nums">&#2547; {{ number_format($money['cod_charge'], 2) }}</span></div>
+                    <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 font-semibold">
+                        <span>Receivable from courier</span>
+                        <span @class(['tabular-nums', 'text-rose-600' => $money['courier_receivable'] < 0])>&#2547; {{ number_format($money['courier_receivable'], 0) }}</span>
+                    </div>
+                </div>
+
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 text-sm space-y-2">
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Gross profit</p>
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Receivable from courier</span><span class="tabular-nums">&#2547; {{ number_format($money['courier_receivable'], 0) }}</span></div>
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− COGS</span><span class="tabular-nums">&#2547; {{ number_format($money['cogs'], 0) }}</span></div>
+                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Packaging</span><span class="tabular-nums">&#2547; {{ number_format($money['packaging'], 0) }}</span></div>
+                    <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 font-semibold">
+                        <span>Gross profit</span>
+                        <span @class(['tabular-nums', 'text-rose-600' => $money['gross_profit'] < 0])>&#2547; {{ number_format($money['gross_profit'], 0) }}</span>
+                    </div>
+                    @if ($money['indirect'] > 0)
+                        <div class="flex justify-between gap-3 text-[#6B6459]"><span>− Indirect expenses</span><span class="tabular-nums">&#2547; {{ number_format($money['indirect'], 0) }}</span></div>
+                        <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 font-semibold">
+                            <span>After indirect</span>
+                            <span @class(['tabular-nums', 'text-rose-600' => $money['net_after_indirect'] < 0])>&#2547; {{ number_format($money['net_after_indirect'], 0) }}</span>
+                        </div>
+                    @endif
+                </div>
+            </div>
+
             <details class="group rounded-xl border border-[#EFE7D6] bg-[#FBF9F4] open:bg-white">
                 <summary class="cursor-pointer list-none px-4 py-3 text-sm font-medium text-[#6B6459] marker:content-none [&::-webkit-details-marker]:hidden">
                     <span class="inline-flex items-center gap-2">

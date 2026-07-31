@@ -303,6 +303,22 @@ class AnalyticsService
      *     direct_breakdown: array{cogs: float, packaging: float, courier: float, cod: float},
      *     indirect: float,
      *     profit: float,
+     *     money: array{
+     *         bill_to_customer: float,
+     *         product_price: float,
+     *         customer_delivery: float,
+     *         other_charges: float,
+     *         discounts: float,
+     *         remittance_base: float,
+     *         courier_charge: float,
+     *         cod_charge: float,
+     *         courier_receivable: float,
+     *         cogs: float,
+     *         packaging: float,
+     *         gross_profit: float,
+     *         indirect: float,
+     *         net_after_indirect: float
+     *     },
      *     segments: list<array{key: string, label: string, value: float, color: string}>
      * }
      */
@@ -324,6 +340,7 @@ class AnalyticsService
             'direct_breakdown' => $totals['direct_breakdown'],
             'indirect' => $totals['indirect'],
             'profit' => $totals['profit'],
+            'money' => $totals['money'],
             'segments' => [
                 ['key' => 'revenue', 'label' => 'Revenue', 'value' => $totals['revenue'], 'color' => '#1F4E79'],
                 ['key' => 'direct', 'label' => 'Direct cost', 'value' => $totals['direct'], 'color' => '#C45C26'],
@@ -441,7 +458,11 @@ class AnalyticsService
         $end = $start->copy()->endOfMonth();
 
         return Order::query()
-            ->with(['items:id,order_id,quantity,returned_quantity,purchase_price', 'courier:id,slug,cod_percentage'])
+            ->with([
+                'items:id,order_id,quantity,returned_quantity,purchase_price',
+                'courier:id,slug,cod_percentage',
+                'adjustments:id,order_id,type,label,amount',
+            ])
             ->where('status', 'delivered')
             ->whereNotNull('actual_delivery_date')
             ->whereBetween('actual_delivery_date', [
@@ -457,9 +478,15 @@ class AnalyticsService
                 'status',
                 'subtotal',
                 'delivery_charge',
+                'charge',
+                'discount',
+                'total',
                 'courier_charge',
                 'packaging_cost',
                 'collected_amount',
+                'paid_amount',
+                'due_amount',
+                'cod_amount',
                 'courier_id',
                 'actual_delivery_date',
             ]);
@@ -472,7 +499,23 @@ class AnalyticsService
      *     direct: float,
      *     direct_breakdown: array{cogs: float, packaging: float, courier: float, cod: float},
      *     indirect: float,
-     *     profit: float
+     *     profit: float,
+     *     money: array{
+     *         bill_to_customer: float,
+     *         product_price: float,
+     *         customer_delivery: float,
+     *         other_charges: float,
+     *         discounts: float,
+     *         remittance_base: float,
+     *         courier_charge: float,
+     *         cod_charge: float,
+     *         courier_receivable: float,
+     *         cogs: float,
+     *         packaging: float,
+     *         gross_profit: float,
+     *         indirect: float,
+     *         net_after_indirect: float
+     *     }
      * }
      */
     private function sumOrderEconomics(Collection $orders, int $year, int $month): array
@@ -483,6 +526,15 @@ class AnalyticsService
         $courier = 0.0;
         $cod = 0.0;
 
+        $bill = 0.0;
+        $productPrice = 0.0;
+        $customerDelivery = 0.0;
+        $otherCharges = 0.0;
+        $discounts = 0.0;
+        $remittanceBase = 0.0;
+        $courierReceivable = 0.0;
+        $grossProfit = 0.0;
+
         foreach ($orders as $order) {
             $line = $this->orderEconomics($order);
             $revenue += $line['revenue'];
@@ -490,6 +542,16 @@ class AnalyticsService
             $packaging += $line['packaging'];
             $courier += $line['courier'];
             $cod += $line['cod'];
+
+            $money = $order->moneyTotals();
+            $bill += $money->billToCustomer;
+            $productPrice += $money->subtotal;
+            $customerDelivery += $money->deliveryCharge;
+            $otherCharges += $money->charges;
+            $discounts += $money->discounts;
+            $remittanceBase += $money->remittanceBase;
+            $courierReceivable += $money->courierReceivable;
+            $grossProfit += $money->grossProfit;
         }
 
         $direct = $cogs + $packaging + $courier + $cod;
@@ -507,6 +569,22 @@ class AnalyticsService
             ],
             'indirect' => round($indirect, 2),
             'profit' => round($profit, 2),
+            'money' => [
+                'bill_to_customer' => round($bill, 2),
+                'product_price' => round($productPrice, 2),
+                'customer_delivery' => round($customerDelivery, 2),
+                'other_charges' => round($otherCharges, 2),
+                'discounts' => round($discounts, 2),
+                'remittance_base' => round($remittanceBase, 2),
+                'courier_charge' => round($courier, 2),
+                'cod_charge' => round($cod, 2),
+                'courier_receivable' => round($courierReceivable, 2),
+                'cogs' => round($cogs, 2),
+                'packaging' => round($packaging, 2),
+                'gross_profit' => round($grossProfit, 2),
+                'indirect' => round($indirect, 2),
+                'net_after_indirect' => round($grossProfit - $indirect, 2),
+            ],
         ];
     }
 

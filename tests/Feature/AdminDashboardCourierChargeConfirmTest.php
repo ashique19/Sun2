@@ -103,11 +103,12 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
         if ($productQuantity > 0) {
             OrderProduct::query()->create([
                 'order_id' => $order->id,
-                'name' => 'Product',
+                'name' => 'Silk Saree',
                 'quantity' => $productQuantity,
                 'price' => 1000,
                 'purchase_price' => 400,
                 'line_total' => 1000 * $productQuantity,
+                'product_image' => 'products/silk-saree.jpg',
             ]);
         }
 
@@ -119,7 +120,7 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
     {
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
-        $this->dispatchedOrder($courier, 'Ayesha Akter', 60, '277193413');
+        $order = $this->dispatchedOrder($courier, 'Ayesha Akter', 60, '277193413', productQuantity: 2);
 
         Livewire::test(AdminDashboard::class)
             ->assertSee('Confirm courier charges')
@@ -127,6 +128,8 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
             ->assertSee('Steadfast ↗')
             ->assertSeeHtml('href="https://steadfast.com.bd/user/consignment/277193413"')
             ->assertSeeHtml('target="_blank"')
+            ->assertSeeHtml('title="Silk Saree ×2"')
+            ->assertSeeHtml('wire:key="confirm-charge-item-'.$order->items->first()->id.'"')
             ->assertSee('Courier ৳')
             ->assertSee('Pack ৳')
             ->assertSeeHtml('wire:click="confirmCourierCharge(');

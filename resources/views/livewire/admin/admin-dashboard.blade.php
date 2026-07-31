@@ -272,90 +272,122 @@
 
             <div class="divide-y divide-[#EFE7D6]">
                 @foreach ($unconfirmedCourierCharges as $order)
-                    <div wire:key="confirm-courier-charge-{{ $order->id }}" class="flex flex-wrap items-end gap-3 px-4 py-3 hover:bg-[#FAF6EF]/50">
-                        <div class="min-w-0 flex-1 basis-40">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <a href="{{ route('admin.orders.show', $order) }}" wire:navigate
-                                    class="truncate text-sm font-medium text-[#1E1E1E] hover:text-[#C9A227]">
-                                    {{ $order->name }}
-                                </a>
-                                @foreach (($courierChargeQuickAmounts[$order->id] ?? []) as $quickAmount)
-                                    <button type="button"
-                                        wire:click="applyCourierChargePreset({{ $order->id }}, {{ $quickAmount }})"
-                                        wire:key="courier-charge-preset-{{ $order->id }}-{{ $quickAmount }}"
-                                        title="Set charge to ৳{{ $quickAmount }}"
-                                        class="inline-flex h-5 min-w-5 items-center justify-center rounded-md border px-1 text-[10px] font-semibold tabular-nums transition
-                                            {{ (string) ($pendingCourierCharges[$order->id] ?? '') === (string) $quickAmount
-                                                ? 'border-amber-500 bg-amber-100 text-amber-900'
-                                                : 'border-[#E0D6C2] bg-[#FAF6EF] text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]' }}">
-                                        {{ $quickAmount }}
-                                    </button>
+                    <div wire:key="confirm-courier-charge-{{ $order->id }}" class="space-y-2.5 px-4 py-3 hover:bg-[#FAF6EF]/50">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <a href="{{ route('admin.orders.show', $order) }}" wire:navigate
+                                class="min-w-0 truncate text-sm font-medium text-[#1E1E1E] hover:text-[#C9A227]">
+                                {{ $order->name }}
+                            </a>
+                            @foreach (($courierChargeQuickAmounts[$order->id] ?? []) as $quickAmount)
+                                <button type="button"
+                                    wire:click="applyCourierChargePreset({{ $order->id }}, {{ $quickAmount }})"
+                                    wire:key="courier-charge-preset-{{ $order->id }}-{{ $quickAmount }}"
+                                    title="Set charge to ৳{{ $quickAmount }}"
+                                    class="inline-flex h-5 min-w-5 items-center justify-center rounded-md border px-1 text-[10px] font-semibold tabular-nums transition
+                                        {{ (string) ($pendingCourierCharges[$order->id] ?? '') === (string) $quickAmount
+                                            ? 'border-amber-500 bg-amber-100 text-amber-900'
+                                            : 'border-[#E0D6C2] bg-[#FAF6EF] text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]' }}">
+                                    {{ $quickAmount }}
+                                </button>
+                            @endforeach
+                            <span class="text-xs text-[#8C8474]">#{{ $order->order_number }}</span>
+                        </div>
+
+                        @if ($order->items->isNotEmpty())
+                            <div class="flex flex-wrap gap-1.5">
+                                @foreach ($order->items as $item)
+                                    @php
+                                        $imageUrl = $item->imageUrl();
+                                        $productName = $item->displayName();
+                                    @endphp
+                                    <div wire:key="confirm-charge-item-{{ $item->id }}"
+                                        title="{{ $productName }} ×{{ $item->quantity }}"
+                                        class="relative h-10 w-10 shrink-0 overflow-hidden rounded-md border border-[#E7DFCF] bg-[#FAF6EF]">
+                                        @if ($imageUrl)
+                                            <img src="{{ $imageUrl }}" alt="{{ $productName }}"
+                                                class="h-full w-full object-cover" loading="lazy">
+                                        @else
+                                            <span class="flex h-full w-full items-center justify-center text-[10px] text-[#8C8474]">?</span>
+                                        @endif
+                                        @if ((int) $item->quantity > 1)
+                                            <span class="absolute bottom-0 right-0 rounded-tl bg-black/65 px-1 text-[9px] font-semibold leading-4 text-white tabular-nums">
+                                                ×{{ $item->quantity }}
+                                            </span>
+                                        @endif
+                                    </div>
                                 @endforeach
-                                @if ($steadfastUrl = $order->steadfastConsignmentUrl())
-                                    <a href="{{ $steadfastUrl }}"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        class="shrink-0 text-xs font-medium text-[#C9A227] hover:underline"
-                                        title="Open Steadfast consignment">
-                                        Steadfast ↗
-                                    </a>
-                                @endif
-                                <span class="text-xs text-[#8C8474]">#{{ $order->order_number }}</span>
                             </div>
-                            <p class="mt-0.5 text-[11px] text-[#8C8474]">
-                                {{ $order->courier?->name ?? 'No courier' }}
-                                @if ($order->courier_tracker)
-                                    · {{ $order->courier_tracker }}
-                                @endif
-                                @if ($order->city)
-                                    · {{ $order->city }}
-                                @endif
-                                @if ($order->dispatch_date)
-                                    · {{ $order->dispatch_date->format('d M, h:i A') }}
-                                @endif
-                            </p>
+                        @endif
+
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[#8C8474]">
+                            @php
+                                $courierName = $order->courier?->name ?? 'No courier';
+                            @endphp
+                            @if ($steadfastUrl = $order->steadfastConsignmentUrl())
+                                <a href="{{ $steadfastUrl }}"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="font-medium text-[#C9A227] hover:underline"
+                                    title="Open courier consignment">
+                                    {{ $courierName }} ↗
+                                </a>
+                            @else
+                                <span class="font-medium text-[#6B6459]">{{ $courierName }}</span>
+                            @endif
+                            @if ($order->courier_tracker)
+                                <span>· {{ $order->courier_tracker }}</span>
+                            @endif
+                            @if ($order->city)
+                                <span>· {{ $order->city }}</span>
+                            @endif
+                            @if ($order->dispatch_date)
+                                <span>· {{ $order->dispatch_date->format('d M, h:i A') }}</span>
+                            @endif
                         </div>
-                        <div class="w-28">
-                            <label for="courier-charge-{{ $order->id }}" class="block text-[10px] font-medium uppercase tracking-wide text-[#8C8474] mb-1">
-                                Courier ৳
-                                <span class="normal-case tracking-normal font-normal">
-                                    · {{ $courierChargeAreaLabels[$order->id] ?? 'Outside Dhaka' }}
-                                </span>
-                            </label>
-                            <input id="courier-charge-{{ $order->id }}"
-                                type="number"
-                                min="0"
-                                step="1"
-                                inputmode="numeric"
-                                wire:model="pendingCourierCharges.{{ $order->id }}"
-                                class="w-full rounded-lg border border-[#E0D6C2] px-2.5 py-1.5 text-sm tabular-nums">
-                            @error('pendingCourierCharges.'.$order->id)
-                                <p class="mt-1 text-[11px] text-rose-600">{{ $message }}</p>
-                            @enderror
+
+                        <div class="flex flex-wrap items-end gap-2">
+                            <div class="min-w-[7rem] flex-1 basis-28 sm:max-w-[9rem] sm:flex-none">
+                                <label for="courier-charge-{{ $order->id }}" class="mb-1 block text-[10px] font-medium uppercase tracking-wide text-[#8C8474]">
+                                    Courier ৳
+                                    <span class="normal-case tracking-normal font-normal">
+                                        · {{ $courierChargeAreaLabels[$order->id] ?? 'Outside Dhaka' }}
+                                    </span>
+                                </label>
+                                <input id="courier-charge-{{ $order->id }}"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    inputmode="numeric"
+                                    wire:model="pendingCourierCharges.{{ $order->id }}"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-2.5 py-1.5 text-sm tabular-nums">
+                                @error('pendingCourierCharges.'.$order->id)
+                                    <p class="mt-1 text-[11px] text-rose-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+                            <div class="w-24 shrink-0">
+                                <label for="packaging-cost-{{ $order->id }}" class="mb-1 block text-[10px] font-medium uppercase tracking-wide text-[#8C8474]">
+                                    Pack ৳
+                                </label>
+                                <input id="packaging-cost-{{ $order->id }}"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    inputmode="numeric"
+                                    wire:model="pendingPackagingCosts.{{ $order->id }}"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-2.5 py-1.5 text-sm tabular-nums">
+                                @error('pendingPackagingCosts.'.$order->id)
+                                    <p class="mt-1 text-[11px] text-rose-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+                            <button type="button"
+                                wire:click="confirmCourierCharge({{ $order->id }})"
+                                wire:loading.attr="disabled"
+                                wire:target="confirmCourierCharge({{ $order->id }})"
+                                class="rounded-full bg-[#C9A227] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
+                                <span wire:loading.remove wire:target="confirmCourierCharge({{ $order->id }})">Update</span>
+                                <span wire:loading wire:target="confirmCourierCharge({{ $order->id }})">Saving…</span>
+                            </button>
                         </div>
-                        <div class="w-24">
-                            <label for="packaging-cost-{{ $order->id }}" class="block text-[10px] font-medium uppercase tracking-wide text-[#8C8474] mb-1">
-                                Pack ৳
-                            </label>
-                            <input id="packaging-cost-{{ $order->id }}"
-                                type="number"
-                                min="0"
-                                step="1"
-                                inputmode="numeric"
-                                wire:model="pendingPackagingCosts.{{ $order->id }}"
-                                class="w-full rounded-lg border border-[#E0D6C2] px-2.5 py-1.5 text-sm tabular-nums">
-                            @error('pendingPackagingCosts.'.$order->id)
-                                <p class="mt-1 text-[11px] text-rose-600">{{ $message }}</p>
-                            @enderror
-                        </div>
-                        <button type="button"
-                            wire:click="confirmCourierCharge({{ $order->id }})"
-                            wire:loading.attr="disabled"
-                            wire:target="confirmCourierCharge({{ $order->id }})"
-                            class="rounded-full bg-[#C9A227] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
-                            <span wire:loading.remove wire:target="confirmCourierCharge({{ $order->id }})">Update</span>
-                            <span wire:loading wire:target="confirmCourierCharge({{ $order->id }})">Saving…</span>
-                        </button>
                     </div>
                 @endforeach
             </div>

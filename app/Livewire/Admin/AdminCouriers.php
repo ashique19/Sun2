@@ -117,12 +117,12 @@ class AdminCouriers extends Component
     }
 
     /**
-     * Fetch live courier wallet balances after the page has rendered.
-     * Keeps /admin/couriers usable when Steadfast/Packzy is slow or down.
+     * Fetch live courier wallet balances on demand (Refresh API button).
+     * Never called during initial render — Steadfast outages must not block this page.
      */
     public function loadApiBalances(CourierBalanceService $balances, CourierApiRegistry $registry): void
     {
-        if ($this->apiBalancesLoading || $this->apiBalancesLoaded) {
+        if ($this->apiBalancesLoading) {
             return;
         }
 

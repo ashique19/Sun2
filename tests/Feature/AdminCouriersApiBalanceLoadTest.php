@@ -61,6 +61,8 @@ class AdminCouriersApiBalanceLoadTest extends TestCase
             ->assertSee('Receivable')
             ->assertSee('Pending')
             ->assertSee('API balance')
+            ->assertSee('Refresh API')
+            ->assertDontSeeHtml('wire:init="loadApiBalances"')
             ->assertSet('apiBalancesLoaded', false)
             ->assertDontSee('৳ 1,234');
 

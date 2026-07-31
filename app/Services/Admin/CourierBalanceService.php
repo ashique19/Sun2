@@ -7,6 +7,8 @@ use App\Models\CourierBalanceEntry;
 use App\Models\Order;
 use App\Services\Couriers\CourierApiRegistry;
 use App\Services\Couriers\SteadfastApiClient;
+use App\Services\Orders\OrderTotalCalculator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -15,6 +17,7 @@ class CourierBalanceService
     public function __construct(
         private readonly SteadfastApiClient $steadfast,
         private readonly CourierApiRegistry $courierRegistry,
+        private readonly OrderTotalCalculator $totals,
     ) {}
 
     /**
@@ -190,42 +193,14 @@ class CourierBalanceService
      * - receivable: net remittance due for delivered parcels after courier fees, minus withdrawals
      * - book: running ledger on couriers.balance
      *
+     * Uses OrderTotalCalculator::codCharge() directly — never Order::codCharge()/moneyTotals(),
+     * which would eager-load items + adjustments for every delivered order.
+     *
      * @return array{pending: float, receivable: float, book: float, withdrawn: float}
      */
     public function summarize(Courier $courier): array
     {
-        $pending = (float) Order::query()
-            ->where('courier_id', $courier->id)
-            ->where('status', 'dispatched')
-            ->get(['cod_amount', 'due_amount', 'total'])
-            ->sum(fn (Order $order) => $order->collectableAmount());
-
-        $deliveredOrders = Order::query()
-            ->where('courier_id', $courier->id)
-            ->where('status', 'delivered')
-            ->with('courier:id,slug,cod_percentage')
-            ->get(['id', 'courier_id', 'collected_amount', 'delivery_charge', 'courier_charge', 'cod_amount', 'due_amount', 'total']);
-
-        $grossRemittable = 0.0;
-
-        foreach ($deliveredOrders as $order) {
-            $collected = max(0.0, (float) ($order->collected_amount ?? 0));
-            $courierCharge = max(0.0, (float) ($order->courier_charge ?? 0));
-            $codCharge = $order->codCharge();
-            $grossRemittable += max(0.0, $collected - $courierCharge - $codCharge);
-        }
-
-        $withdrawn = abs((float) CourierBalanceEntry::query()
-            ->where('courier_id', $courier->id)
-            ->where('type', 'withdraw')
-            ->sum('amount'));
-
-        return [
-            'pending' => round($pending, 2),
-            'receivable' => round(max(0.0, $grossRemittable - $withdrawn), 2),
-            'book' => round((float) $courier->balance, 2),
-            'withdrawn' => round($withdrawn, 2),
-        ];
+        return $this->summarizeMany([$courier])[$courier->id];
     }
 
     /**
@@ -234,10 +209,75 @@ class CourierBalanceService
      */
     public function summarizeMany(iterable $couriers): array
     {
+        /** @var Collection<int, Courier> $courierList */
+        $courierList = collect($couriers)->keyBy('id');
+        $ids = $courierList->keys()->all();
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $pendingByCourier = Order::query()
+            ->whereIn('courier_id', $ids)
+            ->where('status', 'dispatched')
+            ->selectRaw('courier_id, COALESCE(SUM(
+                CASE
+                    WHEN COALESCE(cod_amount, 0) > 0 THEN cod_amount
+                    WHEN COALESCE(due_amount, 0) > 0 THEN due_amount
+                    ELSE COALESCE(total, 0)
+                END
+            ), 0) as pending')
+            ->groupBy('courier_id')
+            ->pluck('pending', 'courier_id');
+
+        $withdrawnByCourier = CourierBalanceEntry::query()
+            ->whereIn('courier_id', $ids)
+            ->where('type', 'withdraw')
+            ->selectRaw('courier_id, ABS(COALESCE(SUM(amount), 0)) as withdrawn')
+            ->groupBy('courier_id')
+            ->pluck('withdrawn', 'courier_id');
+
+        $grossByCourier = array_fill_keys($ids, 0.0);
+
+        Order::query()
+            ->whereIn('courier_id', $ids)
+            ->where('status', 'delivered')
+            ->select(['id', 'courier_id', 'collected_amount', 'delivery_charge', 'courier_charge'])
+            ->orderBy('id')
+            ->chunkById(1000, function ($orders) use (&$grossByCourier, $courierList): void {
+                foreach ($orders as $order) {
+                    $courier = $courierList->get($order->courier_id);
+
+                    if (! $courier) {
+                        continue;
+                    }
+
+                    $collected = max(0.0, (float) ($order->collected_amount ?? 0));
+                    $courierCharge = max(0.0, (float) ($order->courier_charge ?? 0));
+                    $codCharge = $this->totals->codCharge(
+                        collectedAmount: $collected,
+                        deliveryCharge: (float) $order->delivery_charge,
+                        courierSlug: $courier->slug,
+                        codPercentage: (float) ($courier->cod_percentage ?? 1),
+                    );
+
+                    $grossByCourier[$order->courier_id] += max(0.0, $collected - $courierCharge - $codCharge);
+                }
+            });
+
         $summaries = [];
 
-        foreach ($couriers as $courier) {
-            $summaries[$courier->id] = $this->summarize($courier);
+        foreach ($courierList as $id => $courier) {
+            $pending = (float) ($pendingByCourier[$id] ?? 0);
+            $withdrawn = (float) ($withdrawnByCourier[$id] ?? 0);
+            $grossRemittable = (float) ($grossByCourier[$id] ?? 0);
+
+            $summaries[$id] = [
+                'pending' => round($pending, 2),
+                'receivable' => round(max(0.0, $grossRemittable - $withdrawn), 2),
+                'book' => round((float) $courier->balance, 2),
+                'withdrawn' => round($withdrawn, 2),
+            ];
         }
 
         return $summaries;

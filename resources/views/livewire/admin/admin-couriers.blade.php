@@ -1,4 +1,4 @@
-<div wire:init="loadApiBalances">
+<div>
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
             <h1 class="font-serif text-3xl font-semibold">Couriers</h1>
@@ -12,16 +12,26 @@
             <p class="text-xs text-[#8C8474] mt-1">
                 Receivable = delivered COD − courier charge − COD % − withdrawals.
                 Pending = COD still with courier on dispatched parcels.
-                API = live Steadfast wallet (loaded after the page).
+                API = live Steadfast wallet (refresh manually).
             </p>
             @if ($apiBalanceError)
                 <p class="text-xs text-amber-700 mt-1">{{ $apiBalanceError }}</p>
             @endif
         </div>
-        <a href="{{ route('admin.couriers.create') }}" wire:navigate
-            class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">
-            Create Courier
-        </a>
+        <div class="flex flex-wrap items-center gap-2">
+            <button type="button"
+                wire:click="loadApiBalances"
+                wire:loading.attr="disabled"
+                wire:target="loadApiBalances"
+                class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm font-medium text-[#6B6459] hover:border-[#C9A227] hover:bg-[#FAF6EF] disabled:opacity-60">
+                <span wire:loading.remove wire:target="loadApiBalances">Refresh API</span>
+                <span wire:loading wire:target="loadApiBalances">Loading…</span>
+            </button>
+            <a href="{{ route('admin.couriers.create') }}" wire:navigate
+                class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">
+                Create Courier
+            </a>
+        </div>
     </div>
 
     @if ($error)
@@ -83,10 +93,12 @@
                                 &#2547; {{ number_format($summary['pending'] ?? 0, 0) }}
                             </td>
                             <td class="px-4 py-3 tabular-nums text-[#6B6459]">
-                                @if (! $apiBalancesLoaded)
+                                @if ($apiBalancesLoading)
                                     <span class="text-[#8C8474]">…</span>
                                 @elseif ($apiBalance !== null)
                                     &#2547; {{ number_format($apiBalance, 0) }}
+                                @elseif (! $apiBalancesLoaded && $courier->slug && in_array(strtolower((string) $courier->slug), $apiSlugs, true))
+                                    <span class="text-[#8C8474]">Tap Refresh API</span>
                                 @elseif ($courier->slug && in_array(strtolower((string) $courier->slug), $apiSlugs, true))
                                     <span class="text-[#8C8474]" title="{{ $apiBalanceError ?: 'Unavailable' }}">—</span>
                                 @else

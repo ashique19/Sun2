@@ -170,5 +170,47 @@ class OrderTotalCalculatorTest extends TestCase
         // base 2000 - 1600 + 100 - 60 = 440; COD = (2100 - 100) * 1% = 20; net = 420
         $this->assertSame(20.0, $totals->codCharge);
         $this->assertSame(420.0, $totals->netRevenue);
+        $this->assertSame(2100.0, $totals->remittanceBase);
+        $this->assertSame(2020.0, $totals->courierReceivable); // 2100 - 60 - 20
+        $this->assertSame(420.0, $totals->grossProfit); // 2020 - 1600 - 0
+    }
+
+    public function test_bill_receivable_gross_profit_cascade_for_unpaid_cod(): void
+    {
+        $totals = $this->calc->calculate(
+            subtotal: 2200,
+            deliveryCharge: 120,
+            courierCharge: 0,
+            adjustments: [],
+            items: [['purchase_price' => 700, 'quantity' => 2]],
+            packagingCost: 0,
+        );
+
+        // Bill = 2200 + 120 = 2320
+        // Receivable = 2320 - 0 - 0 = 2320
+        // Gross profit = 2320 - 1400 - 0 = 920
+        $this->assertSame(2320.0, $totals->billToCustomer);
+        $this->assertSame(2320.0, $totals->remittanceBase);
+        $this->assertSame(2320.0, $totals->courierReceivable);
+        $this->assertSame(1400.0, $totals->cogs);
+        $this->assertSame(920.0, $totals->grossProfit);
+        $this->assertSame(920.0, $totals->netRevenue);
+    }
+
+    public function test_prepaid_expected_cod_remittance_can_be_zero(): void
+    {
+        $totals = $this->calc->calculate(
+            subtotal: 1000,
+            deliveryCharge: 80,
+            courierCharge: 60,
+            adjustments: [],
+            items: [['purchase_price' => 400, 'quantity' => 1]],
+            packagingCost: 21,
+            expectedCodRemittance: 0,
+        );
+
+        $this->assertSame(0.0, $totals->remittanceBase);
+        $this->assertSame(-60.0, $totals->courierReceivable);
+        $this->assertSame(-481.0, $totals->grossProfit); // -60 - 400 - 21
     }
 }

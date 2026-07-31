@@ -37,6 +37,7 @@ class OrderTotalCalculator
         ?string $courierSlug = null,
         float $codPercentage = 1.0,
         float $packagingCost = 0.0,
+        ?float $expectedCodRemittance = null,
     ): OrderTotals {
         [$charges, $discounts] = $this->sumAdjustments($adjustments);
         $total = max(0.0, $subtotal + $deliveryCharge + $charges - $discounts);
@@ -51,6 +52,14 @@ class OrderTotalCalculator
         $netRevenue = $subtotal - $cogs + $charges - $discounts + $deliveryCharge - $courierCharge - $packaging - $codCharge;
         $deliveryMargin = $deliveryCharge - $courierCharge;
 
+        // Prefer actual COD collection; otherwise expected amount the courier will handle.
+        $collected = max(0.0, $collectedAmount);
+        $remittanceBase = $collected > 0
+            ? $collected
+            : max(0.0, $expectedCodRemittance ?? $total);
+        $courierReceivable = $remittanceBase - $courierCharge - $codCharge;
+        $grossProfit = $courierReceivable - $cogs - $packaging;
+
         return new OrderTotals(
             subtotal: round($subtotal, 2),
             deliveryCharge: round($deliveryCharge, 2),
@@ -63,6 +72,10 @@ class OrderTotalCalculator
             cogs: round($cogs, 2),
             netRevenue: round($netRevenue, 2),
             deliveryMargin: round($deliveryMargin, 2),
+            billToCustomer: round($total, 2),
+            remittanceBase: round($remittanceBase, 2),
+            courierReceivable: round($courierReceivable, 2),
+            grossProfit: round($grossProfit, 2),
         );
     }
 

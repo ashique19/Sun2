@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\Orders\OrderTotalCalculator;
+use App\Services\Orders\OrderTotals;
 use App\Support\PhoneNumber;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -204,6 +205,44 @@ class Order extends Model
      */
     public function netRevenue(): float
     {
+        return $this->moneyTotals()->netRevenue;
+    }
+
+    /** Delivery margin = customer delivery_charge - courier_charge. */
+    public function deliveryMargin(): float
+    {
+        return $this->moneyTotals()->deliveryMargin;
+    }
+
+    /**
+     * Courier COD collection fee (1% by default).
+     * Steadfast: (collected_amount - delivery_charge) × %; others: collected_amount × %.
+     */
+    public function codCharge(): float
+    {
+        return $this->moneyTotals()->codCharge;
+    }
+
+    /** Customer invoice / COD bill. */
+    public function billToCustomer(): float
+    {
+        return $this->moneyTotals()->billToCustomer;
+    }
+
+    /** Remittance from courier after courier fee and COD %. */
+    public function courierReceivable(): float
+    {
+        return $this->moneyTotals()->courierReceivable;
+    }
+
+    /** Gross profit = courier receivable − COGS − packaging. */
+    public function grossProfit(): float
+    {
+        return $this->moneyTotals()->grossProfit;
+    }
+
+    public function moneyTotals(): OrderTotals
+    {
         $this->loadMissing(['items', 'adjustments', 'courier']);
 
         $adjustments = $this->adjustments->isNotEmpty()
@@ -212,6 +251,14 @@ class Order extends Model
                 ['type' => 'charge', 'amount' => (float) $this->charge],
                 ['type' => 'discount', 'amount' => (float) $this->discount],
             ])->filter(fn (array $line) => $line['amount'] > 0)->values();
+
+        $expectedCod = (float) ($this->cod_amount ?? 0);
+        if ($expectedCod <= 0) {
+            $expectedCod = (float) ($this->due_amount ?? 0);
+        }
+        if ($expectedCod <= 0) {
+            $expectedCod = (float) $this->total;
+        }
 
         return app(OrderTotalCalculator::class)->calculate(
             subtotal: (float) $this->subtotal,
@@ -223,28 +270,7 @@ class Order extends Model
             courierSlug: $this->courier?->slug,
             codPercentage: (float) ($this->courier?->cod_percentage ?? 1),
             packagingCost: (float) ($this->packaging_cost ?? 0),
-        )->netRevenue;
-    }
-
-    /** Delivery margin = customer delivery_charge - courier_charge. */
-    public function deliveryMargin(): float
-    {
-        return (float) $this->delivery_charge - (float) ($this->courier_charge ?? 0);
-    }
-
-    /**
-     * Courier COD collection fee (1% by default).
-     * Steadfast: (collected_amount - delivery_charge) × %; others: collected_amount × %.
-     */
-    public function codCharge(): float
-    {
-        $this->loadMissing('courier');
-
-        return app(OrderTotalCalculator::class)->codCharge(
-            collectedAmount: (float) ($this->collected_amount ?? 0),
-            deliveryCharge: (float) $this->delivery_charge,
-            courierSlug: $this->courier?->slug,
-            codPercentage: (float) ($this->courier?->cod_percentage ?? 1),
+            expectedCodRemittance: $expectedCod,
         );
     }
 

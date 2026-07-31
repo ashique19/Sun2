@@ -44,10 +44,35 @@ readonly class OrderTotals
          * Net revenue (admin business metric).
          * netRevenue = subtotal - cogs + charges - discounts + deliveryCharge - courierCharge - packagingCost - codCharge
          * May be negative — do NOT clamp.
+         *
+         * Equivalent to grossProfit when remittance is the customer bill (typical unpaid COD).
          */
         public float $netRevenue,
 
         /** deliveryCharge - courierCharge. */
         public float $deliveryMargin,
+
+        /**
+         * Bill to customer (COD / invoice total).
+         * billToCustomer = subtotal + deliveryCharge + charges - discounts (= total)
+         */
+        public float $billToCustomer,
+
+        /**
+         * Remittance base for courier receivable: collected COD when known, else expected COD bill.
+         */
+        public float $remittanceBase,
+
+        /**
+         * Expected/actual remittance from courier after their fees.
+         * courierReceivable = remittanceBase - courierCharge - codCharge
+         */
+        public float $courierReceivable,
+
+        /**
+         * Gross profit after courier remittance and direct costs.
+         * grossProfit = courierReceivable - cogs - packagingCost
+         */
+        public float $grossProfit,
     ) {}
 }

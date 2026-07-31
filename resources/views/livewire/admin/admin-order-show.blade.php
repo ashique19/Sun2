@@ -184,45 +184,74 @@
                         </div>
                     @endforeach
                 </div>
-                <div class="mt-4 space-y-2 border-t border-[#E7DFCF] pt-4 text-sm">
-                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Subtotal (revenue)</span><span class="tabular-nums">&#2547; {{ number_format($order->subtotal, 0) }}</span></div>
-                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">COGS</span><span class="tabular-nums">&#2547; {{ number_format($order->cogs(), 0) }}</span></div>
-                    @foreach ($order->adjustments->where('type', 'charge') as $adj)
-                        <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ {{ $adj->label }}</span><span class="tabular-nums">&#2547; {{ number_format($adj->amount, 0) }}</span></div>
-                    @endforeach
-                    @foreach ($order->adjustments->whereIn('type', ['discount', 'coupon']) as $adj)
-                        <div class="flex justify-between gap-3 text-emerald-700"><span>− {{ $adj->label }}</span><span class="tabular-nums">&#2547; {{ number_format($adj->amount, 0) }}</span></div>
-                    @endforeach
-                    @if ($order->adjustments->isEmpty() && (float) $order->charge > 0)
-                        <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Charge</span><span class="tabular-nums">&#2547; {{ number_format($order->charge, 0) }}</span></div>
-                    @endif
-                    @if ($order->adjustments->isEmpty() && (float) $order->discount > 0)
-                        <div class="flex justify-between gap-3 text-emerald-700"><span>Discount</span><span class="tabular-nums">− &#2547; {{ number_format($order->discount, 0) }}</span></div>
-                    @endif
-                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Customer delivery</span><span class="tabular-nums">&#2547; {{ number_format($order->delivery_charge, 0) }}</span></div>
-                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Courier cost</span><span class="tabular-nums">&#2547; {{ number_format($order->courier_charge, 0) }}</span></div>
-                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Packaging</span><span class="tabular-nums">&#2547; {{ number_format((float) ($order->packaging_cost ?? 0), 0) }}</span></div>
-                    @php($codCharge = $order->codCharge())
-                    <div class="flex justify-between gap-3">
-                        <span class="text-[#6B6459]">
-                            COD charge
-                            @if ($order->courier)
-                                <span class="text-[11px] font-normal text-[#8C8474]">
-                                    ({{ rtrim(rtrim(number_format((float) $order->courier->cod_percentage, 2, '.', ''), '0'), '.') ?: '0' }}%{{ $order->courier->slug === 'steadfast' ? ' of collected − delivery' : ' of collected' }})
-                                </span>
-                            @endif
-                        </span>
-                        <span class="tabular-nums">&#2547; {{ number_format($codCharge, 2) }}</span>
+                <div class="mt-4 space-y-4 border-t border-[#E7DFCF] pt-4 text-sm">
+                    @php($money = $order->moneyTotals())
+
+                    <div class="space-y-2">
+                        <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Bill to customer</p>
+                        <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Product price</span><span class="tabular-nums">&#2547; {{ number_format($money->subtotal, 0) }}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ Customer delivery</span><span class="tabular-nums">&#2547; {{ number_format($money->deliveryCharge, 0) }}</span></div>
+                        @foreach ($order->adjustments->where('type', 'charge') as $adj)
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ {{ $adj->label }}</span><span class="tabular-nums">&#2547; {{ number_format($adj->amount, 0) }}</span></div>
+                        @endforeach
+                        @if ($order->adjustments->isEmpty() && (float) $order->charge > 0)
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ Other charges</span><span class="tabular-nums">&#2547; {{ number_format($order->charge, 0) }}</span></div>
+                        @endif
+                        @foreach ($order->adjustments->whereIn('type', ['discount', 'coupon']) as $adj)
+                            <div class="flex justify-between gap-3 text-emerald-700"><span>− {{ $adj->label }}</span><span class="tabular-nums">&#2547; {{ number_format($adj->amount, 0) }}</span></div>
+                        @endforeach
+                        @if ($order->adjustments->isEmpty() && (float) $order->discount > 0)
+                            <div class="flex justify-between gap-3 text-emerald-700"><span>− Discounts / coupons</span><span class="tabular-nums">&#2547; {{ number_format($order->discount, 0) }}</span></div>
+                        @endif
+                        <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 font-semibold">
+                            <span>Bill to customer</span>
+                            <span class="tabular-nums">&#2547; {{ number_format($money->billToCustomer, 0) }}</span>
+                        </div>
                     </div>
-                    @php($deliveryMargin = $order->deliveryMargin())
-                    <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Delivery margin</span><span @class(['tabular-nums', 'text-rose-600' => $deliveryMargin < 0])>&#2547; {{ number_format($deliveryMargin, 0) }}</span></div>
-                    <div class="flex justify-between gap-3 font-medium"><span class="text-[#6B6459]">Net revenue</span><span @class(['tabular-nums', 'text-rose-600' => $order->netRevenue() < 0])>&#2547; {{ number_format($order->netRevenue(), 0) }}</span></div>
-                    <div class="flex justify-between gap-3 pt-2 text-base font-semibold border-t border-[#E7DFCF]"><span>Total (COD)</span><span class="tabular-nums">&#2547; {{ number_format($order->total, 0) }}</span></div>
-                    @if ((float) $order->paid_amount > 0 || (float) $order->due_amount > 0)
+
+                    <div class="space-y-2 border-t border-[#E7DFCF] pt-3">
+                        <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Receivable from courier</p>
+                        <div class="flex justify-between gap-3">
+                            <span class="text-[#6B6459]">
+                                {{ (float) ($order->collected_amount ?? 0) > 0 ? 'Collected by courier' : 'COD through courier' }}
+                            </span>
+                            <span class="tabular-nums">&#2547; {{ number_format($money->remittanceBase, 0) }}</span>
+                        </div>
+                        <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Courier charge</span><span class="tabular-nums">&#2547; {{ number_format($money->courierCharge, 0) }}</span></div>
+                        <div class="flex justify-between gap-3">
+                            <span class="text-[#6B6459]">
+                                − COD charge
+                                @if ($order->courier)
+                                    <span class="text-[11px] font-normal text-[#8C8474]">
+                                        ({{ rtrim(rtrim(number_format((float) $order->courier->cod_percentage, 2, '.', ''), '0'), '.') ?: '0' }}%{{ $order->courier->slug === 'steadfast' ? ' of collected − delivery' : ' of collected' }})
+                                    </span>
+                                @endif
+                            </span>
+                            <span class="tabular-nums">&#2547; {{ number_format($money->codCharge, 2) }}</span>
+                        </div>
+                        <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 font-semibold">
+                            <span>Receivable from courier</span>
+                            <span @class(['tabular-nums', 'text-rose-600' => $money->courierReceivable < 0])>&#2547; {{ number_format($money->courierReceivable, 0) }}</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 border-t border-[#E7DFCF] pt-3">
+                        <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Gross profit</p>
+                        <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Receivable from courier</span><span class="tabular-nums">&#2547; {{ number_format($money->courierReceivable, 0) }}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− COGS</span><span class="tabular-nums">&#2547; {{ number_format($money->cogs, 0) }}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Packaging</span><span class="tabular-nums">&#2547; {{ number_format($money->packagingCost, 0) }}</span></div>
+                        <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 text-base font-semibold">
+                            <span>Gross profit</span>
+                            <span @class(['tabular-nums', 'text-rose-600' => $money->grossProfit < 0])>&#2547; {{ number_format($money->grossProfit, 0) }}</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 border-t border-[#E7DFCF] pt-3">
+                        <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Payment</p>
                         <div class="flex justify-between gap-3 text-[#6B6459]"><span>Paid</span><span class="tabular-nums">&#2547; {{ number_format($order->paid_amount, 0) }}</span></div>
                         <div class="flex justify-between gap-3 text-[#6B6459]"><span>Due</span><span class="tabular-nums">&#2547; {{ number_format($order->due_amount, 0) }}</span></div>
                         <div class="flex justify-between gap-3 text-[#6B6459] capitalize"><span>Payment</span><span>{{ $order->payment_status }}</span></div>
-                    @endif
+                    </div>
                 </div>
             </div>
 

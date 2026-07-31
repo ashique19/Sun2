@@ -24,8 +24,8 @@
     },
     {
       "name": "vite",
-      "command": "npm run dev -- --host 0.0.0.0 --port 5173",
-      "description": "Vite asset watcher"
+      "command": "npm run dev -- --host localhost --port 5173",
+      "description": "Vite asset watcher (host localhost so public/hot is browser-reachable)"
     }
   ]
 }

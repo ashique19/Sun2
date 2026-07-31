@@ -158,3 +158,40 @@ This application is a Laravel application and its main Laravel ecosystems packag
 - To filter on a particular test name: `php artisan test --compact --filter=testName` (recommended after making a change to a related file).
 
 </laravel-boost-guidelines>
+
+## Cursor Cloud specific instructions
+
+This repo is a single Laravel 13 + Livewire 4 monolith (storefront + admin) with a Vite
+asset pipeline. There is one app service (`php artisan serve`) plus the Vite dev server for
+assets. System deps (PHP 8.4, Composer, Node) come from `.cursor/Dockerfile`; dependency
+install is `composer install` + `npm ci` (see `.cursor/environment.json`).
+
+Non-obvious setup/run caveats (these are easy to miss):
+
+- **Dev database is SQLite, not MySQL.** `.env.example` defaults to MySQL, but no MySQL
+  server runs in the cloud VM (the Dockerfile only ships the SQLite PHP extension). After
+  copying `.env`, set `DB_CONNECTION=sqlite` and `DB_DATABASE=/workspace/database/database.sqlite`,
+  run `touch database/database.sqlite`, then `php artisan migrate`. All migrations are
+  SQLite-guarded, so they run cleanly. The dev DB is intentionally kept **empty** (see
+  `README.md`); there is no data seeder for real content.
+- **`APP_URL` must match the served port.** `php artisan serve` runs on `:8000`, but
+  `.env.example` sets `APP_URL=http://localhost`. Livewire 4 and `route()`/`url()` build
+  absolute URLs from `APP_URL`, so with the default the Livewire JS bundle and all links
+  point at port 80 and fail in the browser (form submits silently do nothing). Set
+  `APP_URL=http://localhost:8000` in `.env` before browser testing.
+- **Vite dev host must be browser-reachable.** `laravel-vite-plugin` writes the dev-server
+  URL into `public/hot`. Binding Vite to `0.0.0.0` writes `http://0.0.0.0:5173`, which the
+  in-VM browser cannot fetch (assets/CSS fail to load). Bind to `localhost` (the
+  `.cursor/environment.json` vite terminal now does this). Alternatively, run
+  `npm run build` and delete `public/hot` to serve built assets from `:8000` with no Vite
+  process.
+
+Run / lint / test (standard commands; see `README.md` and `composer.json` scripts):
+
+- Run everything at once: `composer run dev` (serve + queue + logs + vite via concurrently).
+  Or individually: `php artisan serve --host=0.0.0.0 --port=8000` and
+  `npm run dev -- --host localhost --port 5173`.
+- Lint: `vendor/bin/pint` (fix) / `vendor/bin/pint --test` (check). Note: `main` currently
+  has a few pre-existing Pint style violations unrelated to environment setup.
+- Test: `php artisan test --compact` — the suite uses an in-memory SQLite DB (see
+  `phpunit.xml`), so it runs regardless of the `.env` DB settings above.

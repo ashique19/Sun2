@@ -303,7 +303,7 @@ class AdminDashboard extends Component
         $unconfirmedCourierCharges = Order::query()
             ->with([
                 'courier:id,name,slug,charge,osd_charge',
-                'items:id,order_id,quantity',
+                'items:id,order_id,name,quantity,product_image',
             ])
             ->where('status', 'dispatched')
             ->whereNull('courier_charge_confirmed_at')

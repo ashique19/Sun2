@@ -825,6 +825,8 @@ class AdminOrderForm extends Component
         $this->message = null;
 
         $this->normalizeCustomerFieldsForSave();
+        // Recompute after paste/location normalize so disabled-field races cannot leave ৳0.
+        $this->refreshDeliveryCharge();
 
         $validated = $this->validate($this->rules());
 
@@ -1067,9 +1069,15 @@ class AdminOrderForm extends Component
             return;
         }
 
-        $location = $this->areaId
-            ? Area::query()->find($this->areaId)
-            : ($this->cityId ? City::query()->find($this->cityId) : null);
+        $location = null;
+
+        if ($this->areaId) {
+            $location = Area::query()->find($this->areaId);
+        }
+
+        if (! $location && $this->cityId) {
+            $location = City::query()->find($this->cityId);
+        }
 
         $this->deliveryCharge = (string) $this->roundedMoney(
             CheckoutPricing::deliveryCharge($location, $itemCount, $subtotal),

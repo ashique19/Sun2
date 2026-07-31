@@ -243,7 +243,14 @@ class CheckoutPricing
             return 0;
         }
 
-        if ($city->slug === 'dhaka-dhaka') {
+        if ($city->is_dhaka || $city->slug === 'dhaka-dhaka') {
+            return self::defaultDhakaCityCharge($itemCount);
+        }
+
+        $normalized = strtolower(trim((string) $city->name));
+        $dhakaCities = array_map('strtolower', config('checkout.dhaka_cities', ['dhaka']));
+
+        if (in_array($normalized, $dhakaCities, true)) {
             return self::defaultDhakaCityCharge($itemCount);
         }
 

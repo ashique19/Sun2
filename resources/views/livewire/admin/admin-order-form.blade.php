@@ -340,13 +340,21 @@
                         <div class="flex items-center justify-between gap-2 mb-1">
                             <label class="text-[#6B6459]">Customer delivery</label>
                             <label class="inline-flex items-center gap-1 text-xs text-[#8C8474]">
-                                <input type="checkbox" wire:model.live="autoDelivery" @checked($autoDelivery)
+                                <input type="checkbox" wire:model.live="autoDelivery"
                                     class="rounded border-[#C9A227] text-[#C9A227]">
                                 Auto
                             </label>
                         </div>
-                        <input type="number" min="0" step="1" wire:model.live="deliveryCharge" @disabled($autoDelivery)
-                            class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 disabled:bg-[#FAF6EF]">
+                        @if ($autoDelivery)
+                            <p class="w-full rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2 tabular-nums text-[#1E1E1E]"
+                                wire:key="auto-delivery-charge-{{ $deliveryCharge }}">
+                                &#2547; {{ number_format((int) $deliveryCharge, 0) }}
+                                <span class="ml-1 text-xs font-normal text-[#8C8474]">from city/area</span>
+                            </p>
+                        @else
+                            <input type="number" min="0" step="1" wire:model.live="deliveryCharge"
+                                class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2">
+                        @endif
                     </div>
                     @if ($order)
                         <div>

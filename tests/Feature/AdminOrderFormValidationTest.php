@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Livewire\Admin\AdminOrderForm;
+use App\Models\Area;
+use App\Models\City;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
@@ -84,7 +86,70 @@ class AdminOrderFormValidationTest extends TestCase
 
         Livewire::test(AdminOrderForm::class)
             ->assertSet('autoDelivery', true)
-            ->assertSeeHtml('wire:model.live="autoDelivery" checked');
+            ->assertSeeHtml('wire:model.live="autoDelivery"');
+    }
+
+    public function test_auto_delivery_sets_customer_delivery_from_area_rate(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->mockCustomerLookup();
+
+        $city = City::query()->create([
+            'name' => 'Dhaka',
+            'slug' => 'dhaka',
+            'is_dhaka' => true,
+            'is_active' => true,
+        ]);
+        $area = Area::query()->create([
+            'city_id' => $city->id,
+            'name' => 'Mirpur',
+            'slug' => 'mirpur-'.uniqid(),
+            'unit_type' => 'thana',
+            'is_active' => true,
+            'delivery_charge_upto_5' => 70,
+            'delivery_charge_over_5' => 110,
+        ]);
+        $product = $this->product();
+
+        Livewire::test(AdminOrderForm::class)
+            ->assertSet('autoDelivery', true)
+            ->assertSet('deliveryCharge', '0')
+            ->call('addProduct', $product->id)
+            ->assertSet('deliveryCharge', '120') // no city/area yet → outside default
+            ->set('cityId', $city->id)
+            ->set('areaId', $area->id)
+            ->assertSet('deliveryCharge', '70')
+            ->assertSee('from city/area')
+            ->set('phone', '01627237432')
+            ->set('name', 'Delivery Customer')
+            ->set('address', 'Mirpur, Dhaka')
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertRedirect();
+
+        $order = Order::query()->first();
+        $this->assertNotNull($order);
+        $this->assertSame(70.0, (float) $order->delivery_charge);
+    }
+
+    public function test_auto_delivery_uses_dhaka_city_default_when_only_city_selected(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->mockCustomerLookup();
+
+        $city = City::query()->create([
+            'name' => 'Dhaka',
+            'slug' => 'dhaka-metro',
+            'is_dhaka' => true,
+            'is_active' => true,
+        ]);
+        $product = $this->product();
+
+        Livewire::test(AdminOrderForm::class)
+            ->call('addProduct', $product->id)
+            ->set('cityId', $city->id)
+            ->assertSet('autoDelivery', true)
+            ->assertSet('deliveryCharge', '80');
     }
 
     public function test_create_order_accepts_filled_phone_and_name(): void

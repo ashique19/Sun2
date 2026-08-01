@@ -12,6 +12,7 @@
             <p class="text-xs text-[#8C8474] mt-1">
                 Receivable = delivered COD − courier charge − COD % − withdrawals.
                 Pending = COD still with courier on dispatched parcels.
+                Expected API = book − pending.
                 API = live Steadfast wallet (refresh manually).
             </p>
             @if ($apiBalanceError)
@@ -70,7 +71,14 @@
                     @forelse ($couriers as $courier)
                         @php
                             $apiBalance = $apiBalances[$courier->id] ?? null;
-                            $summary = $balanceSummaries[$courier->id] ?? ['pending' => 0, 'receivable' => 0, 'book' => (float) $courier->balance];
+                            $summary = $balanceSummaries[$courier->id] ?? [
+                                'pending' => 0,
+                                'receivable' => 0,
+                                'book' => (float) $courier->balance,
+                                'expected_api' => (float) $courier->balance,
+                            ];
+                            $expectedApi = (float) ($summary['expected_api'] ?? (($summary['book'] ?? 0) - ($summary['pending'] ?? 0)));
+                            $apiDiff = $apiBalance !== null ? round((float) $apiBalance - $expectedApi, 2) : null;
                         @endphp
                         <tr class="hover:bg-[#FAF6EF]/60" wire:key="courier-{{ $courier->id }}">
                             <td class="px-4 py-3 font-medium">
@@ -96,11 +104,24 @@
                                 @if ($apiBalancesLoading)
                                     <span class="text-[#8C8474]">…</span>
                                 @elseif ($apiBalance !== null)
-                                    &#2547; {{ number_format($apiBalance, 0) }}
+                                    <div>&#2547; {{ number_format($apiBalance, 0) }}</div>
+                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Book − pending">
+                                        Should be &#2547; {{ number_format($expectedApi, 0) }}
+                                    </div>
+                                    <div class="text-[11px] mt-0.5 {{ abs($apiDiff) < 0.5 ? 'text-emerald-700' : 'text-amber-700' }}"
+                                        title="API − (book − pending)">
+                                        Diff {{ $apiDiff > 0 ? '+' : ($apiDiff < 0 ? '−' : '') }}&#2547; {{ number_format(abs($apiDiff), 0) }}
+                                    </div>
                                 @elseif (! $apiBalancesLoaded && $courier->slug && in_array(strtolower((string) $courier->slug), $apiSlugs, true))
-                                    <span class="text-[#8C8474]">Tap Refresh API</span>
+                                    <div class="text-[#8C8474]">Tap Refresh API</div>
+                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Book − pending">
+                                        Should be &#2547; {{ number_format($expectedApi, 0) }}
+                                    </div>
                                 @elseif ($courier->slug && in_array(strtolower((string) $courier->slug), $apiSlugs, true))
-                                    <span class="text-[#8C8474]" title="{{ $apiBalanceError ?: 'Unavailable' }}">—</span>
+                                    <div class="text-[#8C8474]" title="{{ $apiBalanceError ?: 'Unavailable' }}">—</div>
+                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Book − pending">
+                                        Should be &#2547; {{ number_format($expectedApi, 0) }}
+                                    </div>
                                 @else
                                     <span class="text-[#8C8474]">n/a</span>
                                 @endif

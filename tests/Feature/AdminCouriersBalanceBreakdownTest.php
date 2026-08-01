@@ -89,6 +89,8 @@ class AdminCouriersBalanceBreakdownTest extends TestCase
             'note' => 'Partial remittance',
         ]);
 
+        $courier->update(['balance' => 1880]);
+
         $summary = app(CourierBalanceService::class)->summarize($courier->fresh());
 
         // Pending: collectable on dispatched = 1080
@@ -99,6 +101,10 @@ class AdminCouriersBalanceBreakdownTest extends TestCase
         $this->assertSame(1010.0, round(1080 - 60 - 10, 2));
         $this->assertSame(810.0, $summary['receivable']);
         $this->assertSame(200.0, $summary['withdrawn']);
+
+        // Expected API = book − pending = 1880 − 1080
+        $this->assertSame(1880.0, $summary['book']);
+        $this->assertSame(800.0, $summary['expected_api']);
     }
 
     #[Test]
@@ -112,6 +118,8 @@ class AdminCouriersBalanceBreakdownTest extends TestCase
             ->assertSee('Pending')
             ->assertSee('API balance')
             ->assertSee('Receivable = delivered COD − courier charge − COD % − withdrawals')
-            ->assertSee('Pending = COD still with courier on dispatched parcels');
+            ->assertSee('Pending = COD still with courier on dispatched parcels')
+            ->assertSee('Expected API = book − pending')
+            ->assertSee('Should be');
     }
 }

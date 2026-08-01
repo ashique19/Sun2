@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Livewire\Admin\AdminCouriers;
 use App\Models\Courier;
+use App\Models\Order;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
@@ -91,6 +92,50 @@ class AdminCouriersApiBalanceLoadTest extends TestCase
             ->assertSet('apiBalanceError', null)
             ->assertSet('apiBalances.'.$courier->id, 1234.0)
             ->assertSee('1,234');
+    }
+
+    #[Test]
+    public function couriers_page_shows_expected_api_and_difference_after_refresh(): void
+    {
+        config([
+            'steadfast.api_key' => 'test-key',
+            'steadfast.secret_key' => 'test-secret',
+            'steadfast.base_url' => 'https://portal.packzy.com/api/v1',
+        ]);
+
+        Http::fake([
+            'portal.packzy.com/api/v1/get_balance' => Http::response(['current_balance' => 700], 200),
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+        $courier->update(['balance' => 1500]);
+
+        Order::query()->create([
+            'order_number' => 'PEND-API-1',
+            'name' => 'Pending Customer',
+            'phone' => '01710000001',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'dispatched',
+            'subtotal' => 1000,
+            'delivery_charge' => 80,
+            'courier_charge' => 60,
+            'cod_amount' => 500,
+            'total' => 1080,
+            'courier_id' => $courier->id,
+            'dispatch_date' => now(),
+            'placed_at' => now(),
+        ]);
+
+        // Expected API = book 1500 − pending 500 = 1000; actual API 700 → diff −300
+        Livewire::test(AdminCouriers::class)
+            ->assertSee('Should be')
+            ->assertSee('1,000')
+            ->call('loadApiBalances')
+            ->assertSeeHtml('&#2547; 700')
+            ->assertSeeHtml('Should be &#2547; 1,000')
+            ->assertSeeHtml('Diff −&#2547; 300');
     }
 
     #[Test]

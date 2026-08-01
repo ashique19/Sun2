@@ -23,10 +23,6 @@ class AdminSocialPostsCreate extends Component
 
     public string $body = '';
 
-    public bool $includeProductUrls = true;
-
-    public string $productLinkIntro = '';
-
     public string $layout = SocialPost::LAYOUT_ALBUM; // album | collage
 
     public bool $supportsPricedImages = false;
@@ -189,8 +185,6 @@ class AdminSocialPostsCreate extends Component
 
         $this->validate([
             'body' => ['required', 'string', 'min:3', 'max:5000'],
-            'includeProductUrls' => ['boolean'],
-            'productLinkIntro' => ['nullable', 'string', 'max:200'],
             'layout' => ['required', 'in:'.SocialPost::LAYOUT_ALBUM.','.SocialPost::LAYOUT_COLLAGE],
         ]);
 
@@ -222,18 +216,6 @@ class AdminSocialPostsCreate extends Component
             ]);
         }
 
-        $orderedProducts = collect($ids)
-            ->map(fn (int $id) => $selectedProducts->get($id))
-            ->filter();
-
-        $caption = $this->composedCaption($orderedProducts);
-
-        if (mb_strlen($caption) > 5000) {
-            throw ValidationException::withMessages([
-                'body' => 'Caption with product links exceeds 5000 characters. Shorten the text or remove some products.',
-            ]);
-        }
-
         $allPriced = true;
         foreach ($ids as $pid) {
             $product = $selectedProducts->get($pid);
@@ -245,7 +227,7 @@ class AdminSocialPostsCreate extends Component
         }
 
         $post = SocialPost::query()->create([
-            'body' => $caption,
+            'body' => $this->body,
             'image_source' => $allPriced ? SocialPost::IMAGE_SOURCE_PRICED : SocialPost::IMAGE_SOURCE_THUMB,
             'layout' => $this->layout,
             'status' => SocialPost::STATUS_PUBLISHED,
@@ -403,6 +385,7 @@ class AdminSocialPostsCreate extends Component
                     'name' => $product->name,
                     'path' => $path,
                     'url' => $url,
+                    'store_url' => route('product.show', $product),
                 ];
             }
         }
@@ -424,49 +407,8 @@ class AdminSocialPostsCreate extends Component
             'selectedProducts' => $products,
             'productRows' => $productRows,
             'previewImages' => $previewImages,
-            'composedCaption' => $this->composedCaption($products),
             'facebookPageName' => (string) config('app.name'),
         ]);
-    }
-
-    /**
-     * Caption sent to Facebook: custom text plus optional selected product URLs.
-     *
-     * @param  iterable<int, Product>  $products
-     */
-    public function composedCaption(iterable $products): string
-    {
-        $parts = [];
-        $body = trim($this->body);
-
-        if ($body !== '') {
-            $parts[] = $body;
-        }
-
-        if (! $this->includeProductUrls) {
-            return implode("\n\n", $parts);
-        }
-
-        $linkLines = [];
-        $intro = trim($this->productLinkIntro);
-
-        if ($intro !== '') {
-            $linkLines[] = $intro;
-        }
-
-        foreach ($products as $product) {
-            if (! $product instanceof Product) {
-                continue;
-            }
-
-            $linkLines[] = trim((string) $product->name)."\n".route('product.show', $product);
-        }
-
-        if ($linkLines !== []) {
-            $parts[] = implode("\n\n", $linkLines);
-        }
-
-        return trim(implode("\n\n", $parts));
     }
 
     private function finishIfComplete(): void

@@ -124,45 +124,12 @@
                             rows="5"
                             class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
                             placeholder="Write your Facebook post copy…"></textarea>
+                        <p class="mt-1 text-xs text-[#8C8474]">
+                            Album posts use this as the post message. Each product photo gets its store URL as that image’s caption.
+                        </p>
                         @error('body')
                             <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
                         @enderror
-                    </div>
-
-                    <div class="mb-4 rounded-lg border border-[#E7DFCF] p-3 space-y-3">
-                        <label class="flex items-start gap-3 cursor-pointer">
-                            <input type="checkbox" wire:model.live="includeProductUrls" class="mt-1 rounded border-[#C9A227] text-[#C9A227] focus:ring-[#C9A227]">
-                            <div>
-                                <div class="text-sm font-medium">Include product links in caption</div>
-                                <div class="text-xs text-[#8C8474]">Appends each selected product’s store URL under your custom text.</div>
-                            </div>
-                        </label>
-
-                        @if ($includeProductUrls)
-                            <div>
-                                <label class="block text-sm font-medium mb-1">Link intro <span class="font-normal text-[#8C8474]">(optional)</span></label>
-                                <input type="text"
-                                    wire:model.live="productLinkIntro"
-                                    maxlength="200"
-                                    placeholder="e.g. Order / details:"
-                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40">
-                                @error('productLinkIntro')
-                                    <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
-                                @enderror
-                            </div>
-
-                            @if ($productRows->isNotEmpty())
-                                <div class="rounded-lg bg-[#FAF6EF]/70 px-3 py-2 text-xs text-[#6B6459] space-y-2">
-                                    <p class="font-medium text-[#8C8474]">Links that will be added</p>
-                                    @foreach ($productRows as $row)
-                                        <div>
-                                            <div class="font-medium text-[#1E1E1E]">{{ $row['product']->name }}</div>
-                                            <div class="break-all text-[#8C8474]">{{ $row['store_url'] }}</div>
-                                        </div>
-                                    @endforeach
-                                </div>
-                            @endif
-                        @endif
                     </div>
 
                     <div>
@@ -171,7 +138,7 @@
                             <input type="radio" name="layout" wire:model.live="layout" value="album" class="mt-1">
                             <div>
                                 <div class="font-medium text-sm">Album / multi-photo</div>
-                                <div class="text-xs text-[#8C8474]">Each selected product image posts as a photo in the album.</div>
+                                <div class="text-xs text-[#8C8474]">Each selected product image posts as a photo; its store URL is the photo caption.</div>
                             </div>
                         </label>
 
@@ -208,10 +175,10 @@
                         </div>
 
                         <div class="px-3 pb-3 text-[15px] text-[#050505] whitespace-pre-wrap leading-snug min-h-[1.5rem]">
-                            @if (trim($composedCaption) !== '')
-                                {{ $composedCaption }}
+                            @if (trim($body) !== '')
+                                {{ $body }}
                             @else
-                                <span class="text-[#65676B]">Your post text and product links will appear here…</span>
+                                <span class="text-[#65676B]">Your post text will appear here…</span>
                             @endif
                         </div>
 
@@ -237,22 +204,15 @@
                                 Collage layout will be composed into a single image when you publish.
                             </div>
                         @else
-                            @php $count = count($previewImages); @endphp
-                            <div class="border-t border-[#E4E6EB] grid gap-0.5 bg-[#E4E6EB]
-                                {{ $count === 1 ? 'grid-cols-1' : ($count === 2 ? 'grid-cols-2' : ($count === 3 ? 'grid-cols-2' : 'grid-cols-2')) }}">
-                                @foreach (array_slice($previewImages, 0, 4) as $index => $image)
-                                    <div class="relative bg-[#F0F2F5]
-                                        {{ $count === 1 ? 'aspect-[1.91/1]' : '' }}
-                                        {{ $count === 2 ? 'aspect-square' : '' }}
-                                        {{ $count === 3 && $index === 0 ? 'row-span-2 aspect-auto min-h-[220px]' : '' }}
-                                        {{ $count === 3 && $index > 0 ? 'aspect-square' : '' }}
-                                        {{ $count >= 4 ? 'aspect-square' : '' }}">
-                                        <img src="{{ $image['url'] }}" alt="" class="absolute inset-0 h-full w-full object-cover">
-                                        @if ($index === 3 && $count > 4)
-                                            <div class="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-2xl font-semibold">
-                                                +{{ $count - 4 }}
-                                            </div>
-                                        @endif
+                            <div class="border-t border-[#E4E6EB] divide-y divide-[#E4E6EB]">
+                                @foreach ($previewImages as $image)
+                                    <div class="bg-[#F0F2F5]">
+                                        <div class="relative aspect-square sm:aspect-[4/3]">
+                                            <img src="{{ $image['url'] }}" alt="" class="absolute inset-0 h-full w-full object-cover">
+                                        </div>
+                                        <div class="bg-white px-3 py-2 text-[12px] text-[#050505] break-all">
+                                            {{ $image['store_url'] }}
+                                        </div>
                                     </div>
                                 @endforeach
                             </div>

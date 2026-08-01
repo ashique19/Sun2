@@ -125,7 +125,8 @@
                             class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
                             placeholder="Write your Facebook post copy…"></textarea>
                         <p class="mt-1 text-xs text-[#8C8474]">
-                            Album posts use this as the post message. Each product photo gets its store URL as that image’s caption.
+                            Album posts use this as the post message. Each product photo caption is
+                            “এই প্রডাক্টের আর ছবি দেখুন এই লিংকে - ” plus its store URL.
                         </p>
                         @error('body')
                             <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
@@ -138,7 +139,7 @@
                             <input type="radio" name="layout" wire:model.live="layout" value="album" class="mt-1">
                             <div>
                                 <div class="font-medium text-sm">Album / multi-photo</div>
-                                <div class="text-xs text-[#8C8474]">Each selected product image posts as a photo; its store URL is the photo caption.</div>
+                                <div class="text-xs text-[#8C8474]">Each selected product image posts as a photo with a Bangla caption and store URL.</div>
                             </div>
                         </label>
 
@@ -211,7 +212,7 @@
                                             <img src="{{ $image['url'] }}" alt="" class="absolute inset-0 h-full w-full object-cover">
                                         </div>
                                         <div class="bg-white px-3 py-2 text-[12px] text-[#050505] break-all">
-                                            {{ $image['store_url'] }}
+                                            {{ $image['image_caption'] }}
                                         </div>
                                     </div>
                                 @endforeach

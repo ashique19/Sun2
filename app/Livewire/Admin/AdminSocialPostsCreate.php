@@ -385,7 +385,7 @@ class AdminSocialPostsCreate extends Component
                     'name' => $product->name,
                     'path' => $path,
                     'url' => $url,
-                    'store_url' => route('product.show', $product),
+                    'image_caption' => SocialPost::productImageCaption($product),
                 ];
             }
         }
@@ -399,7 +399,7 @@ class AdminSocialPostsCreate extends Component
                 'options' => $options,
                 'selected' => $selected,
                 'selected_url' => StorefrontAssets::url($selected),
-                'store_url' => route('product.show', $product),
+                'image_caption' => SocialPost::productImageCaption($product),
             ];
         });
 

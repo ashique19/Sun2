@@ -40,6 +40,14 @@ class SocialPost extends Model
     }
 
     /**
+     * Facebook album photo caption for a product image.
+     */
+    public static function productImageCaption(Product $product): string
+    {
+        return 'এই প্রডাক্টের আর ছবি দেখুন এই লিংকে - '.route('product.show', $product);
+    }
+
+    /**
      * Image path chosen for a product row at compose time (republish-stable).
      */
     public static function pivotSelectedImagePath(object $pivot): ?string

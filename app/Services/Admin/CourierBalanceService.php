@@ -192,11 +192,12 @@ class CourierBalanceService
      * - pending: COD still with courier on dispatched parcels (in process)
      * - receivable: net remittance due for delivered parcels after courier fees, minus withdrawals
      * - book: running ledger on couriers.balance
+     * - expected_api: book − pending (what the live API wallet should hold)
      *
      * Uses OrderTotalCalculator::codCharge() directly — never Order::codCharge()/moneyTotals(),
      * which would eager-load items + adjustments for every delivered order.
      *
-     * @return array{pending: float, receivable: float, book: float, withdrawn: float}
+     * @return array{pending: float, receivable: float, book: float, withdrawn: float, expected_api: float}
      */
     public function summarize(Courier $courier): array
     {
@@ -205,7 +206,7 @@ class CourierBalanceService
 
     /**
      * @param  iterable<Courier>  $couriers
-     * @return array<int, array{pending: float, receivable: float, book: float, withdrawn: float}>
+     * @return array<int, array{pending: float, receivable: float, book: float, withdrawn: float, expected_api: float}>
      */
     public function summarizeMany(iterable $couriers): array
     {
@@ -271,12 +272,15 @@ class CourierBalanceService
             $pending = (float) ($pendingByCourier[$id] ?? 0);
             $withdrawn = (float) ($withdrawnByCourier[$id] ?? 0);
             $grossRemittable = (float) ($grossByCourier[$id] ?? 0);
+            $book = round((float) $courier->balance, 2);
+            $pendingRounded = round($pending, 2);
 
             $summaries[$id] = [
-                'pending' => round($pending, 2),
+                'pending' => $pendingRounded,
                 'receivable' => round(max(0.0, $grossRemittable - $withdrawn), 2),
-                'book' => round((float) $courier->balance, 2),
+                'book' => $book,
                 'withdrawn' => round($withdrawn, 2),
+                'expected_api' => round($book - $pendingRounded, 2),
             ];
         }
 

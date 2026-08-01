@@ -11,6 +11,7 @@ use App\Models\SocialPost;
 use App\Models\SocialPostPublication;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
@@ -122,14 +123,14 @@ class AdminSocialPostsTest extends TestCase
             ->assertSee('Facebook preview')
             ->assertSee('Preview copy for Facebook')
             ->assertSee('Make Facebook Post')
-            ->assertSee('Include product links in caption')
+            ->assertSee('photo caption')
             ->assertSee(route('product.show', $product))
             ->assertDontSeeHtml('wire:model.live="postToInstagram"')
             ->assertDontSee('Post to');
     }
 
     #[Test]
-    public function caption_includes_custom_text_intro_and_selected_product_urls(): void
+    public function album_post_keeps_custom_text_in_body_and_shows_product_urls_under_images(): void
     {
         $admin = $this->adminUser();
         $category = $this->makeCategory();
@@ -139,11 +140,7 @@ class AdminSocialPostsTest extends TestCase
         Livewire::actingAs($admin)
             ->test(AdminSocialPostsCreate::class, ['products' => $first->id.','.$second->id])
             ->set('body', 'New arrivals this week')
-            ->set('includeProductUrls', true)
-            ->set('productLinkIntro', 'Order / details:')
             ->assertSee('New arrivals this week')
-            ->assertSee('Order / details:')
-            ->assertSee('Gold Necklace')
             ->assertSee(route('product.show', $first))
             ->assertSee(route('product.show', $second))
             ->call('createPost')
@@ -152,60 +149,78 @@ class AdminSocialPostsTest extends TestCase
 
         $post = SocialPost::query()->latest('id')->first();
         $this->assertNotNull($post);
-
-        $expected = "New arrivals this week\n\nOrder / details:\n\nGold Necklace\n"
-            .route('product.show', $first)
-            ."\n\nSilver Ring\n"
-            .route('product.show', $second);
-
-        $this->assertSame($expected, $post->body);
+        $this->assertSame('New arrivals this week', $post->body);
+        $this->assertStringNotContainsString(route('product.show', $first), $post->body);
+        $this->assertStringNotContainsString(route('product.show', $second), $post->body);
     }
 
     #[Test]
-    public function caption_can_omit_product_urls_when_disabled(): void
+    public function facebook_album_publish_sends_product_url_as_each_photo_caption(): void
     {
         $admin = $this->adminUser();
         $category = $this->makeCategory();
-        $product = $this->makeProduct($category, 'no-links', 'img/products/no-links.jpg', 'No Links Product');
+        $first = $this->makeProduct($category, 'caption-a', 'img/products/caption-a.jpg', 'Caption A');
+        $second = $this->makeProduct($category, 'caption-b', 'img/products/caption-b.jpg', 'Caption B');
 
-        Livewire::actingAs($admin)
-            ->test(AdminSocialPostsCreate::class, ['products' => (string) $product->id])
-            ->set('body', 'Caption only custom text')
-            ->set('includeProductUrls', false)
-            ->call('createPost')
-            ->assertHasNoErrors();
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'fb-page-captions',
+            'facebook.graph_version' => 'v25.0',
+        ]);
 
-        $post = SocialPost::query()->latest('id')->first();
-        $this->assertNotNull($post);
-        $this->assertSame('Caption only custom text', $post->body);
-        $this->assertStringNotContainsString(route('product.show', $product), $post->body);
-    }
+        $photoCaptions = [];
 
-    #[Test]
-    public function product_urls_follow_reordered_selection(): void
-    {
-        $admin = $this->adminUser();
-        $category = $this->makeCategory();
-        $first = $this->makeProduct($category, 'first-item', 'img/products/first.jpg', 'First Item');
-        $second = $this->makeProduct($category, 'second-item', 'img/products/second.jpg', 'Second Item');
+        Http::fake(function (Request $request) use (&$photoCaptions) {
+            $url = $request->url();
+
+            if (str_contains($url, '/fb-page-captions/photos')) {
+                $photoCaptions[] = $request['caption'] ?? null;
+
+                return Http::response([
+                    'id' => 'photo-'.count($photoCaptions),
+                ], 200);
+            }
+
+            if (str_contains($url, '/fb-page-captions/feed')) {
+                return Http::response([
+                    'id' => 'feed-post-1',
+                    'permalink_url' => 'https://www.facebook.com/feed-post-1',
+                ], 200);
+            }
+
+            if (str_contains($url, 'feed-post-1')) {
+                return Http::response([
+                    'permalink_url' => 'https://www.facebook.com/feed-post-1',
+                ], 200);
+            }
+
+            return Http::response(['error' => 'unexpected '.$url], 500);
+        });
 
         Livewire::actingAs($admin)
             ->test(AdminSocialPostsCreate::class, ['products' => $first->id.','.$second->id])
-            ->call('reorderProducts', [$second->id, $first->id])
-            ->set('body', 'Reorder check')
-            ->set('includeProductUrls', true)
-            ->call('createPost')
-            ->assertHasNoErrors();
+            ->set('body', 'Custom album text only')
+            ->set('layout', 'album')
+            ->call('publish')
+            ->assertHasNoErrors()
+            ->assertSet('phase', 'done')
+            ->assertSet('channelProgress.facebook.status', 'success');
 
-        $post = SocialPost::query()->latest('id')->first();
-        $this->assertNotNull($post);
+        $this->assertSame([
+            route('product.show', $first),
+            route('product.show', $second),
+        ], $photoCaptions);
 
-        $secondPos = strpos($post->body, route('product.show', $second));
-        $firstPos = strpos($post->body, route('product.show', $first));
+        Http::assertSent(function (Request $request) {
+            if (! str_contains($request->url(), '/fb-page-captions/feed')) {
+                return false;
+            }
 
-        $this->assertNotFalse($secondPos);
-        $this->assertNotFalse($firstPos);
-        $this->assertLessThan($firstPos, $secondPos);
+            $message = $request['message'] ?? null;
+
+            return $message === 'Custom album text only'
+                && ! str_contains((string) $message, '/product/');
+        });
     }
 
     #[Test]
@@ -264,7 +279,10 @@ class AdminSocialPostsTest extends TestCase
         Http::fake([
             'https://graph.facebook.com/v25.0/fb-page-only/photos*' => Http::response([
                 'id' => 'photo-only',
-                'post_id' => 'fbpub-only',
+            ], 200),
+            'https://graph.facebook.com/v25.0/fb-page-only/feed*' => Http::response([
+                'id' => 'fbpub-only',
+                'permalink_url' => 'https://www.facebook.com/fbpub-only',
             ], 200),
             'https://graph.facebook.com/v25.0/fbpub-only*' => Http::response([
                 'permalink_url' => 'https://www.facebook.com/fbpub-only',
@@ -305,7 +323,10 @@ class AdminSocialPostsTest extends TestCase
         Http::fake([
             'https://graph.facebook.com/v25.0/fb-page-prog/photos*' => Http::response([
                 'id' => 'photo-prog',
-                'post_id' => 'fbpub-prog',
+            ], 200),
+            'https://graph.facebook.com/v25.0/fb-page-prog/feed*' => Http::response([
+                'id' => 'fbpub-prog',
+                'permalink_url' => 'https://www.facebook.com/fbpub-prog',
             ], 200),
             'https://graph.facebook.com/v25.0/fbpub-prog*' => Http::response([
                 'permalink_url' => 'https://www.facebook.com/fbpub-prog',
@@ -344,7 +365,10 @@ class AdminSocialPostsTest extends TestCase
         Http::fake([
             'https://graph.facebook.com/v25.0/fb-page-once/photos*' => Http::response([
                 'id' => 'photo-once',
-                'post_id' => 'fbpub-once',
+            ], 200),
+            'https://graph.facebook.com/v25.0/fb-page-once/feed*' => Http::response([
+                'id' => 'fbpub-once',
+                'permalink_url' => 'https://www.facebook.com/fbpub-once',
             ], 200),
             'https://graph.facebook.com/v25.0/fbpub-once*' => Http::response([
                 'permalink_url' => 'https://www.facebook.com/fbpub-once',
@@ -385,7 +409,10 @@ class AdminSocialPostsTest extends TestCase
         Http::fake([
             'https://graph.facebook.com/v25.0/fb-page-1/photos*' => Http::response([
                 'id' => 'photo-1',
-                'post_id' => 'fbpub-1',
+            ], 200),
+            'https://graph.facebook.com/v25.0/fb-page-1/feed*' => Http::response([
+                'id' => 'fbpub-1',
+                'permalink_url' => 'https://www.facebook.com/fbpub-1',
             ], 200),
             'https://graph.facebook.com/v25.0/fbpub-1*' => Http::response([
                 'permalink_url' => 'https://www.facebook.com/fbpub-1',
@@ -454,7 +481,10 @@ class AdminSocialPostsTest extends TestCase
         Http::fake([
             'https://graph.facebook.com/v25.0/fb-page-2/photos*' => Http::response([
                 'id' => 'photo-2',
-                'post_id' => 'fbpub-2',
+            ], 200),
+            'https://graph.facebook.com/v25.0/fb-page-2/feed*' => Http::response([
+                'id' => 'fbpub-2',
+                'permalink_url' => 'https://www.facebook.com/fbpub-2',
             ], 200),
             'https://graph.facebook.com/v25.0/fbpub-2*' => Http::response([
                 'permalink_url' => 'https://www.facebook.com/fbpub-2',

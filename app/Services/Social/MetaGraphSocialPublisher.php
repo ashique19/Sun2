@@ -110,9 +110,25 @@ class MetaGraphSocialPublisher
         }
     }
 
+    /**
+     * @return list<string>
+     */
     private function imageUrlsForPost(SocialPost $post): array
     {
-        $urls = [];
+        return array_values(array_map(
+            static fn (array $item): string => $item['image_url'],
+            $this->facebookMediaItems($post),
+        ));
+    }
+
+    /**
+     * Album media: each product image paired with that product's store URL as photo caption.
+     *
+     * @return list<array{image_url: string, caption: ?string}>
+     */
+    private function facebookMediaItems(SocialPost $post): array
+    {
+        $items = [];
 
         foreach ($post->products as $product) {
             $pivot = $product->pivot;
@@ -129,12 +145,17 @@ class MetaGraphSocialPublisher
 
             $url = StorefrontAssets::mediumUrl($path) ?? StorefrontAssets::url($path);
 
-            if ($url) {
-                $urls[] = $url;
+            if (! $url) {
+                continue;
             }
+
+            $items[] = [
+                'image_url' => $url,
+                'caption' => route('product.show', $product),
+            ];
         }
 
-        return $urls;
+        return $items;
     }
 
     private function publishFacebook(SocialPost $post, bool $requireAttempt = false): ?SocialPostPublication
@@ -167,16 +188,23 @@ class MetaGraphSocialPublisher
                 throw new RuntimeException('Post body is empty.');
             }
 
-            $imageUrls = $this->primaryFacebookImageUrls($post);
-            if ($imageUrls === []) {
+            $mediaItems = $this->primaryFacebookMediaItems($post);
+            if ($mediaItems === []) {
                 throw new RuntimeException('No images available for publishing.');
             }
 
-            // Facebook /feed rejects `picture` without `link`. Use Photos API instead.
-            if (count($imageUrls) === 1) {
-                $result = $this->publishFacebookSinglePhoto($pageId, $version, $token, $imageUrls[0], $message);
+            // Album (1+ photos): post message = custom text; each photo caption = product URL.
+            // Collage (single composed image): keep custom text as the published photo caption.
+            if ((string) $post->layout === SocialPost::LAYOUT_COLLAGE && count($mediaItems) === 1) {
+                $result = $this->publishFacebookSinglePhoto(
+                    $pageId,
+                    $version,
+                    $token,
+                    $mediaItems[0]['image_url'],
+                    $message,
+                );
             } else {
-                $result = $this->publishFacebookAlbum($pageId, $version, $token, $imageUrls, $message);
+                $result = $this->publishFacebookAlbum($pageId, $version, $token, $mediaItems, $message);
             }
 
             $externalId = $result['id'];
@@ -202,9 +230,9 @@ class MetaGraphSocialPublisher
     }
 
     /**
-     * @return list<string>
+     * @return list<array{image_url: string, caption: ?string}>
      */
-    private function primaryFacebookImageUrls(SocialPost $post): array
+    private function primaryFacebookMediaItems(SocialPost $post): array
     {
         $layout = (string) $post->layout;
 
@@ -212,10 +240,15 @@ class MetaGraphSocialPublisher
             $collagePath = $post->collage_path ?: $post->thumbnail_path;
             $url = StorefrontAssets::mediumUrl($collagePath) ?? StorefrontAssets::url($collagePath);
 
-            return $url ? [$url] : $this->imageUrlsForPost($post);
+            if ($url) {
+                return [[
+                    'image_url' => $url,
+                    'caption' => null,
+                ]];
+            }
         }
 
-        return $this->imageUrlsForPost($post);
+        return $this->facebookMediaItems($post);
     }
 
     /**
@@ -256,27 +289,34 @@ class MetaGraphSocialPublisher
     }
 
     /**
-     * @param  list<string>  $imageUrls
+     * @param  list<array{image_url: string, caption: ?string}>  $mediaItems
      * @return array{id: string, permalink: ?string}
      */
     private function publishFacebookAlbum(
         string $pageId,
         string $version,
         string $token,
-        array $imageUrls,
+        array $mediaItems,
         string $message,
     ): array {
         $attachedMedia = [];
 
-        foreach ($imageUrls as $imageUrl) {
+        foreach ($mediaItems as $item) {
+            $payload = [
+                'url' => $item['image_url'],
+                'published' => false,
+            ];
+
+            $caption = isset($item['caption']) ? trim((string) $item['caption']) : '';
+            if ($caption !== '') {
+                $payload['caption'] = $caption;
+            }
+
             $upload = Http::timeout(30)
                 ->withToken($token)
                 ->acceptJson()
                 ->asJson()
-                ->post('https://graph.facebook.com/'.$version.'/'.$pageId.'/photos', [
-                    'url' => $imageUrl,
-                    'published' => false,
-                ]);
+                ->post('https://graph.facebook.com/'.$version.'/'.$pageId.'/photos', $payload);
 
             if (! $upload->successful()) {
                 throw new RuntimeException('Facebook album photo upload failed: '.$upload->body());

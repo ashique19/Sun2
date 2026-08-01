@@ -122,8 +122,90 @@ class AdminSocialPostsTest extends TestCase
             ->assertSee('Facebook preview')
             ->assertSee('Preview copy for Facebook')
             ->assertSee('Make Facebook Post')
+            ->assertSee('Include product links in caption')
+            ->assertSee(route('product.show', $product))
             ->assertDontSeeHtml('wire:model.live="postToInstagram"')
             ->assertDontSee('Post to');
+    }
+
+    #[Test]
+    public function caption_includes_custom_text_intro_and_selected_product_urls(): void
+    {
+        $admin = $this->adminUser();
+        $category = $this->makeCategory();
+        $first = $this->makeProduct($category, 'gold-necklace', 'img/products/gold.jpg', 'Gold Necklace');
+        $second = $this->makeProduct($category, 'silver-ring', 'img/products/silver.jpg', 'Silver Ring');
+
+        Livewire::actingAs($admin)
+            ->test(AdminSocialPostsCreate::class, ['products' => $first->id.','.$second->id])
+            ->set('body', 'New arrivals this week')
+            ->set('includeProductUrls', true)
+            ->set('productLinkIntro', 'Order / details:')
+            ->assertSee('New arrivals this week')
+            ->assertSee('Order / details:')
+            ->assertSee('Gold Necklace')
+            ->assertSee(route('product.show', $first))
+            ->assertSee(route('product.show', $second))
+            ->call('createPost')
+            ->assertHasNoErrors()
+            ->assertSet('phase', 'publishing');
+
+        $post = SocialPost::query()->latest('id')->first();
+        $this->assertNotNull($post);
+
+        $expected = "New arrivals this week\n\nOrder / details:\n\nGold Necklace\n"
+            .route('product.show', $first)
+            ."\n\nSilver Ring\n"
+            .route('product.show', $second);
+
+        $this->assertSame($expected, $post->body);
+    }
+
+    #[Test]
+    public function caption_can_omit_product_urls_when_disabled(): void
+    {
+        $admin = $this->adminUser();
+        $category = $this->makeCategory();
+        $product = $this->makeProduct($category, 'no-links', 'img/products/no-links.jpg', 'No Links Product');
+
+        Livewire::actingAs($admin)
+            ->test(AdminSocialPostsCreate::class, ['products' => (string) $product->id])
+            ->set('body', 'Caption only custom text')
+            ->set('includeProductUrls', false)
+            ->call('createPost')
+            ->assertHasNoErrors();
+
+        $post = SocialPost::query()->latest('id')->first();
+        $this->assertNotNull($post);
+        $this->assertSame('Caption only custom text', $post->body);
+        $this->assertStringNotContainsString(route('product.show', $product), $post->body);
+    }
+
+    #[Test]
+    public function product_urls_follow_reordered_selection(): void
+    {
+        $admin = $this->adminUser();
+        $category = $this->makeCategory();
+        $first = $this->makeProduct($category, 'first-item', 'img/products/first.jpg', 'First Item');
+        $second = $this->makeProduct($category, 'second-item', 'img/products/second.jpg', 'Second Item');
+
+        Livewire::actingAs($admin)
+            ->test(AdminSocialPostsCreate::class, ['products' => $first->id.','.$second->id])
+            ->call('reorderProducts', [$second->id, $first->id])
+            ->set('body', 'Reorder check')
+            ->set('includeProductUrls', true)
+            ->call('createPost')
+            ->assertHasNoErrors();
+
+        $post = SocialPost::query()->latest('id')->first();
+        $this->assertNotNull($post);
+
+        $secondPos = strpos($post->body, route('product.show', $second));
+        $firstPos = strpos($post->body, route('product.show', $first));
+
+        $this->assertNotFalse($secondPos);
+        $this->assertNotFalse($firstPos);
+        $this->assertLessThan($firstPos, $secondPos);
     }
 
     #[Test]

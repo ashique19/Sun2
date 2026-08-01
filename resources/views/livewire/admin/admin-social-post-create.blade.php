@@ -118,7 +118,7 @@
                     <h2 class="font-semibold mb-3">Compose</h2>
 
                     <div class="mb-4">
-                        <label class="block text-sm font-medium mb-1">Post text</label>
+                        <label class="block text-sm font-medium mb-1">Custom text</label>
                         <textarea
                             wire:model.live="body"
                             rows="5"
@@ -127,6 +127,42 @@
                         @error('body')
                             <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
                         @enderror
+                    </div>
+
+                    <div class="mb-4 rounded-lg border border-[#E7DFCF] p-3 space-y-3">
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input type="checkbox" wire:model.live="includeProductUrls" class="mt-1 rounded border-[#C9A227] text-[#C9A227] focus:ring-[#C9A227]">
+                            <div>
+                                <div class="text-sm font-medium">Include product links in caption</div>
+                                <div class="text-xs text-[#8C8474]">Appends each selected product’s store URL under your custom text.</div>
+                            </div>
+                        </label>
+
+                        @if ($includeProductUrls)
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Link intro <span class="font-normal text-[#8C8474]">(optional)</span></label>
+                                <input type="text"
+                                    wire:model.live="productLinkIntro"
+                                    maxlength="200"
+                                    placeholder="e.g. Order / details:"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40">
+                                @error('productLinkIntro')
+                                    <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            @if ($productRows->isNotEmpty())
+                                <div class="rounded-lg bg-[#FAF6EF]/70 px-3 py-2 text-xs text-[#6B6459] space-y-2">
+                                    <p class="font-medium text-[#8C8474]">Links that will be added</p>
+                                    @foreach ($productRows as $row)
+                                        <div>
+                                            <div class="font-medium text-[#1E1E1E]">{{ $row['product']->name }}</div>
+                                            <div class="break-all text-[#8C8474]">{{ $row['store_url'] }}</div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
+                        @endif
                     </div>
 
                     <div>
@@ -172,10 +208,10 @@
                         </div>
 
                         <div class="px-3 pb-3 text-[15px] text-[#050505] whitespace-pre-wrap leading-snug min-h-[1.5rem]">
-                            @if (trim($body) !== '')
-                                {{ $body }}
+                            @if (trim($composedCaption) !== '')
+                                {{ $composedCaption }}
                             @else
-                                <span class="text-[#65676B]">Your post text will appear here…</span>
+                                <span class="text-[#65676B]">Your post text and product links will appear here…</span>
                             @endif
                         </div>
 

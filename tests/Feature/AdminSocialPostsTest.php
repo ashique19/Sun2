@@ -123,7 +123,7 @@ class AdminSocialPostsTest extends TestCase
             ->assertSee('Facebook preview')
             ->assertSee('Preview copy for Facebook')
             ->assertSee('Make Facebook Post')
-            ->assertSee('photo caption')
+            ->assertSee('এই প্রডাক্টের আর ছবি দেখুন এই লিংকে - ')
             ->assertSee(route('product.show', $product))
             ->assertDontSeeHtml('wire:model.live="postToInstagram"')
             ->assertDontSee('Post to');
@@ -141,8 +141,8 @@ class AdminSocialPostsTest extends TestCase
             ->test(AdminSocialPostsCreate::class, ['products' => $first->id.','.$second->id])
             ->set('body', 'New arrivals this week')
             ->assertSee('New arrivals this week')
-            ->assertSee(route('product.show', $first))
-            ->assertSee(route('product.show', $second))
+            ->assertSee(SocialPost::productImageCaption($first))
+            ->assertSee(SocialPost::productImageCaption($second))
             ->call('createPost')
             ->assertHasNoErrors()
             ->assertSet('phase', 'publishing');
@@ -155,7 +155,7 @@ class AdminSocialPostsTest extends TestCase
     }
 
     #[Test]
-    public function facebook_album_publish_sends_product_url_as_each_photo_caption(): void
+    public function facebook_album_publish_sends_bangla_text_and_product_url_as_each_photo_caption(): void
     {
         $admin = $this->adminUser();
         $category = $this->makeCategory();
@@ -207,9 +207,14 @@ class AdminSocialPostsTest extends TestCase
             ->assertSet('channelProgress.facebook.status', 'success');
 
         $this->assertSame([
-            route('product.show', $first),
-            route('product.show', $second),
+            SocialPost::productImageCaption($first),
+            SocialPost::productImageCaption($second),
         ], $photoCaptions);
+
+        $this->assertSame(
+            'এই প্রডাক্টের আর ছবি দেখুন এই লিংকে - '.route('product.show', $first),
+            $photoCaptions[0],
+        );
 
         Http::assertSent(function (Request $request) {
             if (! str_contains($request->url(), '/fb-page-captions/feed')) {
@@ -219,7 +224,8 @@ class AdminSocialPostsTest extends TestCase
             $message = $request['message'] ?? null;
 
             return $message === 'Custom album text only'
-                && ! str_contains((string) $message, '/product/');
+                && ! str_contains((string) $message, '/product/')
+                && ! str_contains((string) $message, 'এই প্রডাক্টের');
         });
     }
 

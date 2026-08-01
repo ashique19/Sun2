@@ -122,7 +122,7 @@ class MetaGraphSocialPublisher
     }
 
     /**
-     * Album media: each product image paired with that product's store URL as photo caption.
+     * Album media: each product image paired with its Bangla + store URL photo caption.
      *
      * @return list<array{image_url: string, caption: ?string}>
      */
@@ -151,7 +151,7 @@ class MetaGraphSocialPublisher
 
             $items[] = [
                 'image_url' => $url,
-                'caption' => route('product.show', $product),
+                'caption' => SocialPost::productImageCaption($product),
             ];
         }
 
@@ -193,7 +193,7 @@ class MetaGraphSocialPublisher
                 throw new RuntimeException('No images available for publishing.');
             }
 
-            // Album (1+ photos): post message = custom text; each photo caption = product URL.
+            // Album (1+ photos): post message = custom text; each photo caption = Bangla text + product URL.
             // Collage (single composed image): keep custom text as the published photo caption.
             if ((string) $post->layout === SocialPost::LAYOUT_COLLAGE && count($mediaItems) === 1) {
                 $result = $this->publishFacebookSinglePhoto(

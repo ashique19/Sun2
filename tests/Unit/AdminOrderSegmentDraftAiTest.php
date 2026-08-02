@@ -46,7 +46,7 @@ class AdminOrderSegmentDraftAiTest extends TestCase
         $this->assertSame(2, $counts['draft-ai']);
         $this->assertSame(1, $counts['dispatched']);
         $this->assertSame(3, $counts['all']);
-        $this->assertSame('Draft by AI', AdminOrderSegment::label('draft-ai'));
+        $this->assertSame('By AI', AdminOrderSegment::label('draft-ai'));
         $this->assertTrue(AdminOrderSegment::isValid('draft-ai'));
     }
 

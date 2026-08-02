@@ -47,7 +47,7 @@
             </div>
             <div>
                 <label class="mb-1 block text-xs font-medium text-[#6B6459]">Amount (&#2547;)</label>
-                <input type="number" min="0.01" step="1" wire:model="amount"
+                <input type="number" min="0.01" step="0.01" wire:model="amount"
                     class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums">
                 @error('amount') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
             </div>
@@ -181,7 +181,7 @@
             </div>
             <div>
                 <label class="mb-1 block text-xs font-medium text-[#6B6459]">Default amount (optional)</label>
-                <input type="number" min="0.01" step="1" wire:model="reminderDefaultAmount"
+                <input type="number" min="0.01" step="0.01" wire:model="reminderDefaultAmount"
                     class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums">
                 @error('reminderDefaultAmount') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
             </div>

@@ -165,7 +165,7 @@
                                     <label class="mb-1 block text-[10px] font-medium uppercase tracking-wide text-[#8C8474]">
                                         {{ $reminder->prompt_type === 'check' ? 'Top-up amount' : 'Amount' }} (৳)
                                     </label>
-                                    <input type="number" min="0.01" step="1"
+                                    <input type="number" min="0.01" step="0.01"
                                         wire:model="expenseReminderAmounts.{{ $reminder->id }}"
                                         class="w-28 rounded-lg border border-[#E0D6C2] px-2.5 py-1.5 text-sm tabular-nums focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
                                 </div>
@@ -217,7 +217,7 @@
                             </div>
                             <div>
                                 <label class="mb-1 block text-[10px] font-medium uppercase tracking-wide text-[#8C8474]">Amount (৳)</label>
-                                <input type="number" min="0.01" step="1" wire:model="eveningExpenseAmount"
+                                <input type="number" min="0.01" step="0.01" wire:model="eveningExpenseAmount"
                                     class="w-full rounded-lg border border-[#E0D6C2] px-2.5 py-1.5 text-sm tabular-nums focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
                                 @error('eveningExpenseAmount') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
                             </div>

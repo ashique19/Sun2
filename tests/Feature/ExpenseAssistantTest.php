@@ -167,8 +167,11 @@ class ExpenseAssistantTest extends TestCase
         Livewire::test(AdminDashboard::class)
             ->assertSee('Any cost needs to be recorded?')
             ->call('openEveningExpenseForm')
+            // Browser rejects 550 when min=0.01 and step=1 (only 0.01, 1.01, … are valid).
+            ->assertSeeHtml('wire:model="eveningExpenseAmount"')
+            ->assertSeeHtml('step="0.01"')
             ->set('eveningExpenseTitle', 'Taxi')
-            ->set('eveningExpenseAmount', '350')
+            ->set('eveningExpenseAmount', '550')
             ->set('eveningExpenseCategory', 'other')
             ->call('saveEveningExpense')
             ->assertSee('Expense recorded.')
@@ -176,7 +179,7 @@ class ExpenseAssistantTest extends TestCase
 
         $this->assertDatabaseHas('expenses', [
             'title' => 'Taxi',
-            'amount' => 350,
+            'amount' => 550,
             'kind' => Expense::KIND_ONE_TIME,
         ]);
 

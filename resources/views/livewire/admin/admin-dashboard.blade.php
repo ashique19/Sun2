@@ -263,8 +263,8 @@
                     <h2 class="text-sm font-semibold text-sky-950">Return parcels at Steadfast hub</h2>
                     <p class="text-xs text-sky-800/80">
                         {{ $returnHubArrivals->count() }}{{ $returnHubArrivals->count() >= 50 ? '+' : '' }}
-                        return {{ $returnHubArrivals->count() === 1 ? 'parcel has' : 'parcels have' }}
-                        arrived at Steadfast Rampura hub — mark received to restore stock
+                        Has Return {{ $returnHubArrivals->count() === 1 ? 'parcel has' : 'parcels have' }}
+                        arrived at Steadfast Rampura hub — mark received (restores stock when return qty is set, clears H/R)
                     </p>
                 </div>
                 <a href="{{ route('admin.orders.return-pending') }}"
@@ -283,20 +283,29 @@
                                     {{ $order->name }}
                                 </a>
                                 <span class="text-xs text-[#8C8474]">#{{ $order->order_number }}</span>
+                                @if ($order->is_replacement)
+                                    <span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-sky-100 text-sky-800">Exchange</span>
+                                @endif
                                 @if ($order->return_hub_arrived_at)
                                     <span class="text-[10px] text-[#8C8474]">{{ $order->return_hub_arrived_at->diffForHumans() }}</span>
                                 @endif
                             </div>
                             @if ($order->items->isNotEmpty())
+                                @php
+                                    $pendingReturnItems = $order->items->filter(fn ($item) => (int) $item->returned_quantity > 0 && ! $item->return_received);
+                                    $hubItems = $pendingReturnItems->isNotEmpty() ? $pendingReturnItems : $order->items;
+                                @endphp
                                 <div class="mt-2 flex flex-wrap gap-1.5">
-                                    @foreach ($order->items as $item)
-                                        @continue((int) $item->returned_quantity <= 0 || $item->return_received)
+                                    @foreach ($hubItems as $item)
                                         @php
                                             $imageUrl = $item->imageUrl();
                                             $productName = $item->displayName();
+                                            $badgeQty = (int) $item->returned_quantity > 0
+                                                ? (int) $item->returned_quantity
+                                                : (int) $item->quantity;
                                         @endphp
                                         <div wire:key="return-hub-item-{{ $item->id }}"
-                                            title="{{ $productName }} ×{{ $item->returned_quantity }} returning"
+                                            title="{{ $productName }} ×{{ $badgeQty }}{{ (int) $item->returned_quantity > 0 ? ' returning' : '' }}"
                                             class="relative h-10 w-10 shrink-0 overflow-hidden rounded-md border border-[#E7DFCF] bg-[#FAF6EF]">
                                             @if ($imageUrl)
                                                 <img src="{{ $imageUrl }}" alt="{{ $productName }}"
@@ -304,9 +313,11 @@
                                             @else
                                                 <span class="flex h-full w-full items-center justify-center text-[10px] text-[#8C8474]">?</span>
                                             @endif
-                                            <span class="absolute bottom-0 right-0 rounded-tl bg-sky-700/85 px-1 text-[9px] font-semibold leading-4 text-white tabular-nums">
-                                                ×{{ $item->returned_quantity }}
-                                            </span>
+                                            @if ($badgeQty > 1 || (int) $item->returned_quantity > 0)
+                                                <span class="absolute bottom-0 right-0 rounded-tl bg-sky-700/85 px-1 text-[9px] font-semibold leading-4 text-white tabular-nums">
+                                                    ×{{ $badgeQty }}
+                                                </span>
+                                            @endif
                                         </div>
                                     @endforeach
                                 </div>
@@ -315,7 +326,7 @@
                         <div class="flex shrink-0 flex-col gap-1.5">
                             <button type="button"
                                 wire:click="markReturnHubReceived({{ $order->id }})"
-                                wire:confirm="Mark return received for order #{{ $order->order_number }} and restore stock?"
+                                wire:confirm="Mark return received for order #{{ $order->order_number }}? Restores stock for return lines and clears H/R."
                                 class="inline-flex items-center justify-center rounded px-2.5 py-1 text-xs font-medium text-white bg-sky-700 hover:bg-sky-800">
                                 Mark as received
                             </button>

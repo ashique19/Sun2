@@ -105,4 +105,49 @@ class ReturnHubArrivalServiceTest extends TestCase
         $awaiting = $this->service()->ordersAwaitingReceive();
         $this->assertTrue($awaiting->contains('id', $order->id));
     }
+
+    #[Test]
+    public function orders_awaiting_receive_includes_exchange_hr_without_returned_qty(): void
+    {
+        $order = Order::query()->create([
+            'order_number' => 'RH-EXCHANGE',
+            'name' => 'Exchange Customer',
+            'phone' => '01710000011',
+            'address' => '[EXCHANGE PARCEL] Dhaka',
+            'status' => 'new',
+            'subtotal' => 800,
+            'total' => 800,
+            'has_return' => true,
+            'is_replacement' => true,
+            'placed_at' => now()->subDay(),
+        ]);
+
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Exchange Saree',
+            'quantity' => 1,
+            'returned_quantity' => 0,
+            'to_be_returned' => false,
+            'return_received' => false,
+            'price' => 800,
+            'purchase_price' => 300,
+            'line_total' => 800,
+        ]);
+
+        CourierData::query()->create([
+            'order_id' => $order->id,
+            'courier_id' => null,
+            'api_data' => [
+                'notification_type' => 'tracking_update',
+                'tracking_message' => 'Consignment has been received at RAMPURA.',
+                'updated_at' => now()->toDateTimeString(),
+            ],
+            'created_at' => now(),
+        ]);
+
+        $awaiting = $this->service()->ordersAwaitingReceive();
+
+        $this->assertTrue($awaiting->contains('id', $order->id));
+        $this->assertNotNull($order->fresh()->return_hub_arrived_at);
+    }
 }

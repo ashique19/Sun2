@@ -113,7 +113,60 @@ class AdminDashboardReturnHubArrivalTest extends TestCase
 
         $item = $order->items()->first();
         $this->assertTrue((bool) $item->return_received);
+        $this->assertFalse((bool) $order->fresh()->has_return);
         $this->assertSame($stockBefore + 1, (int) Product::query()->whereKey($productId)->value('stock_quantity'));
+    }
+
+    #[Test]
+    public function dashboard_lists_exchange_hr_orders_at_hub_and_clears_hr_on_receive(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $order = Order::query()->create([
+            'order_number' => 'HUB-EX',
+            'name' => 'Exchange Hub Customer',
+            'phone' => '01710000005',
+            'address' => '[EXCHANGE PARCEL] Dhaka',
+            'status' => 'dispatched',
+            'subtotal' => 700,
+            'total' => 700,
+            'has_return' => true,
+            'is_replacement' => true,
+            'placed_at' => now()->subDays(2),
+            'dispatch_date' => now()->subDay(),
+        ]);
+
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Exchange Kurti',
+            'quantity' => 1,
+            'returned_quantity' => 0,
+            'price' => 700,
+            'purchase_price' => 250,
+            'line_total' => 700,
+        ]);
+
+        CourierData::query()->create([
+            'order_id' => $order->id,
+            'courier_id' => null,
+            'api_data' => [
+                'notification_type' => 'tracking_update',
+                'tracking_message' => 'Consignment has been received at RAMPURA.',
+                'updated_at' => now()->subMinutes(20)->toDateTimeString(),
+            ],
+            'created_at' => now()->subMinutes(20),
+        ]);
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSee('Return parcels at Steadfast hub')
+            ->assertSeeHtml('wire:key="return-hub-arrival-'.$order->id.'"')
+            ->assertSee('Exchange')
+            ->call('markReturnHubReceived', $order->id)
+            ->assertSee('Return marked received for order #'.$order->order_number)
+            ->assertDontSeeHtml('wire:key="return-hub-arrival-'.$order->id.'"');
+
+        $this->assertFalse((bool) $order->fresh()->has_return);
+        $this->assertNotNull($order->fresh()->return_hub_arrived_at);
     }
 
     #[Test]

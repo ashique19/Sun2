@@ -39,7 +39,7 @@ class ReturnHubArrivalService
 
     /**
      * Stamp hub arrival when a Steadfast webhook/tracking message matches.
-     * Only applies to return-pending orders (`has_return`).
+     * Applies to every Has Return order (`has_return`), including exchange / H/R-only.
      */
     public function observeMessage(Order $order, string $message, mixed $timestamp = null): bool
     {
@@ -82,17 +82,13 @@ class ReturnHubArrivalService
     }
 
     /**
-     * Backfill hub stamps for return-pending orders that already have matching logs.
+     * Backfill hub stamps for Has Return orders that already have matching logs.
      */
     public function syncPendingFromStoredLogs(int $limit = 100): int
     {
         $orders = Order::query()
             ->where('has_return', true)
             ->whereNull('return_hub_arrived_at')
-            ->whereHas('items', function ($query) {
-                $query->where('returned_quantity', '>', 0)
-                    ->where('return_received', false);
-            })
             ->with('courierLogs')
             ->orderByDesc('id')
             ->limit($limit)
@@ -110,8 +106,8 @@ class ReturnHubArrivalService
     }
 
     /**
-     * Return-pending orders whose parcels have arrived at the Rampura hub
-     * and still have unreceived return lines.
+     * Has Return orders whose parcels have arrived at the Rampura hub
+     * (exchange, H/R-only, and product return-pending).
      *
      * @return Collection<int, Order>
      */
@@ -126,10 +122,6 @@ class ReturnHubArrivalService
             ])
             ->where('has_return', true)
             ->whereNotNull('return_hub_arrived_at')
-            ->whereHas('items', function ($query) {
-                $query->where('returned_quantity', '>', 0)
-                    ->where('return_received', false);
-            })
             ->orderByDesc('return_hub_arrived_at')
             ->orderByDesc('id')
             ->limit($limit)
@@ -139,6 +131,7 @@ class ReturnHubArrivalService
                 'name',
                 'status',
                 'has_return',
+                'is_replacement',
                 'return_hub_arrived_at',
                 'courier_id',
                 'courier_tracker',

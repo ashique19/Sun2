@@ -8,6 +8,8 @@ use App\Services\Orders\OrderDeliverySettlement;
 use App\Services\Orders\OrderPaymentSync;
 use App\Services\Orders\OrderStockService;
 use App\Services\Reseller\ResellerCommissionService;
+use App\Support\AdminOrderSegment;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -229,6 +231,7 @@ class OrderDeliveryReturnService
     public function setHasReturn(Order $order, bool $hasReturn): Order
     {
         $order->update(['has_return' => $hasReturn]);
+        Cache::forget(AdminOrderSegment::COUNTS_CACHE_KEY);
 
         return $order->refresh();
     }

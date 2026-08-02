@@ -66,6 +66,7 @@ class Order extends Model
             'payment_date' => 'datetime',
             'is_replacement' => 'boolean',
             'has_return' => 'boolean',
+            'return_hub_arrived_at' => 'datetime',
         ];
     }
 

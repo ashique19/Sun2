@@ -436,6 +436,16 @@
                                         Cancel/Return
                                     </button>
                                 @endif
+                                @if ($segment === 'delivered' && ! $order->has_return)
+                                    <button type="button"
+                                        wire:click="toggleHasReturn({{ $order->id }})"
+                                        wire:loading.attr="disabled"
+                                        wire:target="toggleHasReturn({{ $order->id }})"
+                                        title="Flag has return (moves to Return Pending)"
+                                        class="inline-flex h-8 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white px-2.5 text-xs font-semibold text-[#6B6459] hover:bg-[#FAF6EF] disabled:opacity-60">
+                                        H/R
+                                    </button>
+                                @endif
                                 @if ($segment === 'return-pending')
                                     @php($hasPendingReturn = $order->items->contains(fn ($item) => (int) $item->returned_quantity > 0 && ! $item->return_received))
                                     @php($hasReceivedReturn = $order->items->contains(fn ($item) => (bool) $item->return_received))

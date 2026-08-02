@@ -252,6 +252,84 @@
         <div class="mb-4 rounded-lg bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">{{ $courierChargeMessage }}</div>
     @endif
 
+    @if ($returnHubMessage)
+        <div class="mb-4 rounded-lg bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">{{ $returnHubMessage }}</div>
+    @endif
+
+    @if (($returnHubArrivals ?? collect())->isNotEmpty())
+        <div class="mb-6 rounded-xl border border-sky-200 bg-white overflow-hidden">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-sky-100 px-4 py-3">
+                <div class="min-w-0">
+                    <h2 class="text-sm font-semibold text-sky-950">Return parcels at Steadfast hub</h2>
+                    <p class="text-xs text-sky-800/80">
+                        {{ $returnHubArrivals->count() }}{{ $returnHubArrivals->count() >= 50 ? '+' : '' }}
+                        return {{ $returnHubArrivals->count() === 1 ? 'parcel has' : 'parcels have' }}
+                        arrived at Steadfast Rampura hub — mark received to restore stock
+                    </p>
+                </div>
+                <a href="{{ route('admin.orders.return-pending') }}"
+                    class="shrink-0 text-xs font-medium text-[#C9A227] hover:text-[#B8921F]">
+                    Return Pending &rarr;
+                </a>
+            </div>
+
+            <div class="divide-y divide-[#EFE7D6]">
+                @foreach ($returnHubArrivals as $order)
+                    <div wire:key="return-hub-arrival-{{ $order->id }}" class="flex flex-wrap items-start gap-3 px-4 py-3 hover:bg-[#FAF6EF]/50">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <a href="{{ route('admin.orders.show', $order) }}" wire:navigate
+                                    class="truncate text-sm font-medium text-[#1E1E1E] hover:text-[#C9A227]">
+                                    {{ $order->name }}
+                                </a>
+                                <span class="text-xs text-[#8C8474]">#{{ $order->order_number }}</span>
+                                @if ($order->return_hub_arrived_at)
+                                    <span class="text-[10px] text-[#8C8474]">{{ $order->return_hub_arrived_at->diffForHumans() }}</span>
+                                @endif
+                            </div>
+                            @if ($order->items->isNotEmpty())
+                                <div class="mt-2 flex flex-wrap gap-1.5">
+                                    @foreach ($order->items as $item)
+                                        @continue((int) $item->returned_quantity <= 0 || $item->return_received)
+                                        @php
+                                            $imageUrl = $item->imageUrl();
+                                            $productName = $item->displayName();
+                                        @endphp
+                                        <div wire:key="return-hub-item-{{ $item->id }}"
+                                            title="{{ $productName }} ×{{ $item->returned_quantity }} returning"
+                                            class="relative h-10 w-10 shrink-0 overflow-hidden rounded-md border border-[#E7DFCF] bg-[#FAF6EF]">
+                                            @if ($imageUrl)
+                                                <img src="{{ $imageUrl }}" alt="{{ $productName }}"
+                                                    class="h-full w-full object-cover" loading="lazy">
+                                            @else
+                                                <span class="flex h-full w-full items-center justify-center text-[10px] text-[#8C8474]">?</span>
+                                            @endif
+                                            <span class="absolute bottom-0 right-0 rounded-tl bg-sky-700/85 px-1 text-[9px] font-semibold leading-4 text-white tabular-nums">
+                                                ×{{ $item->returned_quantity }}
+                                            </span>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                        <div class="flex shrink-0 flex-col gap-1.5">
+                            <button type="button"
+                                wire:click="markReturnHubReceived({{ $order->id }})"
+                                wire:confirm="Mark return received for order #{{ $order->order_number }} and restore stock?"
+                                class="inline-flex items-center justify-center rounded px-2.5 py-1 text-xs font-medium text-white bg-sky-700 hover:bg-sky-800">
+                                Mark as received
+                            </button>
+                            <a href="{{ route('admin.orders.return-pending') }}"
+                                class="inline-flex items-center justify-center rounded border border-[#E7DFCF] px-2.5 py-1 text-xs font-medium text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]">
+                                Open list
+                            </a>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     @if (($unconfirmedCourierCharges ?? collect())->isNotEmpty())
         <div class="mb-6 rounded-xl border border-amber-200 bg-white overflow-hidden">
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-amber-100 px-4 py-3">

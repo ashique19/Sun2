@@ -8,6 +8,8 @@ use App\Models\ExpenseRecurringReminder;
 use App\Models\Order;
 use App\Services\Admin\AdminAttentionService;
 use App\Services\Admin\ExpenseAssistantService;
+use App\Services\Admin\OrderDeliveryReturnService;
+use App\Services\Admin\ReturnHubArrivalService;
 use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderPackagingCost;
 use App\Support\AdminAccess;
@@ -28,6 +30,8 @@ class AdminDashboard extends Component
     public array $pendingPackagingCosts = [];
 
     public ?string $courierChargeMessage = null;
+
+    public ?string $returnHubMessage = null;
 
     public ?string $expenseAssistantMessage = null;
 
@@ -194,6 +198,24 @@ class AdminDashboard extends Component
         $this->resetValidation('pendingCourierCharges.'.$orderId);
     }
 
+    public function markReturnHubReceived(int $orderId, OrderDeliveryReturnService $settlement): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $order = Order::query()
+            ->whereKey($orderId)
+            ->where('has_return', true)
+            ->whereNotNull('return_hub_arrived_at')
+            ->first();
+
+        if (! $order) {
+            return;
+        }
+
+        $settlement->markReturnReceived($order);
+        $this->returnHubMessage = 'Return marked received for order #'.$order->order_number.'.';
+    }
+
     public function confirmCourierCharge(
         int $orderId,
         OrderCourierChargeSync $courierChargeSync,
@@ -265,6 +287,7 @@ class AdminDashboard extends Component
                 'unconfirmedCourierCharges' => collect(),
                 'courierChargeAreaLabels' => [],
                 'courierChargeQuickAmounts' => [],
+                'returnHubArrivals' => collect(),
                 'dueExpenseReminders' => collect(),
                 'showEveningExpensePrompt' => false,
                 'expenseCategories' => Expense::CATEGORIES,
@@ -329,6 +352,8 @@ class AdminDashboard extends Component
             }
         }
 
+        $returnHubArrivals = app(ReturnHubArrivalService::class)->ordersAwaitingReceive();
+
         return view('livewire.admin.admin-dashboard', [
             'segments' => AdminOrderSegment::SEGMENTS,
             'segmentCounts' => $segmentCounts,
@@ -339,6 +364,7 @@ class AdminDashboard extends Component
             'unconfirmedCourierCharges' => $unconfirmedCourierCharges,
             'courierChargeAreaLabels' => $courierChargeAreaLabels,
             'courierChargeQuickAmounts' => $courierChargeQuickAmounts,
+            'returnHubArrivals' => $returnHubArrivals,
             'dueExpenseReminders' => $dueExpenseReminders,
             'showEveningExpensePrompt' => $showEveningExpensePrompt,
             'expenseCategories' => Expense::CATEGORIES,

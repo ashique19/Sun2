@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderStatusHistory;
 use App\Services\Admin\AdminAttentionService;
 use App\Services\Admin\OrderStatusService;
+use App\Services\Admin\ReturnHubArrivalService;
 use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderDeliverySettlement;
 use App\Services\Reseller\ResellerCommissionService;
@@ -23,6 +24,7 @@ class SteadfastWebhookProcessor
         private readonly OrderCourierChargeSync $courierChargeSync,
         private readonly OrderDeliverySettlement $deliverySettlement,
         private readonly AdminAttentionService $adminAttention,
+        private readonly ReturnHubArrivalService $returnHubArrival,
     ) {}
 
     /**
@@ -72,13 +74,16 @@ class SteadfastWebhookProcessor
 
             if ($notificationType === 'delivery_status') {
                 $this->handleDeliveryStatus($order, $payload);
-
-                return;
-            }
-
-            if ($notificationType === 'tracking_update') {
+            } elseif ($notificationType === 'tracking_update') {
                 $this->handleTrackingUpdate($order, $payload);
             }
+
+            $message = (string) ($payload['tracking_message'] ?? '');
+            $this->returnHubArrival->observeMessage(
+                $order->fresh(),
+                $message,
+                $payload['updated_at'] ?? null,
+            );
         });
     }
 

@@ -538,13 +538,24 @@ class AdminOrders extends Component
     {
         AdminAccess::ensureStaffAdmin();
 
-        if ($this->segment !== 'return-pending') {
+        if (! in_array($this->segment, ['return-pending', 'delivered'], true)) {
             return;
         }
 
         $order = Order::query()->find($orderId);
 
         if (! $order) {
+            return;
+        }
+
+        if ($this->segment === 'delivered') {
+            if ($order->status !== 'delivered' || $order->has_return) {
+                return;
+            }
+
+            $settlement->setHasReturn($order, true);
+            $this->removeSettledFromList([(int) $orderId]);
+
             return;
         }
 

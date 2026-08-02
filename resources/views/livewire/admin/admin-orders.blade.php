@@ -21,44 +21,78 @@
     </div>
 
     @unless ($readOnly)
-        <div class="flex flex-wrap gap-2 mb-6">
-            @foreach ($segments as $segmentKey => $segmentName)
-                <button type="button"
-                    wire:key="segment-tab-{{ $segmentKey }}"
-                    wire:click="switchSegment('{{ $segmentKey }}')"
-                    wire:loading.attr="disabled"
-                    class="rounded-full px-4 py-1.5 text-sm border transition disabled:opacity-60 {{ $segment === $segmentKey ? 'border-[#C9A227] bg-[#C9A227] text-white font-medium' : 'border-[#E0D6C2] bg-white text-[#6B6459] hover:bg-[#FAF6EF]' }}">
-                    {{ $segmentName }}
-                </button>
-            @endforeach
-        </div>
-    @endunless
-
-    @unless ($readOnly)
-        <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-6 space-y-3">
-            <input type="search" wire:model.live.debounce.300ms="search" placeholder="Search order #, name, phone…"
-                class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-                <div>
-                    <label class="mb-1 block text-xs font-medium text-[#6B6459]">
-                        {{ $segment === 'dispatched' ? 'Dispatch from' : 'Order from' }}
-                    </label>
-                    <input type="date" wire:model.live="dateFrom"
-                        class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
-                </div>
-                <div>
-                    <label class="mb-1 block text-xs font-medium text-[#6B6459]">
-                        {{ $segment === 'dispatched' ? 'Dispatch to' : 'Order to' }}
-                    </label>
-                    <input type="date" wire:model.live="dateTo"
-                        class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
-                </div>
-                @if ($dateFrom !== '' || $dateTo !== '')
-                    <button type="button" wire:click="clearDateRange"
-                        class="col-span-2 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF] sm:col-span-1">
-                        Clear dates
+        @php
+            $primaryKeys = ['new', 'draft-ai', 'dispatched'];
+            $primarySegments = array_intersect_key($segments, array_flip($primaryKeys));
+            $secondarySegments = array_diff_key($segments, array_flip($primaryKeys));
+            $filtersActive = ($search ?? '') !== '' || $dateFrom !== '' || $dateTo !== '';
+            $expandByDefault = ! in_array($segment, $primaryKeys, true) || $filtersActive;
+        @endphp
+        <div x-data="{ showFilters: {{ $expandByDefault ? 'true' : 'false' }} }" class="mb-6">
+            <div class="flex flex-wrap items-center gap-2">
+                @foreach ($primarySegments as $segmentKey => $segmentName)
+                    <button type="button"
+                        wire:key="segment-tab-{{ $segmentKey }}"
+                        wire:click="switchSegment('{{ $segmentKey }}')"
+                        wire:loading.attr="disabled"
+                        class="rounded-full px-4 py-1.5 text-sm border transition disabled:opacity-60 {{ $segment === $segmentKey ? 'border-[#C9A227] bg-[#C9A227] text-white font-medium' : 'border-[#E0D6C2] bg-white text-[#6B6459] hover:bg-[#FAF6EF]' }}">
+                        {{ $segmentName }}
                     </button>
-                @endif
+                @endforeach
+
+                <button type="button"
+                    x-on:click="showFilters = ! showFilters"
+                    :class="showFilters ? 'border-[#C9A227] bg-[#C9A227] text-white' : 'border-[#E0D6C2] bg-white text-[#6B6459] hover:bg-[#FAF6EF]'"
+                    :aria-expanded="showFilters.toString()"
+                    aria-label="Toggle more tabs and search"
+                    title="More tabs & search"
+                    class="inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-sm transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" />
+                    </svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="h-3.5 w-3.5 transition-transform" :class="showFilters ? 'rotate-180' : ''">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </button>
+            </div>
+
+            <div x-show="showFilters" x-cloak class="mt-3 flex flex-wrap gap-2">
+                @foreach ($secondarySegments as $segmentKey => $segmentName)
+                    <button type="button"
+                        wire:key="segment-tab-{{ $segmentKey }}"
+                        wire:click="switchSegment('{{ $segmentKey }}')"
+                        wire:loading.attr="disabled"
+                        class="rounded-full px-4 py-1.5 text-sm border transition disabled:opacity-60 {{ $segment === $segmentKey ? 'border-[#C9A227] bg-[#C9A227] text-white font-medium' : 'border-[#E0D6C2] bg-white text-[#6B6459] hover:bg-[#FAF6EF]' }}">
+                        {{ $segmentName }}
+                    </button>
+                @endforeach
+            </div>
+
+            <div x-show="showFilters" x-cloak class="mt-4 rounded-xl border border-[#EFE7D6] bg-white p-4 space-y-3">
+                <input type="search" wire:model.live.debounce.300ms="search" placeholder="Search order #, name, phone…"
+                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                    <div>
+                        <label class="mb-1 block text-xs font-medium text-[#6B6459]">
+                            {{ $segment === 'dispatched' ? 'Dispatch from' : 'Order from' }}
+                        </label>
+                        <input type="date" wire:model.live="dateFrom"
+                            class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-xs font-medium text-[#6B6459]">
+                            {{ $segment === 'dispatched' ? 'Dispatch to' : 'Order to' }}
+                        </label>
+                        <input type="date" wire:model.live="dateTo"
+                            class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                    </div>
+                    @if ($dateFrom !== '' || $dateTo !== '')
+                        <button type="button" wire:click="clearDateRange"
+                            class="col-span-2 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF] sm:col-span-1">
+                            Clear dates
+                        </button>
+                    @endif
+                </div>
             </div>
         </div>
     @endunless

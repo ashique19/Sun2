@@ -16,8 +16,9 @@
         : 'bg-[#FAF6EF] font-semibold text-[#C9A227]';
     $inactive = $isMobile ? '' : 'text-[#6B6459] hover:bg-[#FAF6EF]';
     $sectionLabel = $isMobile
-        ? 'px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-[#8C8474]'
+        ? 'px-4 pt-3 pb-1 text-xs font-bold uppercase tracking-wide text-[#1E1E1E]'
         : 'px-3 pt-1 pb-0.5 text-xs font-semibold uppercase tracking-wide text-[#8C8474]';
+    $subGroupMobile = 'ml-3 space-y-0.5 border-l border-[#E7DFCF] pl-2';
     $orderLinks = $isModeratorOnly
         ? ['admin.orders.new' => 'New']
         : [
@@ -57,20 +58,22 @@
 
     @if ($isMobile)
         <p class="{{ $sectionLabel }}">Social</p>
-        @foreach ($socialLinks as $routeName => $label)
-            @php
-                $isActive = match ($routeName) {
-                    'admin.inbox' => request()->routeIs('admin.inbox') && ! request()->routeIs('admin.inbox.quick-replies'),
-                    'admin.inbox.quick-replies' => request()->routeIs('admin.inbox.quick-replies'),
-                    'admin.social-posts' => request()->routeIs('admin.social-posts*'),
-                    default => request()->routeIs($routeName),
-                };
-            @endphp
-            <a href="{{ route($routeName) }}" wire:navigate {!! $click !!}
-                class="{{ $linkBase }} {{ $linkPadSm }} {{ $isActive ? $active : $inactive }}">
-                {{ $label }}
-            </a>
-        @endforeach
+        <div class="{{ $subGroupMobile }}">
+            @foreach ($socialLinks as $routeName => $label)
+                @php
+                    $isActive = match ($routeName) {
+                        'admin.inbox' => request()->routeIs('admin.inbox') && ! request()->routeIs('admin.inbox.quick-replies'),
+                        'admin.inbox.quick-replies' => request()->routeIs('admin.inbox.quick-replies'),
+                        'admin.social-posts' => request()->routeIs('admin.social-posts*'),
+                        default => request()->routeIs($routeName),
+                    };
+                @endphp
+                <a href="{{ route($routeName) }}" wire:navigate {!! $click !!}
+                    class="{{ $linkBase }} {{ $linkPadSm }} {{ $isActive ? $active : $inactive }}">
+                    {{ $label }}
+                </a>
+            @endforeach
+        </div>
     @else
         <div class="space-y-1">
             <p class="{{ $sectionLabel }}">Social</p>
@@ -107,12 +110,14 @@
 @endif
 
 @if ($isMobile)
-    @foreach ($orderLinks as $routeName => $label)
-        <a href="{{ route($routeName) }}" wire:navigate {!! $click !!}
-            class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs($routeName) ? $active : $inactive }}">
-            {{ $label }}
-        </a>
-    @endforeach
+    <div class="{{ $subGroupMobile }}">
+        @foreach ($orderLinks as $routeName => $label)
+            <a href="{{ route($routeName) }}" wire:navigate {!! $click !!}
+                class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs($routeName) ? $active : $inactive }}">
+                {{ $label }}
+            </a>
+        @endforeach
+    </div>
 @else
     <div class="ml-3 space-y-0.5 border-l border-[#E7DFCF] pl-2">
         @foreach ($orderLinks as $routeName => $label)
@@ -157,31 +162,35 @@
 
     @if ($isMobile)
         <p class="{{ $sectionLabel }}">Users</p>
-        <a href="{{ route('admin.users.customers') }}" wire:navigate {!! $click !!}
-            class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.users.customers') ? $active : $inactive }}">
-            Customers
-        </a>
-        <a href="{{ route('admin.users.moderators') }}" wire:navigate {!! $click !!}
-            class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.users.moderators') ? $active : $inactive }}">
-            Moderators
-        </a>
-        <a href="{{ route('admin.users.resellers') }}" wire:navigate {!! $click !!}
-            class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.users.resellers') ? $active : $inactive }}">
-            Resellers
-        </a>
+        <div class="{{ $subGroupMobile }}">
+            <a href="{{ route('admin.users.customers') }}" wire:navigate {!! $click !!}
+                class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.users.customers') ? $active : $inactive }}">
+                Customers
+            </a>
+            <a href="{{ route('admin.users.moderators') }}" wire:navigate {!! $click !!}
+                class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.users.moderators') ? $active : $inactive }}">
+                Moderators
+            </a>
+            <a href="{{ route('admin.users.resellers') }}" wire:navigate {!! $click !!}
+                class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.users.resellers') ? $active : $inactive }}">
+                Resellers
+            </a>
+        </div>
         <p class="{{ $sectionLabel }}">Reports</p>
-        <a href="{{ route('admin.reports.sales-by-month') }}" wire:navigate {!! $click !!}
-            class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.reports.sales-by-month') ? $active : $inactive }}">
-            Sales by Month
-        </a>
-        <a href="{{ route('admin.sitemap') }}" wire:navigate {!! $click !!}
-            class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.sitemap') ? $active : $inactive }}">
-            Sitemap
-        </a>
-        <a href="{{ route('admin.image-hashes') }}" wire:navigate {!! $click !!}
-            class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.image-hashes') ? $active : $inactive }}">
-            Image Hashes
-        </a>
+        <div class="{{ $subGroupMobile }}">
+            <a href="{{ route('admin.reports.sales-by-month') }}" wire:navigate {!! $click !!}
+                class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.reports.sales-by-month') ? $active : $inactive }}">
+                Sales by Month
+            </a>
+            <a href="{{ route('admin.sitemap') }}" wire:navigate {!! $click !!}
+                class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.sitemap') ? $active : $inactive }}">
+                Sitemap
+            </a>
+            <a href="{{ route('admin.image-hashes') }}" wire:navigate {!! $click !!}
+                class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.image-hashes') ? $active : $inactive }}">
+                Image Hashes
+            </a>
+        </div>
     @else
         <div class="space-y-1 pt-2">
             <p class="{{ $sectionLabel }}">Users</p>

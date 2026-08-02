@@ -21,6 +21,8 @@ class AdminAttentionService
     public function createCodMismatch(Order $order, float $expectedAmount, float $collectedAmount, array $metadata = []): AdminAttentionItem
     {
         $discrepancy = abs($expectedAmount - $collectedAmount);
+        $isPartial = (bool) ($metadata['is_partial_delivery'] ?? false);
+        $reportedStatus = (string) ($metadata['reported_status'] ?? $metadata['steadfast_status'] ?? '');
 
         $data = array_merge([
             'expected_amount' => $expectedAmount,
@@ -29,6 +31,15 @@ class AdminAttentionService
             'order_number' => $order->order_number,
             'source' => 'steadfast_webhook',
         ], $metadata);
+
+        $title = $isPartial
+            ? "Partial delivery - Order #{$order->order_number}"
+            : "COD Mismatch - Order #{$order->order_number}";
+
+        $description = $isPartial
+            ? 'Courier reported partial delivery'.($reportedStatus !== '' ? " ({$reportedStatus})" : '')
+                .". COD is ৳{$expectedAmount} but collected ৳{$collectedAmount} — review."
+            : "COD is ৳{$expectedAmount} but collected ৳{$collectedAmount} at courier";
 
         $existing = AdminAttentionItem::query()
             ->unresolved()
@@ -39,8 +50,8 @@ class AdminAttentionService
 
         if ($existing) {
             $existing->update([
-                'title' => "COD Mismatch - Order #{$order->order_number}",
-                'description' => "COD is ৳{$expectedAmount} but collected ৳{$collectedAmount} at courier",
+                'title' => $title,
+                'description' => $description,
                 'data' => $data,
             ]);
 
@@ -50,8 +61,8 @@ class AdminAttentionService
         return AdminAttentionItem::query()->create([
             'order_id' => $order->id,
             'issue_type' => AdminAttentionItem::ISSUE_TYPE_COD_MISMATCH,
-            'title' => "COD Mismatch - Order #{$order->order_number}",
-            'description' => "COD is ৳{$expectedAmount} but collected ৳{$collectedAmount} at courier",
+            'title' => $title,
+            'description' => $description,
             'data' => $data,
         ]);
     }

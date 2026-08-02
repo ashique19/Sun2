@@ -250,6 +250,7 @@ class OrderCourierChargeSync
     {
         foreach ([
             'delivery_fee',
+            'delivery_charge',
             'courier_charge',
             'courier_fee',
             'shipping_fee',

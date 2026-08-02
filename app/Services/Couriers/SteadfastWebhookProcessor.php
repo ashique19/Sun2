@@ -107,14 +107,16 @@ class SteadfastWebhookProcessor
             $extra['dispatch_date'] = $this->parseTimestamp($payload['updated_at'] ?? null) ?? now();
         }
 
-        // Handle delivery status with COD validation
+        // Handle delivery status with COD validation / partial-delivery review.
         if ($mappedStatus === 'delivered') {
-            $collectedAmount = isset($payload['cod_amount']) ? (float) $payload['cod_amount'] : $order->collectableAmount();
+            $order->refresh();
             $expectedAmount = $order->collectableAmount();
+            $collectedAmount = $this->collectedAmountFromPayload($payload, $expectedAmount);
+            $isPartial = $this->isPartialDeliveryStatus($steadfastStatus);
+            $needsAttention = $isPartial
+                || $this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount);
 
-            // Check for COD mismatch regardless of whether it's partial_delivered or delivered status
-            if ($this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount)) {
-                // Create admin attention item for COD mismatch
+            if ($needsAttention) {
                 $this->adminAttention->createCodMismatch(
                     order: $order,
                     expectedAmount: $expectedAmount,
@@ -122,20 +124,21 @@ class SteadfastWebhookProcessor
                     metadata: [
                         'steadfast_status' => $steadfastStatus,
                         'webhook_payload' => $payload,
-                        'reported_status' => $steadfastStatus, // 'delivered' or 'partial_delivered'
-                    ]
+                        'reported_status' => $steadfastStatus,
+                        'is_partial_delivery' => $isPartial,
+                    ],
                 );
 
-                // Log the mismatch but don't mark as delivered
-                $mismatchMessage = "COD mismatch: Expected ৳{$expectedAmount}, collected ৳{$collectedAmount}. ";
-                $mismatchMessage .= "Courier reported status: {$steadfastStatus}. Requires admin attention.";
+                $mismatchMessage = $isPartial
+                    ? "Partial delivery reported ({$steadfastStatus}): Expected COD ৳{$expectedAmount}, collected ৳{$collectedAmount}. Requires admin attention."
+                    : "COD mismatch: Expected ৳{$expectedAmount}, collected ৳{$collectedAmount}. Courier reported status: {$steadfastStatus}. Requires admin attention.";
                 $this->recordHistory($order, $order->status, $mismatchMessage);
 
-                // Keep order as dispatched, not delivered when there's a COD mismatch
+                // Keep order as dispatched — never auto-complete delivery on mismatch/partial.
                 return;
             }
 
-            // Amounts match - proceed normally with delivery
+            // Full delivery with matching COD — proceed normally.
             $this->deliverySettlement->recordCollection(
                 order: $order,
                 amount: $collectedAmount,
@@ -178,8 +181,9 @@ class SteadfastWebhookProcessor
         $message = (string) ($payload['tracking_message'] ?? 'Steadfast tracking update.');
 
         if (preg_match('/delivered successfully/i', $message) && $order->status !== 'delivered') {
+            $order->refresh();
             $expectedAmount = $order->collectableAmount();
-            $collectedAmount = isset($payload['cod_amount']) ? (float) $payload['cod_amount'] : $expectedAmount;
+            $collectedAmount = $this->collectedAmountFromPayload($payload, $expectedAmount);
 
             if ($this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount)) {
                 $this->adminAttention->createCodMismatch(
@@ -247,7 +251,17 @@ class SteadfastWebhookProcessor
 
         $tracking = $payload['tracking_id'] ?? $payload['tracking_code'] ?? null;
         if ($tracking) {
-            return Order::query()->where('courier_tracker', (string) $tracking)->first();
+            $order = Order::query()->where('courier_tracker', (string) $tracking)->first();
+            if ($order) {
+                return $order;
+            }
+        }
+
+        $consignmentId = $payload['consignment_id'] ?? null;
+        if ($consignmentId !== null && $consignmentId !== '') {
+            return Order::query()
+                ->where('courier_consignment_id', (string) $consignmentId)
+                ->first();
         }
 
         return null;
@@ -256,12 +270,39 @@ class SteadfastWebhookProcessor
     private function mapDeliveryStatus(string $steadfastStatus): ?string
     {
         return match ($steadfastStatus) {
-            'delivered', 'partial_delivered', 'delivered_approval_pending' => 'delivered',
+            'delivered',
+            'delivered_approval_pending',
+            'partial_delivered',
+            'partial_delivered_approval_pending' => 'delivered',
             'cancelled', 'cancelled_approval_pending' => 'cancelled',
             'returned', 'cancel and return' => 'returned',
             'pending', 'in_review', 'hold', 'in transit', 'processing' => 'dispatched',
             default => null,
         };
+    }
+
+    private function isPartialDeliveryStatus(string $steadfastStatus): bool
+    {
+        return in_array($steadfastStatus, [
+            'partial_delivered',
+            'partial_delivered_approval_pending',
+        ], true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function collectedAmountFromPayload(array $payload, float $fallback): float
+    {
+        foreach (['collected_amount', 'cod_amount', 'amount_to_collect', 'collectable_amount'] as $key) {
+            if (! array_key_exists($key, $payload) || $payload[$key] === '' || $payload[$key] === null) {
+                continue;
+            }
+
+            return round((float) $payload[$key], 2);
+        }
+
+        return round($fallback, 2);
     }
 
     private function recordHistory(Order $order, string $status, string $note): void

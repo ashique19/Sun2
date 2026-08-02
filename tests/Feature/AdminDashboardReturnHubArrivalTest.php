@@ -107,6 +107,8 @@ class AdminDashboardReturnHubArrivalTest extends TestCase
             ->assertSee($order->name)
             ->assertSee('#'.$order->order_number)
             ->assertSee('Mark as received')
+            ->assertSeeHtml('bg-[#C9A227]')
+            ->assertSeeHtml('wire:click="markReturnHubReceived('.$order->id.')"')
             ->call('markReturnHubReceived', $order->id)
             ->assertSee('Return marked received for order #'.$order->order_number)
             ->assertDontSee($order->name);

@@ -10,7 +10,7 @@ class AdminOrderSegment
 {
     public const SEGMENTS = [
         'new' => 'New',
-        'draft-ai' => 'Draft by AI',
+        'draft-ai' => 'By AI',
         'dispatched' => 'Dispatched',
         'delivered' => 'Delivered',
         'cancel-return' => 'Cancel & Return',

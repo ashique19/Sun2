@@ -43,7 +43,7 @@ class AdminDashboardLayoutTest extends TestCase
             ->assertDontSee('Recently Resolved (')
             ->assertSeeHtml('grid-cols-3')
             ->assertSee('New')
-            ->assertSee('Draft by AI')
+            ->assertSee('By AI')
             ->assertSee('Dispatched')
             ->assertDontSee('View orders')
             ->assertSee('OQ')

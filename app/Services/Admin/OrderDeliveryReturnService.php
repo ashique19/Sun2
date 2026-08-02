@@ -236,6 +236,32 @@ class OrderDeliveryReturnService
         return $order->refresh();
     }
 
+    /**
+     * Courier reported a full return: every line is return-pending and H/R is on.
+     * Does not change order status — callers update status separately.
+     */
+    public function applyCourierReturnedLines(Order $order): Order
+    {
+        $order->loadMissing('items');
+
+        foreach ($order->items as $item) {
+            $qty = (int) $item->quantity;
+
+            $item->update([
+                'returned_quantity' => $qty,
+                'to_be_returned' => $qty > 0,
+                'return_received' => false,
+            ]);
+        }
+
+        if (! $order->has_return) {
+            $order->update(['has_return' => true]);
+            Cache::forget(AdminOrderSegment::COUNTS_CACHE_KEY);
+        }
+
+        return $order->refresh();
+    }
+
     private function assertDispatched(Order $order): void
     {
         if ($order->status !== 'dispatched') {

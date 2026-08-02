@@ -5,6 +5,7 @@ namespace App\Services\Couriers\Webhooks;
 use App\Models\CourierData;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
+use App\Services\Admin\OrderDeliveryReturnService;
 use App\Services\Admin\OrderStatusService;
 use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderDeliverySettlement;
@@ -19,6 +20,7 @@ class CourierWebhookSupport
         private readonly ResellerCommissionService $resellerCommissions,
         private readonly OrderCourierChargeSync $courierChargeSync,
         private readonly OrderDeliverySettlement $deliverySettlement,
+        private readonly OrderDeliveryReturnService $deliveryReturns,
     ) {}
 
     /**
@@ -107,6 +109,11 @@ class CourierWebhookSupport
 
         if ($mappedStatus === 'dispatched' && ! $order->dispatch_date) {
             $extra['dispatch_date'] = $this->parseTimestamp($payload['updated_at'] ?? $payload['timestamp'] ?? null) ?? now();
+        }
+
+        if ($mappedStatus === 'returned') {
+            $this->deliveryReturns->applyCourierReturnedLines($order);
+            $order->refresh();
         }
 
         if ($mappedStatus === 'delivered') {

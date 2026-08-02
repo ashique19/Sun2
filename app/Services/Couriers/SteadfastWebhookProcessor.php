@@ -7,6 +7,7 @@ use App\Models\CourierData;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
 use App\Services\Admin\AdminAttentionService;
+use App\Services\Admin\OrderDeliveryReturnService;
 use App\Services\Admin\OrderStatusService;
 use App\Services\Admin\ReturnHubArrivalService;
 use App\Services\Orders\OrderCourierChargeSync;
@@ -25,6 +26,7 @@ class SteadfastWebhookProcessor
         private readonly OrderDeliverySettlement $deliverySettlement,
         private readonly AdminAttentionService $adminAttention,
         private readonly ReturnHubArrivalService $returnHubArrival,
+        private readonly OrderDeliveryReturnService $deliveryReturns,
     ) {}
 
     /**
@@ -110,6 +112,11 @@ class SteadfastWebhookProcessor
 
         if ($mappedStatus === 'dispatched' && ! $order->dispatch_date) {
             $extra['dispatch_date'] = $this->parseTimestamp($payload['updated_at'] ?? null) ?? now();
+        }
+
+        if ($mappedStatus === 'returned') {
+            $this->deliveryReturns->applyCourierReturnedLines($order);
+            $order->refresh();
         }
 
         // Handle delivery status with COD validation / partial-delivery review.

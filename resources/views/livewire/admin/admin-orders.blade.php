@@ -251,6 +251,20 @@
                                     </div>
                                     <p class="mt-0.5 text-xs text-[#8C8474]">{{ $order->placed_at?->format('d M Y') }}</p>
                                     <p class="mt-0.5 text-xs text-[#8C8474]">Placed by {{ $order->placedByLabel() }}</p>
+                                    @if ($segment !== 'dispatched' && ($steadfastUrl = $order->steadfastConsignmentUrl()))
+                                        <p class="mt-0.5 text-xs">
+                                            <a href="{{ $steadfastUrl }}"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="font-medium text-[#C9A227] hover:underline"
+                                                title="Open Steadfast consignment">
+                                                {{ $order->courier?->name ?? 'Steadfast' }} ↗
+                                            </a>
+                                            @if ($order->courier_tracker)
+                                                <span class="text-[#8C8474]">· {{ $order->courier_tracker }}</span>
+                                            @endif
+                                        </p>
+                                    @endif
                                 </div>
                                 <div class="shrink-0 text-right">
                                     <p class="text-[11px] uppercase tracking-wide text-[#8C8474]">COD</p>
@@ -462,7 +476,17 @@
                                         :aria-expanded="open.toString()"
                                     >
                                         <span class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#1E1E1E]">
-                                            <span class="font-semibold uppercase tracking-wide">{{ $order->courier?->name ?? '—' }}</span>
+                                            @if ($steadfastUrl = $order->steadfastConsignmentUrl())
+                                                <a href="{{ $steadfastUrl }}"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="font-semibold uppercase tracking-wide text-[#C9A227] hover:underline"
+                                                    title="Open Steadfast consignment">
+                                                    {{ $order->courier?->name ?? 'Steadfast' }} ↗
+                                                </a>
+                                            @else
+                                                <span class="font-semibold uppercase tracking-wide">{{ $order->courier?->name ?? '—' }}</span>
+                                            @endif
                                             <span class="text-[#C9B99A]">|</span>
                                             <span class="break-all text-[#6B6459]">{{ $order->courier_tracker ?: '—' }}</span>
                                             <span class="text-[#C9B99A]">|</span>

@@ -477,10 +477,25 @@
                     </div>
                 </form>
 
-                @if ($order->courier_tracker)
+                @if ($order->courier_tracker || $order->steadfastConsignmentUrl())
                     <div class="text-sm space-y-1">
-                        <p><span class="text-[#8C8474]">Courier:</span> {{ $order->courier?->name }}</p>
-                        <p><span class="text-[#8C8474]">Tracking:</span> <strong>{{ $order->courier_tracker }}</strong></p>
+                        <p>
+                            <span class="text-[#8C8474]">Courier:</span>
+                            @if ($steadfastUrl = $order->steadfastConsignmentUrl())
+                                <a href="{{ $steadfastUrl }}"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="font-medium text-[#C9A227] hover:underline"
+                                    title="Open Steadfast consignment">
+                                    {{ $order->courier?->name ?? 'Steadfast' }} ↗
+                                </a>
+                            @else
+                                {{ $order->courier?->name }}
+                            @endif
+                        </p>
+                        @if ($order->courier_tracker)
+                            <p><span class="text-[#8C8474]">Tracking:</span> <strong>{{ $order->courier_tracker }}</strong></p>
+                        @endif
                         @if ($order->dispatch_date)
                             <p class="text-[#8C8474]">Dispatched {{ $order->dispatch_date->format('d M Y, h:i A') }}</p>
                         @endif

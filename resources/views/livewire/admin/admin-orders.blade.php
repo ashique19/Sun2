@@ -103,6 +103,7 @@
             @forelse ($orders as $order)
                 @php($adminNote = filled($order->admin_note) ? \Illuminate\Support\Str::of($order->admin_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
                 @php($courierNote = filled($order->courier_note) ? \Illuminate\Support\Str::of($order->courier_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
+                @php($customerNote = filled($order->customer_note) ? \Illuminate\Support\Str::of($order->customer_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
                 @php($groupDate = $order->placed_at)
                 @php($groupKey = $groupDate?->timezone('Asia/Dhaka')->toDateString() ?? '_none')
                 @if ($groupKey !== $lastGroupKey)
@@ -159,12 +160,18 @@
                             </p>
                         </div>
                     </div>
-                    @if ($adminNote || $courierNote)
+                    @if ($adminNote || $courierNote || $customerNote)
                         <div class="mt-3 space-y-2 border-t border-[#EFE7D6] pt-3">
                             @if ($adminNote)
                                 <div class="rounded-lg border-2 border-rose-500 bg-rose-50 px-3 py-2.5">
                                     <p class="text-[11px] font-semibold uppercase tracking-wide text-rose-700">Admin</p>
                                     <p class="mt-1 text-sm font-medium leading-relaxed text-rose-800 whitespace-pre-line break-words">{{ $adminNote }}</p>
+                                </div>
+                            @endif
+                            @if ($customerNote)
+                                <div class="rounded-lg border border-[#E7DFCF] bg-white px-3 py-2.5">
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Customer note</p>
+                                    <p class="mt-1 text-sm leading-relaxed text-[#1E1E1E] whitespace-pre-line break-words">{{ $customerNote }}</p>
                                 </div>
                             @endif
                             @if ($courierNote)
@@ -204,6 +211,7 @@
                 @php($isSelected = in_array($order->id, $selectedIds, true))
                 @php($adminNote = filled($order->admin_note) ? \Illuminate\Support\Str::of($order->admin_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
                 @php($courierNote = filled($order->courier_note) ? \Illuminate\Support\Str::of($order->courier_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
+                @php($customerNote = filled($order->customer_note) ? \Illuminate\Support\Str::of($order->customer_note)->replace(['<br />', '<br/>', '<br>'], "\n")->stripTags()->trim() : null)
                 @php($areaCity = collect([$order->area, $order->city])->filter()->implode(', '))
                 @if ($groupByDate)
                     @php($groupDate = $segment === 'dispatched' ? $order->dispatch_date : $order->placed_at)
@@ -337,12 +345,26 @@
                                 @endif
                             </div>
 
-                            @if ($adminNote || $courierNote)
+                            @if ($adminNote || $courierNote || $customerNote)
                                 <div class="space-y-2 border-t border-[#EFE7D6] pt-3">
                                     @if ($adminNote)
                                         <div class="rounded-lg border-2 border-rose-500 bg-rose-50 px-3 py-2.5">
                                             <p class="text-[11px] font-semibold uppercase tracking-wide text-rose-700">Admin</p>
                                             <p class="mt-1 text-sm font-medium leading-relaxed text-rose-800 whitespace-pre-line break-words">{{ $adminNote }}</p>
+                                        </div>
+                                    @endif
+                                    @if ($customerNote)
+                                        <div class="rounded-lg border border-[#E7DFCF] bg-white px-3 py-2.5">
+                                            <div class="flex items-start justify-between gap-2">
+                                                <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Customer note</p>
+                                                <button type="button"
+                                                    wire:click="clearCustomerNote({{ $order->id }})"
+                                                    wire:confirm="Clear customer note on order #{{ $order->order_number }}?"
+                                                    class="shrink-0 text-[11px] font-semibold text-[#8C8474] hover:text-rose-700">
+                                                    Clear
+                                                </button>
+                                            </div>
+                                            <p class="mt-1 text-sm leading-relaxed text-[#1E1E1E] whitespace-pre-line break-words">{{ $customerNote }}</p>
                                         </div>
                                     @endif
                                     @if ($courierNote)

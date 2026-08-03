@@ -3,6 +3,7 @@
 namespace App\Livewire\Admin;
 
 use App\Models\AdminAttentionItem;
+use App\Models\CourierData;
 use App\Models\Expense;
 use App\Models\ExpenseRecurringReminder;
 use App\Models\Order;
@@ -76,6 +77,19 @@ class AdminDashboard extends Component
         app(AdminAttentionService::class)->markAsResolved($item, 'Resolved from dashboard');
 
         $this->dispatch('attention-item-resolved');
+    }
+
+    public function dismissSteadfastWebhook(int $entryId, SteadfastWebhookInboxService $webhookInbox): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $entry = CourierData::query()->whereKey($entryId)->first();
+
+        if (! $entry) {
+            return;
+        }
+
+        $webhookInbox->dismiss($entry);
     }
 
     public function recordExpenseReminder(int $reminderId, ExpenseAssistantService $assistant): void

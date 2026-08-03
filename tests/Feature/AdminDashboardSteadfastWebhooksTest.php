@@ -95,15 +95,25 @@ class AdminDashboardSteadfastWebhooksTest extends TestCase
 
         $parcelUrl = 'https://steadfast.com.bd/user/consignment/270697681';
 
+        $entryId = (int) CourierData::query()->where('order_id', $order->id)->latest('id')->value('id');
+
         Livewire::test(AdminDashboard::class)
             ->assertSee('Latest Steadfast webhooks')
+            ->assertSee('See all')
+            ->assertSee(route('admin.couriers.webhooks'), false)
             ->assertSee('Order #'.$order->order_number)
             ->assertSee($order->name)
             ->assertSee('in_transit')
             ->assertDontSee('Older tracking hop')
             ->assertSee(route('admin.orders.show', $order), false)
             ->assertSee($parcelUrl, false)
-            ->assertSee('Parcel '.$order->courier_consignment_id);
+            ->assertSee('Parcel '.$order->courier_consignment_id)
+            ->assertSeeHtml('wire:click="dismissSteadfastWebhook('.$entryId.')"')
+            ->assertDontSeeHtml('>Parcel ↗</a>')
+            ->call('dismissSteadfastWebhook', $entryId)
+            ->assertDontSee('Order #'.$order->order_number);
+
+        $this->assertNotNull(CourierData::query()->whereKey($entryId)->value('inbox_dismissed_at'));
     }
 
     #[Test]

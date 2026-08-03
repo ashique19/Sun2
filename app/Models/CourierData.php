@@ -18,6 +18,7 @@ class CourierData extends Model
         return [
             'api_data' => 'array',
             'created_at' => 'datetime',
+            'inbox_dismissed_at' => 'datetime',
         ];
     }
 

@@ -4,6 +4,7 @@ namespace App\Services\Admin;
 
 use App\Models\Courier;
 use App\Models\CourierData;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -16,6 +17,8 @@ class SteadfastWebhookInboxService
 
     public const WITHIN_DAYS = 2;
 
+    public const PAGE_SIZE = 50;
+
     /**
      * Latest webhook row per order, newest first, capped for the dashboard.
      *
@@ -24,25 +27,34 @@ class SteadfastWebhookInboxService
     public function latestIncoming(int $limit = self::MAX_ENTRIES, int $withinDays = self::WITHIN_DAYS): Collection
     {
         $limit = max(1, min($limit, self::MAX_ENTRIES));
-        $withinDays = max(1, min($withinDays, self::WITHIN_DAYS));
-        $since = now()->subDays($withinDays);
 
-        $latestIdsQuery = CourierData::query()
-            ->selectRaw('MAX(id) as id')
-            ->where('created_at', '>=', $since)
-            ->tap(fn (Builder $query) => $this->constrainToIncomingWebhooks($query))
-            ->groupBy('order_id');
-
-        return CourierData::query()
-            ->with([
-                'order:id,order_number,name,status,courier_id,courier_tracker,courier_consignment_id',
-                'order.courier:id,name,slug',
-            ])
-            ->whereIn('id', $latestIdsQuery)
-            ->latest('created_at')
-            ->latest('id')
+        return $this->latestIncomingQuery($withinDays)
             ->limit($limit)
             ->get();
+    }
+
+    /**
+     * Same inbox rows as the dashboard, without the dashboard cap.
+     *
+     * @return LengthAwarePaginator<int, CourierData>
+     */
+    public function paginateIncoming(int $perPage = self::PAGE_SIZE, int $withinDays = self::WITHIN_DAYS): LengthAwarePaginator
+    {
+        $perPage = max(1, min($perPage, 100));
+
+        return $this->latestIncomingQuery($withinDays)
+            ->paginate($perPage);
+    }
+
+    public function dismiss(CourierData $entry): void
+    {
+        if ($entry->inbox_dismissed_at) {
+            return;
+        }
+
+        $entry->forceFill([
+            'inbox_dismissed_at' => now(),
+        ])->save();
     }
 
     /**
@@ -66,6 +78,31 @@ class SteadfastWebhookInboxService
         }
 
         return $type !== '' ? $type : 'webhook update';
+    }
+
+    /**
+     * @return Builder<CourierData>
+     */
+    private function latestIncomingQuery(int $withinDays = self::WITHIN_DAYS): Builder
+    {
+        $withinDays = max(1, min($withinDays, self::WITHIN_DAYS));
+        $since = now()->subDays($withinDays);
+
+        $latestIdsQuery = CourierData::query()
+            ->selectRaw('MAX(id) as id')
+            ->where('created_at', '>=', $since)
+            ->tap(fn (Builder $query) => $this->constrainToIncomingWebhooks($query))
+            ->groupBy('order_id');
+
+        return CourierData::query()
+            ->with([
+                'order:id,order_number,name,status,courier_id,courier_tracker,courier_consignment_id',
+                'order.courier:id,name,slug',
+            ])
+            ->whereIn('id', $latestIdsQuery)
+            ->whereNull('inbox_dismissed_at')
+            ->latest('created_at')
+            ->latest('id');
     }
 
     /**

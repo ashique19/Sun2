@@ -2,8 +2,10 @@
 
 namespace App\Services\Admin;
 
+use App\Models\AdminAttentionItem;
 use App\Models\Courier;
 use App\Models\CourierBalanceEntry;
+use App\Models\CourierData;
 use App\Models\Order;
 use App\Services\Couriers\CourierApiRegistry;
 use App\Services\Couriers\SteadfastApiClient;
@@ -285,6 +287,206 @@ class CourierBalanceService
         }
 
         return $summaries;
+    }
+
+    /**
+     * Orders that help explain an API vs expected (book − pending) Diff.
+     * Prefers Steadfast webhook `collected_amount` and unresolved COD attention items.
+     *
+     * @return list<array{
+     *     order_id: int,
+     *     order_number: string,
+     *     customer: string,
+     *     status: string,
+     *     reason: string,
+     *     reason_label: string,
+     *     book_expected: float,
+     *     courier_collected: float|null,
+     *     delta: float,
+     *     attention_id: int|null,
+     *     tracking_message: string|null
+     * }>
+     */
+    public function mismatchOrders(Courier $courier, int $limit = 50): array
+    {
+        $rows = [];
+        $seen = [];
+
+        $attentionItems = AdminAttentionItem::query()
+            ->unresolved()
+            ->where('issue_type', AdminAttentionItem::ISSUE_TYPE_COD_MISMATCH)
+            ->whereHas('order', fn ($query) => $query->where('courier_id', $courier->id))
+            ->with(['order:id,order_number,name,status,cod_amount,due_amount,total,collected_amount,courier_id'])
+            ->latest('id')
+            ->limit($limit)
+            ->get();
+
+        foreach ($attentionItems as $item) {
+            $order = $item->order;
+
+            if (! $order) {
+                continue;
+            }
+
+            $expected = round((float) ($item->data['expected_amount'] ?? $order->collectableAmount()), 2);
+            $collected = array_key_exists('collected_amount', $item->data ?? [])
+                ? round((float) $item->data['collected_amount'], 2)
+                : null;
+            $delta = $collected !== null ? round($collected - $expected, 2) : 0.0;
+
+            $rows[] = [
+                'order_id' => (int) $order->id,
+                'order_number' => (string) $order->order_number,
+                'customer' => (string) $order->name,
+                'status' => (string) $order->status,
+                'reason' => 'cod_mismatch',
+                'reason_label' => 'COD mismatch (attention)',
+                'book_expected' => $expected,
+                'courier_collected' => $collected,
+                'delta' => $delta,
+                'attention_id' => (int) $item->id,
+                'tracking_message' => isset($item->data['steadfast_status'])
+                    ? (string) $item->data['steadfast_status']
+                    : (isset($item->data['reported_status']) ? (string) $item->data['reported_status'] : null),
+            ];
+            $seen[$order->id] = true;
+        }
+
+        $candidateOrders = Order::query()
+            ->where('courier_id', $courier->id)
+            ->whereIn('status', ['dispatched', 'delivered', 'returned', 'cancelled'])
+            ->orderByDesc('id')
+            ->limit(200)
+            ->get(['id', 'order_number', 'name', 'status', 'cod_amount', 'due_amount', 'total', 'collected_amount']);
+
+        if ($candidateOrders->isNotEmpty()) {
+            $orderIds = $candidateOrders->modelKeys();
+            $latestCollectedByOrder = $this->latestWebhookCollectedByOrder($orderIds);
+
+            foreach ($candidateOrders as $order) {
+                if (isset($seen[$order->id])) {
+                    continue;
+                }
+
+                $webhook = $latestCollectedByOrder[$order->id] ?? null;
+
+                if ($webhook === null) {
+                    continue;
+                }
+
+                $expected = $order->status === 'delivered'
+                    ? round((float) ($order->collected_amount ?? $order->collectableAmount()), 2)
+                    : $order->collectableAmount();
+                $collected = $webhook['amount'];
+                $delta = round($collected - $expected, 2);
+
+                if (abs($delta) <= 1.0) {
+                    continue;
+                }
+
+                $rows[] = [
+                    'order_id' => (int) $order->id,
+                    'order_number' => (string) $order->order_number,
+                    'customer' => (string) $order->name,
+                    'status' => (string) $order->status,
+                    'reason' => 'webhook_collected_diff',
+                    'reason_label' => 'Webhook collected differs',
+                    'book_expected' => $expected,
+                    'courier_collected' => $collected,
+                    'delta' => $delta,
+                    'attention_id' => null,
+                    'tracking_message' => $webhook['message'],
+                ];
+                $seen[$order->id] = true;
+            }
+        }
+
+        $unreversedOrderIds = CourierBalanceEntry::query()
+            ->where('courier_id', $courier->id)
+            ->where('type', 'dispatch')
+            ->whereNotNull('order_id')
+            ->whereNotIn('order_id', function ($query) use ($courier) {
+                $query->select('order_id')
+                    ->from('courier_balance_entries')
+                    ->where('courier_id', $courier->id)
+                    ->where('type', 'return')
+                    ->whereNotNull('order_id');
+            })
+            ->pluck('amount', 'order_id');
+
+        if ($unreversedOrderIds->isNotEmpty()) {
+            $returnedOrders = Order::query()
+                ->where('courier_id', $courier->id)
+                ->whereIn('status', ['returned', 'cancelled'])
+                ->whereIn('id', $unreversedOrderIds->keys())
+                ->get(['id', 'order_number', 'name', 'status', 'cod_amount', 'due_amount', 'total']);
+
+            foreach ($returnedOrders as $order) {
+                if (isset($seen[$order->id])) {
+                    continue;
+                }
+
+                $credit = round((float) $unreversedOrderIds[$order->id], 2);
+
+                $rows[] = [
+                    'order_id' => (int) $order->id,
+                    'order_number' => (string) $order->order_number,
+                    'customer' => (string) $order->name,
+                    'status' => (string) $order->status,
+                    'reason' => 'unreversed_dispatch',
+                    'reason_label' => 'Return without book reverse',
+                    'book_expected' => $credit,
+                    'courier_collected' => 0.0,
+                    'delta' => round(0.0 - $credit, 2),
+                    'attention_id' => null,
+                    'tracking_message' => 'Dispatch credit still on book after courier return',
+                ];
+                $seen[$order->id] = true;
+            }
+        }
+
+        usort($rows, fn (array $a, array $b) => abs($b['delta']) <=> abs($a['delta']));
+
+        return array_slice($rows, 0, $limit);
+    }
+
+    /**
+     * @param  list<int>  $orderIds
+     * @return array<int, array{amount: float, message: string|null}>
+     */
+    private function latestWebhookCollectedByOrder(array $orderIds): array
+    {
+        if ($orderIds === []) {
+            return [];
+        }
+
+        $latest = [];
+
+        CourierData::query()
+            ->whereIn('order_id', $orderIds)
+            ->orderByDesc('id')
+            ->get(['id', 'order_id', 'api_data'])
+            ->each(function (CourierData $log) use (&$latest): void {
+                if (isset($latest[$log->order_id])) {
+                    return;
+                }
+
+                $data = is_array($log->api_data) ? $log->api_data : [];
+
+                // Prefer explicit collected_amount from Steadfast webhooks.
+                if (! array_key_exists('collected_amount', $data) || $data['collected_amount'] === '' || $data['collected_amount'] === null) {
+                    return;
+                }
+
+                $latest[$log->order_id] = [
+                    'amount' => round((float) $data['collected_amount'], 2),
+                    'message' => filled($data['tracking_message'] ?? null)
+                        ? (string) $data['tracking_message']
+                        : (isset($data['status']) ? (string) $data['status'] : null),
+                ];
+            });
+
+        return $latest;
     }
 
     private function apply(

@@ -108,10 +108,19 @@
                                     <div class="text-[11px] text-[#8C8474] mt-0.5" title="Book − pending">
                                         Should be &#2547; {{ number_format($expectedApi, 0) }}
                                     </div>
-                                    <div class="text-[11px] mt-0.5 {{ abs($apiDiff) < 0.5 ? 'text-emerald-700' : 'text-amber-700' }}"
-                                        title="API − (book − pending)">
-                                        Diff {{ $apiDiff > 0 ? '+' : ($apiDiff < 0 ? '−' : '') }}&#2547; {{ number_format(abs($apiDiff), 0) }}
-                                    </div>
+                                    @if (abs($apiDiff) < 0.5)
+                                        <div class="text-[11px] mt-0.5 text-emerald-700"
+                                            title="API − (book − pending)">
+                                            Diff {{ $apiDiff > 0 ? '+' : ($apiDiff < 0 ? '−' : '') }}&#2547; {{ number_format(abs($apiDiff), 0) }}
+                                        </div>
+                                    @else
+                                        <button type="button"
+                                            wire:click="openDiffOrders({{ $courier->id }})"
+                                            title="API − (book − pending). Open orders that explain this Diff."
+                                            class="mt-0.5 text-[11px] font-semibold text-amber-700 underline decoration-amber-300 underline-offset-2 hover:text-amber-900">
+                                            Diff {{ $apiDiff > 0 ? '+' : '−' }}&#2547; {{ number_format(abs($apiDiff), 0) }}
+                                        </button>
+                                    @endif
                                 @elseif (! $apiBalancesLoaded && $courier->slug && in_array(strtolower((string) $courier->slug), $apiSlugs, true))
                                     <div class="text-[#8C8474]">Tap Refresh API</div>
                                     <div class="text-[11px] text-[#8C8474] mt-0.5" title="Book − pending">
@@ -200,6 +209,95 @@
                     <button type="button" wire:click="closeWithdraw"
                         class="rounded-full border border-[#E0D6C2] px-6 py-2.5 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
                         Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    @if ($showDiffModal)
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" wire:click.self="closeDiffOrders">
+            <div class="w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl flex flex-col"
+                wire:key="diff-modal-{{ $diffCourierId }}">
+                <div class="flex items-start justify-between gap-3 border-b border-[#EFE7D6] px-5 py-4">
+                    <div class="min-w-0">
+                        <h2 class="font-semibold text-lg">Balance Diff — {{ $diffCourierName }}</h2>
+                        <p class="text-xs text-[#8C8474] mt-1">
+                            API &#2547; {{ number_format((float) $diffApiBalance, 0) }}
+                            · Should be &#2547; {{ number_format((float) $diffExpectedApi, 0) }}
+                            · Diff
+                            <span class="font-semibold text-amber-700">
+                                {{ (float) $diffAmount > 0 ? '+' : ((float) $diffAmount < 0 ? '−' : '') }}&#2547;
+                                {{ number_format(abs((float) $diffAmount), 0) }}
+                            </span>
+                        </p>
+                        <p class="text-xs text-[#8C8474] mt-1">
+                            Orders where Steadfast webhook collected amount (or return book credit) does not match what we expect.
+                        </p>
+                    </div>
+                    <button type="button" wire:click="closeDiffOrders" class="text-sm text-[#8C8474] hover:text-[#1E1E1E]">Close</button>
+                </div>
+
+                <div class="overflow-y-auto px-5 py-3">
+                    @if ($diffOrders === [])
+                        <p class="py-8 text-center text-sm text-[#8C8474]">
+                            No per-order COD / webhook mismatches found. Diff may come from courier fees, withdrawals timing, or older ledger gaps.
+                        </p>
+                    @else
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm min-w-[40rem]">
+                                <thead class="text-left text-[#6B6459]">
+                                    <tr class="border-b border-[#EFE7D6]">
+                                        <th class="py-2 pr-3 font-medium">Order</th>
+                                        <th class="py-2 pr-3 font-medium">Reason</th>
+                                        <th class="py-2 pr-3 font-medium text-right">Expected</th>
+                                        <th class="py-2 pr-3 font-medium text-right">Courier collected</th>
+                                        <th class="py-2 font-medium text-right">Delta</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-[#E7DFCF]">
+                                    @foreach ($diffOrders as $row)
+                                        <tr wire:key="diff-order-{{ $row['order_id'] }}-{{ $row['reason'] }}">
+                                            <td class="py-2.5 pr-3 align-top">
+                                                <a href="{{ route('admin.orders.show', $row['order_id']) }}" wire:navigate
+                                                    class="font-medium text-[#C9A227] hover:underline">
+                                                    #{{ $row['order_number'] }}
+                                                </a>
+                                                <div class="text-xs text-[#8C8474]">{{ $row['customer'] }}</div>
+                                                <div class="text-[11px] capitalize text-[#8C8474]">{{ $row['status'] }}</div>
+                                            </td>
+                                            <td class="py-2.5 pr-3 align-top">
+                                                <div class="text-xs font-medium text-[#1E1E1E]">{{ $row['reason_label'] }}</div>
+                                                @if (! empty($row['tracking_message']))
+                                                    <div class="mt-0.5 text-[11px] text-[#8C8474] line-clamp-2">{{ $row['tracking_message'] }}</div>
+                                                @endif
+                                            </td>
+                                            <td class="py-2.5 pr-3 align-top text-right tabular-nums">
+                                                &#2547; {{ number_format((float) $row['book_expected'], 0) }}
+                                            </td>
+                                            <td class="py-2.5 pr-3 align-top text-right tabular-nums">
+                                                @if ($row['courier_collected'] === null)
+                                                    —
+                                                @else
+                                                    &#2547; {{ number_format((float) $row['courier_collected'], 0) }}
+                                                @endif
+                                            </td>
+                                            <td class="py-2.5 align-top text-right tabular-nums font-medium {{ abs((float) $row['delta']) > 1 ? 'text-amber-700' : 'text-[#6B6459]' }}">
+                                                {{ (float) $row['delta'] > 0 ? '+' : ((float) $row['delta'] < 0 ? '−' : '') }}&#2547;
+                                                {{ number_format(abs((float) $row['delta']), 0) }}
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
+                </div>
+
+                <div class="border-t border-[#EFE7D6] px-5 py-3 flex justify-end">
+                    <button type="button" wire:click="closeDiffOrders"
+                        class="rounded-full border border-[#E0D6C2] px-5 py-2 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
+                        Close
                     </button>
                 </div>
             </div>

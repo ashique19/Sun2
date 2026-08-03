@@ -38,6 +38,35 @@ class AdminCouriers extends Component
 
     public ?string $apiBalanceError = null;
 
+    public bool $showDiffModal = false;
+
+    public ?int $diffCourierId = null;
+
+    public string $diffCourierName = '';
+
+    public string $diffApiBalance = '0';
+
+    public string $diffExpectedApi = '0';
+
+    public string $diffAmount = '0';
+
+    /**
+     * @var list<array{
+     *     order_id: int,
+     *     order_number: string,
+     *     customer: string,
+     *     status: string,
+     *     reason: string,
+     *     reason_label: string,
+     *     book_expected: float,
+     *     courier_collected: float|null,
+     *     delta: float,
+     *     attention_id: int|null,
+     *     tracking_message: string|null
+     * }>
+     */
+    public array $diffOrders = [];
+
     public function delete(int $courierId): void
     {
         $this->error = null;
@@ -114,6 +143,43 @@ class AdminCouriers extends Component
 
         $this->closeWithdraw();
         $this->message = 'Withdrawal recorded for '.$courier->name.'.';
+    }
+
+    public function openDiffOrders(int $courierId, CourierBalanceService $balances): void
+    {
+        $courier = Courier::query()->findOrFail($courierId);
+        $summary = $balances->summarize($courier);
+        $apiBalance = $this->apiBalances[$courier->id] ?? null;
+
+        if ($apiBalance === null) {
+            return;
+        }
+
+        $expectedApi = (float) $summary['expected_api'];
+        $diff = round((float) $apiBalance - $expectedApi, 2);
+
+        if (abs($diff) < 0.5) {
+            return;
+        }
+
+        $this->diffCourierId = $courier->id;
+        $this->diffCourierName = $courier->name;
+        $this->diffApiBalance = (string) round((float) $apiBalance, 2);
+        $this->diffExpectedApi = (string) $expectedApi;
+        $this->diffAmount = (string) $diff;
+        $this->diffOrders = $balances->mismatchOrders($courier);
+        $this->showDiffModal = true;
+    }
+
+    public function closeDiffOrders(): void
+    {
+        $this->showDiffModal = false;
+        $this->diffCourierId = null;
+        $this->diffCourierName = '';
+        $this->diffApiBalance = '0';
+        $this->diffExpectedApi = '0';
+        $this->diffAmount = '0';
+        $this->diffOrders = [];
     }
 
     /**

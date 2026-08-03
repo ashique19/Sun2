@@ -56,11 +56,20 @@ class SteadfastWebhookProcessor
                 'created_at' => now(),
             ]);
 
+            $mappedPreview = $notificationType === 'delivery_status'
+                ? $this->mapDeliveryStatus(strtolower((string) ($payload['status'] ?? '')))
+                : null;
+            $chargePhase = match ($mappedPreview) {
+                'cancelled', 'returned' => 'cancelled',
+                'delivered' => 'delivered',
+                default => $notificationType === 'delivery_status' ? 'delivered' : 'tracking',
+            };
+
             $this->courierChargeSync->sync(
                 order: $order,
                 fee: $this->courierChargeSync->parseFeeFromPayload($payload),
                 actor: null,
-                phase: $notificationType === 'delivery_status' ? 'delivered' : 'tracking',
+                phase: $chargePhase,
                 meta: ['source' => 'steadfast_webhook'],
                 courierDataId: (int) $courierData->id,
             );
@@ -114,9 +123,17 @@ class SteadfastWebhookProcessor
             $extra['dispatch_date'] = $this->parseTimestamp($payload['updated_at'] ?? null) ?? now();
         }
 
-        if ($mappedStatus === 'returned') {
-            $this->deliveryReturns->applyCourierReturnedLines($order);
-            $order->refresh();
+        if (in_array($mappedStatus, ['cancelled', 'returned'], true)) {
+            $this->deliveryReturns->settleCourierCancelOrReturn(
+                order: $order,
+                status: $mappedStatus,
+                note: $message,
+                changedBy: null,
+                applyCourierFeeDebit: true,
+                extraAttributes: $extra,
+            );
+
+            return;
         }
 
         // Handle delivery status with COD validation / partial-delivery review.

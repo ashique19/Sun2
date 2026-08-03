@@ -117,7 +117,7 @@ class AdminCouriersBalanceBreakdownTest extends TestCase
             ->assertSee('Receivable')
             ->assertSee('Pending')
             ->assertSee('API balance')
-            ->assertSee('Receivable = delivered COD − courier charge − COD % − withdrawals')
+            ->assertSee('Receivable = delivered/cancelled/returned COD − courier charge − COD % − withdrawals')
             ->assertSee('Pending = COD still with courier on dispatched parcels')
             ->assertSee('Expected API = book − pending')
             ->assertSee('Should be');

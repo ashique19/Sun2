@@ -10,7 +10,8 @@
                 <span class="tabular-nums font-medium text-[#6B6459]">&#2547; {{ number_format($totalPending ?? 0, 0) }}</span>
             </p>
             <p class="text-xs text-[#8C8474] mt-1">
-                Receivable = delivered COD − courier charge − COD % − withdrawals.
+                Receivable = delivered/cancelled/returned COD − courier charge − COD % − withdrawals
+                (cancelled with collected 0 still subtracts courier charge; COD % is 0).
                 Pending = COD still with courier on dispatched parcels.
                 Expected API = book − pending.
                 API = live Steadfast wallet (refresh manually).

@@ -123,6 +123,35 @@ class CourierBalanceService
     }
 
     /**
+     * Debit book for the courier fee on a cancelled / returned parcel (collected COD = 0).
+     * Idempotent per order.
+     */
+    public function debitCancelFee(Courier $courier, Order $order, int $amount, ?int $createdBy = null): void
+    {
+        if ($amount <= 0) {
+            return;
+        }
+
+        $alreadyDebited = CourierBalanceEntry::query()
+            ->where('order_id', $order->id)
+            ->where('type', 'fee')
+            ->exists();
+
+        if ($alreadyDebited) {
+            return;
+        }
+
+        $this->apply(
+            courier: $courier,
+            type: 'fee',
+            amount: -$amount,
+            orderId: $order->id,
+            note: 'Courier fee on cancel/return #'.$order->order_number,
+            createdBy: $createdBy,
+        );
+    }
+
+    /**
      * Record a withdrawal / remittance received from the courier.
      */
     public function withdraw(Courier $courier, int $amount, ?string $note = null, ?int $createdBy = null): Courier
@@ -192,7 +221,8 @@ class CourierBalanceService
      * Admin-facing balance breakdown for a courier.
      *
      * - pending: COD still with courier on dispatched parcels (in process)
-     * - receivable: net remittance due for delivered parcels after courier fees, minus withdrawals
+     * - receivable: net remittance for delivered/cancelled/returned parcels after courier fees
+     *   and COD %, minus withdrawals (cancelled with collected 0 contributes −courier_charge)
      * - book: running ledger on couriers.balance
      * - expected_api: book − pending (what the live API wallet should hold)
      *
@@ -244,8 +274,8 @@ class CourierBalanceService
 
         Order::query()
             ->whereIn('courier_id', $ids)
-            ->where('status', 'delivered')
-            ->select(['id', 'courier_id', 'collected_amount', 'delivery_charge', 'courier_charge'])
+            ->whereIn('status', ['delivered', 'cancelled', 'returned'])
+            ->select(['id', 'courier_id', 'status', 'collected_amount', 'delivery_charge', 'courier_charge'])
             ->orderBy('id')
             ->chunkById(1000, function ($orders) use (&$grossByCourier, $courierList): void {
                 foreach ($orders as $order) {
@@ -264,7 +294,8 @@ class CourierBalanceService
                         codPercentage: (float) ($courier->cod_percentage ?? 1),
                     );
 
-                    $grossByCourier[$order->courier_id] += max(0.0, $collected - $courierCharge - $codCharge);
+                    // Allow negative: cancelled/returned with collected 0 still owe courier_charge.
+                    $grossByCourier[$order->courier_id] += $collected - $courierCharge - $codCharge;
                 }
             });
 
@@ -279,7 +310,7 @@ class CourierBalanceService
 
             $summaries[$id] = [
                 'pending' => $pendingRounded,
-                'receivable' => round(max(0.0, $grossRemittable - $withdrawn), 2),
+                'receivable' => round($grossRemittable - $withdrawn, 2),
                 'book' => $book,
                 'withdrawn' => round($withdrawn, 2),
                 'expected_api' => round($book - $pendingRounded, 2),

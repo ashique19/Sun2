@@ -4,6 +4,7 @@ namespace App\Services\Admin;
 
 use App\Models\Order;
 use App\Models\User;
+use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderDeliverySettlement;
 use App\Services\Orders\OrderPaymentSync;
 use App\Services\Orders\OrderStockService;
@@ -23,6 +24,7 @@ class OrderDeliveryReturnService
         private readonly ResellerCommissionService $resellerCommissions,
         private readonly OrderDeliverySettlement $deliverySettlement,
         private readonly OrderPaymentSync $paymentSync,
+        private readonly OrderCourierChargeSync $courierChargeSync,
     ) {}
 
     public function markDelivered(Order $order, ?float $collectedAmount = null, ?int $changedBy = null): Order
@@ -63,37 +65,90 @@ class OrderDeliveryReturnService
     {
         $this->assertDispatched($order);
 
-        return DB::transaction(function () use ($order, $changedBy) {
-            $order->load('items', 'courier');
+        return $this->settleCourierCancelOrReturn(
+            order: $order,
+            status: 'returned',
+            note: 'Cancel and Return (no delivery charge).',
+            changedBy: $changedBy,
+            applyCourierFeeDebit: false,
+        );
+    }
 
-            foreach ($order->items as $item) {
-                $qty = (int) $item->quantity;
-                $item->update([
-                    'returned_quantity' => $qty,
-                    'to_be_returned' => $qty > 0,
-                    'return_received' => false,
-                ]);
-            }
+    /**
+     * Settle a courier-reported cancel/return (or admin C/R).
+     *
+     * - Marks all lines return-pending and sets H/R
+     * - Reverses dispatch COD credit on the courier book
+     * - Optionally debits courier_charge (collected = 0 ⇒ COD fee = 0; courier still charges)
+     * - Syncs payments with zero new collection
+     *
+     * @param  array<string, mixed>  $extraAttributes
+     */
+    public function settleCourierCancelOrReturn(
+        Order $order,
+        string $status,
+        string $note,
+        ?int $changedBy = null,
+        bool $applyCourierFeeDebit = true,
+        array $extraAttributes = [],
+    ): Order {
+        if (! in_array($status, ['cancelled', 'returned'], true)) {
+            throw new RuntimeException('Terminal courier settle status must be cancelled or returned.');
+        }
+
+        return DB::transaction(function () use ($order, $status, $note, $changedBy, $applyCourierFeeDebit, $extraAttributes) {
+            $order->refresh()->load('items', 'courier');
+
+            $this->applyCourierReturnedLines($order);
+            $order->refresh()->load('courier');
 
             if ($order->courier) {
                 $this->courierBalances->reverseDispatchCredit($order->courier, $order, $changedBy);
+
+                if ($applyCourierFeeDebit) {
+                    $fee = (int) round(max(0.0, (float) $order->courier_charge));
+
+                    if ($fee <= 0) {
+                        $fee = (int) round($this->courierChargeSync->suggestedConfirmAmount($order));
+
+                        if ($fee > 0) {
+                            $this->courierChargeSync->set(
+                                order: $order,
+                                amount: (float) $fee,
+                                phase: 'cancelled',
+                                actor: $changedBy ? User::query()->find($changedBy) : null,
+                                meta: ['source' => 'cancel_fee_fallback'],
+                            );
+                            $order->refresh();
+                        }
+                    }
+
+                    if ($fee > 0) {
+                        $this->courierBalances->debitCancelFee($order->courier, $order, $fee, $changedBy);
+                    }
+                }
             }
 
             $updated = $this->statusService->update(
-                $order,
-                'returned',
-                'Cancel and Return (no delivery charge).',
+                $order->fresh(),
+                $status,
+                $note,
                 $changedBy,
-                [
-                    'has_return' => true,
-                ],
+                array_merge(['has_return' => true], $extraAttributes),
+            );
+
+            $this->deliverySettlement->recordCollection(
+                order: $updated->fresh(),
+                amount: 0.0,
+                actor: $changedBy ? User::query()->find($changedBy) : null,
+                meta: ['source' => 'courier_cancel_or_return'],
             );
 
             $this->paymentSync->sync($updated->fresh());
-
             $this->resellerCommissions->reverseForOrder($updated->fresh(['items']));
+            Cache::forget(AdminOrderSegment::COUNTS_CACHE_KEY);
 
-            return $updated;
+            return $updated->fresh();
         });
     }
 

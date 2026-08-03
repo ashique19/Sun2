@@ -111,9 +111,17 @@ class CourierWebhookSupport
             $extra['dispatch_date'] = $this->parseTimestamp($payload['updated_at'] ?? $payload['timestamp'] ?? null) ?? now();
         }
 
-        if ($mappedStatus === 'returned') {
-            $this->deliveryReturns->applyCourierReturnedLines($order);
-            $order->refresh();
+        if (in_array($mappedStatus, ['cancelled', 'returned'], true)) {
+            $this->deliveryReturns->settleCourierCancelOrReturn(
+                order: $order,
+                status: $mappedStatus,
+                note: $message,
+                changedBy: null,
+                applyCourierFeeDebit: true,
+                extraAttributes: $extra,
+            );
+
+            return;
         }
 
         if ($mappedStatus === 'delivered') {

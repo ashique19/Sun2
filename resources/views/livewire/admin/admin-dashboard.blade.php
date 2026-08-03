@@ -351,9 +351,11 @@
                         Newest inbound update per order · last 2 days · max 20
                     </p>
                 </div>
-                <span class="shrink-0 rounded bg-[#FAF6EF] px-1.5 py-0.5 text-[10px] font-medium text-[#6B6459]">
-                    {{ $steadfastWebhookInbox->count() }}
-                </span>
+                <a href="{{ route('admin.couriers.webhooks') }}"
+                    wire:navigate
+                    class="shrink-0 text-xs font-medium text-[#C9A227] hover:text-[#B8921F]">
+                    See all &rarr;
+                </a>
             </div>
 
             <div class="divide-y divide-[#EFE7D6]">
@@ -403,22 +405,19 @@
                                 @endif
                             </div>
                         </div>
-                        @if ($order)
-                            <div class="flex shrink-0 flex-col gap-1.5">
+                        <div class="flex shrink-0 flex-col gap-1.5">
+                            @if ($order)
                                 <a href="{{ route('admin.orders.show', $order) }}" wire:navigate
                                     class="inline-flex items-center justify-center rounded px-2.5 py-1 text-xs font-medium text-white bg-[#C9A227] hover:bg-[#B8921F]">
                                     Order
                                 </a>
-                                @if ($steadfastUrl)
-                                    <a href="{{ $steadfastUrl }}"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        class="inline-flex items-center justify-center rounded border border-[#E7DFCF] px-2.5 py-1 text-xs font-medium text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]">
-                                        Parcel ↗
-                                    </a>
-                                @endif
-                            </div>
-                        @endif
+                            @endif
+                            <button type="button"
+                                wire:click="dismissSteadfastWebhook({{ $entry->id }})"
+                                class="inline-flex items-center justify-center rounded border border-[#E7DFCF] px-2.5 py-1 text-xs font-medium text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]">
+                                Dismiss
+                            </button>
+                        </div>
                     </div>
                 @endforeach
             </div>

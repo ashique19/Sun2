@@ -43,6 +43,7 @@ use App\Livewire\Admin\AdminSocialPosts;
 use App\Livewire\Admin\AdminSocialPostsCreate;
 use App\Livewire\Admin\AdminSocialPostsEdit;
 use App\Livewire\Admin\AdminSocialPostsShow;
+use App\Livewire\Admin\AdminSteadfastWebhooks;
 use App\Livewire\Admin\AdminUserEdit;
 use App\Livewire\Admin\AdminUsers;
 use App\Livewire\PublicProductShare;
@@ -225,6 +226,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/hero-slides/create', AdminHeroSlideEdit::class)->name('hero-slides.create');
         Route::get('/hero-slides/{slide}/edit', AdminHeroSlideEdit::class)->name('hero-slides.edit');
         Route::get('/couriers', AdminCouriers::class)->name('couriers');
+        Route::get('/couriers/webhooks', AdminSteadfastWebhooks::class)->name('couriers.webhooks');
         Route::get('/couriers/create', AdminCourierEdit::class)->name('couriers.create');
         Route::get('/couriers/{courier}/edit', AdminCourierEdit::class)->name('couriers.edit');
         Route::get('/cities', AdminCities::class)->name('cities');

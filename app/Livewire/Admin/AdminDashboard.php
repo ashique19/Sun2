@@ -10,6 +10,7 @@ use App\Services\Admin\AdminAttentionService;
 use App\Services\Admin\ExpenseAssistantService;
 use App\Services\Admin\OrderDeliveryReturnService;
 use App\Services\Admin\ReturnHubArrivalService;
+use App\Services\Admin\SteadfastWebhookInboxService;
 use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderPackagingCost;
 use App\Support\AdminAccess;
@@ -290,6 +291,8 @@ class AdminDashboard extends Component
                 'courierChargeAreaLabels' => [],
                 'courierChargeQuickAmounts' => [],
                 'returnHubArrivals' => collect(),
+                'steadfastWebhookInbox' => collect(),
+                'steadfastWebhookSummaries' => [],
                 'dueExpenseReminders' => collect(),
                 'showEveningExpensePrompt' => false,
                 'expenseCategories' => Expense::CATEGORIES,
@@ -356,6 +359,13 @@ class AdminDashboard extends Component
 
         $returnHubArrivals = app(ReturnHubArrivalService::class)->ordersAwaitingReceive();
 
+        $webhookInbox = app(SteadfastWebhookInboxService::class);
+        $steadfastWebhookInbox = $webhookInbox->latestIncoming();
+        $steadfastWebhookSummaries = [];
+        foreach ($steadfastWebhookInbox as $entry) {
+            $steadfastWebhookSummaries[$entry->id] = $webhookInbox->summary($entry);
+        }
+
         return view('livewire.admin.admin-dashboard', [
             'segments' => AdminOrderSegment::SEGMENTS,
             'segmentCounts' => $segmentCounts,
@@ -367,6 +377,8 @@ class AdminDashboard extends Component
             'courierChargeAreaLabels' => $courierChargeAreaLabels,
             'courierChargeQuickAmounts' => $courierChargeQuickAmounts,
             'returnHubArrivals' => $returnHubArrivals,
+            'steadfastWebhookInbox' => $steadfastWebhookInbox,
+            'steadfastWebhookSummaries' => $steadfastWebhookSummaries,
             'dueExpenseReminders' => $dueExpenseReminders,
             'showEveningExpensePrompt' => $showEveningExpensePrompt,
             'expenseCategories' => Expense::CATEGORIES,

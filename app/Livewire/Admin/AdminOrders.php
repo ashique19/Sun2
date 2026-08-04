@@ -515,6 +515,7 @@ class AdminOrders extends Component
         }
 
         $settlement->markReturnReceived($order);
+        $this->removeSettledFromList([(int) $orderId]);
     }
 
     public function undoReturnReceived(int $orderId, OrderDeliveryReturnService $settlement): void

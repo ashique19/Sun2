@@ -228,8 +228,6 @@ class AdminDashboard extends Component
         }
 
         $settlement->markReturnReceived($order);
-        // Clear H/R so exchange / H/R-only orders leave Return Pending after hub acknowledgment.
-        $settlement->setHasReturn($order->fresh(), false);
         $this->returnHubMessage = 'Return marked received for order #'.$order->order_number.'.';
     }
 

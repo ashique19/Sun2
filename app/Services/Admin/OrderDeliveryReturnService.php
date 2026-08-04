@@ -253,7 +253,10 @@ class OrderDeliveryReturnService
                 ]);
             }
 
-            return $order->refresh();
+            // Receiving the return completes the H/R workflow — leave Return Pending.
+            $this->setHasReturn($order->fresh(), false);
+
+            return $order->fresh();
         });
     }
 

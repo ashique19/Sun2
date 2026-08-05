@@ -19,12 +19,15 @@ return [
     // Graph API version used for Messenger / Page API calls (e.g. subscribed_apps, Send API).
     'graph_version' => env('FACEBOOK_GRAPH_VERSION', 'v25.0'),
 
+    // App ID from Meta App Dashboard → Settings → Basic (needed to exchange User tokens).
+    'app_id' => env('FACEBOOK_APP_ID'),
+
     'messenger' => [
         'enabled' => filter_var(env('FACEBOOK_MESSENGER_WEBHOOK_ENABLED', true), FILTER_VALIDATE_BOOL),
 
         'verify_token' => env('FACEBOOK_MESSENGER_VERIFY_TOKEN'),
 
-        // App Secret from Meta App Dashboard → Settings → Basic (for X-Hub-Signature-256).
+        // App Secret from Meta App Dashboard → Settings → Basic (for X-Hub-Signature-256 + token exchange).
         'app_secret' => env('FACEBOOK_APP_SECRET'),
 
         // Page access token (send replies / publish posts).

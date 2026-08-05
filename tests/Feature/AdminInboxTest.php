@@ -250,7 +250,7 @@ class AdminInboxTest extends TestCase
             ->assertSee('Live app + pages_messaging Advanced Access')
             ->assertSee('Sync Messenger')
             ->assertSee('Facebook Page token needs attention')
-            ->assertSee('Paste new FACEBOOK_PAGE_ACCESS_TOKEN')
+            ->assertSee('Paste User or Page access token')
             ->assertSee('Save token');
     }
 

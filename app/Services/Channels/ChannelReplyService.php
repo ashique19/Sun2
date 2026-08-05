@@ -51,17 +51,15 @@ class ChannelReplyService
     }
 
     /**
-     * Mark the Messenger conversation as seen on Facebook (blue ticks for the customer).
+     * Sync read state to Facebook: claim the thread from Page Inbox (so Meta
+     * Business Suite / Page Inbox stops showing it unread) and send mark_seen
+     * (customer-facing seen receipts).
      *
-     * Returns true when Graph accepted mark_seen (or there was nothing to sync).
+     * Returns true when Graph accepted mark_seen, or when there was nothing left to sync.
      */
     public function markSeen(ChannelConversation $conversation): bool
     {
         if ($conversation->channel !== ChannelConversation::CHANNEL_MESSENGER) {
-            return true;
-        }
-
-        if (! $conversation->needsMessengerSeenSync()) {
             return true;
         }
 
@@ -78,7 +76,20 @@ class ChannelReplyService
         }
 
         try {
+            // Page Inbox keeps threads unread until our app owns the conversation.
+            // Claim first (even when mark_seen was already recorded) so FB Messages clears.
+            $this->takeThreadControl($conversation, $psid, $token);
+
+            if (! $conversation->needsMessengerSeenSync()) {
+                return true;
+            }
+
             $ok = $this->postMarkSeen($conversation, $psid, $token);
+
+            if (! $ok) {
+                $this->requestThreadControl($conversation, $psid, $token);
+                $ok = $this->postMarkSeen($conversation, $psid, $token);
+            }
 
             if (! $ok && $this->takeThreadControl($conversation, $psid, $token)) {
                 $ok = $this->postMarkSeen($conversation, $psid, $token);
@@ -103,37 +114,83 @@ class ChannelReplyService
 
     private function postMarkSeen(ChannelConversation $conversation, string $psid, string $token): bool
     {
-        $version = $this->tokens->graphVersion();
-        // Match sendMessenger: page tokens authenticate /me/messages.
-        $url = 'https://graph.facebook.com/'.$version.'/me/messages';
+        foreach ($this->messagesEndpoints() as $url) {
+            $response = Http::timeout(12)
+                ->withToken($token)
+                ->acceptJson()
+                ->asJson()
+                ->post($url, [
+                    'recipient' => ['id' => $psid],
+                    'sender_action' => 'mark_seen',
+                ]);
 
-        $response = Http::timeout(12)
-            ->withToken($token)
-            ->acceptJson()
-            ->asJson()
-            ->post($url, [
-                'recipient' => ['id' => $psid],
-                'sender_action' => 'mark_seen',
+            if ($response->successful()) {
+                return true;
+            }
+
+            Log::warning('Messenger mark_seen failed.', [
+                'conversation_id' => $conversation->id,
+                'url' => $url,
+                'status' => $response->status(),
+                'body' => $response->body(),
             ]);
-
-        if ($response->successful()) {
-            return true;
         }
-
-        Log::warning('Messenger mark_seen failed.', [
-            'conversation_id' => $conversation->id,
-            'status' => $response->status(),
-            'body' => $response->body(),
-        ]);
 
         return false;
     }
 
     /**
-     * When Page Inbox (or another app) owns the thread, sender actions fail until we take control.
+     * @return list<string>
+     */
+    private function messagesEndpoints(): array
+    {
+        $version = $this->tokens->graphVersion();
+        $pageId = $this->tokens->pageId();
+
+        // Prefer /{page-id}/messages (current Meta docs). Fall back to /me/messages
+        // when PAGE_ID is missing so page tokens still resolve via /me.
+        if ($pageId !== '') {
+            return ['https://graph.facebook.com/'.$version.'/'.$pageId.'/messages'];
+        }
+
+        return ['https://graph.facebook.com/'.$version.'/me/messages'];
+    }
+
+    /**
+     * Claim the thread from Page Inbox / another app so unread clears in FB Messages.
      */
     private function takeThreadControl(ChannelConversation $conversation, string $psid, string $token): bool
     {
+        return $this->postThreadControl(
+            $conversation,
+            $psid,
+            $token,
+            'take_thread_control',
+            'Admin Inbox sync for conversation #'.$conversation->id,
+        );
+    }
+
+    /**
+     * Ask the current owner to hand over control (Conversation Routing / handover).
+     */
+    private function requestThreadControl(ChannelConversation $conversation, string $psid, string $token): bool
+    {
+        return $this->postThreadControl(
+            $conversation,
+            $psid,
+            $token,
+            'request_thread_control',
+            'Admin Inbox requested control for conversation #'.$conversation->id,
+        );
+    }
+
+    private function postThreadControl(
+        ChannelConversation $conversation,
+        string $psid,
+        string $token,
+        string $edge,
+        string $metadata,
+    ): bool {
         $pageId = $this->tokens->pageId();
         if ($pageId === '') {
             return false;
@@ -146,22 +203,22 @@ class ChannelReplyService
                 ->withToken($token)
                 ->acceptJson()
                 ->asJson()
-                ->post('https://graph.facebook.com/'.$version.'/'.$pageId.'/take_thread_control', [
+                ->post('https://graph.facebook.com/'.$version.'/'.$pageId.'/'.$edge, [
                     'recipient' => ['id' => $psid],
-                    'metadata' => 'Admin Inbox opened conversation #'.$conversation->id,
+                    'metadata' => $metadata,
                 ]);
 
             if ($response->successful()) {
                 return true;
             }
 
-            Log::warning('Messenger take_thread_control failed.', [
+            Log::warning('Messenger '.$edge.' failed.', [
                 'conversation_id' => $conversation->id,
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
         } catch (Throwable $e) {
-            Log::warning('Messenger take_thread_control exception.', [
+            Log::warning('Messenger '.$edge.' exception.', [
                 'conversation_id' => $conversation->id,
                 'message' => $e->getMessage(),
             ]);
@@ -241,6 +298,10 @@ class ChannelReplyService
                     'reply_to_external_id' => $replyTo?->external_message_id,
                 ], fn ($v) => $v !== null),
             ]);
+
+            // Replies should also clear unread in Facebook Page Inbox / customer seen state.
+            $conversation->refresh();
+            $this->markSeen($conversation);
 
             return [
                 'ok' => true,

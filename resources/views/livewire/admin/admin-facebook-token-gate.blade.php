@@ -6,8 +6,12 @@
                     <h2 class="font-semibold text-rose-800">Facebook Page token needs attention</h2>
                     <p class="mt-1 text-sm text-rose-700">{{ $status['message'] }}</p>
                     <p class="mt-2 text-xs text-rose-600/90">
-                        Messenger replies and social publishing use this token. Generate a
-                        <strong>Page</strong> access token (prefer a Business Manager System User token), then paste it below.
+                        Messenger replies and social publishing use this token. Prefer a
+                        <strong>Business System User Page token</strong> (never expires), or paste a
+                        <strong>User</strong> token with Page permissions — with
+                        <code class="rounded bg-white/70 px-1">FACEBOOK_APP_ID</code> +
+                        <code class="rounded bg-white/70 px-1">FACEBOOK_APP_SECRET</code> set we exchange it
+                        into a never-expiring Page token automatically.
                     </p>
                 </div>
                 <button type="button"
@@ -32,7 +36,7 @@
                 <input type="password"
                     wire:model="tokenInput"
                     autocomplete="off"
-                    placeholder="Paste new FACEBOOK_PAGE_ACCESS_TOKEN"
+                    placeholder="Paste User or Page access token"
                     class="min-w-0 flex-1 rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm text-[#1E1E1E] focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-400">
                 <button type="button"
                     wire:click="saveToken"

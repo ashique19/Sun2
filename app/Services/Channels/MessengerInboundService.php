@@ -4,7 +4,9 @@ namespace App\Services\Channels;
 
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
+use App\Services\Facebook\FacebookPageTokenService;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -13,6 +15,7 @@ class MessengerInboundService
 {
     public function __construct(
         private ChannelConversationService $conversations,
+        private FacebookPageTokenService $tokens,
     ) {}
 
     /**
@@ -85,13 +88,26 @@ class MessengerInboundService
             return;
         }
 
-        // Ignore echo / delivery / read noise.
-        if (! empty($message['is_echo'])) {
+        $isEcho = ! empty($message['is_echo']);
+        $senderId = (string) data_get($event, 'sender.id', '');
+        $recipientId = (string) data_get($event, 'recipient.id', '');
+
+        // Echoes are Page→user replies (e.g. answered in Facebook Page Inbox).
+        // sender = page, recipient = customer PSID.
+        if ($isEcho) {
+            $messagingUserId = $recipientId !== '' ? $recipientId : '';
+            $direction = ChannelMessage::DIRECTION_OUTBOUND;
+        } else {
+            $messagingUserId = $senderId;
+            $direction = ChannelMessage::DIRECTION_INBOUND;
+        }
+
+        if ($messagingUserId === '') {
             return;
         }
 
-        $senderId = (string) data_get($event, 'sender.id', '');
-        if ($senderId === '') {
+        // Never treat the Page itself as the conversation peer.
+        if ($pageId !== null && $messagingUserId === $pageId) {
             return;
         }
 
@@ -108,19 +124,33 @@ class MessengerInboundService
             return;
         }
 
+        $existingName = ChannelConversation::query()
+            ->where('channel', ChannelConversation::CHANNEL_MESSENGER)
+            ->where('external_user_id', $messagingUserId)
+            ->value('customer_name');
+
+        $customerName = is_string($existingName) && trim($existingName) !== ''
+            ? trim($existingName)
+            : $this->resolveCustomerName($messagingUserId);
+
         $conversation = $this->conversations->findOrCreate(
             ChannelConversation::CHANNEL_MESSENGER,
-            $senderId,
-            [
+            $messagingUserId,
+            array_filter([
                 'external_account_id' => $pageId,
+                'customer_name' => $customerName,
                 'meta' => ['page_id' => $pageId],
-            ],
+            ], fn ($value) => $value !== null),
         );
+
+        if ($customerName && $conversation->customer_name !== $customerName) {
+            $conversation->forceFill(['customer_name' => $customerName])->save();
+        }
 
         if ($attachments === []) {
             $this->conversations->storeMessage($conversation, [
                 'external_message_id' => $mid,
-                'direction' => ChannelMessage::DIRECTION_INBOUND,
+                'direction' => $direction,
                 'body' => $text !== '' ? $text : null,
                 'media_url' => null,
                 'media_mime' => null,
@@ -132,7 +162,7 @@ class MessengerInboundService
             foreach ($attachments as $index => $attachment) {
                 $this->conversations->storeMessage($conversation, [
                     'external_message_id' => $this->attachmentExternalId($mid, $index, $total),
-                    'direction' => ChannelMessage::DIRECTION_INBOUND,
+                    'direction' => $direction,
                     // Caption/text only on the first image of an album.
                     'body' => $index === 0 && $text !== null && $text !== '' ? $text : null,
                     'media_url' => $attachment['url'],
@@ -142,6 +172,59 @@ class MessengerInboundService
                 ]);
             }
         }
+    }
+
+    private function resolveCustomerName(string $psid): ?string
+    {
+        $cacheKey = 'messenger.psid_name.'.$psid;
+        $cached = Cache::get($cacheKey);
+        if (is_string($cached) && $cached !== '') {
+            return $cached;
+        }
+
+        $token = $this->tokens->token();
+        if ($token === '') {
+            return null;
+        }
+
+        try {
+            $version = $this->tokens->graphVersion();
+            $response = Http::timeout(8)
+                ->withToken($token)
+                ->acceptJson()
+                ->get('https://graph.facebook.com/'.$version.'/'.$psid, [
+                    'fields' => 'name,first_name,last_name',
+                ]);
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $name = $response->json('name');
+            if (is_string($name) && trim($name) !== '') {
+                $resolved = trim($name);
+                Cache::put($cacheKey, $resolved, now()->addDays(7));
+
+                return $resolved;
+            }
+
+            $first = trim((string) ($response->json('first_name') ?? ''));
+            $last = trim((string) ($response->json('last_name') ?? ''));
+            $combined = trim($first.' '.$last);
+
+            if ($combined !== '') {
+                Cache::put($cacheKey, $combined, now()->addDays(7));
+
+                return $combined;
+            }
+        } catch (Throwable $e) {
+            Log::debug('Messenger PSID name lookup failed.', [
+                'psid' => $psid,
+                'message' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
     }
 
     /**
@@ -210,7 +293,7 @@ class MessengerInboundService
      */
     public function authorizedMediaUrl(string $url): string
     {
-        $token = (string) config('facebook.messenger.page_access_token', '');
+        $token = $this->tokens->token();
         if ($token === '' || ! str_contains($url, 'fbcdn') && ! str_contains($url, 'facebook.com')) {
             return $url;
         }

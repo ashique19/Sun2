@@ -7,6 +7,7 @@ use App\Models\ChannelMessage;
 use App\Models\Order;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -291,6 +292,86 @@ class SyncMessengerConversationsCommandTest extends TestCase
         ]);
         $this->assertDatabaseMissing('channel_messages', [
             'external_message_id' => 'm_legacy_album#0',
+        ]);
+    }
+
+    public function test_graph_sync_paginates_conversation_pages(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'PAGE42',
+            'facebook.graph_version' => 'v25.0',
+            'gemini.api_key' => null,
+        ]);
+
+        $page1 = [
+            'data' => [[
+                'id' => 't_page_1',
+                'updated_time' => now()->toIso8601String(),
+                'participants' => [
+                    'data' => [
+                        ['id' => 'PAGE42', 'name' => 'Sun Page'],
+                        ['id' => 'PSID_PAGE_1', 'name' => 'First Customer'],
+                    ],
+                ],
+                'messages' => [
+                    'data' => [[
+                        'id' => 'm_page_1',
+                        'message' => 'From page 1',
+                        'from' => ['id' => 'PSID_PAGE_1', 'name' => 'First Customer'],
+                        'created_time' => now()->subMinute()->toIso8601String(),
+                    ]],
+                ],
+            ]],
+            'paging' => [
+                'next' => 'https://graph.facebook.com/v25.0/PAGE42/conversations?after=CURSOR1&platform=messenger',
+            ],
+        ];
+
+        $page2 = [
+            'data' => [[
+                'id' => 't_page_2',
+                'updated_time' => now()->toIso8601String(),
+                'participants' => [
+                    'data' => [
+                        ['id' => 'PAGE42', 'name' => 'Sun Page'],
+                        ['id' => 'PSID_PAGE_2', 'name' => 'Second Customer'],
+                    ],
+                ],
+                'messages' => [
+                    'data' => [[
+                        'id' => 'm_page_2',
+                        'message' => 'From page 2',
+                        'from' => ['id' => 'PSID_PAGE_2', 'name' => 'Second Customer'],
+                        'created_time' => now()->subMinute()->toIso8601String(),
+                    ]],
+                ],
+            ]],
+        ];
+
+        Http::fake(function (Request $request) use ($page1, $page2) {
+            if (str_contains($request->url(), 'after=CURSOR1')) {
+                return Http::response($page2, 200);
+            }
+
+            return Http::response($page1, 200);
+        });
+
+        $this->assertSame(0, Artisan::call('messenger:sync-conversations', [
+            '--conversations' => 50,
+        ]));
+
+        $this->assertDatabaseHas('channel_conversations', [
+            'external_user_id' => 'PSID_PAGE_1',
+        ]);
+        $this->assertDatabaseHas('channel_conversations', [
+            'external_user_id' => 'PSID_PAGE_2',
+        ]);
+        $this->assertDatabaseHas('channel_messages', [
+            'external_message_id' => 'm_page_1',
+        ]);
+        $this->assertDatabaseHas('channel_messages', [
+            'external_message_id' => 'm_page_2',
         ]);
     }
 

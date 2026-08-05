@@ -247,7 +247,7 @@ class AdminInboxTest extends TestCase
             ->assertSee('No conversations stored yet')
             ->assertSee('/api/webhooks/messenger')
             ->assertSee('Verify token configured')
-            ->assertSee('Development mode')
+            ->assertSee('Live app + pages_messaging Advanced Access')
             ->assertSee('Sync from Facebook')
             ->assertSee('Facebook Page token needs attention')
             ->assertSee('Paste new FACEBOOK_PAGE_ACCESS_TOKEN')

@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 class SyncMessengerConversationsCommand extends Command
 {
     protected $signature = 'messenger:sync-conversations
-                            {--conversations=25 : Max Graph conversation threads to pull}
+                            {--conversations=50 : Max Graph conversation threads to pull}
                             {--messages=30 : Max messages per thread}';
 
     protected $description = 'Pull recent Facebook Messenger conversations into Admin Inbox';

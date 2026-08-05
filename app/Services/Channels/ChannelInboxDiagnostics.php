@@ -125,11 +125,13 @@ class ChannelInboxDiagnostics
         ];
 
         $checks[] = [
-            'ok' => $messengerCount > 1,
-            'label' => 'Meta app Live mode / testers (required for other customers)',
-            'detail' => 'Development mode is NOT enough even if you own the Page. Meta only delivers Messenger webhooks/API threads for people with an app role (Admin/Developer/Tester). '
-                .'Your personal Facebook ID works because you are an app Admin. Other customers will NOT appear until you either (1) add each tester Facebook account under App Roles → Roles, or (2) switch the app to Live and get pages_messaging Advanced Access. '
-                .'Use “Sync from Facebook” to pull whatever Graph can currently see.',
+            'ok' => $messengerCount > 0,
+            'label' => 'Live app + pages_messaging Advanced Access',
+            'detail' => $messengerCount > 1
+                ? 'Multiple Messenger conversations stored — customer delivery looks healthy. Keep webhook fields messages + standby subscribed, and use Sync Messenger to backfill older Graph threads.'
+                : ($messengerCount === 1
+                    ? 'One Messenger conversation is stored. With a Live Meta app and pages_messaging Advanced Access, additional customer chats should arrive via webhook. If customers message the Page but never appear, confirm Advanced Access and that this app is subscribed to the Page.'
+                    : 'No Messenger conversations yet. Confirm the Meta app is Live with pages_messaging Advanced Access, webhook URL + verify token, messages/standby subscriptions, then have a customer message the Page or run Sync Messenger.'),
         ];
 
         if (! empty($messengerHealth['last_rejection_reason'])) {
@@ -168,13 +170,13 @@ class ChannelInboxDiagnostics
             $summary = 'Inbox is empty because no conversations have been ingested yet, and one or more Messenger setup checks are failing.';
             $severity = 'error';
         } elseif ($total === 0) {
-            $summary = 'Inbox is empty. Config looks okay so far — waiting for Meta to deliver a Messenger message webhook.';
+            $summary = 'Inbox is empty. Config looks okay so far — waiting for Meta to deliver a Messenger message webhook, or run Sync Messenger to backfill Graph threads.';
             $severity = 'info';
-        } elseif ($messengerCount <= 1) {
-            $summary = 'Only your app-role chats can appear while the Meta app is in Development mode. Being Page owner/admin is not enough for other Facebook users — add them as App Testers, or switch the app to Live. Use “Sync Messenger” to import tester threads Graph can see.';
-            $severity = 'warning';
+        } elseif ($messengerCount === 1) {
+            $summary = 'One Messenger conversation is stored. If the Meta app is Live with pages_messaging Advanced Access, new customer chats should appear via webhook; use Sync Messenger to import more Graph-visible threads.';
+            $severity = 'info';
         } else {
-            $summary = 'Conversations are loading from the local database (webhook ingest).';
+            $summary = 'Conversations are loading from the local database (webhook ingest + Graph sync).';
             $severity = $failed ? 'warning' : 'ok';
         }
 

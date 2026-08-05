@@ -18,7 +18,7 @@ class MessengerConversationSyncController extends Controller
         }
 
         $result = $sync->sync(
-            conversationLimit: max(1, min(50, (int) $request->query('conversations', 25))),
+            conversationLimit: max(1, min(100, (int) $request->query('conversations', 50))),
             messagesPerThread: max(1, min(50, (int) $request->query('messages', 30))),
         );
 

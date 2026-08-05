@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
@@ -324,25 +325,36 @@ class FacebookMessengerWebhookTest extends TestCase
         ]);
     }
 
-    public function test_ignores_echo_messages(): void
+    public function test_ingests_echo_messages_as_outbound_from_page_inbox(): void
     {
         config([
             'facebook.messenger.enabled' => true,
             'facebook.messenger.app_secret' => '',
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'PAGE123',
+            'facebook.graph_version' => 'v25.0',
+            'gemini.api_key' => null,
         ]);
 
+        Http::fake([
+            'https://graph.facebook.com/v25.0/PSID_CUSTOMER*' => Http::response([
+                'name' => 'Echo Customer',
+            ], 200),
+        ]);
+
+        // Real echo shape: sender = Page, recipient = customer PSID.
         $body = json_encode([
             'object' => 'page',
             'entry' => [[
                 'id' => 'PAGE123',
                 'time' => time(),
                 'messaging' => [[
-                    'sender' => ['id' => 'PSID_ECHO'],
-                    'recipient' => ['id' => 'PAGE123'],
+                    'sender' => ['id' => 'PAGE123'],
+                    'recipient' => ['id' => 'PSID_CUSTOMER'],
                     'timestamp' => (int) (microtime(true) * 1000),
                     'message' => [
                         'mid' => 'm_echo_test',
-                        'text' => 'This is an echo',
+                        'text' => 'Reply from Page Inbox',
                         'is_echo' => true,
                     ],
                 ]],
@@ -359,12 +371,65 @@ class FacebookMessengerWebhookTest extends TestCase
             $body,
         )->assertOk()->assertSee('EVENT_RECEIVED', false);
 
-        // Echo messages should NOT create a conversation or store message
-        $this->assertDatabaseMissing('channel_conversations', [
-            'external_user_id' => 'PSID_ECHO',
+        $this->assertDatabaseHas('channel_conversations', [
+            'external_user_id' => 'PSID_CUSTOMER',
+            'customer_name' => 'Echo Customer',
         ]);
-        $this->assertDatabaseMissing('channel_messages', [
+        $this->assertDatabaseHas('channel_messages', [
             'external_message_id' => 'm_echo_test',
+            'direction' => ChannelMessage::DIRECTION_OUTBOUND,
+            'body' => 'Reply from Page Inbox',
+        ]);
+    }
+
+    public function test_webhook_fetches_customer_name_from_graph(): void
+    {
+        config([
+            'facebook.messenger.enabled' => true,
+            'facebook.messenger.app_secret' => '',
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'PAGE123',
+            'facebook.graph_version' => 'v25.0',
+            'gemini.api_key' => null,
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/PSID_NAMED*' => Http::response([
+                'first_name' => 'Karim',
+                'last_name' => 'Hassan',
+            ], 200),
+        ]);
+
+        $body = json_encode([
+            'object' => 'page',
+            'entry' => [[
+                'id' => 'PAGE123',
+                'time' => time(),
+                'messaging' => [[
+                    'sender' => ['id' => 'PSID_NAMED'],
+                    'recipient' => ['id' => 'PAGE123'],
+                    'timestamp' => (int) (microtime(true) * 1000),
+                    'message' => [
+                        'mid' => 'm_named',
+                        'text' => 'Hi',
+                    ],
+                ]],
+            ]],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->call(
+            'POST',
+            '/api/webhooks/messenger',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            $body,
+        )->assertOk();
+
+        $this->assertDatabaseHas('channel_conversations', [
+            'external_user_id' => 'PSID_NAMED',
+            'customer_name' => 'Karim Hassan',
         ]);
     }
 

@@ -21,8 +21,8 @@ class MessengerConversationSyncService
     /**
      * Pull recent Page Messenger conversations from Graph and upsert into Inbox.
      *
-     * In Development / Standard Access mode, Meta typically only returns threads
-     * involving Admins, Developers, or Testers of the app — not arbitrary customers.
+     * With a Live Meta app + pages_messaging Advanced Access, Graph can return
+     * real customer threads. This sync paginates until `$conversationLimit` is reached.
      *
      * @return array{
      *     ok: bool,
@@ -32,7 +32,7 @@ class MessengerConversationSyncService
      *     graph_threads: int
      * }
      */
-    public function sync(int $conversationLimit = 25, int $messagesPerThread = 30): array
+    public function sync(int $conversationLimit = 50, int $messagesPerThread = 30): array
     {
         $lock = Cache::lock('messenger-conversation-sync', 180);
 
@@ -78,35 +78,29 @@ class MessengerConversationSyncService
             ];
         }
 
+        $conversationLimit = max(1, min(100, $conversationLimit));
+        $messagesPerThread = max(1, min(50, $messagesPerThread));
+
         try {
-            $response = Http::timeout(30)
-                ->withToken($token)
-                ->acceptJson()
-                ->get('https://graph.facebook.com/'.$version.'/'.$pageId.'/conversations', [
-                    'platform' => 'messenger',
-                    'limit' => max(1, min(50, $conversationLimit)),
-                    'fields' => 'id,updated_time,participants{id,name},messages.limit('
-                        .max(1, min(50, $messagesPerThread))
-                        .'){id,message,from,created_time,attachments}',
-                ]);
+            $fetched = $this->fetchConversationThreads(
+                $token,
+                $version,
+                $pageId,
+                $conversationLimit,
+                $messagesPerThread,
+            );
 
-            if (! $response->successful()) {
-                $error = (string) data_get($response->json(), 'error.message', $response->body());
-
+            if (! $fetched['ok']) {
                 return [
                     'ok' => false,
-                    'message' => 'Facebook Conversations API failed: '.$error,
+                    'message' => $fetched['message'],
                     'conversations' => 0,
                     'messages' => 0,
                     'graph_threads' => 0,
                 ];
             }
 
-            $threads = $response->json('data');
-            if (! is_array($threads)) {
-                $threads = [];
-            }
-
+            $threads = $fetched['threads'];
             $conversationCount = 0;
             $messageCount = 0;
 
@@ -122,9 +116,7 @@ class MessengerConversationSyncService
 
             $hint = '';
             if ($threads === []) {
-                $hint = ' Graph returned 0 threads. In Development mode Meta usually only exposes chats with Admins/Developers/Testers — add the other Facebook account as an app Tester, or switch the app to Live.';
-            } elseif ($conversationCount <= 1) {
-                $hint = ' Only role-users typically appear while the Meta app is in Development mode. Add other people as Testers, or put the app Live (with pages_messaging Advanced Access) for real customers.';
+                $hint = ' Graph returned 0 threads. Confirm the Meta app is Live with pages_messaging Advanced Access, the Page token is valid, and customers have messaged this Page. In Development mode Meta only exposes chats with Admins/Developers/Testers.';
             }
 
             return [
@@ -146,6 +138,82 @@ class MessengerConversationSyncService
                 'graph_threads' => 0,
             ];
         }
+    }
+
+    /**
+     * @return array{ok: bool, message: string, threads: list<array<string, mixed>>}
+     */
+    private function fetchConversationThreads(
+        string $token,
+        string $version,
+        string $pageId,
+        int $conversationLimit,
+        int $messagesPerThread,
+    ): array {
+        $pageSize = min(50, $conversationLimit);
+        $fields = 'id,updated_time,participants{id,name},messages.limit('
+            .$messagesPerThread
+            .'){id,message,from,created_time,attachments}';
+
+        $threads = [];
+        $nextUrl = null;
+        $maxPages = (int) ceil($conversationLimit / max(1, $pageSize)) + 1;
+
+        for ($page = 0; $page < $maxPages && count($threads) < $conversationLimit; $page++) {
+            if ($nextUrl !== null) {
+                $response = Http::timeout(30)
+                    ->withToken($token)
+                    ->acceptJson()
+                    ->get($nextUrl);
+            } else {
+                $response = Http::timeout(30)
+                    ->withToken($token)
+                    ->acceptJson()
+                    ->get('https://graph.facebook.com/'.$version.'/'.$pageId.'/conversations', [
+                        'platform' => 'messenger',
+                        'limit' => $pageSize,
+                        'fields' => $fields,
+                    ]);
+            }
+
+            if (! $response->successful()) {
+                $error = (string) data_get($response->json(), 'error.message', $response->body());
+
+                return [
+                    'ok' => false,
+                    'message' => 'Facebook Conversations API failed: '.$error,
+                    'threads' => [],
+                ];
+            }
+
+            $batch = $response->json('data');
+            if (! is_array($batch) || $batch === []) {
+                break;
+            }
+
+            foreach ($batch as $thread) {
+                if (is_array($thread)) {
+                    $threads[] = $thread;
+                }
+
+                if (count($threads) >= $conversationLimit) {
+                    break;
+                }
+            }
+
+            $next = data_get($response->json(), 'paging.next');
+            if (! is_string($next) || $next === '') {
+                break;
+            }
+
+            $nextUrl = $next;
+        }
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'threads' => array_slice($threads, 0, $conversationLimit),
+        ];
     }
 
     /**

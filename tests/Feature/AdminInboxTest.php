@@ -374,6 +374,8 @@ class AdminInboxTest extends TestCase
         ]);
 
         Http::fake([
+            'https://graph.facebook.com/v25.0/PAGE42/take_thread_control*' => Http::response(['success' => true], 200),
+            'https://graph.facebook.com/v25.0/PAGE42/messages*' => Http::response(['recipient_id' => 'psid-1'], 200),
             'https://graph.facebook.com/v25.0/me/messages*' => Http::response(['recipient_id' => 'psid-1'], 200),
         ]);
 
@@ -393,7 +395,11 @@ class AdminInboxTest extends TestCase
         $this->assertNotNull($conversation->fresh()->messenger_seen_at);
 
         Http::assertSent(function ($request) {
-            return str_contains($request->url(), '/me/messages')
+            return str_contains($request->url(), '/take_thread_control')
+                && ($request['recipient']['id'] ?? null) === 'psid-1';
+        });
+        Http::assertSent(function ($request) {
+            return str_contains($request->url(), '/messages')
                 && ($request['sender_action'] ?? null) === 'mark_seen'
                 && ($request['recipient']['id'] ?? null) === 'psid-1';
         });
@@ -408,15 +414,23 @@ class AdminInboxTest extends TestCase
             'facebook.graph_version' => 'v25.0',
         ]);
 
-        Http::fake([
-            'https://graph.facebook.com/v25.0/me/messages*' => Http::sequence()
-                ->push(['error' => ['message' => 'Thread ownership required', 'code' => 10]], 400)
-                ->push(['error' => ['message' => 'Thread ownership required', 'code' => 10]], 400)
-                ->push(['recipient_id' => 'psid-1'], 200),
-            'https://graph.facebook.com/v25.0/PAGE42/take_thread_control*' => Http::sequence()
-                ->push(['error' => ['message' => 'busy']], 400)
-                ->push(['success' => true], 200),
-        ]);
+        $allowMarkSeen = false;
+
+        Http::fake(function ($request) use (&$allowMarkSeen) {
+            $url = $request->url();
+
+            if (str_contains($url, '/take_thread_control') || str_contains($url, '/request_thread_control')) {
+                return Http::response(['success' => true], 200);
+            }
+
+            if (str_contains($url, '/messages') && ($request['sender_action'] ?? null) === 'mark_seen') {
+                return $allowMarkSeen
+                    ? Http::response(['recipient_id' => 'psid-1'], 200)
+                    : Http::response(['error' => ['message' => 'Thread ownership required', 'code' => 10]], 400);
+            }
+
+            return Http::response(['error' => ['message' => 'unexpected '.$url]], 500);
+        });
 
         $this->actingAs($this->adminUser());
         $conversation = $this->conversation([
@@ -431,6 +445,7 @@ class AdminInboxTest extends TestCase
         $this->assertNotNull($conversation->fresh()->last_read_at);
         $this->assertNull($conversation->fresh()->messenger_seen_at);
 
+        $allowMarkSeen = true;
         $component->call('refreshInbox');
 
         $this->assertNotNull($conversation->fresh()->messenger_seen_at);
@@ -439,7 +454,10 @@ class AdminInboxTest extends TestCase
             return str_contains($request->url(), '/take_thread_control');
         });
         Http::assertSent(function ($request) {
-            return str_contains($request->url(), '/me/messages')
+            return str_contains($request->url(), '/request_thread_control');
+        });
+        Http::assertSent(function ($request) {
+            return str_contains($request->url(), '/messages')
                 && ($request['sender_action'] ?? null) === 'mark_seen';
         });
     }
@@ -454,6 +472,8 @@ class AdminInboxTest extends TestCase
         ]);
 
         Http::fake([
+            'https://graph.facebook.com/v25.0/PAGE42/take_thread_control*' => Http::response(['success' => true], 200),
+            'https://graph.facebook.com/v25.0/PAGE42/messages*' => Http::response(['recipient_id' => 'psid-1'], 200),
             'https://graph.facebook.com/v25.0/me/messages*' => Http::response(['recipient_id' => 'psid-1'], 200),
         ]);
 
@@ -514,15 +534,15 @@ class AdminInboxTest extends TestCase
                 return Http::response(['data' => []], 200);
             }
 
-            if (str_contains($url, '/take_thread_control')) {
+            if (str_contains($url, '/take_thread_control') || str_contains($url, '/request_thread_control')) {
                 return Http::response(['error' => ['message' => 'busy']], 400);
             }
 
-            if (str_contains($url, '/me/messages') && ($request['sender_action'] ?? null) === 'mark_seen') {
+            if (str_contains($url, '/messages') && ($request['sender_action'] ?? null) === 'mark_seen') {
                 $markSeenAttempts++;
 
-                // First open attempt fails; poll retry should succeed.
-                if ($markSeenAttempts < 2) {
+                // Open path retries mark_seen a few times; poll should be the one that lands.
+                if ($markSeenAttempts < 4) {
                     return Http::response(['error' => ['message' => 'busy']], 400);
                 }
 
@@ -548,7 +568,7 @@ class AdminInboxTest extends TestCase
 
         $component->call('pollSyncFromFacebook');
 
-        $this->assertSame(2, $markSeenAttempts, 'poll should retry mark_seen');
+        $this->assertSame(4, $markSeenAttempts, 'poll should retry mark_seen after open failures');
         $this->assertNotNull($conversation->fresh()->messenger_seen_at);
     }
 
@@ -1053,6 +1073,8 @@ class AdminInboxTest extends TestCase
                     ],
                 ]],
             ], 200),
+            'https://graph.facebook.com/v25.0/PAGE42/take_thread_control*' => Http::response(['success' => true], 200),
+            'https://graph.facebook.com/v25.0/PAGE42/messages*' => Http::response(['recipient_id' => 'PSID_OPEN_1'], 200),
             'https://graph.facebook.com/v25.0/me/messages*' => Http::response(['recipient_id' => 'PSID_OPEN_1'], 200),
         ]);
 
@@ -1086,8 +1108,10 @@ class AdminInboxTest extends TestCase
         ]);
 
         Http::fake([
-            'https://graph.facebook.com/v25.0/me/messages*' => Http::response(['error' => ['message' => 'busy']], 400),
             'https://graph.facebook.com/v25.0/PAGE42/take_thread_control*' => Http::response(['error' => ['message' => 'busy']], 400),
+            'https://graph.facebook.com/v25.0/PAGE42/request_thread_control*' => Http::response(['error' => ['message' => 'busy']], 400),
+            'https://graph.facebook.com/v25.0/PAGE42/messages*' => Http::response(['error' => ['message' => 'busy']], 400),
+            'https://graph.facebook.com/v25.0/me/messages*' => Http::response(['error' => ['message' => 'busy']], 400),
         ]);
 
         $this->actingAs($this->adminUser());

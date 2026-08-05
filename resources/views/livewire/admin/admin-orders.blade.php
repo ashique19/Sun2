@@ -763,6 +763,16 @@
                                     class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
                                 @error('partialCollectedTk') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                                 <p class="mt-1 text-xs text-[#8C8474]">
+                                    Amount the courier rider collected from the customer (gross).
+                                    Recorded as-is — courier charge is not subtracted here.
+                                    Returned item value is written off the bill so due does not linger.
+                                </p>
+                                <p class="mt-1 text-xs text-[#8C8474]">
+                                    Expected COD &#2547;{{ number_format((float) $partialExpectedCod, 0) }}
+                                    · Courier charge &#2547;{{ number_format((float) $partialCourierCharge, 0) }}
+                                    (fee applies later in receivable = collected − courier charge − COD %)
+                                </p>
+                                <p class="mt-1 text-xs text-[#8C8474]">
                                     All products returned → Cancelled. Some kept → Delivered. Both set has_return.
                                 </p>
                             </div>

@@ -79,6 +79,10 @@ class AdminOrders extends Component
 
     public string $partialCollectedTk = '0';
 
+    public string $partialExpectedCod = '0';
+
+    public string $partialCourierCharge = '0';
+
     /** @var list<array{id:int,name:string,quantity:int,image:?string}> */
     public array $partialItems = [];
 
@@ -586,7 +590,10 @@ class AdminOrders extends Component
 
         $this->partialOrderId = (int) $order->id;
         $this->partialOrderNumber = (string) $order->order_number;
-        $this->partialCollectedTk = (string) (int) round((float) $order->cod_amount);
+        $this->partialExpectedCod = (string) (int) round($order->collectableAmount());
+        $this->partialCourierCharge = (string) (int) round((float) ($order->courier_charge ?? 0));
+        // Prefill with expected COD — admin edits to what the rider actually collected.
+        $this->partialCollectedTk = $this->partialExpectedCod;
         $this->partialReturns = [];
         $this->partialItems = [];
 
@@ -612,6 +619,8 @@ class AdminOrders extends Component
         $this->partialReturns = [];
         $this->partialItems = [];
         $this->partialCollectedTk = '0';
+        $this->partialExpectedCod = '0';
+        $this->partialCourierCharge = '0';
         $this->resetErrorBag();
     }
 

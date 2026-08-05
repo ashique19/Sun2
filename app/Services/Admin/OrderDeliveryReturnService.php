@@ -208,6 +208,8 @@ class OrderDeliveryReturnService
                 ? 'Partial return: all products returned. Collected ৳'.number_format($collectedTk, 0).'.'
                 : 'Partial return: some products kept. Collected ৳'.number_format($collectedTk, 0).'.';
 
+            // $collectedTk is what the rider collected from the customer (gross).
+            // Do not subtract courier_charge here — that fee is applied in receivable math only.
             if ($order->courier) {
                 $this->courierBalances->settleAfterPartialReturn($order->courier, $order, (int) round($collectedTk), $changedBy);
             }

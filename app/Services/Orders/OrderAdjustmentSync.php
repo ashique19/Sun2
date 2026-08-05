@@ -81,6 +81,47 @@ class OrderAdjustmentSync
     }
 
     /**
+     * Add/replace the partial-return merchandise write-off discount, keeping other lines.
+     */
+    public function applyPartialReturnWriteOff(Order $order, float $amount, ?User $actor = null): void
+    {
+        $amount = round(max(0.0, $amount), 2);
+
+        $this->materializeFromScalars($order);
+        $order->load('adjustments');
+
+        $lines = [];
+        foreach ($order->adjustments as $adjustment) {
+            if ($adjustment->source === 'partial_return_writeoff') {
+                continue;
+            }
+
+            $lines[] = [
+                'type' => (string) $adjustment->type,
+                'label' => (string) $adjustment->label,
+                'amount' => (float) $adjustment->amount,
+                'coupon_id' => $adjustment->coupon_id,
+                'source' => (string) ($adjustment->source ?? 'admin'),
+                'sort_order' => (int) $adjustment->sort_order,
+                'meta' => is_array($adjustment->meta) ? $adjustment->meta : null,
+            ];
+        }
+
+        if ($amount > 0) {
+            $lines[] = [
+                'type' => 'discount',
+                'label' => 'Returned items',
+                'amount' => $amount,
+                'source' => 'partial_return_writeoff',
+                'sort_order' => 900,
+                'meta' => ['reason' => 'partial_return'],
+            ];
+        }
+
+        $this->replaceAdjustments($order, $lines, $actor);
+    }
+
+    /**
      * If no adjustment rows exist for this order, create them from scalar charge/discount/coupon_id.
      * Safe to call on every legacy save path — no-ops when lines already exist.
      */

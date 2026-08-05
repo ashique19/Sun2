@@ -4,6 +4,7 @@ namespace App\Services\Admin;
 
 use App\Models\Order;
 use App\Models\User;
+use App\Services\Orders\OrderAdjustmentSync;
 use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderDeliverySettlement;
 use App\Services\Orders\OrderPaymentSync;
@@ -17,6 +18,8 @@ use RuntimeException;
 
 class OrderDeliveryReturnService
 {
+    public const PARTIAL_RETURN_WRITEOFF_SOURCE = 'partial_return_writeoff';
+
     public function __construct(
         private readonly OrderStatusService $statusService,
         private readonly CourierBalanceService $courierBalances,
@@ -25,6 +28,7 @@ class OrderDeliveryReturnService
         private readonly OrderDeliverySettlement $deliverySettlement,
         private readonly OrderPaymentSync $paymentSync,
         private readonly OrderCourierChargeSync $courierChargeSync,
+        private readonly OrderAdjustmentSync $adjustmentSync,
     ) {}
 
     public function markDelivered(Order $order, ?float $collectedAmount = null, ?int $changedBy = null): Order
@@ -208,16 +212,24 @@ class OrderDeliveryReturnService
                 ? 'Partial return: all products returned. Collected ৳'.number_format($collectedTk, 0).'.'
                 : 'Partial return: some products kept. Collected ৳'.number_format($collectedTk, 0).'.';
 
+            $actor = $changedBy ? User::query()->find($changedBy) : auth()->user();
+
+            // Write off returned merchandise (and delivery when nothing was kept) so the
+            // bill matches what the rider should have collected — otherwise residual due
+            // looks like a wrong "recorded" COD (e.g. 2320 − 1220 → 1100).
+            $this->applyPartialReturnWriteOff($order->fresh(['items', 'adjustments']), $allReturned, $actor);
+
             // $collectedTk is what the rider collected from the customer (gross).
             // Do not subtract courier_charge here — that fee is applied in receivable math only.
+            $order = $order->fresh(['courier']);
             if ($order->courier) {
                 $this->courierBalances->settleAfterPartialReturn($order->courier, $order, (int) round($collectedTk), $changedBy);
             }
 
             $this->deliverySettlement->recordCollection(
-                order: $order,
+                order: $order->fresh(),
                 amount: $collectedTk,
-                actor: $changedBy ? User::query()->find($changedBy) : auth()->user(),
+                actor: $actor,
                 meta: ['source' => 'admin_partial_return'],
             );
 
@@ -320,6 +332,30 @@ class OrderDeliveryReturnService
         }
 
         return $order->refresh();
+    }
+
+    /**
+     * Reduce the customer bill for returned merchandise (and delivery when nothing was kept).
+     */
+    private function applyPartialReturnWriteOff(Order $order, bool $allReturned, ?User $actor): void
+    {
+        $returnedMerchandise = 0.0;
+
+        foreach ($order->items as $item) {
+            $returnedMerchandise += (int) $item->returned_quantity * (float) $item->price;
+        }
+
+        $writeOff = $returnedMerchandise;
+
+        if ($allReturned) {
+            $writeOff += max(0.0, (float) $order->delivery_charge);
+        }
+
+        if ($writeOff <= 0) {
+            return;
+        }
+
+        $this->adjustmentSync->applyPartialReturnWriteOff($order, $writeOff, $actor);
     }
 
     private function assertDispatched(Order $order): void

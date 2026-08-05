@@ -248,7 +248,7 @@ class AdminInboxTest extends TestCase
             ->assertSee('/api/webhooks/messenger')
             ->assertSee('Verify token configured')
             ->assertSee('Live app + pages_messaging Advanced Access')
-            ->assertSee('Sync from Facebook')
+            ->assertSee('Sync Messenger')
             ->assertSee('Facebook Page token needs attention')
             ->assertSee('Paste new FACEBOOK_PAGE_ACCESS_TOKEN')
             ->assertSee('Save token');

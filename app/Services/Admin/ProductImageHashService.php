@@ -21,8 +21,13 @@ class ProductImageHashService
     public const TOP_MATCHES = 3;
 
     /**
+     * Downscale large images before dHash so decode→resample stays cheap.
+     */
+    public const HASH_MAX_EDGE = 512;
+
+    /**
      * Center-crop fractions tried when full-frame match is below auto threshold.
-     * Order: larger crop first (keeps more product), then tighter screenshot ROIs.
+     * Compared against stored full-frame catalog hashes only (no per-image rehash).
      *
      * @var list<float>
      */
@@ -61,6 +66,8 @@ class ProductImageHashService
         if ($image === false) {
             throw new RuntimeException('Unsupported or corrupt image data.');
         }
+
+        $image = $this->downscaleForHash($image);
 
         if ($centerFraction !== null) {
             $image = $this->centerCrop($image, $centerFraction);
@@ -138,73 +145,57 @@ class ProductImageHashService
 
     /**
      * Plan A: full-frame vs stored hashes.
-     * Plan B: if below auto threshold, compare center crops (query vs each catalog image).
+     * Plan B: if below auto threshold, center-crop the query and compare to stored
+     * full-frame catalog hashes (cheap — never re-decodes the catalog).
      *
      * @return array{product_id:int,name:string,sku:?string,price:float,stock_quantity:int,image_url:?string,match_percent:float,distance:int,strategy:string}|null
      */
     public function findBestAutoMatchFromBinary(string $binary): ?array
     {
-        $fullHash = $this->hashBinary($binary);
-        $fullMatches = $this->findTopMatches($fullHash, 1, self::AUTO_MATCH_PERCENT);
-        $top = $fullMatches[0] ?? null;
+        $image = @imagecreatefromstring($binary);
 
-        if ($top !== null && (float) $top['match_percent'] >= self::AUTO_MATCH_PERCENT) {
-            return $top + ['strategy' => 'full'];
+        if ($image === false) {
+            throw new RuntimeException('Unsupported or corrupt image data.');
         }
 
-        $best = null;
+        $image = $this->downscaleForHash($image);
 
-        foreach (self::CENTER_CROP_SCALES as $scale) {
-            try {
-                $queryHash = $this->hashBinary($binary, $scale);
+        try {
+            $fullHash = $this->hashGdImageCopy($image);
+            $fullMatches = $this->findTopMatches($fullHash, 1, self::AUTO_MATCH_PERCENT);
+            $top = $fullMatches[0] ?? null;
 
-                // Screenshot chrome is usually on the edges: compare the cropped
-                // query against stored full-frame catalog hashes first.
-                $againstFull = $this->findTopMatches($queryHash, 1, self::AUTO_MATCH_PERCENT);
-                $this->considerAutoCandidate(
-                    $best,
-                    $againstFull[0] ?? null,
-                    'query_center_'.$this->scaleLabel($scale).'_vs_catalog_full',
-                );
-
-                // Also try same center crop on both sides (centered product photos).
-                $againstCrop = $this->findTopMatchesAgainstCenterCrop(
-                    $queryHash,
-                    $scale,
-                    1,
-                    self::AUTO_MATCH_PERCENT,
-                );
-                $this->considerAutoCandidate(
-                    $best,
-                    $againstCrop[0] ?? null,
-                    'center_'.$this->scaleLabel($scale),
-                );
-            } catch (Throwable $e) {
-                Log::debug('Center-crop product image match failed.', [
-                    'scale' => $scale,
-                    'error' => $e->getMessage(),
-                ]);
+            if ($top !== null && (float) $top['match_percent'] >= self::AUTO_MATCH_PERCENT) {
+                return $top + ['strategy' => 'full'];
             }
+
+            foreach (self::CENTER_CROP_SCALES as $scale) {
+                try {
+                    $cropped = $this->centerCropCopy($image, $scale);
+                    $queryHash = $this->hashGdImage($cropped);
+
+                    // Screenshot chrome is usually on the edges: cropped query vs
+                    // stored full-frame catalog hashes.
+                    $againstFull = $this->findTopMatches($queryHash, 1, self::AUTO_MATCH_PERCENT);
+                    $candidate = $againstFull[0] ?? null;
+
+                    if ($candidate !== null && (float) $candidate['match_percent'] >= self::AUTO_MATCH_PERCENT) {
+                        return $candidate + [
+                            'strategy' => 'query_center_'.$this->scaleLabel($scale).'_vs_catalog_full',
+                        ];
+                    }
+                } catch (Throwable $e) {
+                    Log::debug('Center-crop product image match failed.', [
+                        'scale' => $scale,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        } finally {
+            imagedestroy($image);
         }
 
-        return $best;
-    }
-
-    /**
-     * @param  array{product_id:int,name:string,sku:?string,price:float,stock_quantity:int,image_url:?string,match_percent:float,distance:int,strategy?:string}|null  $best
-     * @param  array{product_id:int,name:string,sku:?string,price:float,stock_quantity:int,image_url:?string,match_percent:float,distance:int}|null  $candidate
-     */
-    private function considerAutoCandidate(?array &$best, ?array $candidate, string $strategy): void
-    {
-        if ($candidate === null || (float) $candidate['match_percent'] < self::AUTO_MATCH_PERCENT) {
-            return;
-        }
-
-        if ($best !== null && (float) $candidate['match_percent'] <= (float) $best['match_percent']) {
-            return;
-        }
-
-        $best = $candidate + ['strategy' => $strategy];
+        return null;
     }
 
     private function scaleLabel(float $scale): string
@@ -262,92 +253,21 @@ class ProductImageHashService
     }
 
     /**
-     * Compare a query center-crop hash to the same center crop of each catalog image.
-     *
-     * @return list<array{product_id:int,name:string,sku:?string,price:float,stock_quantity:int,image_url:?string,match_percent:float,distance:int}>
+     * Hash a copy of $image so the source remains usable.
      */
-    public function findTopMatchesAgainstCenterCrop(
-        string $queryHash,
-        float $centerFraction,
-        int $limit = self::TOP_MATCHES,
-        float $minPercent = self::MIN_MATCH_PERCENT,
-    ): array {
-        $rows = ProductImage::query()
-            ->whereNotNull('perceptual_hash')
-            ->with(['product:id,name,sku,price,stock_quantity,slug'])
-            ->get(['id', 'product_id', 'path', 'perceptual_hash']);
-
-        $bestByProduct = [];
-
-        foreach ($rows as $row) {
-            if (! $row->product) {
-                continue;
-            }
-
-            $catalogHash = $this->hashProductImageCenterCrop($row, $centerFraction);
-            if ($catalogHash === null) {
-                continue;
-            }
-
-            $distance = $this->hammingDistance($queryHash, $catalogHash);
-            $percent = round(max(0, (1 - ($distance / self::HASH_BITS)) * 100), 1);
-
-            if ($percent < $minPercent) {
-                continue;
-            }
-
-            $productId = (int) $row->product_id;
-            $existing = $bestByProduct[$productId] ?? null;
-
-            if ($existing && $existing['match_percent'] >= $percent) {
-                continue;
-            }
-
-            $bestByProduct[$productId] = [
-                'product_id' => $productId,
-                'name' => $row->product->name,
-                'sku' => $row->product->sku,
-                'price' => (float) $row->product->price,
-                'stock_quantity' => (int) $row->product->stock_quantity,
-                'image_url' => StorefrontAssets::url($row->path),
-                'match_percent' => $percent,
-                'distance' => $distance,
-            ];
-        }
-
-        $matches = array_values($bestByProduct);
-        usort($matches, fn (array $a, array $b) => $b['match_percent'] <=> $a['match_percent']);
-
-        return array_slice($matches, 0, $limit);
-    }
-
-    private function hashProductImageCenterCrop(ProductImage $image, float $centerFraction): ?string
+    private function hashGdImageCopy(\GdImage $image): string
     {
-        $local = $this->localPath($image->path);
+        $width = imagesx($image);
+        $height = imagesy($image);
+        $copy = imagecreatetruecolor($width, $height);
 
-        if ($local) {
-            try {
-                return $this->hashFile($local, $centerFraction);
-            } catch (Throwable) {
-                return null;
-            }
+        if ($copy === false) {
+            throw new RuntimeException('Could not allocate image buffer.');
         }
 
-        $url = StorefrontAssets::url($image->path);
-        if (! $url || ! str_starts_with($url, 'http')) {
-            return null;
-        }
+        imagecopy($copy, $image, 0, 0, 0, 0, $width, $height);
 
-        try {
-            $response = Http::timeout(15)->get($url);
-            if (! $response->successful() || $response->body() === '') {
-                return null;
-            }
-
-            return $this->hashBinary($response->body(), $centerFraction);
-        } catch (Throwable) {
-            return null;
-        }
+        return $this->hashGdImage($copy);
     }
 
     private function hashGdImage(\GdImage $image): string
@@ -390,7 +310,44 @@ class ProductImageHashService
         return sprintf('%016s', base_convert($bits, 2, 16));
     }
 
+    private function downscaleForHash(\GdImage $image): \GdImage
+    {
+        $width = imagesx($image);
+        $height = imagesy($image);
+        $maxEdge = max($width, $height);
+
+        if ($maxEdge <= self::HASH_MAX_EDGE) {
+            return $image;
+        }
+
+        $scale = self::HASH_MAX_EDGE / $maxEdge;
+        $newWidth = max(1, (int) round($width * $scale));
+        $newHeight = max(1, (int) round($height * $scale));
+        $scaled = imagescale($image, $newWidth, $newHeight);
+        imagedestroy($image);
+
+        if ($scaled === false) {
+            throw new RuntimeException('Could not downscale image for hashing.');
+        }
+
+        return $scaled;
+    }
+
+    /**
+     * Center-crop and destroy the source image.
+     */
     private function centerCrop(\GdImage $image, float $fraction): \GdImage
+    {
+        $cropped = $this->centerCropCopy($image, $fraction);
+        imagedestroy($image);
+
+        return $cropped;
+    }
+
+    /**
+     * Center-crop without destroying the source image.
+     */
+    private function centerCropCopy(\GdImage $image, float $fraction): \GdImage
     {
         $fraction = max(0.1, min(0.95, $fraction));
         $width = imagesx($image);
@@ -402,12 +359,10 @@ class ProductImageHashService
 
         $cropped = imagecreatetruecolor($cropWidth, $cropHeight);
         if ($cropped === false) {
-            imagedestroy($image);
             throw new RuntimeException('Could not allocate crop buffer.');
         }
 
         imagecopy($cropped, $image, 0, 0, $x, $y, $cropWidth, $cropHeight);
-        imagedestroy($image);
 
         return $cropped;
     }

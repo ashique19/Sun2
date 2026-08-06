@@ -66,10 +66,11 @@ class AdminProductEditImageModalTest extends TestCase
             ->call('openPricedImageModal')
             ->assertSet('showPricedImageModal', true)
             ->assertSee('Priced image')
-            ->assertSee('Text position')
+            ->assertSeeHtml('role="group" aria-label="Text position"')
             ->assertSeeHtml('aria-label="Top left"')
             ->assertSeeHtml('aria-label="Center"')
             ->assertSeeHtml('class="flex gap-1.5"')
+            ->assertDontSee('Text size (px)')
             ->assertSeeHtml('x-if="editorOpen"')
             ->assertDontSeeHtml('x-show="editorOpen"');
     }

@@ -300,9 +300,7 @@ class ChannelReplyService
                 ], fn ($v) => $v !== null),
             ]);
 
-            // Replies should also clear unread in Facebook Page Inbox / customer seen state.
-            $conversation->refresh();
-            $this->markSeen($conversation);
+            // mark_seen is deferred by the Inbox UI so Send API latency is not doubled.
 
             return [
                 'ok' => true,

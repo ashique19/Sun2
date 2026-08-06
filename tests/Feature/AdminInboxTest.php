@@ -573,6 +573,76 @@ class AdminInboxTest extends TestCase
     }
 
     #[Test]
+    public function failed_background_send_restores_composer(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Hello',
+            'sent_at' => now(),
+        ]);
+
+        $replies = Mockery::mock(ChannelReplyService::class);
+        $replies->shouldReceive('sendText')
+            ->once()
+            ->andReturn([
+                'ok' => false,
+                'message' => null,
+                'error' => 'Messenger Send API error (400): boom',
+                'outside_window' => false,
+            ]);
+        $replies->shouldReceive('markSeen')->zeroOrMoreTimes();
+        $this->app->instance(ChannelReplyService::class, $replies);
+
+        Livewire::test(AdminInbox::class)
+            ->set('selectedConversationId', $conversation->id)
+            ->set('replyText', 'Should come back')
+            ->call('sendReply')
+            ->assertSet('replyText', 'Should come back')
+            ->assertSet('outboundSending', false)
+            ->assertSet('statusMessage', null)
+            ->assertSet('error', 'Messenger Send API error (400): boom');
+    }
+
+    #[Test]
+    public function prefetch_recent_threads_warms_cache_for_latest_conversations(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $first = $this->conversation([
+            'external_user_id' => 'psid-prefetch-1',
+            'customer_name' => 'Prefetch One',
+            'last_inbound_at' => now()->subMinutes(2),
+        ]);
+        $second = $this->conversation([
+            'external_user_id' => 'psid-prefetch-2',
+            'customer_name' => 'Prefetch Two',
+            'last_inbound_at' => now()->subMinute(),
+        ]);
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $first->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'First thread body',
+            'sent_at' => now()->subMinutes(2),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $second->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Second thread body',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('prefetchRecentThreads')
+            ->call('selectConversation', $second->id)
+            ->assertSee('Second thread body');
+    }
+
+    #[Test]
     public function it_can_reply_to_a_previous_message(): void
     {
         config([

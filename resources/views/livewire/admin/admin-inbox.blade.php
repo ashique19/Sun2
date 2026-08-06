@@ -325,6 +325,8 @@
                     <button type="button"
                         wire:key="inbox-conversation-{{ $conversation->id }}"
                         wire:click="selectConversation({{ $conversation->id }})"
+                        wire:loading.class="opacity-60"
+                        wire:target="selectConversation({{ $conversation->id }})"
                         @class([
                             'block w-full px-4 py-3 text-left transition',
                             $selected ? 'bg-[#FAF6EF]' : 'active:bg-[#FAF6EF] hover:bg-[#FAF6EF]/60',
@@ -786,6 +788,20 @@
                             </div>
                         </div>
                     @endforeach
+
+                    @if ($outboundSending)
+                        <div class="flex w-full justify-end" wire:key="pending-outbound">
+                            <div class="max-w-[82%] rounded-2xl rounded-br-md bg-[#C9A227]/80 px-3 py-2 text-sm text-white shadow-sm sm:max-w-[70%]">
+                                @if (filled($pendingReplyText))
+                                    <p class="whitespace-pre-wrap break-words leading-relaxed">{{ $pendingReplyText }}</p>
+                                @endif
+                                @if ($pendingReplyImage)
+                                    <img src="{{ $pendingReplyImage->temporaryUrl() }}" alt="" class="mt-2 max-h-48 rounded-xl object-contain">
+                                @endif
+                                <p class="mt-1 text-[10px] font-medium text-white/80">Sending…</p>
+                            </div>
+                        </div>
+                    @endif
                 </div>
 
                 <div class="shrink-0 border-t border-[#E7DFCF] bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 xl:px-4 xl:py-3">
@@ -793,7 +809,7 @@
                         <p class="mb-2 text-xs text-rose-600">{{ $error }}</p>
                     @endif
                     @if ($statusMessage)
-                        <p class="mb-2 text-xs text-emerald-700">{{ $statusMessage }}</p>
+                        <p class="mb-2 text-xs {{ $outboundSending ? 'text-[#8C8474]' : 'text-emerald-700' }}">{{ $statusMessage }}</p>
                     @endif
 
                     @if ($replyToMessage)
@@ -860,14 +876,17 @@
                                 wire:model="replyText"
                                 rows="{{ $replyRows }}"
                                 placeholder="{{ $replyToMessage ? 'Write a reply…' : 'Message…' }}"
-                                class="w-full resize-none rounded-2xl border border-[#E0D6C2] bg-[#FAF6EF] px-4 py-2.5 text-sm leading-5 focus:border-[#C9A227] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
+                                class="w-full resize-none rounded-2xl border border-[#E0D6C2] bg-[#FAF6EF] px-4 py-2.5 text-sm leading-5 focus:border-[#C9A227] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C9A227] disabled:opacity-60"
                                 wire:keydown.enter.exact.prevent="sendReply"
+                                @disabled($outboundSending)
                                 title="Enter to send · Shift+Enter for a new line"
                             ></textarea>
                         </div>
                         <button type="button"
                             wire:click="sendReply"
                             wire:loading.attr="disabled"
+                            wire:target="sendReply,flushPendingOutbound"
+                            @disabled($outboundSending)
                             class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#C9A227] text-white hover:bg-[#b89220] disabled:opacity-60"
                             aria-label="Send">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">

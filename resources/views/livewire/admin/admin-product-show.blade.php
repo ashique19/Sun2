@@ -36,6 +36,7 @@
             </div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
+            <x-admin.product-neighbor-nav :product="$product" route-name="admin.products.show" />
             <a href="{{ route('admin.products.edit', $product) }}" wire:navigate
                 class="rounded-lg bg-[#C9A227] px-4 py-2 text-sm font-medium text-white hover:bg-[#b89220]">
                 Edit product

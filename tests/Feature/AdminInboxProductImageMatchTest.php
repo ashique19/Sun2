@@ -83,8 +83,8 @@ class AdminInboxProductImageMatchTest extends TestCase
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
-            ->assertSee('Open full size')
-            ->assertSee('Match product')
+            ->assertDontSee('Open full size')
+            ->assertDontSee('Match product')
             ->assertSee('+ Order')
             ->call('openMessageMapMenu', $message->id)
             ->assertSet('mappingMessageId', $message->id)
@@ -93,6 +93,7 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->assertSee('Products')
             ->call('beginMapField', 'product')
             ->assertSet('mappingField', 'product')
+            ->assertSet('mappingMode', 'order')
             ->assertSeeHtml('data-inbox-product-map-modal')
             ->assertSeeHtml('z-index: 100000')
             ->assertSeeHtml('max-height: calc(100svh - 1rem)')
@@ -100,7 +101,7 @@ class AdminInboxProductImageMatchTest extends TestCase
     }
 
     #[Test]
-    public function match_product_opens_mapper_in_one_step_from_image_message(): void
+    public function search_icon_opens_tag_product_modal_for_image_message(): void
     {
         $this->actingAs($this->adminUser());
         $conversation = $this->conversation();
@@ -116,13 +117,54 @@ class AdminInboxProductImageMatchTest extends TestCase
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
-            ->call('beginMapProductFromMessage', $message->id)
+            ->call('openTagProductOnImage', $message->id)
             ->assertSet('mappingMessageId', $message->id)
             ->assertSet('mappingField', 'product')
-            ->assertSee('Add product to order')
+            ->assertSet('mappingMode', 'tag')
+            ->assertSee('Tag product on photo')
             ->assertSee('Crop chat image')
             ->assertSeeHtml('min(52vh, 26rem)')
             ->assertDontSee('load older messages');
+    }
+
+    #[Test]
+    public function tagging_a_product_on_image_persists_without_creating_order(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+        $product = Product::query()->create([
+            'name' => 'Tagged Ring',
+            'slug' => 'tagged-ring-'.uniqid(),
+            'sku' => 'TR'.random_int(100, 999),
+            'price' => 900,
+            'purchase_price' => 400,
+            'stock_quantity' => 4,
+            'is_published' => true,
+            'display_order' => 0,
+        ]);
+
+        $message = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.test/tag-me.jpg',
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('openTagProductOnImage', $message->id)
+            ->call('tagMatchedProduct', $product->id)
+            ->assertSet('mappingField', null)
+            ->assertSee('Tagged Ring')
+            ->assertSee('Send priced')
+            ->assertSee('Add to order')
+            ->call('addMatchedProductToOrder', $message->id)
+            ->assertSet('orderPanelOpen', true);
+
+        $this->assertSame($product->id, $message->fresh()->matched_product_id);
+        $order = Order::query()->find($conversation->fresh()->draft_order_id);
+        $this->assertSame($product->id, $order?->items()->first()?->product_id);
     }
 
     #[Test]
@@ -219,7 +261,7 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->call('openMessageMapMenu', $message->id)
             ->call('beginMapField', 'product')
             ->assertSee('Crop chat image')
-            ->assertSee('Open full size')
+            ->assertSet('mappingMode', 'order')
             ->set('mappingCroppedImage', $upload)
             ->call('matchProductFromCroppedImage')
             ->assertSet('mappingField', 'product')

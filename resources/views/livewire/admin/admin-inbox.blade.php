@@ -634,9 +634,9 @@
                                                     </svg>
                                                 </button>
                                                 <button type="button"
-                                                    wire:click.stop="openPricedImageSend({{ $messageRow->id }})"
-                                                    title="Send priced product image"
-                                                    aria-label="Search products and send priced image"
+                                                    wire:click.stop="openTagProductOnImage({{ $messageRow->id }})"
+                                                    title="Find / tag product"
+                                                    aria-label="Find and tag product"
                                                     class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white shadow hover:bg-black/70">
                                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="pointer-events-none h-4 w-4" aria-hidden="true">
                                                         <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/>
@@ -645,55 +645,63 @@
                                             </div>
                                         @endif
                                     </div>
-                                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                                        <a href="{{ route('admin.inbox.media', $messageRow) }}" target="_blank" rel="noopener"
-                                            @click.stop
-                                            @class([
-                                                'text-[10px] font-medium',
-                                                'text-white/90 underline' => $isOutbound,
-                                                'text-[#C9A227] hover:underline' => ! $isOutbound,
-                                            ])>
-                                            Open full size
-                                        </a>
-                                        <button type="button"
-                                            wire:click="beginMapProductFromMessage({{ $messageRow->id }})"
-                                            @click.stop
-                                            @class([
-                                                'text-[10px] font-semibold',
-                                                'text-white' => $isOutbound,
-                                                'text-[#C9A227]' => ! $isOutbound,
-                                            ])>
-                                            Match product
-                                        </button>
-                                        @if (! $isOutbound)
-                                            @php
-                                                $imageMatchState = $inboundImageMatchState[(string) $messageRow->id]
-                                                    ?? $inboundImageMatchState[$messageRow->id]
-                                                    ?? null;
-                                            @endphp
-                                            @if (($imageMatchState['status'] ?? null) === 'pending')
+                                    @if (! $isOutbound)
+                                        @php
+                                            $imageMatchState = $inboundImageMatchState[(string) $messageRow->id]
+                                                ?? $inboundImageMatchState[$messageRow->id]
+                                                ?? null;
+                                            $taggedProductId = (int) ($messageRow->matched_product_id
+                                                ?? ($imageMatchState['product_id'] ?? 0));
+                                            $taggedProductName = $messageRow->matchedProduct?->name
+                                                ?? ($imageMatchState['name'] ?? null);
+                                            $taggedMatchPercent = isset($imageMatchState['match_percent'])
+                                                ? (float) $imageMatchState['match_percent']
+                                                : null;
+                                        @endphp
+                                        @if (($imageMatchState['status'] ?? null) === 'pending')
+                                            <div class="mt-1.5 flex items-center gap-1.5 text-[10px] text-[#8C8474]"
+                                                wire:key="inbound-image-match-loading-{{ $messageRow->id }}">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3 animate-spin" aria-hidden="true">
+                                                    <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.39a.75.75 0 0 0-.75.75v3.842a.75.75 0 0 0 1.5 0v-2.14l.311.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm-10.623-2.85a5.5 5.5 0 0 1 9.201-2.466l.312.311H11.77a.75.75 0 0 0 0 1.5h3.843a.75.75 0 0 0 .75-.75V3.328a.75.75 0 1 0-1.5 0V5.47l-.311-.311A7 7 0 0 0 3.04 8.295a.75.75 0 1 0 1.45.39Z" clip-rule="evenodd" />
+                                                </svg>
+                                                <span>Matching product…</span>
+                                            </div>
+                                        @elseif ($taggedProductId > 0 && filled($taggedProductName))
+                                            <div class="mt-1.5 flex flex-wrap items-center gap-1.5"
+                                                wire:key="inbound-image-tag-{{ $messageRow->id }}-{{ $taggedProductId }}">
                                                 <span
-                                                    class="inline-flex items-center text-[#8C8474]"
-                                                    title="Searching product images"
-                                                    aria-label="Searching product images"
-                                                    wire:key="inbound-image-match-loading-{{ $messageRow->id }}">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3 animate-spin" aria-hidden="true">
-                                                        <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.39a.75.75 0 0 0-.75.75v3.842a.75.75 0 0 0 1.5 0v-2.14l.311.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm-10.623-2.85a5.5 5.5 0 0 1 9.201-2.466l.312.311H11.77a.75.75 0 0 0 0 1.5h3.843a.75.75 0 0 0 .75-.75V3.328a.75.75 0 1 0-1.5 0V5.47l-.311-.311A7 7 0 0 0 3.04 8.295a.75.75 0 1 0 1.45.39Z" clip-rule="evenodd" />
-                                                    </svg>
+                                                    class="inline-flex max-w-full items-center gap-1 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-2 py-0.5 text-[10px] font-semibold text-[#1E1E1E]"
+                                                    title="{{ $taggedMatchPercent !== null ? number_format($taggedMatchPercent, 1).'% match' : 'Tagged product' }}">
+                                                    <span class="truncate">{{ $taggedProductName }}</span>
+                                                    @if ($taggedMatchPercent !== null && ($imageMatchState['strategy'] ?? null) !== 'manual' && ($imageMatchState['strategy'] ?? null) !== 'stored')
+                                                        <span class="shrink-0 tabular-nums text-[#8C8474]">{{ number_format($taggedMatchPercent, 0) }}%</span>
+                                                    @endif
                                                 </span>
-                                            @elseif (($imageMatchState['status'] ?? null) === 'done' && ! empty($imageMatchState['product_id']))
                                                 <button type="button"
                                                     wire:click="sendPricedImageFromMatch({{ $messageRow->id }})"
                                                     wire:loading.attr="disabled"
                                                     wire:target="sendPricedImageFromMatch({{ $messageRow->id }})"
                                                     @click.stop
-                                                    title="{{ ($imageMatchState['name'] ?? 'Product').' · '.number_format((float) ($imageMatchState['match_percent'] ?? 0), 1).'% match' }}"
                                                     class="text-[10px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
-                                                    Send priced image
+                                                    Send priced
                                                 </button>
-                                            @endif
+                                                <button type="button"
+                                                    wire:click="addMatchedProductToOrder({{ $messageRow->id }})"
+                                                    @click.stop
+                                                    class="text-[10px] font-semibold text-[#C9A227] hover:underline">
+                                                    Add to order
+                                                </button>
+                                                <button type="button"
+                                                    wire:click="clearMatchedProduct({{ $messageRow->id }})"
+                                                    @click.stop
+                                                    class="text-[10px] font-medium text-[#8C8474] hover:text-[#6B6459]"
+                                                    title="Clear product tag"
+                                                    aria-label="Clear product tag">
+                                                    Clear
+                                                </button>
+                                            </div>
                                         @endif
-                                    </div>
+                                    @endif
                                 @elseif ($messageRow->hasMedia())
                                     <a href="{{ route('admin.inbox.media', $messageRow) }}" target="_blank" rel="noopener"
                                         class="mt-1 inline-block text-xs {{ $isOutbound ? 'text-white/90 underline' : 'text-[#C9A227] hover:underline' }}">
@@ -874,9 +882,15 @@
                     >
                         <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#E7DFCF] px-4 py-3">
                             <div class="min-w-0">
-                                <h3 id="inbox-product-map-title" class="text-base font-semibold text-[#1E1E1E]">Add product to order</h3>
+                                <h3 id="inbox-product-map-title" class="text-base font-semibold text-[#1E1E1E]">
+                                    {{ $mappingMode === 'tag' ? 'Tag product on photo' : 'Add product to order' }}
+                                </h3>
                                 <p class="mt-0.5 text-xs text-[#8C8474]">
-                                    Search the catalog{{ $mappingMessage->isImageAttachment() ? ', or crop the chat image to match' : '' }}.
+                                    @if ($mappingMode === 'tag')
+                                        Search the catalog{{ $mappingMessage->isImageAttachment() ? ', or crop the chat image to match' : '' }}. You can send a priced image or add it to the order after tagging.
+                                    @else
+                                        Search the catalog{{ $mappingMessage->isImageAttachment() ? ', or crop the chat image to match' : '' }}.
+                                    @endif
                                 </p>
                             </div>
                             <button type="button" wire:click="closeMessageMapMenu" class="text-2xl leading-none text-[#8C8474] hover:text-[#1E1E1E]" aria-label="Close">&times;</button>
@@ -893,7 +907,7 @@
                                 <div class="mt-2 max-h-36 space-y-1.5 overflow-y-auto overscroll-contain sm:max-h-40">
                                     @forelse ($mappingProductSuggestions as $suggestion)
                                         <button type="button"
-                                            wire:click="applyMapField('product', {{ $suggestion['id'] }})"
+                                            wire:click="chooseMappingProduct({{ $suggestion['id'] }})"
                                             class="flex w-full items-center gap-2.5 rounded-xl border border-[#EFE7D6] px-2.5 py-2 text-left hover:border-[#C9A227] hover:bg-[#FAF6EF]">
                                             @if (! empty($suggestion['image_url']))
                                                 <img src="{{ $suggestion['image_url'] }}" alt="" class="h-11 w-11 shrink-0 rounded-lg object-cover bg-[#FAF6EF]">
@@ -914,7 +928,7 @@
                                     @empty
                                         @if (trim($mappingProductSearch) !== '')
                                             <p class="text-xs text-[#8C8474]">No products match that search.</p>
-                                        @elseif (! $mappingMessage->isImageAttachment())
+                                        @elseif ($mappingMode !== 'tag' && ! $mappingMessage->isImageAttachment())
                                             <button type="button"
                                                 wire:click="applyMapField('product')"
                                                 class="w-full rounded-xl border border-dashed border-[#E0D6C2] px-3 py-2 text-left text-xs text-[#6B6459] hover:border-[#C9A227]">
@@ -983,7 +997,7 @@
                                             <button type="button"
                                                 wire:click="selectMappingImageMatch({{ $match['product_id'] }})"
                                                 class="shrink-0 rounded-lg bg-[#C9A227] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#b89220]">
-                                                Add
+                                                {{ $mappingMode === 'tag' ? 'Tag' : 'Add' }}
                                             </button>
                                         </div>
                                     @endforeach

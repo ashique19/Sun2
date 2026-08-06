@@ -19,6 +19,7 @@ class ChannelMessage extends Model
         return [
             'channel_conversation_id' => 'integer',
             'reply_to_message_id' => 'integer',
+            'matched_product_id' => 'integer',
             'raw_payload' => 'array',
             'sent_at' => 'datetime',
         ];
@@ -32,6 +33,11 @@ class ChannelMessage extends Model
     public function replyTo(): BelongsTo
     {
         return $this->belongsTo(self::class, 'reply_to_message_id');
+    }
+
+    public function matchedProduct(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'matched_product_id');
     }
 
     public function hasMedia(): bool

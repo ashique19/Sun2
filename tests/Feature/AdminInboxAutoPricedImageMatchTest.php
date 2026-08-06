@@ -123,14 +123,20 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
 
         $component = Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
-            ->assertSee('Match product')
-            ->assertSee('Send priced image')
-            ->assertSeeHtml('wire:click="sendPricedImageFromMatch('.$inbound->id.')"');
+            ->assertDontSee('Match product')
+            ->assertDontSee('Open full size')
+            ->assertSee('Send priced')
+            ->assertSee('Add to order')
+            ->assertSee($product->name)
+            ->assertSeeHtml('wire:click="sendPricedImageFromMatch('.$inbound->id.')"')
+            ->assertSeeHtml('wire:click="addMatchedProductToOrder('.$inbound->id.')"')
+            ->assertSeeHtml('wire:click.stop="openTagProductOnImage('.$inbound->id.')"');
 
         $state = $component->get('inboundImageMatchState');
         $this->assertSame('done', $state[(string) $inbound->id]['status'] ?? null);
         $this->assertSame($product->id, $state[(string) $inbound->id]['product_id'] ?? null);
         $this->assertGreaterThanOrEqual(90.0, (float) ($state[(string) $inbound->id]['match_percent'] ?? 0));
+        $this->assertSame($product->id, $inbound->fresh()->matched_product_id);
 
         @unlink($customerAbsolute);
     }
@@ -155,9 +161,9 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
-            ->assertSee('Match product')
-            ->assertDontSee('Send priced image')
-            ->assertDontSeeHtml('wire:click="sendPricedImageFromMatch('.$inbound->id.')"');
+            ->assertSeeHtml('wire:click.stop="openTagProductOnImage('.$inbound->id.')"')
+            ->assertDontSeeHtml('wire:click="sendPricedImageFromMatch('.$inbound->id.')"')
+            ->assertDontSeeHtml('wire:click="addMatchedProductToOrder('.$inbound->id.')"');
     }
 
     #[Test]
@@ -196,7 +202,7 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
-            ->assertSee('Send priced image')
+            ->assertSee('Send priced')
             ->call('sendPricedImageFromMatch', $inbound->id)
             ->assertHasNoErrors()
             ->assertSet('statusMessage', 'Priced image sent.');
@@ -298,11 +304,13 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
 
         $component = Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
-            ->assertSee('Send priced image');
+            ->assertSee('Send priced')
+            ->assertSee('Add to order');
 
         $state = $component->get('inboundImageMatchState')[(string) $inbound->id] ?? [];
         $this->assertSame($product->id, $state['product_id'] ?? null);
         $this->assertStringContainsString('center', (string) ($state['strategy'] ?? ''));
+        $this->assertSame($product->id, $inbound->fresh()->matched_product_id);
     }
 
     #[Test]

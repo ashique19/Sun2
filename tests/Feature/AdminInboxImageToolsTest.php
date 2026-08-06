@@ -104,7 +104,7 @@ class AdminInboxImageToolsTest extends TestCase
     }
 
     #[Test]
-    public function inbound_images_show_edit_and_priced_send_icon_buttons(): void
+    public function inbound_images_show_edit_and_tag_product_icon_buttons(): void
     {
         $this->actingAs($this->adminUser());
         $conversation = $this->conversation();
@@ -113,9 +113,11 @@ class AdminInboxImageToolsTest extends TestCase
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->assertSeeHtml('wire:click.stop="openImageEdit('.$inbound->id.')"')
-            ->assertSeeHtml('wire:click.stop="openPricedImageSend('.$inbound->id.')"')
+            ->assertSeeHtml('wire:click.stop="openTagProductOnImage('.$inbound->id.')"')
             ->assertSeeHtml('aria-label="Edit image and send"')
-            ->assertSeeHtml('aria-label="Search products and send priced image"');
+            ->assertSeeHtml('aria-label="Find and tag product"')
+            ->assertDontSee('Open full size')
+            ->assertDontSee('Match product');
     }
 
     #[Test]
@@ -136,11 +138,14 @@ class AdminInboxImageToolsTest extends TestCase
             ->assertSeeHtml('data-inbox-image-edit-modal')
             ->assertSeeHtml('Edit &amp; send image')
             ->call('closeImageEdit')
-            ->call('openPricedImageSend', $inbound->id)
+            ->call('openTagProductOnImage', $inbound->id)
             ->assertHasNoErrors()
-            ->assertSet('pricedSendMessageId', $inbound->id)
-            ->assertSeeHtml('data-inbox-priced-send-modal')
-            ->assertSee('Send priced product image');
+            ->assertSet('selectedConversationId', $conversation->id)
+            ->assertSet('mappingMessageId', $inbound->id)
+            ->assertSet('mappingField', 'product')
+            ->assertSet('mappingMode', 'tag')
+            ->assertSeeHtml('data-inbox-product-map-modal')
+            ->assertSee('Tag product on photo');
     }
 
     #[Test]

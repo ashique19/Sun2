@@ -223,6 +223,91 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
     }
 
     #[Test]
+    public function send_matched_product_price_reply_retries_without_reply_to_when_messenger_rejects_it(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.graph_version' => 'v25.0',
+            'channels.ai_draft.image_min_bytes' => 100,
+        ]);
+
+        [$product, $customerAbsolute, $customerUrl] = $this->productAndMatchingCustomerJpeg();
+        $priceAttempts = [];
+
+        Http::fake(function ($request) use ($customerAbsolute, $customerUrl, &$priceAttempts) {
+            if ($request->url() === $customerUrl) {
+                return Http::response(file_get_contents($customerAbsolute), 200, [
+                    'Content-Type' => 'image/jpeg',
+                ]);
+            }
+
+            $data = $request->data();
+            $text = is_array($data['message'] ?? null) ? ($data['message']['text'] ?? null) : null;
+
+            if (is_string($text) && str_starts_with($text, 'Tk ')) {
+                $priceAttempts[] = $data;
+
+                if (isset($data['reply_to'])) {
+                    return Http::response([
+                        'error' => [
+                            'message' => '(#-1) Unexpected internal error',
+                            'type' => 'OAuthException',
+                            'code' => -1,
+                            'error_subcode' => 2018012,
+                            'fbtrace_id' => 'AkXuqmQxOvTy9uTW6y-gE_Z',
+                        ],
+                    ], 400);
+                }
+
+                return Http::response(['message_id' => 'm_price_fallback'], 200);
+            }
+
+            return Http::response(['recipient_id' => 'psid-auto-priced'], 200);
+        });
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $inbound = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_album_price#1',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => $customerUrl,
+            'media_mime' => 'image/jpeg',
+            'raw_payload' => [
+                'message' => [
+                    'mid' => 'm_album_price',
+                ],
+            ],
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('sendMatchedProductPriceReply', $inbound->id)
+            ->assertHasNoErrors()
+            ->assertSet('statusMessage', 'Price reply sent.')
+            ->assertSet('error', null);
+
+        $this->assertCount(2, $priceAttempts);
+        $this->assertSame('m_album_price', $priceAttempts[0]['reply_to']['mid'] ?? null);
+        $this->assertArrayNotHasKey('reply_to', $priceAttempts[1]);
+
+        $outbound = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($outbound);
+        $this->assertSame($inbound->id, $outbound->reply_to_message_id);
+        $this->assertSame('Tk '.number_format((float) $product->price, 0), $outbound->body);
+        $this->assertSame('m_price_fallback', $outbound->external_message_id);
+
+        @unlink($customerAbsolute);
+    }
+
+    #[Test]
     public function send_priced_image_from_match_replies_with_priced_product_image(): void
     {
         config([

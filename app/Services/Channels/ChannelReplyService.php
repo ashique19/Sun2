@@ -6,6 +6,7 @@ use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Services\Facebook\FacebookPageTokenService;
 use App\Support\StorefrontAssets;
+use Illuminate\Http\Client\Response;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
@@ -421,11 +422,22 @@ class ChannelReplyService
             $payload['reply_to'] = ['mid' => $replyToMid];
         }
 
-        $response = Http::timeout(30)
-            ->withToken($token)
-            ->acceptJson()
-            ->asJson()
-            ->post($url, $payload);
+        $response = $this->postMessengerSend($url, $token, $payload);
+
+        // Meta often rejects reply_to for image/album mids (opaque 2018012 / invalid mid).
+        // Retry once without reply_to; local reply_to_message_id is still stored for inbox UI.
+        if (! $response->successful() && isset($payload['reply_to'])) {
+            Log::warning('Messenger Send API failed with reply_to; retrying without it.', [
+                'conversation_id' => $conversation->id,
+                'reply_to_mid' => $replyToMid,
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            unset($payload['reply_to']);
+            $replyToMid = null;
+            $response = $this->postMessengerSend($url, $token, $payload);
+        }
 
         if (! $response->successful()) {
             throw new RuntimeException('Messenger Send API error ('.$response->status().'): '.$response->body());
@@ -447,11 +459,16 @@ class ChannelReplyService
                 $captionPayload['reply_to'] = ['mid' => $replyToMid];
             }
 
-            $captionResponse = Http::timeout(20)
-                ->withToken($token)
-                ->acceptJson()
-                ->asJson()
-                ->post($url, $captionPayload);
+            $captionResponse = $this->postMessengerSend($url, $token, $captionPayload);
+
+            if (! $captionResponse->successful() && isset($captionPayload['reply_to'])) {
+                Log::warning('Messenger caption follow-up failed with reply_to; retrying without it.', [
+                    'conversation_id' => $conversation->id,
+                    'body' => $captionResponse->body(),
+                ]);
+                unset($captionPayload['reply_to']);
+                $captionResponse = $this->postMessengerSend($url, $token, $captionPayload);
+            }
 
             if (! $captionResponse->successful()) {
                 Log::warning('Messenger caption follow-up failed.', [
@@ -462,6 +479,18 @@ class ChannelReplyService
         }
 
         return $mid;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function postMessengerSend(string $url, string $token, array $payload): Response
+    {
+        return Http::timeout(30)
+            ->withToken($token)
+            ->acceptJson()
+            ->asJson()
+            ->post($url, $payload);
     }
 
     private function messengerReplyMid(?ChannelMessage $message): ?string

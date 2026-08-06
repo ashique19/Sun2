@@ -653,38 +653,27 @@ class AdminInboxTest extends TestCase
     }
 
     #[Test]
-    public function prefetch_recent_threads_warms_cache_for_latest_conversations(): void
+    public function selecting_a_conversation_loads_thread_messages_without_serialized_cache(): void
     {
         $this->actingAs($this->adminUser());
 
-        $first = $this->conversation([
-            'external_user_id' => 'psid-prefetch-1',
-            'customer_name' => 'Prefetch One',
-            'last_inbound_at' => now()->subMinutes(2),
-        ]);
-        $second = $this->conversation([
-            'external_user_id' => 'psid-prefetch-2',
-            'customer_name' => 'Prefetch Two',
+        $conversation = $this->conversation([
+            'external_user_id' => 'psid-thread-load',
+            'customer_name' => 'Thread Load',
             'last_inbound_at' => now()->subMinute(),
         ]);
 
         ChannelMessage::query()->create([
-            'channel_conversation_id' => $first->id,
+            'channel_conversation_id' => $conversation->id,
             'direction' => ChannelMessage::DIRECTION_INBOUND,
-            'body' => 'First thread body',
-            'sent_at' => now()->subMinutes(2),
-        ]);
-        ChannelMessage::query()->create([
-            'channel_conversation_id' => $second->id,
-            'direction' => ChannelMessage::DIRECTION_INBOUND,
-            'body' => 'Second thread body',
+            'body' => 'Fresh thread body',
             'sent_at' => now()->subMinute(),
         ]);
 
         Livewire::test(AdminInbox::class)
-            ->call('prefetchRecentThreads')
-            ->call('selectConversation', $second->id)
-            ->assertSee('Second thread body');
+            ->call('selectConversation', $conversation->id)
+            ->assertSee('Fresh thread body')
+            ->assertDontSee('__PHP_Incomplete_Class');
     }
 
     #[Test]

@@ -751,7 +751,20 @@
                                     <p class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#8C8474]">
                                         Add to order fields
                                     </p>
+                                    @php
+                                        $orderMenuMatchState = $inboundImageMatchState[(string) $messageRow->id]
+                                            ?? $inboundImageMatchState[$messageRow->id]
+                                            ?? null;
+                                        $hideProductsInOrderMenu = $messageRow->isImageAttachment()
+                                            && (
+                                                (int) ($messageRow->matched_product_id ?? 0) > 0
+                                                || (int) ($orderMenuMatchState['product_id'] ?? 0) > 0
+                                            );
+                                    @endphp
                                     @foreach (['phone' => 'Phone', 'name' => 'Name', 'address' => 'Address', 'product' => 'Products'] as $fieldKey => $fieldLabel)
+                                        @if ($fieldKey === 'product' && $hideProductsInOrderMenu)
+                                            @continue
+                                        @endif
                                         <button type="button"
                                             wire:click="beginMapField('{{ $fieldKey }}')"
                                             class="block w-full rounded-lg px-2 py-1.5 text-left text-xs font-medium hover:bg-[#FAF6EF]">

@@ -669,14 +669,18 @@
                                         @elseif ($taggedProductId > 0 && filled($taggedProductName))
                                             <div class="mt-1.5 flex flex-wrap items-center gap-1.5"
                                                 wire:key="inbound-image-tag-{{ $messageRow->id }}-{{ $taggedProductId }}">
-                                                <span
-                                                    class="inline-flex max-w-full items-center gap-1 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-2 py-0.5 text-[10px] font-semibold text-[#1E1E1E]"
-                                                    title="{{ $taggedMatchPercent !== null ? number_format($taggedMatchPercent, 1).'% match' : 'Tagged product' }}">
+                                                <a href="{{ route('admin.products.show', $taggedProductId) }}"
+                                                    target="_blank"
+                                                    rel="noopener"
+                                                    @click.stop
+                                                    class="inline-flex max-w-full items-center gap-1 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-2 py-0.5 text-[10px] font-semibold text-[#1E1E1E] hover:border-[#C9A227] hover:bg-white"
+                                                    title="{{ ($taggedMatchPercent !== null ? number_format($taggedMatchPercent, 1).'% match · ' : '').'Open product details' }}"
+                                                    aria-label="Open product details for {{ $taggedProductName }}">
                                                     <span class="truncate">{{ $taggedProductName }}</span>
                                                     @if ($taggedMatchPercent !== null && ($imageMatchState['strategy'] ?? null) !== 'manual' && ($imageMatchState['strategy'] ?? null) !== 'stored')
                                                         <span class="shrink-0 tabular-nums text-[#8C8474]">{{ number_format($taggedMatchPercent, 0) }}%</span>
                                                     @endif
-                                                </span>
+                                                </a>
                                                 <button type="button"
                                                     wire:click="sendPricedImageFromMatch({{ $messageRow->id }})"
                                                     wire:loading.attr="disabled"

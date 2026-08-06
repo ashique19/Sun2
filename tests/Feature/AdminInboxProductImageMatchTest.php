@@ -157,6 +157,8 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->call('tagMatchedProduct', $product->id)
             ->assertSet('mappingField', null)
             ->assertSee('Tagged Ring')
+            ->assertSeeHtml('href="'.route('admin.products.show', $product).'"')
+            ->assertSeeHtml('target="_blank"')
             ->assertSee('Send priced')
             ->assertSee('Add to order')
             ->call('addMatchedProductToOrder', $message->id)

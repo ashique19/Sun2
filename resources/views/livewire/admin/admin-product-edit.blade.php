@@ -760,6 +760,7 @@
                                         'top-right' => 'Top right',
                                         'bottom-left' => 'Bottom left',
                                         'bottom-right' => 'Bottom right',
+                                        'center' => 'Center',
                                     ] as $value => $label)
                                         <button type="button"
                                             wire:click="$set('pricedImagePosition', '{{ $value }}')"

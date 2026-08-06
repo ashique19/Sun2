@@ -464,13 +464,24 @@
                                                         class="w-full accent-[#C9A227] disabled:opacity-60">
                                                 </div>
                                                 <div>
-                                                    <p class="mb-1 text-[11px] text-[#8C8474]">Text position</p>
-                                                    <div class="grid grid-cols-2 gap-2">
+                                                    <div class="flex gap-1.5" role="group" aria-label="Text position">
                                                         <template x-for="option in overlayPositions()" :key="`text-${option.value}`">
-                                                            <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-[#E0D6C2] px-2 py-1.5 text-xs hover:bg-[#FAF6EF]">
-                                                                <input type="radio" name="overlay-text-position" :value="option.value" x-model="overlayTextPosition" :disabled="savedSaving" class="text-[#C9A227]">
-                                                                <span x-text="option.label"></span>
-                                                            </label>
+                                                            <button type="button"
+                                                                @click="overlayTextPosition = option.value"
+                                                                :title="option.label"
+                                                                :aria-label="option.label"
+                                                                :aria-pressed="overlayTextPosition === option.value ? 'true' : 'false'"
+                                                                :disabled="savedSaving"
+                                                                :class="overlayTextPosition === option.value
+                                                                    ? 'border-[#1E1E1E] bg-[#1E1E1E] text-white'
+                                                                    : 'border-[#E0D6C2] bg-white text-[#1E1E1E] hover:bg-[#FAF6EF]'"
+                                                                class="inline-flex h-9 flex-1 items-center justify-center rounded-lg border transition disabled:opacity-60">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                                                                    <rect x="2.5" y="2.5" width="15" height="15" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.45"/>
+                                                                    <rect :x="option.icon.x" :y="option.icon.y" :width="option.icon.w" :height="option.icon.h" rx="0.75"/>
+                                                                </svg>
+                                                                <span class="sr-only" x-text="option.label"></span>
+                                                            </button>
                                                         </template>
                                                     </div>
                                                 </div>
@@ -496,15 +507,25 @@
                                                         class="w-full accent-[#C9A227] disabled:opacity-60">
                                                 </div>
                                                 <div>
-                                                    <p class="mb-1 text-[11px] text-[#8C8474]">Logo position</p>
-                                                    <div class="grid grid-cols-2 gap-2">
+                                                    <div class="flex gap-1.5" role="group" aria-label="Logo position"
+                                                        :class="{ 'opacity-60': ! overlayLogoEnabled }">
                                                         <template x-for="option in overlayPositions()" :key="`logo-${option.value}`">
-                                                            <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-[#E0D6C2] px-2 py-1.5 text-xs hover:bg-[#FAF6EF]"
-                                                                :class="{ 'opacity-60': ! overlayLogoEnabled }">
-                                                                <input type="radio" name="overlay-logo-position" :value="option.value" x-model="overlayLogoPosition"
-                                                                    :disabled="savedSaving || ! overlayLogoEnabled" class="text-[#C9A227]">
-                                                                <span x-text="option.label"></span>
-                                                            </label>
+                                                            <button type="button"
+                                                                @click="overlayLogoPosition = option.value"
+                                                                :title="option.label"
+                                                                :aria-label="`Logo ${option.label}`"
+                                                                :aria-pressed="overlayLogoPosition === option.value ? 'true' : 'false'"
+                                                                :disabled="savedSaving || ! overlayLogoEnabled"
+                                                                :class="overlayLogoPosition === option.value
+                                                                    ? 'border-[#1E1E1E] bg-[#1E1E1E] text-white'
+                                                                    : 'border-[#E0D6C2] bg-white text-[#1E1E1E] hover:bg-[#FAF6EF]'"
+                                                                class="inline-flex h-9 flex-1 items-center justify-center rounded-lg border transition disabled:opacity-60">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                                                                    <rect x="2.5" y="2.5" width="15" height="15" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.45"/>
+                                                                    <rect :x="option.icon.x" :y="option.icon.y" :width="option.icon.w" :height="option.icon.h" rx="0.75"/>
+                                                                </svg>
+                                                                <span class="sr-only" x-text="`Logo ${option.label}`"></span>
+                                                            </button>
                                                         </template>
                                                     </div>
                                                 </div>

@@ -116,4 +116,31 @@ class AdminProductEditImageModalTest extends TestCase
             ->assertSeeHtml('x-teleport="body"')
             ->assertDontSeeHtml('x-show="aiEditorOpen"');
     }
+
+    #[Test]
+    public function saved_image_edit_modal_uses_icon_position_tabs_including_center(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $product = Product::query()->create([
+            'name' => 'Necklace Set',
+            'slug' => 'necklace-set',
+            'price' => 2500,
+            'is_published' => true,
+        ]);
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->assertSeeHtml('aria-label="Text position"')
+            ->assertSeeHtml('aria-label="Logo position"')
+            ->assertSeeHtml(':aria-label="option.label"')
+            ->assertSeeHtml(':aria-label="`Logo ${option.label}`"')
+            ->assertSeeHtml('option.icon.x')
+            ->assertDontSeeHtml('name="overlay-text-position"')
+            ->assertDontSeeHtml('name="overlay-logo-position"');
+
+        $source = file_get_contents(resource_path('js/admin-product-images.js'));
+        $this->assertIsString($source);
+        $this->assertStringContainsString("value: 'center'", $source);
+        $this->assertStringContainsString("case 'center':", $source);
+    }
 }

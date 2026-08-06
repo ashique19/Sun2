@@ -1059,18 +1059,45 @@
                                 </div>
                             </div>
 
-                            <div>
-                                <p class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Text position</p>
-                                <div class="flex flex-wrap gap-2">
-                                    @foreach (['top-left' => 'Top left', 'top-right' => 'Top right', 'bottom-left' => 'Bottom left', 'bottom-right' => 'Bottom right'] as $value => $label)
-                                        <button type="button"
-                                            @click="overlayTextPosition = '{{ $value }}'"
-                                            :class="overlayTextPosition === '{{ $value }}' ? 'border-[#C9A227] bg-[#FAF6EF] text-[#1E1E1E]' : 'border-[#E0D6C2] text-[#6B6459]'"
-                                            class="rounded-full border px-2.5 py-1 text-[11px] font-semibold">
-                                            {{ $label }}
-                                        </button>
-                                    @endforeach
-                                </div>
+                            <div class="flex gap-1.5" role="group" aria-label="Text position">
+                                @foreach ([
+                                    'top-left' => 'Top left',
+                                    'top-right' => 'Top right',
+                                    'bottom-left' => 'Bottom left',
+                                    'bottom-right' => 'Bottom right',
+                                    'center' => 'Center',
+                                ] as $value => $label)
+                                    <button type="button"
+                                        @click="overlayTextPosition = '{{ $value }}'"
+                                        title="{{ $label }}"
+                                        aria-label="{{ $label }}"
+                                        :aria-pressed="overlayTextPosition === '{{ $value }}' ? 'true' : 'false'"
+                                        :class="overlayTextPosition === '{{ $value }}'
+                                            ? 'border-[#1E1E1E] bg-[#1E1E1E] text-white'
+                                            : 'border-[#E0D6C2] bg-white text-[#1E1E1E] hover:bg-[#FAF6EF]'"
+                                        class="inline-flex h-9 flex-1 items-center justify-center rounded-lg border transition">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                                            <rect x="2.5" y="2.5" width="15" height="15" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.45"/>
+                                            @switch($value)
+                                                @case('top-left')
+                                                    <rect x="4" y="4" width="5.5" height="4" rx="0.75"/>
+                                                    @break
+                                                @case('top-right')
+                                                    <rect x="10.5" y="4" width="5.5" height="4" rx="0.75"/>
+                                                    @break
+                                                @case('bottom-left')
+                                                    <rect x="4" y="12" width="5.5" height="4" rx="0.75"/>
+                                                    @break
+                                                @case('bottom-right')
+                                                    <rect x="10.5" y="12" width="5.5" height="4" rx="0.75"/>
+                                                    @break
+                                                @default
+                                                    <rect x="6.5" y="7.5" width="7" height="5" rx="0.75"/>
+                                            @endswitch
+                                        </svg>
+                                        <span class="sr-only">{{ $label }}</span>
+                                    </button>
+                                @endforeach
                             </div>
 
                             <div x-show="previewUrl" x-cloak class="rounded-xl border border-[#E7DFCF] bg-[#FAF6EF] p-2">

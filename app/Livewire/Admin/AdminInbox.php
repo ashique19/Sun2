@@ -1289,7 +1289,9 @@ class AdminInbox extends Component
     }
 
     /**
-     * Retry Messenger mark_seen for the open thread (after Graph sync morphs).
+     * Retry Messenger mark_seen / thread takeover for the open thread.
+     * Always invoke markSeen for Messenger threads so take_thread_control can
+     * keep retrying even after a prior mark_seen "success" left Page Inbox unread.
      */
     public function retryMessengerSeen(ChannelReplyService $replies): void
     {
@@ -1299,9 +1301,11 @@ class AdminInbox extends Component
 
         $conversation = ChannelConversation::query()->find($this->selectedConversationId);
 
-        if ($conversation?->needsMessengerSeenSync()) {
-            $replies->markSeen($conversation);
+        if (! $conversation || $conversation->channel !== ChannelConversation::CHANNEL_MESSENGER) {
+            return;
         }
+
+        $replies->markSeen($conversation);
     }
 
     /**
@@ -1356,7 +1360,7 @@ class AdminInbox extends Component
 
         $conversation = ChannelConversation::query()->find($this->selectedConversationId);
 
-        if (! $conversation?->needsMessengerSeenSync()) {
+        if (! $conversation || $conversation->channel !== ChannelConversation::CHANNEL_MESSENGER) {
             return;
         }
 
@@ -1855,6 +1859,14 @@ class AdminInbox extends Component
                     ->first();
         }
 
+        $messengerSeenPendingHint = 'Graph mark_seen has not caught up yet. If Facebook Page Inbox stays unread, set this Meta app as Primary Receiver (or allow Conversation Routing takeover).';
+        if ($selectedConversation?->needsMessengerSeenSync()) {
+            $lastError = app(ChannelReplyService::class)->lastMarkSeenError($selectedConversation);
+            if (is_string($lastError) && $lastError !== '') {
+                $messengerSeenPendingHint = $lastError;
+            }
+        }
+
         return view('livewire.admin.admin-inbox', [
             'conversations' => $conversations,
             'selectedConversation' => $selectedConversation,
@@ -1870,6 +1882,7 @@ class AdminInbox extends Component
             'threadLookbackHours' => $lookbackHours,
             'realtimeEnabled' => $this->realtimeEnabled(),
             'graphPollSeconds' => $this->graphPollSeconds(),
+            'messengerSeenPendingHint' => $messengerSeenPendingHint,
             'diagnostics' => $diagnostics->forInbox([
                 'channel' => $this->channel,
                 'unread' => $this->unread,

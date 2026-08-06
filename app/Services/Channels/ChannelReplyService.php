@@ -8,6 +8,7 @@ use App\Services\Facebook\FacebookPageTokenService;
 use App\Support\StorefrontAssets;
 use Illuminate\Http\Client\Response;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -77,9 +78,13 @@ class ChannelReplyService
         }
 
         try {
+            $needsSeen = $conversation->needsMessengerSeenSync();
+
             // Page Inbox keeps threads unread until our app owns the conversation.
-            // Claim first (even when mark_seen was already recorded) so FB Messages clears.
-            $this->takeThreadControl($conversation, $psid, $token);
+            // Always attempt take when seen is pending; otherwise throttle take retries.
+            if ($needsSeen || $this->shouldRetryThreadTakeover($conversation)) {
+                $this->takeThreadControl($conversation, $psid, $token);
+            }
 
             if (! $conversation->needsMessengerSeenSync()) {
                 return true;
@@ -88,6 +93,8 @@ class ChannelReplyService
             $ok = $this->postMarkSeen($conversation, $psid, $token);
 
             if (! $ok) {
+                // request_thread_control is async; still try mark_seen again in case
+                // ownership already flipped, then poll/open will retry later.
                 $this->requestThreadControl($conversation, $psid, $token);
                 $ok = $this->postMarkSeen($conversation, $psid, $token);
             }
@@ -100,6 +107,7 @@ class ChannelReplyService
                 $conversation->forceFill([
                     'messenger_seen_at' => $conversation->last_inbound_at?->copy() ?? now(),
                 ])->save();
+                Cache::forget($this->markSeenErrorCacheKey($conversation));
             }
 
             return $ok;
@@ -115,6 +123,8 @@ class ChannelReplyService
 
     private function postMarkSeen(ChannelConversation $conversation, string $psid, string $token): bool
     {
+        $lastError = null;
+
         foreach ($this->messagesEndpoints() as $url) {
             $response = Http::timeout(12)
                 ->withToken($token)
@@ -129,12 +139,18 @@ class ChannelReplyService
                 return true;
             }
 
+            $lastError = $response->body();
+
             Log::warning('Messenger mark_seen failed.', [
                 'conversation_id' => $conversation->id,
                 'url' => $url,
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
+        }
+
+        if (is_string($lastError) && $lastError !== '') {
+            Cache::put($this->markSeenErrorCacheKey($conversation), $lastError, now()->addMinutes(30));
         }
 
         return false;
@@ -147,14 +163,47 @@ class ChannelReplyService
     {
         $version = $this->tokens->graphVersion();
         $pageId = $this->tokens->pageId();
+        $endpoints = [];
 
-        // Prefer /{page-id}/messages (current Meta docs). Fall back to /me/messages
-        // when PAGE_ID is missing so page tokens still resolve via /me.
+        // Prefer /{page-id}/messages (current Meta docs), then always fall back to
+        // /me/messages — Send API already uses /me, and a mismatched PAGE_ID must
+        // not leave mark_seen broken while replies still work.
         if ($pageId !== '') {
-            return ['https://graph.facebook.com/'.$version.'/'.$pageId.'/messages'];
+            $endpoints[] = 'https://graph.facebook.com/'.$version.'/'.$pageId.'/messages';
         }
 
-        return ['https://graph.facebook.com/'.$version.'/me/messages'];
+        $endpoints[] = 'https://graph.facebook.com/'.$version.'/me/messages';
+
+        return array_values(array_unique($endpoints));
+    }
+
+    public function lastMarkSeenError(ChannelConversation $conversation): ?string
+    {
+        $value = Cache::get($this->markSeenErrorCacheKey($conversation));
+
+        return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    private function markSeenErrorCacheKey(ChannelConversation $conversation): string
+    {
+        return 'messenger.mark_seen.last_error.'.$conversation->id;
+    }
+
+    private function shouldRetryThreadTakeover(ChannelConversation $conversation): bool
+    {
+        return ! Cache::has('messenger.take_ok.'.$conversation->id)
+            && ! Cache::has('messenger.take_attempt.'.$conversation->id);
+    }
+
+    private function rememberThreadTakeover(ChannelConversation $conversation): void
+    {
+        Cache::put('messenger.take_ok.'.$conversation->id, 1, now()->addMinutes(10));
+        Cache::forget('messenger.take_attempt.'.$conversation->id);
+    }
+
+    private function rememberThreadTakeAttempt(ChannelConversation $conversation): void
+    {
+        Cache::put('messenger.take_attempt.'.$conversation->id, 1, now()->addMinutes(2));
     }
 
     /**
@@ -162,13 +211,21 @@ class ChannelReplyService
      */
     private function takeThreadControl(ChannelConversation $conversation, string $psid, string $token): bool
     {
-        return $this->postThreadControl(
+        $ok = $this->postThreadControl(
             $conversation,
             $psid,
             $token,
             'take_thread_control',
             'Admin Inbox sync for conversation #'.$conversation->id,
         );
+
+        if ($ok) {
+            $this->rememberThreadTakeover($conversation);
+        } else {
+            $this->rememberThreadTakeAttempt($conversation);
+        }
+
+        return $ok;
     }
 
     /**
@@ -194,6 +251,10 @@ class ChannelReplyService
     ): bool {
         $pageId = $this->tokens->pageId();
         if ($pageId === '') {
+            Log::warning('Messenger '.$edge.' skipped: FACEBOOK_PAGE_ID is not configured.', [
+                'conversation_id' => $conversation->id,
+            ]);
+
             return false;
         }
 
@@ -215,6 +276,7 @@ class ChannelReplyService
 
             Log::warning('Messenger '.$edge.' failed.', [
                 'conversation_id' => $conversation->id,
+                'page_id' => $pageId,
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);

@@ -78,8 +78,8 @@ class ChannelInboxDiagnostics
             'ok' => $pageIdSet,
             'label' => 'Facebook Page ID configured',
             'detail' => $pageIdSet
-                ? 'FACEBOOK_PAGE_ID is set.'
-                : 'Missing FACEBOOK_PAGE_ID.',
+                ? 'FACEBOOK_PAGE_ID is set (required for take_thread_control so Page Inbox unread can clear).'
+                : 'Missing FACEBOOK_PAGE_ID — mark_seen can still use /me/messages, but thread takeover (Page Inbox unread) cannot run.',
         ];
 
         $checks[] = [
@@ -120,7 +120,7 @@ class ChannelInboxDiagnostics
             'detail' => (! empty($lastReceived) && ! $hasMessaging && ! $hasStandby)
                 ? 'Last webhook had no messaging/standby events (delivery/read noise only, or wrong subscription fields). Subscribe to messages and standby in Meta Developer → Webhooks.'
                 : ($hasStandby
-                    ? 'Standby events are present (Page Inbox is likely primary). This app now ingests standby as well as messaging.'
+                    ? 'Standby events are present (Page Inbox is likely primary). Customer messages still arrive here, but Facebook Page Inbox unread will not clear until this Meta app is the Primary Receiver (or Conversation Routing allows takeover) so take_thread_control can succeed.'
                     : 'Webhook includes messaging events (or none received yet).'),
         ];
 

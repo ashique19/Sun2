@@ -218,6 +218,7 @@ class AdminInboxTest extends TestCase
                 'outside_window' => false,
             ]);
         $replies->shouldReceive('markSeen')->zeroOrMoreTimes();
+        $replies->shouldReceive('lastMarkSeenError')->zeroOrMoreTimes()->andReturn(null);
         $this->app->instance(ChannelReplyService::class, $replies);
 
         Livewire::test(AdminInbox::class)
@@ -525,9 +526,10 @@ class AdminInboxTest extends TestCase
             'gemini.api_key' => null,
         ]);
 
+        $allowMarkSeen = false;
         $markSeenAttempts = 0;
 
-        Http::fake(function ($request) use (&$markSeenAttempts) {
+        Http::fake(function ($request) use (&$markSeenAttempts, &$allowMarkSeen) {
             $url = $request->url();
 
             if (str_contains($url, '/conversations')) {
@@ -541,12 +543,9 @@ class AdminInboxTest extends TestCase
             if (str_contains($url, '/messages') && ($request['sender_action'] ?? null) === 'mark_seen') {
                 $markSeenAttempts++;
 
-                // Open path retries mark_seen a few times; poll should be the one that lands.
-                if ($markSeenAttempts < 4) {
-                    return Http::response(['error' => ['message' => 'busy']], 400);
-                }
-
-                return Http::response(['recipient_id' => 'psid-1'], 200);
+                return $allowMarkSeen
+                    ? Http::response(['recipient_id' => 'psid-1'], 200)
+                    : Http::response(['error' => ['message' => 'busy']], 400);
             }
 
             return Http::response(['error' => ['message' => 'unexpected']], 500);
@@ -563,13 +562,58 @@ class AdminInboxTest extends TestCase
 
         $this->assertNull($conversation->fresh()->messenger_seen_at);
         $this->assertGreaterThanOrEqual(1, $markSeenAttempts);
-        $this->assertTrue(app()->runningUnitTests());
         $this->assertTrue($conversation->fresh()->needsMessengerSeenSync());
 
+        $attemptsBeforePoll = $markSeenAttempts;
+        $allowMarkSeen = true;
         $component->call('pollSyncFromFacebook');
 
-        $this->assertSame(4, $markSeenAttempts, 'poll should retry mark_seen after open failures');
+        $this->assertGreaterThan($attemptsBeforePoll, $markSeenAttempts, 'poll should retry mark_seen after open failures');
         $this->assertNotNull($conversation->fresh()->messenger_seen_at);
+    }
+
+    #[Test]
+    public function mark_seen_falls_back_to_me_messages_when_page_endpoint_fails(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'WRONG_PAGE',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake(function ($request) {
+            $url = $request->url();
+
+            if (str_contains($url, '/take_thread_control') || str_contains($url, '/request_thread_control')) {
+                return Http::response(['error' => ['message' => 'Only Main Receiver can call this API', 'code' => 10]], 400);
+            }
+
+            if (str_contains($url, '/WRONG_PAGE/messages') && ($request['sender_action'] ?? null) === 'mark_seen') {
+                return Http::response(['error' => ['message' => 'Invalid page id']], 400);
+            }
+
+            if (str_contains($url, '/me/messages') && ($request['sender_action'] ?? null) === 'mark_seen') {
+                return Http::response(['recipient_id' => 'psid-1'], 200);
+            }
+
+            return Http::response(['error' => ['message' => 'unexpected '.$url]], 500);
+        });
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation([
+            'last_inbound_at' => now()->subMinute(),
+            'messenger_seen_at' => null,
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id);
+
+        $this->assertNotNull($conversation->fresh()->messenger_seen_at);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/WRONG_PAGE/messages')
+            && ($request['sender_action'] ?? null) === 'mark_seen');
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/me/messages')
+            && ($request['sender_action'] ?? null) === 'mark_seen');
     }
 
     #[Test]
@@ -595,6 +639,7 @@ class AdminInboxTest extends TestCase
                 'outside_window' => false,
             ]);
         $replies->shouldReceive('markSeen')->zeroOrMoreTimes();
+        $replies->shouldReceive('lastMarkSeenError')->zeroOrMoreTimes()->andReturn(null);
         $this->app->instance(ChannelReplyService::class, $replies);
 
         Livewire::test(AdminInbox::class)

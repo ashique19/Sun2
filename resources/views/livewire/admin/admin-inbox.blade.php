@@ -423,7 +423,10 @@
                                     </a>
                                 @endif
                                 @if ($selectedConversation->needsMessengerSeenSync())
-                                    · Messenger seen pending
+                                    ·
+                                    <span title="{{ $messengerSeenPendingHint }}">
+                                        Messenger seen pending
+                                    </span>
                                 @endif
                             </p>
                         </div>

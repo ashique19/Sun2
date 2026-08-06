@@ -21,6 +21,8 @@ use App\Support\AdminAccess;
 use App\Support\Fileinfo;
 use App\Support\StorefrontAssets;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -58,6 +60,18 @@ class AdminInbox extends Component
 
     /** @var TemporaryUploadedFile|null */
     public $replyImage = null;
+
+    /**
+     * Outbound reply staged for a background Graph send so the composer stays responsive.
+     */
+    public string $pendingReplyText = '';
+
+    /** @var TemporaryUploadedFile|null */
+    public $pendingReplyImage = null;
+
+    public ?int $pendingReplyToMessageId = null;
+
+    public bool $outboundSending = false;
 
     public ?string $error = null;
 
@@ -182,6 +196,40 @@ class AdminInbox extends Component
 
         if ($this->channel !== '' || $this->unread !== '' || $this->window !== '' || $this->linked !== '') {
             $this->mobileFiltersOpen = true;
+        }
+
+        $this->dispatchThreadPrefetch();
+    }
+
+    /**
+     * Warm recent / unread thread caches so switching conversations hits the DB less.
+     */
+    public function prefetchRecentThreads(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $limit = max(1, (int) config('channels.inbox.prefetch_conversations', 20));
+        $lookbackHours = max(1, (int) config('channels.inbox.thread_lookback_hours', 24));
+        $threadSince = now()->subHours($lookbackHours);
+
+        $recentIds = ChannelConversation::query()
+            ->orderByRaw('COALESCE(last_inbound_at, last_outbound_at, created_at) desc')
+            ->limit($limit)
+            ->pluck('id');
+
+        $unreadIds = ChannelConversation::query()
+            ->where(function ($q) {
+                $q->whereNull('last_read_at')
+                    ->orWhereColumn('last_inbound_at', '>', 'last_read_at');
+            })
+            ->orderByRaw('COALESCE(last_inbound_at, last_outbound_at, created_at) desc')
+            ->limit($limit)
+            ->pluck('id');
+
+        $ids = $recentIds->merge($unreadIds)->unique()->values();
+
+        foreach ($ids as $conversationId) {
+            $this->cachedConversationThread((int) $conversationId, $threadSince);
         }
     }
 
@@ -967,12 +1015,16 @@ class AdminInbox extends Component
         $this->statusMessage = 'Priced image sent.';
     }
 
-    public function sendReply(ChannelReplyService $replies): void
+    public function sendReply(): void
     {
         AdminAccess::ensureStaffAdmin();
 
         $this->error = null;
         $this->statusMessage = null;
+
+        if ($this->outboundSending) {
+            return;
+        }
 
         if (! $this->selectedConversationId) {
             return;
@@ -992,46 +1044,171 @@ class AdminInbox extends Component
             'replyToMessageId' => ['nullable', 'integer'],
         ]);
 
-        $replyTo = null;
+        if (trim($this->replyText) === '' && $this->replyImage === null) {
+            $this->error = 'Reply text or image is required.';
+
+            return;
+        }
+
         if ($this->replyToMessageId) {
-            $replyTo = ChannelMessage::query()
+            $replyToExists = ChannelMessage::query()
                 ->where('channel_conversation_id', $conversation->id)
                 ->whereKey($this->replyToMessageId)
-                ->first();
+                ->exists();
 
-            if (! $replyTo) {
+            if (! $replyToExists) {
                 $this->error = 'The message you are replying to was not found.';
 
                 return;
             }
         }
 
-        if ($this->replyImage) {
+        // Clear the composer immediately; Graph Send API runs in a follow-up request.
+        $this->pendingReplyText = $this->replyText;
+        $this->pendingReplyImage = $this->replyImage;
+        $this->pendingReplyToMessageId = $this->replyToMessageId;
+        $this->outboundSending = true;
+        $this->statusMessage = 'Sending…';
+        $this->resetComposer();
+        $this->dispatchPendingOutboundFlush();
+    }
+
+    /**
+     * Complete a staged composer send against Messenger (background Livewire request).
+     */
+    public function flushPendingOutbound(ChannelReplyService $replies): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->outboundSending) {
+            return;
+        }
+
+        if (! $this->selectedConversationId) {
+            $this->failPendingOutbound('Conversation not found.');
+
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+
+        if (! $conversation) {
+            $this->failPendingOutbound('Conversation not found.');
+
+            return;
+        }
+
+        $replyTo = null;
+        if ($this->pendingReplyToMessageId) {
+            $replyTo = ChannelMessage::query()
+                ->where('channel_conversation_id', $conversation->id)
+                ->whereKey($this->pendingReplyToMessageId)
+                ->first();
+
+            if (! $replyTo) {
+                $this->failPendingOutbound('The message you are replying to was not found.');
+
+                return;
+            }
+        }
+
+        if ($this->pendingReplyImage) {
             $result = $replies->sendImage(
                 $conversation,
-                $this->replyImage,
-                $this->replyText,
+                $this->pendingReplyImage,
+                $this->pendingReplyText,
                 false,
                 $replyTo,
             );
         } else {
             $result = $replies->sendText(
                 $conversation,
-                $this->replyText,
+                $this->pendingReplyText,
                 false,
                 $replyTo,
             );
         }
 
-        if (! $result['ok']) {
-            $this->error = $result['error'] ?? 'Failed to send reply.';
+        if (! ($result['ok'] ?? false)) {
+            $this->failPendingOutbound($result['error'] ?? 'Failed to send reply.');
 
             return;
         }
 
+        $this->clearPendingOutbound();
         $this->markConversationRead($conversation, $replies);
-        $this->resetComposer();
         $this->statusMessage = 'Reply sent.';
+    }
+
+    private function dispatchPendingOutboundFlush(): void
+    {
+        if (app()->runningUnitTests()) {
+            $this->flushPendingOutbound(app(ChannelReplyService::class));
+
+            return;
+        }
+
+        $this->js('queueMicrotask(() => $wire.flushPendingOutbound())');
+    }
+
+    private function dispatchThreadPrefetch(): void
+    {
+        if (app()->runningUnitTests()) {
+            return;
+        }
+
+        $this->js('queueMicrotask(() => $wire.prefetchRecentThreads())');
+    }
+
+    private function cachedConversationThread(int $conversationId, Carbon $threadSince): ?ChannelConversation
+    {
+        $messageFingerprint = (int) (ChannelMessage::query()
+            ->where('channel_conversation_id', $conversationId)
+            ->max('id') ?? 0);
+
+        $key = 'inbox.thread.v1.'.$conversationId.'.'.$threadSince->timestamp.'.'.$messageFingerprint;
+
+        /** @var ChannelConversation|null $cached */
+        $cached = Cache::remember($key, now()->addSeconds(45), function () use ($conversationId, $threadSince) {
+            return ChannelConversation::query()
+                ->with([
+                    'draftOrder.items',
+                    'messages' => function ($q) use ($threadSince) {
+                        $q->with([
+                            'replyTo',
+                            'matchedProduct:id,name,sku,price,slug',
+                            'matchedProduct.images' => fn ($images) => $images->orderByDesc('is_primary')->orderBy('sort_order')->limit(1),
+                        ])
+                            ->orderBy('sent_at')
+                            ->orderBy('id')
+                            ->where(function ($window) use ($threadSince) {
+                                $window->where('sent_at', '>=', $threadSince)
+                                    ->orWhereNull('sent_at');
+                            });
+                    },
+                ])
+                ->find($conversationId);
+        });
+
+        return $cached;
+    }
+
+    private function failPendingOutbound(string $error): void
+    {
+        $this->replyText = $this->pendingReplyText;
+        $this->replyImage = $this->pendingReplyImage;
+        $this->replyToMessageId = $this->pendingReplyToMessageId;
+        $this->clearPendingOutbound();
+        $this->error = $error;
+        $this->statusMessage = null;
+    }
+
+    private function clearPendingOutbound(): void
+    {
+        $this->pendingReplyText = '';
+        $this->pendingReplyImage = null;
+        $this->pendingReplyToMessageId = null;
+        $this->outboundSending = false;
     }
 
     public function syncFromFacebook(MessengerConversationSyncService $sync): void
@@ -1239,8 +1416,9 @@ class AdminInbox extends Component
     private function markConversationRead(ChannelConversation $conversation, ChannelReplyService $replies): void
     {
         // Website unread first so the list updates even if Graph mark_seen is slow/fails.
+        // Graph mark_seen runs in a follow-up request so conversation open / send stay snappy.
         $conversation->markRead(auth()->id());
-        $replies->markSeen($conversation);
+        $this->deferMessengerSeenForOpenThread();
     }
 
     private function resetComposer(): void
@@ -1595,33 +1773,41 @@ class AdminInbox extends Component
 
         // If the selected id is outside the filtered list, still load it for the thread,
         // but never shrink the left list to that single conversation.
-        $selectedConversation = $displayConversationId
-            ? ChannelConversation::query()
-                ->with([
-                    'draftOrder.items',
-                    'messages' => function ($q) use ($threadSearch, $threadSince) {
-                        $q->with([
-                            'replyTo',
-                            'matchedProduct:id,name,sku,price,slug',
-                            'matchedProduct.images' => fn ($images) => $images->orderByDesc('is_primary')->orderBy('sort_order')->limit(1),
-                        ])->orderBy('sent_at')->orderBy('id');
+        // Prefer the short-lived prefetch cache for the default lookback window.
+        $selectedConversation = null;
+        if ($displayConversationId) {
+            if ($threadSearch === '' && ! $this->threadHistoryExpanded) {
+                $selectedConversation = $this->cachedConversationThread((int) $displayConversationId, $threadSince);
+            }
 
-                        if ($threadSearch !== '') {
-                            $q->where('body', 'like', '%'.$threadSearch.'%');
+            if (! $selectedConversation) {
+                $selectedConversation = ChannelConversation::query()
+                    ->with([
+                        'draftOrder.items',
+                        'messages' => function ($q) use ($threadSearch, $threadSince) {
+                            $q->with([
+                                'replyTo',
+                                'matchedProduct:id,name,sku,price,slug',
+                                'matchedProduct.images' => fn ($images) => $images->orderByDesc('is_primary')->orderBy('sort_order')->limit(1),
+                            ])->orderBy('sent_at')->orderBy('id');
 
-                            return;
-                        }
+                            if ($threadSearch !== '') {
+                                $q->where('body', 'like', '%'.$threadSearch.'%');
 
-                        if (! $this->threadHistoryExpanded) {
-                            $q->where(function ($window) use ($threadSince) {
-                                $window->where('sent_at', '>=', $threadSince)
-                                    ->orWhereNull('sent_at');
-                            });
-                        }
-                    },
-                ])
-                ->find($displayConversationId)
-            : null;
+                                return;
+                            }
+
+                            if (! $this->threadHistoryExpanded) {
+                                $q->where(function ($window) use ($threadSince) {
+                                    $window->where('sent_at', '>=', $threadSince)
+                                        ->orWhereNull('sent_at');
+                                });
+                            }
+                        },
+                    ])
+                    ->find($displayConversationId);
+            }
+        }
 
         if ($selectedConversation && $threadSearch === '' && ! $this->threadHistoryExpanded) {
             $hasOlderMessages = ChannelMessage::query()
@@ -1676,7 +1862,9 @@ class AdminInbox extends Component
             'mappingMessage' => $mappingMessage,
             'imageEditMessage' => $imageEditMessage,
             'pricedSendMessage' => $pricedSendMessage,
-            'pricedSendCategories' => Category::query()->orderBy('name')->get(['id', 'name']),
+            'pricedSendCategories' => $this->pricedSendMessageId
+                ? Category::query()->orderBy('name')->get(['id', 'name'])
+                : collect(),
             'quickReplies' => $quickReplies,
             'hasOlderMessages' => $hasOlderMessages,
             'threadLookbackHours' => $lookbackHours,

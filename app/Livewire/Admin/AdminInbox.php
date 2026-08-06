@@ -10,6 +10,7 @@ use App\Services\Admin\ProductImageHashService;
 use App\Services\Admin\ProductPricedImageService;
 use App\Services\Channels\ChannelInboxDiagnostics;
 use App\Services\Channels\ChannelInboxPurgeService;
+use App\Services\Channels\ChannelMessageImageMatchService;
 use App\Services\Channels\ChannelMessageOrderMapper;
 use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
@@ -138,6 +139,13 @@ class AdminInbox extends Component
      */
     public array $pricedSendResults = [];
 
+    /**
+     * Auto product-image matches for inbound customer photos in the open thread.
+     *
+     * @var array<string, array{status: string, product_id?: int, name?: string, match_percent?: float}>
+     */
+    public array $inboundImageMatchState = [];
+
     /** When false, the open thread only shows recent messages (see thread_lookback_hours). */
     public bool $threadHistoryExpanded = false;
 
@@ -161,6 +169,7 @@ class AdminInbox extends Component
             $conversation = ChannelConversation::query()->find($this->selectedConversationId);
             if ($conversation) {
                 $this->markConversationRead($conversation, $replies);
+                $this->queueInboundImageMatching();
             }
         }
 
@@ -181,6 +190,7 @@ class AdminInbox extends Component
         $this->error = null;
         $this->statusMessage = null;
         $this->markConversationRead($conversation, $replies);
+        $this->queueInboundImageMatching();
     }
 
     /**
@@ -219,6 +229,7 @@ class AdminInbox extends Component
         $this->error = null;
         $this->statusMessage = null;
         $this->markConversationRead($conversation, app(ChannelReplyService::class));
+        $this->queueInboundImageMatching();
     }
 
     public function closeMobileThread(): void
@@ -622,6 +633,47 @@ class AdminInbox extends Component
         $this->pricedSendResults = [];
     }
 
+    /**
+     * Hash each pending inbound customer photo against the product catalog.
+     */
+    public function runInboundImageMatches(ChannelMessageImageMatchService $matcher): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        foreach ($this->inboundImageMatchState as $messageId => $state) {
+            if (($state['status'] ?? null) !== 'pending') {
+                continue;
+            }
+
+            $this->resolveInboundImageMatch((int) $messageId, $matcher);
+        }
+    }
+
+    /**
+     * One-click send of the ≥90% catalog match as a priced product image reply.
+     */
+    public function sendPricedImageFromMatch(
+        int $messageId,
+        ChannelReplyService $replies,
+        ProductPricedImageService $pricedImages,
+    ): void {
+        AdminAccess::ensureStaffAdmin();
+
+        $state = $this->inboundImageMatchState[(string) $messageId]
+            ?? $this->inboundImageMatchState[$messageId]
+            ?? null;
+        $productId = is_array($state) ? (int) ($state['product_id'] ?? 0) : 0;
+
+        if ($productId <= 0) {
+            $this->error = 'No strong product match for this image.';
+
+            return;
+        }
+
+        $this->pricedSendMessageId = $messageId;
+        $this->sendPricedProductImage($productId, $replies, $pricedImages);
+    }
+
     public function updatedPricedSendSearch(): void
     {
         $this->refreshPricedSendResults();
@@ -793,6 +845,7 @@ class AdminInbox extends Component
         if ($result['ok']) {
             $this->refreshOpenThreadAfterPoll();
             $this->deferMessengerSeenForOpenThread();
+            $this->queueInboundImageMatching();
         }
     }
 
@@ -811,6 +864,7 @@ class AdminInbox extends Component
         // Facebook call cannot delay Livewire morphing newly synced messages.
         $this->refreshOpenThreadAfterPoll();
         $this->deferMessengerSeenForOpenThread();
+        $this->queueInboundImageMatching();
     }
 
     public function dismissSyncToast(): void
@@ -829,6 +883,7 @@ class AdminInbox extends Component
         if ($conversationId && $this->selectedConversationId === $conversationId) {
             $this->refreshOpenThreadAfterPoll();
             $this->deferMessengerSeenForOpenThread();
+            $this->queueInboundImageMatching();
         }
     }
 
@@ -1007,6 +1062,79 @@ class AdminInbox extends Component
     {
         $this->closeImageEdit();
         $this->closePricedImageSend();
+        $this->inboundImageMatchState = [];
+    }
+
+    /**
+     * Queue perceptual-hash matching for inbound customer images in the open thread.
+     */
+    private function queueInboundImageMatching(): void
+    {
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        $messages = ChannelMessage::query()
+            ->where('channel_conversation_id', $this->selectedConversationId)
+            ->where('direction', ChannelMessage::DIRECTION_INBOUND)
+            ->whereNotNull('media_url')
+            ->orderBy('id')
+            ->get();
+
+        $queued = false;
+
+        foreach ($messages as $message) {
+            if (! $message->isImageAttachment()) {
+                continue;
+            }
+
+            $key = (string) $message->id;
+            if (isset($this->inboundImageMatchState[$key])) {
+                continue;
+            }
+
+            $this->inboundImageMatchState[$key] = ['status' => 'pending'];
+            $queued = true;
+        }
+
+        if (! $queued) {
+            return;
+        }
+
+        if (app()->runningUnitTests()) {
+            $this->runInboundImageMatches(app(ChannelMessageImageMatchService::class));
+
+            return;
+        }
+
+        $this->js('queueMicrotask(() => $wire.runInboundImageMatches())');
+    }
+
+    private function resolveInboundImageMatch(int $messageId, ChannelMessageImageMatchService $matcher): void
+    {
+        $key = (string) $messageId;
+        $message = $this->inboundImageMessage($messageId);
+
+        if (! $message) {
+            $this->inboundImageMatchState[$key] = ['status' => 'done'];
+
+            return;
+        }
+
+        $match = $matcher->bestAutoMatch($message);
+
+        if ($match === null) {
+            $this->inboundImageMatchState[$key] = ['status' => 'done'];
+
+            return;
+        }
+
+        $this->inboundImageMatchState[$key] = [
+            'status' => 'done',
+            'product_id' => $match['product_id'],
+            'name' => $match['name'],
+            'match_percent' => $match['match_percent'],
+        ];
     }
 
     private function clearMappingImageMatchState(): void

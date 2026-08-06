@@ -665,6 +665,34 @@
                                             ])>
                                             Match product
                                         </button>
+                                        @if (! $isOutbound)
+                                            @php
+                                                $imageMatchState = $inboundImageMatchState[(string) $messageRow->id]
+                                                    ?? $inboundImageMatchState[$messageRow->id]
+                                                    ?? null;
+                                            @endphp
+                                            @if (($imageMatchState['status'] ?? null) === 'pending')
+                                                <span
+                                                    class="inline-flex items-center text-[#8C8474]"
+                                                    title="Searching product images"
+                                                    aria-label="Searching product images"
+                                                    wire:key="inbound-image-match-loading-{{ $messageRow->id }}">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3 animate-spin" aria-hidden="true">
+                                                        <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.39a.75.75 0 0 0-.75.75v3.842a.75.75 0 0 0 1.5 0v-2.14l.311.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm-10.623-2.85a5.5 5.5 0 0 1 9.201-2.466l.312.311H11.77a.75.75 0 0 0 0 1.5h3.843a.75.75 0 0 0 .75-.75V3.328a.75.75 0 1 0-1.5 0V5.47l-.311-.311A7 7 0 0 0 3.04 8.295a.75.75 0 1 0 1.45.39Z" clip-rule="evenodd" />
+                                                    </svg>
+                                                </span>
+                                            @elseif (($imageMatchState['status'] ?? null) === 'done' && ! empty($imageMatchState['product_id']))
+                                                <button type="button"
+                                                    wire:click="sendPricedImageFromMatch({{ $messageRow->id }})"
+                                                    wire:loading.attr="disabled"
+                                                    wire:target="sendPricedImageFromMatch({{ $messageRow->id }})"
+                                                    @click.stop
+                                                    title="{{ ($imageMatchState['name'] ?? 'Product').' · '.number_format((float) ($imageMatchState['match_percent'] ?? 0), 1).'% match' }}"
+                                                    class="text-[10px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
+                                                    Send priced image
+                                                </button>
+                                            @endif
+                                        @endif
                                     </div>
                                 @elseif ($messageRow->hasMedia())
                                     <a href="{{ route('admin.inbox.media', $messageRow) }}" target="_blank" rel="noopener"

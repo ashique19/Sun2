@@ -119,5 +119,38 @@ class ProductImageHashCenterCropTest extends TestCase
         $this->assertSame($product->id, $match['product_id']);
         $this->assertGreaterThanOrEqual(ProductImageHashService::AUTO_MATCH_PERCENT, $match['match_percent']);
         $this->assertStringContainsString('center', $match['strategy']);
+        $this->assertStringContainsString('catalog_full', $match['strategy']);
+    }
+
+    #[Test]
+    public function auto_match_center_fallback_uses_stored_hashes_without_rereading_catalog_files(): void
+    {
+        $hasher = app(ProductImageHashService::class);
+        [$catalogBytes, $screenshotBytes] = $this->catalogAndScreenshotBytes();
+
+        $product = Product::query()->create([
+            'name' => 'Stored Hash Only',
+            'slug' => 'stored-hash-only-'.uniqid(),
+            'price' => 1200,
+            'purchase_price' => 500,
+            'stock_quantity' => 1,
+            'is_published' => true,
+        ]);
+
+        // Path points at a missing file — Plan B must not re-decode catalog images.
+        ProductImage::query()->create([
+            'product_id' => $product->id,
+            'path' => '/img/products/missing/does-not-exist.png',
+            'alt' => $product->name,
+            'is_primary' => true,
+            'sort_order' => 0,
+            'perceptual_hash' => $hasher->hashBinary($catalogBytes),
+        ]);
+
+        $match = $hasher->findBestAutoMatchFromBinary($screenshotBytes);
+
+        $this->assertNotNull($match);
+        $this->assertSame($product->id, $match['product_id']);
+        $this->assertStringContainsString('query_center_', $match['strategy']);
     }
 }

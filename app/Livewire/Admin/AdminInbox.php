@@ -640,13 +640,37 @@ class AdminInbox extends Component
     {
         AdminAccess::ensureStaffAdmin();
 
-        foreach ($this->inboundImageMatchState as $messageId => $state) {
-            if (($state['status'] ?? null) !== 'pending') {
-                continue;
-            }
+        // One image per request — hashing stays under the PHP time limit when a
+        // thread has many inbound photos.
+        $nextId = null;
 
-            $this->resolveInboundImageMatch((int) $messageId, $matcher);
+        foreach ($this->inboundImageMatchState as $messageId => $state) {
+            if (($state['status'] ?? null) === 'pending') {
+                $nextId = (int) $messageId;
+                break;
+            }
         }
+
+        if ($nextId === null) {
+            return;
+        }
+
+        $this->resolveInboundImageMatch($nextId, $matcher);
+
+        $hasMorePending = collect($this->inboundImageMatchState)
+            ->contains(fn (array $state): bool => ($state['status'] ?? null) === 'pending');
+
+        if (! $hasMorePending) {
+            return;
+        }
+
+        if (app()->runningUnitTests()) {
+            $this->runInboundImageMatches($matcher);
+
+            return;
+        }
+
+        $this->js('queueMicrotask(() => $wire.runInboundImageMatches())');
     }
 
     /**

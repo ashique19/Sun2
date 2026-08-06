@@ -756,68 +756,61 @@
                             </button>
                         </div>
 
-                        <div class="shrink-0 space-y-4 border-b border-[#EFE7D6] px-4 py-4">
-                            <div>
-                                <label class="mb-2 block text-sm font-medium">Text position</label>
-                                <div class="flex gap-1.5" role="group" aria-label="Text position">
-                                    @foreach ([
-                                        'top-left' => 'Top left',
-                                        'top-right' => 'Top right',
-                                        'bottom-left' => 'Bottom left',
-                                        'bottom-right' => 'Bottom right',
-                                        'center' => 'Center',
-                                    ] as $value => $label)
-                                        <button type="button"
-                                            wire:click="$set('pricedImagePosition', '{{ $value }}')"
-                                            title="{{ $label }}"
-                                            aria-label="{{ $label }}"
-                                            aria-pressed="{{ $pricedImagePosition === $value ? 'true' : 'false' }}"
-                                            class="inline-flex h-10 flex-1 items-center justify-center rounded-lg border transition
-                                                {{ $pricedImagePosition === $value
-                                                    ? 'border-[#1E1E1E] bg-[#1E1E1E] text-white'
-                                                    : 'border-[#E0D6C2] bg-white text-[#1E1E1E] hover:bg-[#FAF6EF]' }}">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
-                                                <rect x="2.5" y="2.5" width="15" height="15" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.45"/>
-                                                @switch($value)
-                                                    @case('top-left')
-                                                        <rect x="4" y="4" width="5.5" height="4" rx="0.75"/>
-                                                        @break
-                                                    @case('top-right')
-                                                        <rect x="10.5" y="4" width="5.5" height="4" rx="0.75"/>
-                                                        @break
-                                                    @case('bottom-left')
-                                                        <rect x="4" y="12" width="5.5" height="4" rx="0.75"/>
-                                                        @break
-                                                    @case('bottom-right')
-                                                        <rect x="10.5" y="12" width="5.5" height="4" rx="0.75"/>
-                                                        @break
-                                                    @default
-                                                        <rect x="6.5" y="7.5" width="7" height="5" rx="0.75"/>
-                                                @endswitch
-                                            </svg>
-                                            <span class="sr-only">{{ $label }}</span>
-                                        </button>
-                                    @endforeach
-                                </div>
+                        <div class="shrink-0 space-y-3 border-b border-[#EFE7D6] px-4 py-3">
+                            <div class="flex gap-1.5" role="group" aria-label="Text position">
+                                @foreach ([
+                                    'top-left' => 'Top left',
+                                    'top-right' => 'Top right',
+                                    'bottom-left' => 'Bottom left',
+                                    'bottom-right' => 'Bottom right',
+                                    'center' => 'Center',
+                                ] as $value => $label)
+                                    <button type="button"
+                                        wire:click="$set('pricedImagePosition', '{{ $value }}')"
+                                        title="{{ $label }}"
+                                        aria-label="{{ $label }}"
+                                        aria-pressed="{{ $pricedImagePosition === $value ? 'true' : 'false' }}"
+                                        class="inline-flex h-10 flex-1 items-center justify-center rounded-lg border transition
+                                            {{ $pricedImagePosition === $value
+                                                ? 'border-[#1E1E1E] bg-[#1E1E1E] text-white'
+                                                : 'border-[#E0D6C2] bg-white text-[#1E1E1E] hover:bg-[#FAF6EF]' }}">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+                                            <rect x="2.5" y="2.5" width="15" height="15" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.45"/>
+                                            @switch($value)
+                                                @case('top-left')
+                                                    <rect x="4" y="4" width="5.5" height="4" rx="0.75"/>
+                                                    @break
+                                                @case('top-right')
+                                                    <rect x="10.5" y="4" width="5.5" height="4" rx="0.75"/>
+                                                    @break
+                                                @case('bottom-left')
+                                                    <rect x="4" y="12" width="5.5" height="4" rx="0.75"/>
+                                                    @break
+                                                @case('bottom-right')
+                                                    <rect x="10.5" y="12" width="5.5" height="4" rx="0.75"/>
+                                                    @break
+                                                @default
+                                                    <rect x="6.5" y="7.5" width="7" height="5" rx="0.75"/>
+                                            @endswitch
+                                        </svg>
+                                        <span class="sr-only">{{ $label }}</span>
+                                    </button>
+                                @endforeach
                             </div>
-                            <div>
-                                <label class="mb-1 block text-sm font-medium" for="priced-image-font">Text size (px)</label>
-                                <div class="flex items-center gap-3">
-                                    <input id="priced-image-font" type="range"
-                                        min="{{ \App\Services\Admin\ProductPricedImageService::FONT_MIN }}"
-                                        max="{{ \App\Services\Admin\ProductPricedImageService::FONT_MAX }}"
-                                        step="4"
-                                        wire:model="pricedImageFont"
-                                        class="min-w-0 flex-1">
-                                    <input type="number"
-                                        min="{{ \App\Services\Admin\ProductPricedImageService::FONT_MIN }}"
-                                        max="{{ \App\Services\Admin\ProductPricedImageService::FONT_MAX }}"
-                                        wire:model="pricedImageFont"
-                                        class="w-20 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums">
-                                </div>
-                                <p class="mt-1 text-xs text-[#8C8474]">
-                                    {{ \App\Services\Admin\ProductPricedImageService::FONT_MIN }}–{{ \App\Services\Admin\ProductPricedImageService::FONT_MAX }} px
-                                </p>
+                            <div class="flex items-center gap-3">
+                                <input id="priced-image-font" type="range"
+                                    min="{{ \App\Services\Admin\ProductPricedImageService::FONT_MIN }}"
+                                    max="{{ \App\Services\Admin\ProductPricedImageService::FONT_MAX }}"
+                                    step="4"
+                                    wire:model="pricedImageFont"
+                                    aria-label="Text size in pixels"
+                                    class="min-w-0 flex-1">
+                                <input type="number"
+                                    min="{{ \App\Services\Admin\ProductPricedImageService::FONT_MIN }}"
+                                    max="{{ \App\Services\Admin\ProductPricedImageService::FONT_MAX }}"
+                                    wire:model="pricedImageFont"
+                                    aria-label="Text size in pixels"
+                                    class="w-20 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums">
                             </div>
                             @error('pricedImage')
                                 <p class="text-xs text-rose-600">{{ $message }}</p>
@@ -849,9 +842,6 @@
                                     </button>
                                 @endif
                             </div>
-                            <p class="text-xs text-[#8C8474]">
-                                Save &amp; {{ $product?->priced_image_path ? 'rebuild' : 'generate' }} writes the position, text size, and priced image.
-                            </p>
                         </div>
 
                         <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4">

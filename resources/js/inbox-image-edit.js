@@ -106,6 +106,12 @@ const registerInboxImageEdit = () => {
             if (key === 'top-left') {
                 return { x: pad, y: pad };
             }
+            if (key === 'center') {
+                return {
+                    x: Math.max(pad, Math.round((canvasWidth - boxWidth) / 2)),
+                    y: Math.max(pad, Math.round((canvasHeight - boxHeight) / 2)),
+                };
+            }
 
             return { x: pad, y: canvasHeight - boxHeight - pad };
         },

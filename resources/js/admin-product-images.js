@@ -794,10 +794,11 @@ const registerProductImageAlpineData = () => {
 
         overlayPositions() {
             return [
-                { value: 'top-left', label: 'Top left' },
-                { value: 'top-right', label: 'Top right' },
-                { value: 'bottom-left', label: 'Bottom left' },
-                { value: 'bottom-right', label: 'Bottom right' },
+                { value: 'top-left', label: 'Top left', icon: { x: 4, y: 4, w: 5.5, h: 4 } },
+                { value: 'top-right', label: 'Top right', icon: { x: 10.5, y: 4, w: 5.5, h: 4 } },
+                { value: 'bottom-left', label: 'Bottom left', icon: { x: 4, y: 12, w: 5.5, h: 4 } },
+                { value: 'bottom-right', label: 'Bottom right', icon: { x: 10.5, y: 12, w: 5.5, h: 4 } },
+                { value: 'center', label: 'Center', icon: { x: 6.5, y: 7.5, w: 7, h: 5 } },
             ];
         },
 
@@ -809,6 +810,11 @@ const registerProductImageAlpineData = () => {
                     return { x: pad, y: height - boxHeight - pad };
                 case 'bottom-right':
                     return { x: width - boxWidth - pad, y: height - boxHeight - pad };
+                case 'center':
+                    return {
+                        x: Math.max(pad, Math.round((width - boxWidth) / 2)),
+                        y: Math.max(pad, Math.round((height - boxHeight) / 2)),
+                    };
                 case 'top-left':
                 default:
                     return { x: pad, y: pad };

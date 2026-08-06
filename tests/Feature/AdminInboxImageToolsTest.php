@@ -311,5 +311,24 @@ class AdminInboxImageToolsTest extends TestCase
         $this->assertStringContainsString('overlayText', $source);
         $this->assertStringContainsString('sendEdited', $source);
         $this->assertStringContainsString('editedReplyImage', $source);
+        $this->assertStringContainsString("key === 'center'", $source);
+    }
+
+    #[Test]
+    public function inbox_image_edit_modal_uses_icon_position_tabs_including_center(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+        $inbound = $this->inboundImage($conversation);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('openImageEdit', $inbound->id)
+            ->assertSee('Edit & send image')
+            ->assertSeeHtml('role="group" aria-label="Text position"')
+            ->assertSeeHtml('aria-label="Top left"')
+            ->assertSeeHtml('aria-label="Center"')
+            ->assertSeeHtml('class="flex gap-1.5"')
+            ->assertDontSeeHtml('rounded-full border px-2.5 py-1 text-[11px] font-semibold');
     }
 }

@@ -754,7 +754,7 @@
                         <div class="shrink-0 space-y-4 border-b border-[#EFE7D6] px-4 py-4">
                             <div>
                                 <label class="mb-2 block text-sm font-medium">Text position</label>
-                                <div class="grid grid-cols-2 gap-2">
+                                <div class="flex gap-1.5" role="group" aria-label="Text position">
                                     @foreach ([
                                         'top-left' => 'Top left',
                                         'top-right' => 'Top right',
@@ -764,11 +764,33 @@
                                     ] as $value => $label)
                                         <button type="button"
                                             wire:click="$set('pricedImagePosition', '{{ $value }}')"
-                                            class="rounded-lg border px-3 py-2 text-left text-sm transition
+                                            title="{{ $label }}"
+                                            aria-label="{{ $label }}"
+                                            aria-pressed="{{ $pricedImagePosition === $value ? 'true' : 'false' }}"
+                                            class="inline-flex h-10 flex-1 items-center justify-center rounded-lg border transition
                                                 {{ $pricedImagePosition === $value
                                                     ? 'border-[#1E1E1E] bg-[#1E1E1E] text-white'
                                                     : 'border-[#E0D6C2] bg-white text-[#1E1E1E] hover:bg-[#FAF6EF]' }}">
-                                            {{ $label }}
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+                                                <rect x="2.5" y="2.5" width="15" height="15" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.45"/>
+                                                @switch($value)
+                                                    @case('top-left')
+                                                        <rect x="4" y="4" width="5.5" height="4" rx="0.75"/>
+                                                        @break
+                                                    @case('top-right')
+                                                        <rect x="10.5" y="4" width="5.5" height="4" rx="0.75"/>
+                                                        @break
+                                                    @case('bottom-left')
+                                                        <rect x="4" y="12" width="5.5" height="4" rx="0.75"/>
+                                                        @break
+                                                    @case('bottom-right')
+                                                        <rect x="10.5" y="12" width="5.5" height="4" rx="0.75"/>
+                                                        @break
+                                                    @default
+                                                        <rect x="6.5" y="7.5" width="7" height="5" rx="0.75"/>
+                                                @endswitch
+                                            </svg>
+                                            <span class="sr-only">{{ $label }}</span>
                                         </button>
                                     @endforeach
                                 </div>

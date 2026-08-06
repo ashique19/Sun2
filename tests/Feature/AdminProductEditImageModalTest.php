@@ -67,8 +67,9 @@ class AdminProductEditImageModalTest extends TestCase
             ->assertSet('showPricedImageModal', true)
             ->assertSee('Priced image')
             ->assertSee('Text position')
-            ->assertSee('Top left')
-            ->assertSee('Center')
+            ->assertSeeHtml('aria-label="Top left"')
+            ->assertSeeHtml('aria-label="Center"')
+            ->assertSeeHtml('class="flex gap-1.5"')
             ->assertSeeHtml('x-if="editorOpen"')
             ->assertDontSeeHtml('x-show="editorOpen"');
     }

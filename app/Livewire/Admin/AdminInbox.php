@@ -99,6 +99,13 @@ class AdminInbox extends Component
     /** Active mapping field: phone|name|address|product|null */
     public ?string $mappingField = null;
 
+    /**
+     * Product modal intent: tag a catalog product on an inbound image, or add to the order draft.
+     *
+     * @var 'tag'|'order'
+     */
+    public string $mappingMode = 'order';
+
     /** Product search when mapping a message to Products. */
     public string $mappingProductSearch = '';
 
@@ -292,6 +299,7 @@ class AdminInbox extends Component
 
         $this->mappingMessageId = $messageId;
         $this->mappingField = null;
+        $this->mappingMode = 'order';
         $this->mappingProductSearch = '';
         $this->mappingProductSuggestions = [];
         $this->clearMappingImageMatchState();
@@ -302,15 +310,40 @@ class AdminInbox extends Component
     {
         $this->mappingMessageId = null;
         $this->mappingField = null;
+        $this->mappingMode = 'order';
         $this->mappingProductSearch = '';
         $this->mappingProductSuggestions = [];
         $this->clearMappingImageMatchState();
     }
 
+    /**
+     * Search icon on inbound photos: find and tag a catalog product on the message.
+     */
+    public function openTagProductOnImage(int $messageId, ChannelMessageOrderMapper $mapper): void
+    {
+        AdminAccess::ensureStaffAdmin();
+        $this->error = null;
+        $this->statusMessage = null;
+
+        $message = $this->inboundImageMessage($messageId);
+        if (! $message) {
+            $this->error = 'Image message not found.';
+
+            return;
+        }
+
+        $this->ensureConversationSelected((int) $message->channel_conversation_id);
+        $this->closeImageEdit();
+        $this->closePricedImageSend();
+        $this->openMessageMapMenu($message->id);
+        $this->mappingMode = 'tag';
+        $this->beginMapField(ChannelMessageOrderMapper::FIELD_PRODUCT, $mapper);
+    }
+
+    /** @deprecated Use openTagProductOnImage for inbound photos. */
     public function beginMapProductFromMessage(int $messageId, ChannelMessageOrderMapper $mapper): void
     {
-        $this->openMessageMapMenu($messageId);
-        $this->beginMapField(ChannelMessageOrderMapper::FIELD_PRODUCT, $mapper);
+        $this->openTagProductOnImage($messageId, $mapper);
     }
 
     public function beginMapField(string $field, ChannelMessageOrderMapper $mapper): void
@@ -463,7 +496,106 @@ class AdminInbox extends Component
 
     public function selectMappingImageMatch(int $productId): void
     {
+        $this->chooseMappingProduct($productId);
+    }
+
+    /**
+     * Confirm a product from search or crop results (tag vs add-to-order depends on mappingMode).
+     */
+    public function chooseMappingProduct(int $productId): void
+    {
+        if ($this->mappingMode === 'tag') {
+            $this->tagMatchedProduct($productId);
+
+            return;
+        }
+
         $this->applyMapField(ChannelMessageOrderMapper::FIELD_PRODUCT, $productId);
+    }
+
+    /**
+     * Persist a catalog product tag on the inbound image message (no order change).
+     */
+    public function tagMatchedProduct(int $productId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->selectedConversationId || ! $this->mappingMessageId) {
+            return;
+        }
+
+        $message = ChannelMessage::query()
+            ->where('channel_conversation_id', $this->selectedConversationId)
+            ->whereKey($this->mappingMessageId)
+            ->first();
+
+        $product = Product::query()
+            ->whereKey($productId)
+            ->where('is_published', true)
+            ->first();
+
+        if (! $message || ! $product) {
+            $this->error = 'Message or product not found.';
+
+            return;
+        }
+
+        $message->forceFill(['matched_product_id' => $product->id])->save();
+
+        $this->inboundImageMatchState[(string) $message->id] = [
+            'status' => 'done',
+            'product_id' => (int) $product->id,
+            'name' => (string) $product->name,
+            'match_percent' => (float) ($this->inboundImageMatchState[(string) $message->id]['match_percent'] ?? 100),
+            'strategy' => 'manual',
+        ];
+
+        $this->statusMessage = 'Tagged “'.$product->name.'” on this photo.';
+        $this->error = null;
+        $this->closeMessageMapMenu();
+    }
+
+    /**
+     * Add the tagged product from an inbound image to the conversation order draft.
+     */
+    public function addMatchedProductToOrder(int $messageId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $message = $this->inboundImageMessage($messageId);
+        $productId = (int) ($message?->matched_product_id ?? 0);
+
+        if (! $message || $productId <= 0) {
+            $this->error = 'No product tagged on this image.';
+
+            return;
+        }
+
+        $this->ensureConversationSelected((int) $message->channel_conversation_id);
+        $this->mappingMessageId = $message->id;
+        $this->mappingMode = 'order';
+        $this->applyMapField(ChannelMessageOrderMapper::FIELD_PRODUCT, $productId);
+    }
+
+    /**
+     * Clear the catalog product tag from an inbound image.
+     */
+    public function clearMatchedProduct(int $messageId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $message = $this->inboundImageMessage($messageId);
+        if (! $message) {
+            return;
+        }
+
+        $message->forceFill(['matched_product_id' => null])->save();
+
+        $key = (string) $message->id;
+        $this->inboundImageMatchState[$key] = ['status' => 'done'];
+
+        $this->statusMessage = 'Product tag cleared.';
+        $this->error = null;
     }
 
     public function insertQuickReply(int $index, InboxQuickReplyService $quickReplies): void
@@ -674,7 +806,7 @@ class AdminInbox extends Component
     }
 
     /**
-     * One-click send of the ≥90% catalog match as a priced product image reply.
+     * Send the tagged (or auto-matched) catalog product as a priced image reply.
      */
     public function sendPricedImageFromMatch(
         int $messageId,
@@ -683,13 +815,15 @@ class AdminInbox extends Component
     ): void {
         AdminAccess::ensureStaffAdmin();
 
+        $message = $this->inboundImageMessage($messageId);
         $state = $this->inboundImageMatchState[(string) $messageId]
             ?? $this->inboundImageMatchState[$messageId]
             ?? null;
-        $productId = is_array($state) ? (int) ($state['product_id'] ?? 0) : 0;
+        $productId = (int) ($message?->matched_product_id
+            ?? (is_array($state) ? ($state['product_id'] ?? 0) : 0));
 
         if ($productId <= 0) {
-            $this->error = 'No strong product match for this image.';
+            $this->error = 'No product tagged on this image.';
 
             return;
         }
@@ -1099,6 +1233,7 @@ class AdminInbox extends Component
         }
 
         $messages = ChannelMessage::query()
+            ->with('matchedProduct:id,name')
             ->where('channel_conversation_id', $this->selectedConversationId)
             ->where('direction', ChannelMessage::DIRECTION_INBOUND)
             ->whereNotNull('media_url')
@@ -1114,6 +1249,18 @@ class AdminInbox extends Component
 
             $key = (string) $message->id;
             if (isset($this->inboundImageMatchState[$key])) {
+                continue;
+            }
+
+            if ($message->matched_product_id && $message->matchedProduct) {
+                $this->inboundImageMatchState[$key] = [
+                    'status' => 'done',
+                    'product_id' => (int) $message->matched_product_id,
+                    'name' => (string) $message->matchedProduct->name,
+                    'match_percent' => 100.0,
+                    'strategy' => 'stored',
+                ];
+
                 continue;
             }
 
@@ -1145,6 +1292,21 @@ class AdminInbox extends Component
             return;
         }
 
+        if ($message->matched_product_id) {
+            $product = $message->matchedProduct
+                ?? Product::query()->whereKey($message->matched_product_id)->first();
+
+            $this->inboundImageMatchState[$key] = [
+                'status' => 'done',
+                'product_id' => (int) $message->matched_product_id,
+                'name' => (string) ($product?->name ?? 'Product'),
+                'match_percent' => 100.0,
+                'strategy' => 'stored',
+            ];
+
+            return;
+        }
+
         $match = $matcher->bestAutoMatch($message);
 
         if ($match === null) {
@@ -1152,6 +1314,8 @@ class AdminInbox extends Component
 
             return;
         }
+
+        $message->forceFill(['matched_product_id' => $match['product_id']])->save();
 
         $this->inboundImageMatchState[$key] = [
             'status' => 'done',
@@ -1381,7 +1545,11 @@ class AdminInbox extends Component
                 ->with([
                     'draftOrder.items',
                     'messages' => function ($q) use ($threadSearch, $threadSince) {
-                        $q->with('replyTo')->orderBy('sent_at')->orderBy('id');
+                        $q->with([
+                            'replyTo',
+                            'matchedProduct:id,name,sku,price,slug',
+                            'matchedProduct.images' => fn ($images) => $images->orderByDesc('is_primary')->orderBy('sort_order')->limit(1),
+                        ])->orderBy('sent_at')->orderBy('id');
 
                         if ($threadSearch !== '') {
                             $q->where('body', 'like', '%'.$threadSearch.'%');

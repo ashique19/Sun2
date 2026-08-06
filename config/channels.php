@@ -64,9 +64,6 @@ return [
         // Open threads initially show only messages with sent_at within this window.
         'thread_lookback_hours' => (int) env('CHANNEL_INBOX_THREAD_LOOKBACK_HOURS', 24),
 
-        // Prefetch this many recent + unread threads after Inbox opens (DB cache warm).
-        'prefetch_conversations' => (int) env('CHANNEL_INBOX_PREFETCH_CONVERSATIONS', 20),
-
         // When true (BROADCAST_CONNECTION=reverb|pusher by default), Echo pushes
         // inbox updates and Graph poll runs on a slower fallback interval.
         'realtime_enabled' => filter_var(

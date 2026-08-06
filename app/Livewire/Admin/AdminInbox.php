@@ -21,8 +21,6 @@ use App\Support\AdminAccess;
 use App\Support\Fileinfo;
 use App\Support\StorefrontAssets;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -196,40 +194,6 @@ class AdminInbox extends Component
 
         if ($this->channel !== '' || $this->unread !== '' || $this->window !== '' || $this->linked !== '') {
             $this->mobileFiltersOpen = true;
-        }
-
-        $this->dispatchThreadPrefetch();
-    }
-
-    /**
-     * Warm recent / unread thread caches so switching conversations hits the DB less.
-     */
-    public function prefetchRecentThreads(): void
-    {
-        AdminAccess::ensureStaffAdmin();
-
-        $limit = max(1, (int) config('channels.inbox.prefetch_conversations', 20));
-        $lookbackHours = max(1, (int) config('channels.inbox.thread_lookback_hours', 24));
-        $threadSince = now()->subHours($lookbackHours);
-
-        $recentIds = ChannelConversation::query()
-            ->orderByRaw('COALESCE(last_inbound_at, last_outbound_at, created_at) desc')
-            ->limit($limit)
-            ->pluck('id');
-
-        $unreadIds = ChannelConversation::query()
-            ->where(function ($q) {
-                $q->whereNull('last_read_at')
-                    ->orWhereColumn('last_inbound_at', '>', 'last_read_at');
-            })
-            ->orderByRaw('COALESCE(last_inbound_at, last_outbound_at, created_at) desc')
-            ->limit($limit)
-            ->pluck('id');
-
-        $ids = $recentIds->merge($unreadIds)->unique()->values();
-
-        foreach ($ids as $conversationId) {
-            $this->cachedConversationThread((int) $conversationId, $threadSince);
         }
     }
 
@@ -1151,48 +1115,6 @@ class AdminInbox extends Component
         $this->js('queueMicrotask(() => $wire.flushPendingOutbound())');
     }
 
-    private function dispatchThreadPrefetch(): void
-    {
-        if (app()->runningUnitTests()) {
-            return;
-        }
-
-        $this->js('queueMicrotask(() => $wire.prefetchRecentThreads())');
-    }
-
-    private function cachedConversationThread(int $conversationId, Carbon $threadSince): ?ChannelConversation
-    {
-        $messageFingerprint = (int) (ChannelMessage::query()
-            ->where('channel_conversation_id', $conversationId)
-            ->max('id') ?? 0);
-
-        $key = 'inbox.thread.v1.'.$conversationId.'.'.$threadSince->timestamp.'.'.$messageFingerprint;
-
-        /** @var ChannelConversation|null $cached */
-        $cached = Cache::remember($key, now()->addSeconds(45), function () use ($conversationId, $threadSince) {
-            return ChannelConversation::query()
-                ->with([
-                    'draftOrder.items',
-                    'messages' => function ($q) use ($threadSince) {
-                        $q->with([
-                            'replyTo',
-                            'matchedProduct:id,name,sku,price,slug',
-                            'matchedProduct.images' => fn ($images) => $images->orderByDesc('is_primary')->orderBy('sort_order')->limit(1),
-                        ])
-                            ->orderBy('sent_at')
-                            ->orderBy('id')
-                            ->where(function ($window) use ($threadSince) {
-                                $window->where('sent_at', '>=', $threadSince)
-                                    ->orWhereNull('sent_at');
-                            });
-                    },
-                ])
-                ->find($conversationId);
-        });
-
-        return $cached;
-    }
-
     private function failPendingOutbound(string $error): void
     {
         $this->replyText = $this->pendingReplyText;
@@ -1777,41 +1699,34 @@ class AdminInbox extends Component
 
         // If the selected id is outside the filtered list, still load it for the thread,
         // but never shrink the left list to that single conversation.
-        // Prefer the short-lived prefetch cache for the default lookback window.
-        $selectedConversation = null;
-        if ($displayConversationId) {
-            if ($threadSearch === '' && ! $this->threadHistoryExpanded) {
-                $selectedConversation = $this->cachedConversationThread((int) $displayConversationId, $threadSince);
-            }
+        // Do not Cache Eloquent graphs — file/redis serialization can return __PHP_Incomplete_Class.
+        $selectedConversation = $displayConversationId
+            ? ChannelConversation::query()
+                ->with([
+                    'draftOrder.items',
+                    'messages' => function ($q) use ($threadSearch, $threadSince) {
+                        $q->with([
+                            'replyTo',
+                            'matchedProduct:id,name,sku,price,slug',
+                            'matchedProduct.images' => fn ($images) => $images->orderByDesc('is_primary')->orderBy('sort_order')->limit(1),
+                        ])->orderBy('sent_at')->orderBy('id');
 
-            if (! $selectedConversation) {
-                $selectedConversation = ChannelConversation::query()
-                    ->with([
-                        'draftOrder.items',
-                        'messages' => function ($q) use ($threadSearch, $threadSince) {
-                            $q->with([
-                                'replyTo',
-                                'matchedProduct:id,name,sku,price,slug',
-                                'matchedProduct.images' => fn ($images) => $images->orderByDesc('is_primary')->orderBy('sort_order')->limit(1),
-                            ])->orderBy('sent_at')->orderBy('id');
+                        if ($threadSearch !== '') {
+                            $q->where('body', 'like', '%'.$threadSearch.'%');
 
-                            if ($threadSearch !== '') {
-                                $q->where('body', 'like', '%'.$threadSearch.'%');
+                            return;
+                        }
 
-                                return;
-                            }
-
-                            if (! $this->threadHistoryExpanded) {
-                                $q->where(function ($window) use ($threadSince) {
-                                    $window->where('sent_at', '>=', $threadSince)
-                                        ->orWhereNull('sent_at');
-                                });
-                            }
-                        },
-                    ])
-                    ->find($displayConversationId);
-            }
-        }
+                        if (! $this->threadHistoryExpanded) {
+                            $q->where(function ($window) use ($threadSince) {
+                                $window->where('sent_at', '>=', $threadSince)
+                                    ->orWhereNull('sent_at');
+                            });
+                        }
+                    },
+                ])
+                ->find($displayConversationId)
+            : null;
 
         if ($selectedConversation && $threadSearch === '' && ! $this->threadHistoryExpanded) {
             $hasOlderMessages = ChannelMessage::query()

@@ -151,7 +151,7 @@ class AdminInboxProductImageMatchTest extends TestCase
             'sent_at' => now(),
         ]);
 
-        Livewire::test(AdminInbox::class)
+        $html = Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->call('openTagProductOnImage', $message->id)
             ->call('tagMatchedProduct', $product->id)
@@ -160,10 +160,17 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->assertSeeHtml('href="'.route('admin.products.show', $product).'"')
             ->assertSeeHtml('target="_blank"')
             ->assertSee('Send priced')
-            ->assertSee('Add to order')
+            ->assertSeeHtml('wire:click="addMatchedProductToOrder('.$message->id.')"')
+            ->assertSee('+ Order')
+            ->assertSee('Phone')
+            ->assertSee('Name')
+            ->assertSee('Address')
+            ->assertDontSeeHtml("wire:click=\"beginMapField('product')\"")
             ->call('addMatchedProductToOrder', $message->id)
-            ->assertSet('orderPanelOpen', true);
+            ->assertSet('orderPanelOpen', true)
+            ->html();
 
+        $this->assertStringNotContainsString("beginMapField('product')", $html);
         $this->assertSame($product->id, $message->fresh()->matched_product_id);
         $order = Order::query()->find($conversation->fresh()->draft_order_id);
         $this->assertSame($product->id, $order?->items()->first()?->product_id);

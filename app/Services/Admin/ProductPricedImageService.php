@@ -15,6 +15,7 @@ class ProductPricedImageService
         'top-right',
         'bottom-left',
         'bottom-right',
+        'center',
     ];
 
     public const FONT_MIN = 28;
@@ -290,6 +291,10 @@ class ProductPricedImageService
             'top-right' => [$maxX, $margin],
             'bottom-left' => [$margin, $maxY],
             'bottom-right' => [$maxX, $maxY],
+            'center' => [
+                (int) max($margin, round(($imageWidth - $panelWidth) / 2)),
+                (int) max($margin, round(($imageHeight - $panelHeight) / 2)),
+            ],
             default => [$margin, $margin],
         };
     }

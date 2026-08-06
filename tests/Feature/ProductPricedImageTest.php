@@ -194,6 +194,7 @@ class ProductPricedImageTest extends TestCase
             ->assertSee('Top right')
             ->assertSee('Bottom left')
             ->assertSee('Bottom right')
+            ->assertSee('Center')
             ->assertSee('Text size (px)')
             ->assertSee('Close')
             ->assertDontSee('X position')
@@ -208,6 +209,48 @@ class ProductPricedImageTest extends TestCase
         $this->assertSame('bottom-left', $product->priced_image_layout['position']);
         $this->assertSame(80, $product->priced_image_layout['font']);
         $this->assertNotNull($product->priced_image_path);
+    }
+
+    #[Test]
+    public function edit_modal_can_generate_priced_image_with_center_position(): void
+    {
+        $this->actingAs($this->adminUser());
+        $product = $this->productWithPrimaryImage();
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->call('openPricedImageModal')
+            ->set('pricedImagePosition', 'center')
+            ->set('pricedImageFont', 64)
+            ->call('generatePricedImage')
+            ->assertHasNoErrors()
+            ->assertSet('message', 'Priced image saved.');
+
+        $product->refresh();
+        $this->assertSame('center', $product->priced_image_layout['position']);
+        $this->assertSame(64, $product->priced_image_layout['font']);
+        $this->assertNotNull($product->priced_image_path);
+        $this->assertFileExists(public_path(ltrim($product->priced_image_path, '/')));
+    }
+
+    #[Test]
+    public function service_generates_priced_image_with_center_position(): void
+    {
+        $product = $this->productWithPrimaryImage();
+        $service = app(ProductPricedImageService::class);
+
+        $path = $service->generate($product, [
+            'position' => 'center',
+            'font' => 56,
+        ]);
+
+        $product->refresh();
+
+        $this->assertFileExists(public_path(ltrim($path, '/')));
+        $this->assertSame('center', $product->priced_image_layout['position']);
+        $this->assertSame([
+            'position' => 'center',
+            'font' => 56,
+        ], $service->normalizeLayout(['position' => 'center', 'font' => 56]));
     }
 
     #[Test]

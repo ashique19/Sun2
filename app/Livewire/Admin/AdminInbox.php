@@ -1134,6 +1134,7 @@ class AdminInbox extends Component
             'product_id' => $match['product_id'],
             'name' => $match['name'],
             'match_percent' => $match['match_percent'],
+            'strategy' => $match['strategy'] ?? 'full',
         ];
     }
 

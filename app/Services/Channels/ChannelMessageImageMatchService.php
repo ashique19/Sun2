@@ -19,8 +19,9 @@ class ChannelMessageImageMatchService
 
     /**
      * Best published catalog match at or above the auto threshold (90%).
+     * Uses full-frame first, then center-crop fallbacks for screenshots.
      *
-     * @return array{product_id: int, name: string, match_percent: float}|null
+     * @return array{product_id: int, name: string, match_percent: float, strategy: string}|null
      */
     public function bestAutoMatch(ChannelMessage $message): ?array
     {
@@ -45,12 +46,8 @@ class ChannelMessageImageMatchService
         }
 
         try {
-            $hash = $this->hasher->hashBinary($downloaded['bytes']);
-            $matches = $this->hasher->findTopMatches(
-                $hash,
-                1,
-                ProductImageHashService::AUTO_MATCH_PERCENT,
-            );
+            // Plan A: full-frame. Plan B: center crops (70/50/40%) vs catalog crops.
+            $top = $this->hasher->findBestAutoMatchFromBinary($downloaded['bytes']);
         } catch (Throwable $e) {
             Log::debug('Inbox inbound image hash failed.', [
                 'message_id' => $message->id,
@@ -60,7 +57,6 @@ class ChannelMessageImageMatchService
             return null;
         }
 
-        $top = $matches[0] ?? null;
         if ($top === null || (float) $top['match_percent'] < ProductImageHashService::AUTO_MATCH_PERCENT) {
             return null;
         }
@@ -79,6 +75,7 @@ class ChannelMessageImageMatchService
             'product_id' => $productId,
             'name' => (string) $top['name'],
             'match_percent' => (float) $top['match_percent'],
+            'strategy' => (string) ($top['strategy'] ?? 'full'),
         ];
     }
 

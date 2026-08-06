@@ -215,6 +215,97 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
     }
 
     #[Test]
+    public function screenshot_with_chrome_matches_via_center_crop_fallback(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'channels.ai_draft.image_min_bytes' => 100,
+        ]);
+
+        $hasher = app(ProductImageHashService::class);
+
+        $catalog = imagecreatetruecolor(200, 200);
+        $a = imagecolorallocate($catalog, 200, 40, 60);
+        $b = imagecolorallocate($catalog, 40, 90, 200);
+        for ($y = 0; $y < 200; $y++) {
+            for ($x = 0; $x < 200; $x++) {
+                imagesetpixel($catalog, $x, $y, (((int) ($x / 10)) % 2) === 0 ? $a : $b);
+            }
+        }
+
+        $screenshot = imagecreatetruecolor(400, 400);
+        $chrome = imagecolorallocate($screenshot, 18, 18, 22);
+        imagefill($screenshot, 0, 0, $chrome);
+        imagecopy($screenshot, $catalog, 100, 100, 0, 0, 200, 200);
+
+        ob_start();
+        imagepng($catalog);
+        $catalogBytes = (string) ob_get_clean();
+        imagedestroy($catalog);
+
+        ob_start();
+        imagepng($screenshot);
+        $screenshotBytes = (string) ob_get_clean();
+        imagedestroy($screenshot);
+
+        $product = Product::query()->create([
+            'name' => 'Screenshot Match Ring',
+            'slug' => 'screenshot-match-ring-'.uniqid(),
+            'price' => 2100,
+            'purchase_price' => 900,
+            'stock_quantity' => 2,
+            'is_published' => true,
+        ]);
+
+        $relativeDir = 'img/products/'.$product->id;
+        $absoluteDir = public_path($relativeDir);
+        if (! is_dir($absoluteDir)) {
+            mkdir($absoluteDir, 0775, true);
+        }
+        file_put_contents($absoluteDir.'/catalog.png', $catalogBytes);
+
+        ProductImage::query()->create([
+            'product_id' => $product->id,
+            'path' => '/'.$relativeDir.'/catalog.png',
+            'alt' => $product->name,
+            'is_primary' => true,
+            'sort_order' => 0,
+            'perceptual_hash' => $hasher->hashBinary($catalogBytes),
+        ]);
+
+        $customerUrl = 'https://cdn.example.test/screenshot-chrome.png';
+        Http::fake([
+            $customerUrl => Http::response($screenshotBytes, 200, ['Content-Type' => 'image/png']),
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $inbound = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => $customerUrl,
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now(),
+        ]);
+
+        $fullMatches = $hasher->findTopMatches(
+            $hasher->hashBinary($screenshotBytes),
+            1,
+            ProductImageHashService::AUTO_MATCH_PERCENT,
+        );
+        $this->assertSame([], $fullMatches);
+
+        $component = Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSee('Send priced image');
+
+        $state = $component->get('inboundImageMatchState')[(string) $inbound->id] ?? [];
+        $this->assertSame($product->id, $state['product_id'] ?? null);
+        $this->assertStringContainsString('center', (string) ($state['strategy'] ?? ''));
+    }
+
+    #[Test]
     public function pending_match_state_is_set_before_async_search_outside_tests(): void
     {
         // In HTTP tests runInboundImageMatches runs immediately; this asserts the

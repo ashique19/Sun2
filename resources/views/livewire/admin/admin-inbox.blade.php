@@ -692,10 +692,20 @@
                                                     @endif
                                                 </a>
                                                 <button type="button"
+                                                    wire:click="sendMatchedProductPriceReply({{ $messageRow->id }})"
+                                                    wire:loading.attr="disabled"
+                                                    wire:target="sendMatchedProductPriceReply({{ $messageRow->id }})"
+                                                    @click.stop
+                                                    title="Send price as a text reply"
+                                                    class="text-[10px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
+                                                    Send price
+                                                </button>
+                                                <button type="button"
                                                     wire:click="sendPricedImageFromMatch({{ $messageRow->id }})"
                                                     wire:loading.attr="disabled"
                                                     wire:target="sendPricedImageFromMatch({{ $messageRow->id }})"
                                                     @click.stop
+                                                    title="Send priced product image"
                                                     class="text-[10px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
                                                     Send priced
                                                 </button>

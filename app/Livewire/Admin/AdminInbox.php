@@ -816,11 +816,7 @@ class AdminInbox extends Component
         AdminAccess::ensureStaffAdmin();
 
         $message = $this->inboundImageMessage($messageId);
-        $state = $this->inboundImageMatchState[(string) $messageId]
-            ?? $this->inboundImageMatchState[$messageId]
-            ?? null;
-        $productId = (int) ($message?->matched_product_id
-            ?? (is_array($state) ? ($state['product_id'] ?? 0) : 0));
+        $productId = $this->matchedProductIdForMessage($messageId, $message);
 
         if ($productId <= 0) {
             $this->error = 'No product tagged on this image.';
@@ -830,6 +826,54 @@ class AdminInbox extends Component
 
         $this->pricedSendMessageId = $messageId;
         $this->sendPricedProductImage($productId, $replies, $pricedImages);
+    }
+
+    /**
+     * Reply to the inbound photo with the tagged product's selling price as text.
+     */
+    public function sendMatchedProductPriceReply(int $messageId, ChannelReplyService $replies): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
+
+        $message = $this->inboundImageMessage($messageId);
+        $productId = $this->matchedProductIdForMessage($messageId, $message);
+
+        if (! $message || $productId <= 0) {
+            $this->error = 'No product tagged on this image.';
+
+            return;
+        }
+
+        $product = Product::query()->whereKey($productId)->first();
+        if (! $product) {
+            $this->error = 'Tagged product not found.';
+
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find((int) $message->channel_conversation_id);
+        if (! $conversation) {
+            $this->error = 'Conversation not found.';
+
+            return;
+        }
+
+        $this->ensureConversationSelected((int) $conversation->id);
+
+        $body = 'Tk '.number_format((float) $product->price, 0);
+        $result = $replies->sendText($conversation, $body, false, $message);
+
+        if (! ($result['ok'] ?? false)) {
+            $this->error = $result['error'] ?? 'Failed to send price reply.';
+
+            return;
+        }
+
+        $this->markConversationRead($conversation, $replies);
+        $this->statusMessage = 'Price reply sent.';
     }
 
     public function updatedPricedSendSearch(): void
@@ -1354,6 +1398,17 @@ class AdminInbox extends Component
         }
 
         return $message;
+    }
+
+    private function matchedProductIdForMessage(int $messageId, ?ChannelMessage $message = null): int
+    {
+        $message ??= $this->inboundImageMessage($messageId);
+        $state = $this->inboundImageMatchState[(string) $messageId]
+            ?? $this->inboundImageMatchState[$messageId]
+            ?? null;
+
+        return (int) ($message?->matched_product_id
+            ?? (is_array($state) ? ($state['product_id'] ?? 0) : 0));
     }
 
     /**

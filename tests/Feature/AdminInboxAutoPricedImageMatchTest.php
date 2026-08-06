@@ -125,11 +125,13 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
             ->call('selectConversation', $conversation->id)
             ->assertDontSee('Match product')
             ->assertDontSee('Open full size')
+            ->assertSee('Send price')
             ->assertSee('Send priced')
             ->assertSee('Add to order')
             ->assertSee($product->name)
             ->assertSeeHtml('href="'.route('admin.products.show', $product).'"')
             ->assertSeeHtml('aria-label="Open product details for '.$product->name.'"')
+            ->assertSeeHtml('wire:click="sendMatchedProductPriceReply('.$inbound->id.')"')
             ->assertSeeHtml('wire:click="sendPricedImageFromMatch('.$inbound->id.')"')
             ->assertSeeHtml('wire:click="addMatchedProductToOrder('.$inbound->id.')"')
             ->assertSeeHtml('wire:click.stop="openTagProductOnImage('.$inbound->id.')"');
@@ -164,8 +166,60 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->assertSeeHtml('wire:click.stop="openTagProductOnImage('.$inbound->id.')"')
+            ->assertDontSeeHtml('wire:click="sendMatchedProductPriceReply('.$inbound->id.')"')
             ->assertDontSeeHtml('wire:click="sendPricedImageFromMatch('.$inbound->id.')"')
             ->assertDontSeeHtml('wire:click="addMatchedProductToOrder('.$inbound->id.')"');
+    }
+
+    #[Test]
+    public function send_matched_product_price_reply_sends_text_price_as_reply(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.graph_version' => 'v25.0',
+            'channels.ai_draft.image_min_bytes' => 100,
+        ]);
+
+        [$product, $customerAbsolute, $customerUrl] = $this->productAndMatchingCustomerJpeg();
+
+        Http::fake([
+            $customerUrl => Http::response(file_get_contents($customerAbsolute), 200, [
+                'Content-Type' => 'image/jpeg',
+            ]),
+            'https://graph.facebook.com/*' => Http::response(['message_id' => 'm_price_text'], 200),
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $inbound = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_price_reply',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => $customerUrl,
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSee('Send price')
+            ->call('sendMatchedProductPriceReply', $inbound->id)
+            ->assertHasNoErrors()
+            ->assertSet('statusMessage', 'Price reply sent.');
+
+        $outbound = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($outbound);
+        $this->assertSame($inbound->id, $outbound->reply_to_message_id);
+        $this->assertSame('Tk '.number_format((float) $product->price, 0), $outbound->body);
+        $this->assertNull($outbound->media_url);
+
+        @unlink($customerAbsolute);
     }
 
     #[Test]

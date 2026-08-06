@@ -532,12 +532,18 @@
                                     touchStartX: 0,
                                     touchStartY: 0,
                                     openMenu() {
+                                        if (! this.orderMapEnabled) {
+                                            return;
+                                        }
                                         this.cancelLongPress();
                                         this.menu = true;
                                         $wire.openMessageMapMenu({{ $messageRow->id }});
                                     },
                                     closeMenu() { this.menu = false; },
                                     startLongPress(event) {
+                                        if (! this.orderMapEnabled) {
+                                            return;
+                                        }
                                         this.cancelLongPress();
                                         const touch = event.changedTouches?.[0] || event.touches?.[0];
                                         this.touchStartX = touch?.clientX ?? 0;
@@ -561,7 +567,11 @@
                                             this.cancelLongPress();
                                         }
                                     },
+                                    orderMapEnabled: @js($isOutbound || ! $messageRow->isImageAttachment()),
                                     mapMenuOpen() {
+                                        if (! this.orderMapEnabled) {
+                                            return false;
+                                        }
                                         const mappingId = Number($wire.mappingMessageId);
                                         const field = $wire.mappingField;
                                         return this.menu
@@ -731,47 +741,38 @@
                                         ])>
                                         Reply
                                     </button>
-                                    <button type="button"
-                                        @click.stop="openMenu()"
-                                        @class([
-                                            'text-[10px] font-medium opacity-100 transition xl:opacity-0 xl:group-hover:opacity-100 xl:focus:opacity-100',
-                                            'text-white/90' => $isOutbound,
-                                            'text-[#C9A227]' => ! $isOutbound,
-                                        ])>
-                                        + Order
-                                    </button>
+                                    @if ($isOutbound || ! $messageRow->isImageAttachment())
+                                        <button type="button"
+                                            @click.stop="openMenu()"
+                                            @class([
+                                                'text-[10px] font-medium opacity-100 transition xl:opacity-0 xl:group-hover:opacity-100 xl:focus:opacity-100',
+                                                'text-white/90' => $isOutbound,
+                                                'text-[#C9A227]' => ! $isOutbound,
+                                            ])>
+                                            + Order
+                                        </button>
+                                    @endif
                                 </div>
 
-                                <div
-                                    x-show="mapMenuOpen()"
-                                    x-cloak
-                                    @click.stop
-                                    class="absolute left-0 right-0 top-full z-20 mt-1 min-w-[11rem] rounded-xl border border-[#E7DFCF] bg-white p-1.5 text-left text-[#1E1E1E] shadow-lg"
-                                >
-                                    <p class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#8C8474]">
-                                        Add to order fields
-                                    </p>
-                                    @php
-                                        $orderMenuMatchState = $inboundImageMatchState[(string) $messageRow->id]
-                                            ?? $inboundImageMatchState[$messageRow->id]
-                                            ?? null;
-                                        $hideProductsInOrderMenu = $messageRow->isImageAttachment()
-                                            && (
-                                                (int) ($messageRow->matched_product_id ?? 0) > 0
-                                                || (int) ($orderMenuMatchState['product_id'] ?? 0) > 0
-                                            );
-                                    @endphp
-                                    @foreach (['phone' => 'Phone', 'name' => 'Name', 'address' => 'Address', 'product' => 'Products'] as $fieldKey => $fieldLabel)
-                                        @if ($fieldKey === 'product' && $hideProductsInOrderMenu)
-                                            @continue
-                                        @endif
-                                        <button type="button"
-                                            wire:click="beginMapField('{{ $fieldKey }}')"
-                                            class="block w-full rounded-lg px-2 py-1.5 text-left text-xs font-medium hover:bg-[#FAF6EF]">
-                                            {{ $fieldLabel }}
-                                        </button>
-                                    @endforeach
-                                </div>
+                                @if ($isOutbound || ! $messageRow->isImageAttachment())
+                                    <div
+                                        x-show="mapMenuOpen()"
+                                        x-cloak
+                                        @click.stop
+                                        class="absolute left-0 right-0 top-full z-20 mt-1 min-w-[11rem] rounded-xl border border-[#E7DFCF] bg-white p-1.5 text-left text-[#1E1E1E] shadow-lg"
+                                    >
+                                        <p class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#8C8474]">
+                                            Add to order fields
+                                        </p>
+                                        @foreach (['phone' => 'Phone', 'name' => 'Name', 'address' => 'Address', 'product' => 'Products'] as $fieldKey => $fieldLabel)
+                                            <button type="button"
+                                                wire:click="beginMapField('{{ $fieldKey }}')"
+                                                class="block w-full rounded-lg px-2 py-1.5 text-left text-xs font-medium hover:bg-[#FAF6EF]">
+                                                {{ $fieldLabel }}
+                                            </button>
+                                        @endforeach
+                                    </div>
+                                @endif
                             </div>
                         </div>
                     @endforeach

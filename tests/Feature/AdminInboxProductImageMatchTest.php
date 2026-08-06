@@ -85,19 +85,30 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->call('selectConversation', $conversation->id)
             ->assertDontSee('Open full size')
             ->assertDontSee('Match product')
-            ->assertSee('+ Order')
-            ->call('openMessageMapMenu', $message->id)
-            ->assertSet('mappingMessageId', $message->id)
-            ->assertSet('mappingField', null)
+            ->assertDontSeeHtml('@click.stop="openMenu()"')
+            ->assertSeeHtml('orderMapEnabled: false')
+            ->assertSeeHtml('wire:click="toggleOrderPanel"');
+    }
+
+    #[Test]
+    public function text_messages_still_show_message_level_order_button(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Please send to Gulshan',
+            'sent_at' => now(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSeeHtml('@click.stop="openMenu()"')
+            ->assertSeeHtml('orderMapEnabled: true')
             ->assertSee('Add to order fields')
-            ->assertSee('Products')
-            ->call('beginMapField', 'product')
-            ->assertSet('mappingField', 'product')
-            ->assertSet('mappingMode', 'order')
-            ->assertSeeHtml('data-inbox-product-map-modal')
-            ->assertSeeHtml('z-index: 100000')
-            ->assertSeeHtml('max-height: calc(100svh - 1rem)')
-            ->assertDontSee('load older messages');
+            ->assertSee('Products');
     }
 
     #[Test]
@@ -151,7 +162,7 @@ class AdminInboxProductImageMatchTest extends TestCase
             'sent_at' => now(),
         ]);
 
-        $html = Livewire::test(AdminInbox::class)
+        Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->call('openTagProductOnImage', $message->id)
             ->call('tagMatchedProduct', $product->id)
@@ -161,16 +172,10 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->assertSeeHtml('target="_blank"')
             ->assertSee('Send priced')
             ->assertSeeHtml('wire:click="addMatchedProductToOrder('.$message->id.')"')
-            ->assertSee('+ Order')
-            ->assertSee('Phone')
-            ->assertSee('Name')
-            ->assertSee('Address')
-            ->assertDontSeeHtml("wire:click=\"beginMapField('product')\"")
+            ->assertDontSeeHtml('@click.stop="openMenu()"')
             ->call('addMatchedProductToOrder', $message->id)
-            ->assertSet('orderPanelOpen', true)
-            ->html();
+            ->assertSet('orderPanelOpen', true);
 
-        $this->assertStringNotContainsString("beginMapField('product')", $html);
         $this->assertSame($product->id, $message->fresh()->matched_product_id);
         $order = Order::query()->find($conversation->fresh()->draft_order_id);
         $this->assertSame($product->id, $order?->items()->first()?->product_id);

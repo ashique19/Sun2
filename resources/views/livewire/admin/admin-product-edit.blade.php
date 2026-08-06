@@ -8,8 +8,13 @@
             <a href="{{ route('admin.products') }}" wire:navigate class="text-sm text-[#C9A227] hover:underline">&larr; Products</a>
             <h1 class="font-serif text-3xl font-semibold mt-2 line-clamp-2">{{ $product?->name ?? 'Create Product' }}</h1>
         </div>
-        @if ($product?->is_published)
-            <a href="{{ route('product.show', $product) }}" target="_blank" class="text-sm text-[#C9A227] hover:underline">View on store ↗</a>
+        @if ($product)
+            <div class="flex flex-wrap items-center gap-3">
+                <x-admin.product-neighbor-nav :product="$product" route-name="admin.products.edit" />
+                @if ($product->is_published)
+                    <a href="{{ route('product.show', $product) }}" target="_blank" class="text-sm text-[#C9A227] hover:underline">View on store ↗</a>
+                @endif
+            </div>
         @endif
     </div>
 

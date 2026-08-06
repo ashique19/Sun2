@@ -1,0 +1,49 @@
+@props([
+    'product',
+    'routeName',
+])
+
+@php
+    $previous = \App\Support\AdminProductNavigator::previous($product);
+    $next = \App\Support\AdminProductNavigator::next($product);
+    $buttonClass = 'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white text-[#6B6459] opacity-80 hover:bg-[#FAF6EF] hover:opacity-100';
+    $disabledClass = 'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white text-[#6B6459] opacity-35 cursor-not-allowed';
+@endphp
+
+<div {{ $attributes->class('flex items-center gap-1.5') }} role="group" aria-label="Product navigation">
+    @if ($previous)
+        <a href="{{ route($routeName, $previous) }}"
+            wire:navigate
+            title="Previous product"
+            aria-label="Previous product"
+            class="{{ $buttonClass }}">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                <path fill-rule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd"/>
+            </svg>
+        </a>
+    @else
+        <span title="No previous product" aria-label="No previous product" aria-disabled="true" class="{{ $disabledClass }}">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                <path fill-rule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd"/>
+            </svg>
+        </span>
+    @endif
+
+    @if ($next)
+        <a href="{{ route($routeName, $next) }}"
+            wire:navigate
+            title="Next product"
+            aria-label="Next product"
+            class="{{ $buttonClass }}">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                <path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/>
+            </svg>
+        </a>
+    @else
+        <span title="No next product" aria-label="No next product" aria-disabled="true" class="{{ $disabledClass }}">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                <path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/>
+            </svg>
+        </span>
+    @endif
+</div>

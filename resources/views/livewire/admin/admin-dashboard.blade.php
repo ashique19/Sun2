@@ -104,6 +104,21 @@
         </div>
     @endif
 
+    @if ($steadfastExpectedApiBalance !== null)
+        <a href="{{ route('admin.couriers') }}"
+            wire:navigate
+            class="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[#EFE7D6] bg-white px-3 py-2.5 transition hover:border-[#C9A227]/50 hover:bg-[#FAF6EF]/60"
+            data-steadfast-expected-api>
+            <p class="min-w-0 truncate text-xs text-[#8C8474]">
+                <span class="font-medium text-[#6B6459]">Steadfast</span>
+                · API balance should be
+            </p>
+            <p class="shrink-0 text-sm font-semibold tabular-nums text-[#1E1E1E]">
+                &#2547; {{ number_format((float) $steadfastExpectedApiBalance, 0) }}
+            </p>
+        </a>
+    @endif
+
     @if ($expenseAssistantMessage)
         <div class="mb-4 rounded-lg bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">{{ $expenseAssistantMessage }}</div>
     @endif

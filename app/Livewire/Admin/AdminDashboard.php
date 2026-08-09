@@ -3,11 +3,13 @@
 namespace App\Livewire\Admin;
 
 use App\Models\AdminAttentionItem;
+use App\Models\Courier;
 use App\Models\CourierData;
 use App\Models\Expense;
 use App\Models\ExpenseRecurringReminder;
 use App\Models\Order;
 use App\Services\Admin\AdminAttentionService;
+use App\Services\Admin\CourierBalanceService;
 use App\Services\Admin\ExpenseAssistantService;
 use App\Services\Admin\OrderDeliveryReturnService;
 use App\Services\Admin\ReturnHubArrivalService;
@@ -308,6 +310,7 @@ class AdminDashboard extends Component
                 'dueExpenseReminders' => collect(),
                 'showEveningExpensePrompt' => false,
                 'expenseCategories' => Expense::CATEGORIES,
+                'steadfastExpectedApiBalance' => null,
             ]);
         }
 
@@ -378,6 +381,11 @@ class AdminDashboard extends Component
             $steadfastWebhookSummaries[$entry->id] = $webhookInbox->summary($entry);
         }
 
+        $steadfast = Courier::query()->where('slug', 'steadfast')->first();
+        $steadfastExpectedApiBalance = $steadfast
+            ? (float) app(CourierBalanceService::class)->summarize($steadfast)['expected_api']
+            : null;
+
         return view('livewire.admin.admin-dashboard', [
             'segments' => AdminOrderSegment::SEGMENTS,
             'segmentCounts' => $segmentCounts,
@@ -394,6 +402,7 @@ class AdminDashboard extends Component
             'dueExpenseReminders' => $dueExpenseReminders,
             'showEveningExpensePrompt' => $showEveningExpensePrompt,
             'expenseCategories' => Expense::CATEGORIES,
+            'steadfastExpectedApiBalance' => $steadfastExpectedApiBalance,
         ]);
     }
 }

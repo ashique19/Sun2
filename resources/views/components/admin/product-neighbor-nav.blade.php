@@ -6,13 +6,88 @@
 @php
     $previous = \App\Support\AdminProductNavigator::previous($product);
     $next = \App\Support\AdminProductNavigator::next($product);
+    $previousUrl = $previous ? route($routeName, $previous) : null;
+    $nextUrl = $next ? route($routeName, $next) : null;
     $buttonClass = 'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white text-[#6B6459] opacity-80 hover:bg-[#FAF6EF] hover:opacity-100';
     $disabledClass = 'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white text-[#6B6459] opacity-35 cursor-not-allowed';
 @endphp
 
-<div {{ $attributes->class('flex items-center gap-1.5') }} role="group" aria-label="Product navigation">
+<div
+    {{ $attributes->class('flex items-center gap-1.5') }}
+    role="group"
+    aria-label="Product navigation"
+    data-product-swipe-nav
+    data-previous-url="{{ $previousUrl ?? '' }}"
+    data-next-url="{{ $nextUrl ?? '' }}"
+    x-data="{
+        previousUrl: @js($previousUrl),
+        nextUrl: @js($nextUrl),
+        startX: null,
+        startY: null,
+        onStart(event) {
+            if (! window.matchMedia('(max-width: 767px)').matches) {
+                return;
+            }
+
+            const touch = event.changedTouches?.[0];
+            if (! touch) {
+                return;
+            }
+
+            this.startX = touch.clientX;
+            this.startY = touch.clientY;
+        },
+        onEnd(event) {
+            if (this.startX === null || this.startY === null) {
+                return;
+            }
+
+            if (! window.matchMedia('(max-width: 767px)').matches) {
+                this.startX = null;
+                this.startY = null;
+
+                return;
+            }
+
+            const touch = event.changedTouches?.[0];
+            if (! touch) {
+                this.startX = null;
+                this.startY = null;
+
+                return;
+            }
+
+            const dx = touch.clientX - this.startX;
+            const dy = touch.clientY - this.startY;
+            this.startX = null;
+            this.startY = null;
+
+            if (Math.abs(dx) < 70 || Math.abs(dx) <= Math.abs(dy)) {
+                return;
+            }
+
+            const target = event.target;
+            if (target instanceof Element && target.closest('input, textarea, select, [contenteditable=\"true\"], .no-product-swipe-nav')) {
+                return;
+            }
+
+            const url = dx > 0 ? this.previousUrl : this.nextUrl;
+            if (! url) {
+                return;
+            }
+
+            if (window.Livewire && typeof window.Livewire.navigate === 'function') {
+                window.Livewire.navigate(url);
+            } else {
+                window.location.assign(url);
+            }
+        },
+    }"
+    @touchstart.window.passive="onStart($event)"
+    @touchend.window.passive="onEnd($event)"
+>
     @if ($previous)
-        <a href="{{ route($routeName, $previous) }}"
+        <a href="{{ $previousUrl }}"
             wire:navigate
             title="Previous product"
             aria-label="Previous product"
@@ -30,7 +105,7 @@
     @endif
 
     @if ($next)
-        <a href="{{ route($routeName, $next) }}"
+        <a href="{{ $nextUrl }}"
             wire:navigate
             title="Next product"
             aria-label="Next product"

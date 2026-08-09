@@ -188,7 +188,8 @@ class Order extends Model
     // ── Money helpers (delegate to OrderTotalCalculator) ──────────────────────
 
     /**
-     * COGS = sum(purchase_price × effective_quantity) over order lines.
+     * COGS = sum(unit_cost × effective_quantity) over order lines
+     * (falls back to purchase_price on legacy lines).
      * Effective quantity = quantity - returned_quantity when returns apply.
      * Requires items to be loaded.
      */

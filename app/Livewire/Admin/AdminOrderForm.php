@@ -323,6 +323,7 @@ class AdminOrderForm extends Component
                 'quantity' => (int) $item->quantity,
                 'price' => (float) (int) round((float) $item->price),
                 'purchase_price' => (float) (int) round((float) $item->purchase_price),
+                'unit_cost' => (float) (int) round($item->effectiveUnitCost()),
                 'line_total' => (float) (int) round((float) $item->line_total),
                 'product_image' => $item->product_image,
                 'stock_quantity' => (int) ($item->product?->stock_quantity ?? 0),
@@ -604,6 +605,7 @@ class AdminOrderForm extends Component
             'sku' => strtoupper(Str::random(8)),
             'price' => (float) $this->newProductPrice,
             'purchase_price' => 0,
+            'unit_cost' => 0,
             'stock_quantity' => $this->newProductStock,
             'is_published' => true,
             'display_order' => 0,
@@ -791,6 +793,7 @@ class AdminOrderForm extends Component
                 'quantity' => 1,
                 'price' => (float) (int) round((float) $product->price),
                 'purchase_price' => (float) (int) round((float) $product->purchase_price),
+                'unit_cost' => (float) (int) round($product->effectiveUnitCost()),
                 'line_total' => (float) (int) round((float) $product->price),
                 'product_image' => StorefrontAssets::url($product->primaryImagePath()),
                 'stock_quantity' => (int) $product->stock_quantity,
@@ -865,6 +868,7 @@ class AdminOrderForm extends Component
             'quantity' => (int) $line['quantity'],
             'price' => (float) $this->roundedMoney($line['price']),
             'purchase_price' => (float) $this->roundedMoney($line['purchase_price']),
+            'unit_cost' => (float) $this->roundedMoney($line['unit_cost'] ?? $line['purchase_price']),
             'line_total' => (float) $this->roundedMoney($line['line_total']),
             'product_image' => $line['product_image'],
         ], $this->lines));
@@ -930,6 +934,7 @@ class AdminOrderForm extends Component
         }
 
         $items = array_map(fn (array $line) => [
+            'unit_cost' => $line['unit_cost'] ?? $line['purchase_price'],
             'purchase_price' => $line['purchase_price'],
             'quantity' => (int) $line['quantity'],
             'returned_quantity' => 0,
@@ -961,6 +966,7 @@ class AdminOrderForm extends Component
         $codPercentage = (float) ($this->order?->courier?->cod_percentage ?? 1);
 
         $items = array_map(fn (array $line) => [
+            'unit_cost' => $line['unit_cost'] ?? $line['purchase_price'],
             'purchase_price' => $line['purchase_price'],
             'quantity' => (int) $line['quantity'],
             'returned_quantity' => 0,

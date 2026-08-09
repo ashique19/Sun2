@@ -66,8 +66,23 @@
                     @error('compare_at_price') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                 </div>
                 <div>
-                    <label class="block text-sm font-medium mb-1">Purchase price (&#2547;)</label>
-                    <input type="number" min="0" step="1" wire:model.live="purchase_price" class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                    <label class="block text-sm font-medium mb-1">Main cost / purchase price (&#2547;)</label>
+                    <input type="number" min="0" step="1" wire:model.live="purchase_price"
+                        @disabled($hasBomMaterials)
+                        class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm disabled:bg-[#FAF6EF] disabled:text-[#8C8474]">
+                    <p class="mt-1 text-xs text-[#8C8474]">
+                        @if ($hasBomMaterials)
+                            Set by the primary material on the BOM below.
+                        @else
+                            Supplier buy price or main material. Total unit cost can include packaging heads below.
+                        @endif
+                    </p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Total unit cost (&#2547;)</label>
+                    <input type="text" value="{{ $unit_cost_display }}" readonly
+                        class="w-full rounded-lg border border-[#E0D6C2] bg-[#FAF6EF] px-4 py-2 text-sm text-[#6B6459]">
+                    <p class="mt-1 text-xs text-[#8C8474]">Used for COGS on orders. Main + other materials + cost heads.</p>
                 </div>
                 <div>
                     <label class="block text-sm font-medium mb-1">Reseller commission (&#2547; / unit)</label>
@@ -100,6 +115,121 @@
                 </label>
             </div>
         </div>
+
+        <section class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-5">
+            <div>
+                <h2 class="font-semibold text-lg">Cost breakdown (BOM)</h2>
+                <p class="mt-1 text-xs text-[#8C8474]">
+                    Link materials and other per-piece heads. Totals save into main cost + unit cost (used for COGS).
+                    Manage the catalog under <a href="{{ route('admin.materials') }}" wire:navigate class="text-[#C9A227] hover:underline">Materials</a>.
+                </p>
+            </div>
+
+            @if ($product)
+                <div class="overflow-hidden rounded-lg border border-[#EFE7D6]">
+                    <table class="w-full text-sm">
+                        <thead class="bg-[#FAF6EF] text-left text-[#6B6459]">
+                            <tr>
+                                <th class="px-3 py-2 font-medium">Material</th>
+                                <th class="px-3 py-2 font-medium">Qty / piece</th>
+                                <th class="px-3 py-2 font-medium">Line cost</th>
+                                <th class="px-3 py-2 font-medium">Primary</th>
+                                <th class="px-3 py-2 font-medium"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-[#E7DFCF]">
+                            @forelse ($product->materials as $material)
+                                @php
+                                    $lineCost = round((float) $material->pivot->quantity * (float) $material->unit_cost, 2);
+                                @endphp
+                                <tr wire:key="bom-material-{{ $material->id }}">
+                                    <td class="px-3 py-2">
+                                        <div class="font-medium">{{ $material->name }}</div>
+                                        <div class="text-xs text-[#8C8474]">৳{{ number_format((float) $material->unit_cost, 2) }} / {{ $material->unit }}</div>
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <input type="number" min="0.001" step="0.001" value="{{ $material->pivot->quantity }}"
+                                            wire:change="updateBomQuantity({{ $material->id }}, $event.target.value)"
+                                            class="w-24 rounded-lg border border-[#E0D6C2] px-2 py-1 text-sm">
+                                    </td>
+                                    <td class="px-3 py-2 tabular-nums">৳{{ number_format($lineCost, 2) }}</td>
+                                    <td class="px-3 py-2">
+                                        @if ($material->pivot->is_primary)
+                                            <span class="text-xs font-semibold text-emerald-700">Main</span>
+                                        @else
+                                            <button type="button" wire:click="setBomPrimary({{ $material->id }})"
+                                                class="text-xs text-[#C9A227] hover:underline">Make main</button>
+                                        @endif
+                                    </td>
+                                    <td class="px-3 py-2 text-right">
+                                        <button type="button" wire:click="removeBomMaterial({{ $material->id }})"
+                                            class="text-xs text-rose-600 hover:underline">Remove</button>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="5" class="px-3 py-4 text-center text-[#8C8474]">No materials linked yet.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="grid gap-3 sm:grid-cols-4">
+                    <div class="sm:col-span-2">
+                        <label class="mb-1 block text-xs font-medium text-[#6B6459]">Add material</label>
+                        <select wire:model="bomMaterialId" class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm">
+                            <option value="">Select…</option>
+                            @foreach ($materialsForBom as $materialOption)
+                                <option value="{{ $materialOption->id }}">{{ $materialOption->name }} (৳{{ number_format((float) $materialOption->unit_cost, 2) }})</option>
+                            @endforeach
+                        </select>
+                        @error('bomMaterialId') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-xs font-medium text-[#6B6459]">Qty / piece</label>
+                        <input type="number" min="0.001" step="0.001" wire:model="bomQuantity" class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm">
+                        @error('bomQuantity') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div class="flex flex-col justify-end gap-2">
+                        <label class="inline-flex items-center gap-2 text-xs">
+                            <input type="checkbox" wire:model="bomIsPrimary" class="rounded border-[#E0D6C2] text-[#C9A227]">
+                            Primary (main cost)
+                        </label>
+                        <button type="button" wire:click="addBomMaterial"
+                            class="rounded-full border border-[#C9A227] px-4 py-2 text-sm font-semibold text-[#C9A227] hover:bg-[#FAF6EF]">
+                            Add
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="mb-2 text-sm font-semibold">Other cost heads / piece</h3>
+                    <ul class="mb-3 space-y-1 text-sm">
+                        @forelse ($product->costHeads as $head)
+                            <li wire:key="cost-head-{{ $head->id }}" class="flex items-center justify-between rounded-lg border border-[#EFE7D6] px-3 py-2">
+                                <span>{{ $head->name }} — ৳{{ number_format((float) $head->amount, 2) }}</span>
+                                <button type="button" wire:click="removeCostHead({{ $head->id }})" class="text-xs text-rose-600 hover:underline">Remove</button>
+                            </li>
+                        @empty
+                            <li class="text-xs text-[#8C8474]">e.g. packaging labour, electricity share</li>
+                        @endforelse
+                    </ul>
+                    <div class="grid gap-3 sm:grid-cols-3">
+                        <input type="text" wire:model="costHeadName" placeholder="Head name" class="rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm sm:col-span-1">
+                        <input type="number" min="0" step="0.01" wire:model="costHeadAmount" placeholder="Amount" class="rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm">
+                        <button type="button" wire:click="addCostHead"
+                            class="rounded-full border border-[#C9A227] px-4 py-2 text-sm font-semibold text-[#C9A227] hover:bg-[#FAF6EF]">
+                            Add head
+                        </button>
+                    </div>
+                    @error('costHeadName') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                    @error('costHeadAmount') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                </div>
+            @else
+                <p class="text-sm text-[#8C8474]">Save the product first, then link materials and cost heads.</p>
+            @endif
+        </section>
 
         <section class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-6">
             <div class="flex flex-wrap items-start justify-between gap-3">

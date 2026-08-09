@@ -77,6 +77,7 @@ class OrderPlacer
                     'quantity' => $line['quantity'],
                     'price' => $product->price,
                     'purchase_price' => $product->purchase_price,
+                    'unit_cost' => $product->effectiveUnitCost(),
                     'max_discount' => $product->max_discount !== null
                         ? (float) $product->max_discount
                         : null,

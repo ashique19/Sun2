@@ -459,7 +459,7 @@ class AnalyticsService
 
         return Order::query()
             ->with([
-                'items:id,order_id,quantity,returned_quantity,purchase_price',
+                'items:id,order_id,quantity,returned_quantity,purchase_price,unit_cost',
                 'courier:id,slug,cod_percentage',
                 'adjustments:id,order_id,type,label,amount',
             ])

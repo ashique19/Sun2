@@ -98,7 +98,8 @@
                         <th class="px-4 py-3 font-medium">Category</th>
                         <th class="px-4 py-3 font-medium">Price</th>
                         <th class="px-4 py-3 font-medium">Regular</th>
-                        <th class="px-4 py-3 font-medium">Cost</th>
+                        <th class="px-4 py-3 font-medium">Main</th>
+                        <th class="px-4 py-3 font-medium">Unit cost</th>
                         <th class="px-4 py-3 font-medium">Commission</th>
                         <th class="px-4 py-3 font-medium">Max disc.</th>
                         <th class="px-4 py-3 font-medium">Stock</th>
@@ -141,6 +142,40 @@
                                     'nullable' => true,
                                 ],
                                 'purchase_price' => ['value' => (string) (int) round((float) $product->purchase_price), 'prefix' => '৳ ', 'nullable' => false],
+                            ] as $field => $cell)
+                                <td
+                                    class="px-4 py-3 tabular-nums {{ $editingProductId === $product->id && $editingField === $field ? '' : 'cursor-pointer select-none' }}"
+                                    title="Double-click to edit"
+                                    @if (! ($editingProductId === $product->id && $editingField === $field))
+                                        wire:dblclick="startInlineEdit({{ $product->id }}, '{{ $field }}', '{{ $cell['value'] }}')"
+                                    @endif
+                                >
+                                    @if ($editingProductId === $product->id && $editingField === $field)
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="1"
+                                            wire:model="editingValue"
+                                            wire:keydown.enter.prevent="saveInlineEdit"
+                                            wire:keydown.escape.prevent="cancelInlineEdit"
+                                            wire:blur="saveInlineEdit"
+                                            x-init="$nextTick(() => { $el.focus(); $el.select() })"
+                                            class="w-24 rounded-lg border border-[#C9A227] bg-white px-2 py-1 text-sm tabular-nums shadow-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
+                                            aria-label="Edit {{ str_replace('_', ' ', $field) }}"
+                                            @if ($cell['nullable']) placeholder="—" @endif
+                                        >
+                                        @error('editingValue')
+                                            <p class="mt-1 text-[11px] text-rose-600">{{ $message }}</p>
+                                        @enderror
+                                    @else
+                                        {{ $cell['prefix'] }}{{ $cell['value'] !== '' ? number_format((float) $cell['value'], 0) : '—' }}
+                                    @endif
+                                </td>
+                            @endforeach
+                            <td class="px-4 py-3 tabular-nums text-[#6B6459]" title="Total unit cost (COGS)">
+                                ৳ {{ number_format($product->effectiveUnitCost(), 0) }}
+                            </td>
+                            @foreach ([
                                 'commission' => ['value' => (string) (int) round((float) $product->commission), 'prefix' => '৳ ', 'nullable' => false],
                                 'max_discount' => [
                                     'value' => $product->max_discount !== null ? (string) (int) round((float) $product->max_discount) : '',

@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Services\Admin\ProductImageService;
 use App\Services\Admin\ProductPricedImageService;
+use App\Services\Admin\ProductUnitCostService;
 use App\Support\AdminAccess;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -228,6 +229,11 @@ class AdminProducts extends Component
         };
 
         $product->update([$field => $value]);
+
+        if ($field === 'purchase_price') {
+            app(ProductUnitCostService::class)->recalculate($product->fresh());
+        }
+
         $this->cancelInlineEdit();
     }
 

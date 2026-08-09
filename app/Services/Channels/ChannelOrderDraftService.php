@@ -603,6 +603,7 @@ class ChannelOrderDraftService
             if ($product) {
                 $price = (float) (int) round((float) $product->price);
                 $purchase = (float) (int) round((float) $product->purchase_price);
+                $unitCost = (float) (int) round($product->effectiveUnitCost());
 
                 return [[
                     'product_id' => (int) $product->id,
@@ -610,6 +611,7 @@ class ChannelOrderDraftService
                     'quantity' => $quantity,
                     'price' => $price,
                     'purchase_price' => $purchase,
+                    'unit_cost' => $unitCost,
                     'line_total' => $price * $quantity,
                     'product_image' => $product->primaryImagePath(),
                     'base_price' => $price,
@@ -629,6 +631,7 @@ class ChannelOrderDraftService
             'quantity' => $quantity,
             'price' => 0.0,
             'purchase_price' => 0.0,
+            'unit_cost' => 0.0,
             'line_total' => 0.0,
             'product_image' => null,
             'base_price' => 0.0,
@@ -652,6 +655,9 @@ class ChannelOrderDraftService
                 'base_price' => $line['base_price'] ?? $line['price'],
                 'price' => $line['price'],
                 'purchase_price' => $line['purchase_price'],
+                'unit_cost' => array_key_exists('unit_cost', $line) && $line['unit_cost'] !== null
+                    ? (float) $line['unit_cost']
+                    : (float) $line['purchase_price'],
                 'commission_rate' => $line['commission_rate'] ?? 0,
                 'commission_earned' => 0,
                 'max_discount' => isset($line['max_discount']) && $line['max_discount'] !== null

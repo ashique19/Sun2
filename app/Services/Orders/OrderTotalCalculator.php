@@ -13,7 +13,7 @@ use App\Models\OrderProduct;
  *
  * Locked decisions (see ORDER-ADJUSTMENTS-PLAN.md):
  * - total is clamped to >= 0; net revenue is NOT clamped (lossy orders show negative)
- * - COGS uses (quantity - returned_quantity) × purchase_price
+ * - COGS uses (quantity - returned_quantity) × unit_cost (fallback: purchase_price)
  * - Charges cannot be negative (enforced at service layer; not here)
  * - Delivery and courier cost are independent fields, not adjustments
  * - Packaging cost is a direct attributable cost subtracted from net revenue
@@ -25,7 +25,7 @@ class OrderTotalCalculator
      * Calculate all order money totals.
      *
      * @param  iterable<OrderAdjustment|array{type:string,amount:float|int}>  $adjustments
-     * @param  iterable<OrderProduct|array{purchase_price:float|int,quantity:int,returned_quantity?:int}>  $items  Order lines for COGS
+     * @param  iterable<OrderProduct|array{unit_cost?:float|int|null,purchase_price?:float|int,quantity:int,returned_quantity?:int}>  $items  Order lines for COGS
      */
     public function calculate(
         float $subtotal,
@@ -123,7 +123,9 @@ class OrderTotalCalculator
     /**
      * COGS from an iterable of order items.
      *
-     * @param  iterable<OrderProduct|array{purchase_price:float|int,quantity:int,returned_quantity?:int}>  $items
+     * Prefer snapshotted unit_cost (total). Fall back to purchase_price for legacy rows.
+     *
+     * @param  iterable<OrderProduct|array{unit_cost?:float|int|null,purchase_price?:float|int,quantity:int,returned_quantity?:int}>  $items
      */
     public function cogsFromItems(iterable $items): float
     {
@@ -131,20 +133,32 @@ class OrderTotalCalculator
 
         foreach ($items as $item) {
             if (is_array($item)) {
-                $purchasePrice = (float) ($item['purchase_price'] ?? 0);
+                $unitCost = $this->unitCostFromArray($item);
                 $qty = (int) ($item['quantity'] ?? 0);
                 $returned = (int) ($item['returned_quantity'] ?? 0);
             } else {
-                $purchasePrice = (float) $item->purchase_price;
+                $unitCost = $item->effectiveUnitCost();
                 $qty = (int) $item->quantity;
                 $returned = (int) ($item->returned_quantity ?? 0);
             }
 
             $effectiveQty = max(0, $qty - $returned);
-            $cogs += $purchasePrice * $effectiveQty;
+            $cogs += $unitCost * $effectiveQty;
         }
 
         return round($cogs, 2);
+    }
+
+    /**
+     * @param  array{unit_cost?:float|int|null,purchase_price?:float|int}  $item
+     */
+    private function unitCostFromArray(array $item): float
+    {
+        if (array_key_exists('unit_cost', $item) && $item['unit_cost'] !== null && $item['unit_cost'] !== '') {
+            return (float) $item['unit_cost'];
+        }
+
+        return (float) ($item['purchase_price'] ?? 0);
     }
 
     /**

@@ -29,6 +29,8 @@ use App\Livewire\Admin\AdminHeroSlides;
 use App\Livewire\Admin\AdminInbox;
 use App\Livewire\Admin\AdminInboxQuickReplies;
 use App\Livewire\Admin\AdminIssues;
+use App\Livewire\Admin\AdminMaterialEdit;
+use App\Livewire\Admin\AdminMaterials;
 use App\Livewire\Admin\AdminOrderForm;
 use App\Livewire\Admin\AdminOrders;
 use App\Livewire\Admin\AdminOrderShow;
@@ -219,6 +221,9 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/categories', AdminCategories::class)->name('categories');
         Route::get('/categories/create', AdminCategoryEdit::class)->name('categories.create');
         Route::get('/categories/{category}/edit', AdminCategoryEdit::class)->name('categories.edit');
+        Route::get('/materials', AdminMaterials::class)->name('materials');
+        Route::get('/materials/create', AdminMaterialEdit::class)->name('materials.create');
+        Route::get('/materials/{material}/edit', AdminMaterialEdit::class)->name('materials.edit');
         Route::get('/coupons', AdminCoupons::class)->name('coupons');
         Route::get('/coupons/create', AdminCouponEdit::class)->name('coupons.create');
         Route::get('/coupons/{coupon}/edit', AdminCouponEdit::class)->name('coupons.edit');

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
@@ -19,6 +20,7 @@ class Product extends Model
             'compare_at_price' => 'decimal:2',
             'priced_image_layout' => 'array',
             'purchase_price' => 'decimal:2',
+            'unit_cost' => 'decimal:2',
             'commission' => 'decimal:2',
             'max_discount' => 'decimal:2',
             'is_published' => 'boolean',
@@ -36,6 +38,32 @@ class Product extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function materials(): BelongsToMany
+    {
+        return $this->belongsToMany(Material::class, 'product_materials')
+            ->withPivot(['id', 'quantity', 'is_primary'])
+            ->withTimestamps()
+            ->orderByDesc('product_materials.is_primary')
+            ->orderBy('materials.name');
+    }
+
+    public function costHeads(): HasMany
+    {
+        return $this->hasMany(ProductCostHead::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    /**
+     * Total unit cost for COGS (falls back to main purchase_price when unset).
+     */
+    public function effectiveUnitCost(): float
+    {
+        if ($this->unit_cost !== null && $this->unit_cost !== '') {
+            return round((float) $this->unit_cost, 2);
+        }
+
+        return round((float) $this->purchase_price, 2);
     }
 
     public function images(): HasMany

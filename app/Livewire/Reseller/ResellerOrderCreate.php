@@ -109,6 +109,7 @@ class ResellerOrderCreate extends Component
                 'base_price' => $basePrice,
                 'commission_rate' => (float) $product->commission,
                 'purchase_price' => (float) (int) round((float) $product->purchase_price),
+                'unit_cost' => (float) (int) round($product->effectiveUnitCost()),
                 'line_total' => $basePrice,
                 'product_image' => StorefrontAssets::url($product->primaryImagePath()),
                 'stock_quantity' => (int) $product->stock_quantity,
@@ -170,6 +171,7 @@ class ResellerOrderCreate extends Component
             'base_price' => (float) $line['base_price'],
             'commission_rate' => (float) $line['commission_rate'],
             'purchase_price' => (float) $line['purchase_price'],
+            'unit_cost' => (float) ($line['unit_cost'] ?? $line['purchase_price']),
             'line_total' => (float) $this->roundedMoney($line['line_total']),
             'product_image' => $line['product_image'],
         ], $this->lines));

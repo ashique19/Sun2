@@ -62,13 +62,20 @@ class AdminProductNeighborSwipeTest extends TestCase
         $this->actingAs($this->adminUser());
         [$first, $middle, $last] = $this->orderedProducts();
 
-        Livewire::test(AdminProductShow::class, ['product' => $middle])
+        $html = Livewire::test(AdminProductShow::class, ['product' => $middle])
             ->assertSeeHtml('data-product-swipe-nav')
             ->assertSeeHtml('@touchstart.window.passive')
             ->assertSeeHtml('@touchend.window.passive')
-            ->assertSeeHtml('data-previous-url="'.route('admin.products.show', $first).'"')
-            ->assertSeeHtml('data-next-url="'.route('admin.products.show', $last).'"')
-            ->assertSeeHtml('max-width: 767px');
+            ->assertSeeHtml('data-previous-url="'.e(route('admin.products.show', $first)).'"')
+            ->assertSeeHtml('data-next-url="'.e(route('admin.products.show', $last)).'"')
+            ->assertSeeHtml('max-width: 767px')
+            ->assertSeeHtml("getAttribute('data-previous-url')")
+            ->html();
+
+        // Alpine must stay in attributes — broken quoting used to dump JS into visible text.
+        $visible = html_entity_decode(strip_tags($html), ENT_QUOTES, 'UTF-8');
+        $this->assertStringNotContainsString('window.Livewire.navigate', $visible);
+        $this->assertStringNotContainsString('onStart($event)', $visible);
     }
 
     #[Test]

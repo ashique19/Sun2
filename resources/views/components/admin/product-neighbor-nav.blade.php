@@ -12,6 +12,11 @@
     $disabledClass = 'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white text-[#6B6459] opacity-35 cursor-not-allowed';
 @endphp
 
+{{--
+    Keep Alpine in a double-quoted attribute with only single-quoted JS strings.
+    Avoid raw "<" inside the attribute (breaks HTML). Escape Alpine @ as @@ for Blade.
+    URLs come from data-* so @js() cannot puncture the attribute quoting.
+--}}
 <div
     {{ $attributes->class('flex items-center gap-1.5') }}
     role="group"
@@ -20,16 +25,22 @@
     data-previous-url="{{ $previousUrl ?? '' }}"
     data-next-url="{{ $nextUrl ?? '' }}"
     x-data="{
-        previousUrl: @js($previousUrl),
-        nextUrl: @js($nextUrl),
+        previousUrl: null,
+        nextUrl: null,
         startX: null,
         startY: null,
+        init() {
+            const previous = this.$el.getAttribute('data-previous-url');
+            const next = this.$el.getAttribute('data-next-url');
+            this.previousUrl = previous ? previous : null;
+            this.nextUrl = next ? next : null;
+        },
         onStart(event) {
             if (! window.matchMedia('(max-width: 767px)').matches) {
                 return;
             }
 
-            const touch = event.changedTouches?.[0];
+            const touch = event.changedTouches && event.changedTouches[0];
             if (! touch) {
                 return;
             }
@@ -49,7 +60,7 @@
                 return;
             }
 
-            const touch = event.changedTouches?.[0];
+            const touch = event.changedTouches && event.changedTouches[0];
             if (! touch) {
                 this.startX = null;
                 this.startY = null;
@@ -62,12 +73,12 @@
             this.startX = null;
             this.startY = null;
 
-            if (Math.abs(dx) < 70 || Math.abs(dx) <= Math.abs(dy)) {
+            if (70 > Math.abs(dx) || Math.abs(dy) >= Math.abs(dx)) {
                 return;
             }
 
             const target = event.target;
-            if (target instanceof Element && target.closest('input, textarea, select, [contenteditable=\"true\"], .no-product-swipe-nav')) {
+            if (target instanceof Element && target.closest('input, textarea, select, [contenteditable], .no-product-swipe-nav')) {
                 return;
             }
 
@@ -83,8 +94,8 @@
             }
         },
     }"
-    @touchstart.window.passive="onStart($event)"
-    @touchend.window.passive="onEnd($event)"
+    @@touchstart.window.passive="onStart($event)"
+    @@touchend.window.passive="onEnd($event)"
 >
     @if ($previous)
         <a href="{{ $previousUrl }}"

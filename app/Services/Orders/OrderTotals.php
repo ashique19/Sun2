@@ -37,7 +37,7 @@ readonly class OrderTotals
          */
         public float $total,
 
-        /** Cost of goods sold: sum(purchase_price × effective_qty) over order items. */
+        /** Cost of goods sold: sum(unit_cost × effective_qty) over order items (fallback purchase_price). */
         public float $cogs,
 
         /**

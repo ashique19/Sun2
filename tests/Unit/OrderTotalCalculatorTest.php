@@ -90,6 +90,17 @@ class OrderTotalCalculatorTest extends TestCase
         $this->assertNotSame($a->netRevenue, $c->netRevenue);
     }
 
+    public function test_cogs_prefers_unit_cost_and_falls_back_to_purchase_price(): void
+    {
+        $cogs = $this->calc->cogsFromItems([
+            ['unit_cost' => 140, 'purchase_price' => 100, 'quantity' => 1],
+            ['purchase_price' => 50, 'quantity' => 2],
+        ]);
+
+        // 140 + 50*2 = 240
+        $this->assertSame(240.0, $cogs);
+    }
+
     public function test_cogs_subtracts_returned_quantity(): void
     {
         $cogs = $this->calc->cogsFromItems([

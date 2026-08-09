@@ -63,8 +63,12 @@
                     </dd>
                 </div>
                 <div>
-                    <dt class="text-[#8C8474]">Cost</dt>
+                    <dt class="text-[#8C8474]">Main cost</dt>
                     <dd class="mt-0.5 font-medium tabular-nums">&#2547; {{ number_format((float) $product->purchase_price, 0) }}</dd>
+                </div>
+                <div>
+                    <dt class="text-[#8C8474]">Unit cost (COGS)</dt>
+                    <dd class="mt-0.5 font-medium tabular-nums">&#2547; {{ number_format($product->effectiveUnitCost(), 0) }}</dd>
                 </div>
                 <div>
                     <dt class="text-[#8C8474]">Reseller commission</dt>

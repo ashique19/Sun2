@@ -139,6 +139,10 @@
         class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.categories*') ? $active : $inactive }}">
         Categories
     </a>
+    <a href="{{ route('admin.materials') }}" wire:navigate {!! $click !!}
+        class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.materials*') ? $active : $inactive }}">
+        Materials
+    </a>
     <a href="{{ route('admin.coupons') }}" wire:navigate {!! $click !!}
         class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.coupons*') ? $active : $inactive }}">
         Coupons

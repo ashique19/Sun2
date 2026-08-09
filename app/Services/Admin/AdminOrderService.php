@@ -143,6 +143,9 @@ class AdminOrderService
                 'base_price' => $basePrice,
                 'price' => $line['price'],
                 'purchase_price' => $line['purchase_price'],
+                'unit_cost' => array_key_exists('unit_cost', $line) && $line['unit_cost'] !== null
+                    ? (float) $line['unit_cost']
+                    : (float) $line['purchase_price'],
                 'commission_rate' => $commissionRate,
                 'commission_earned' => 0,
                 'max_discount' => $maxDiscount !== null ? (float) $maxDiscount : null,

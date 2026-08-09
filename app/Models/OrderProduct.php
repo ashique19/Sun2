@@ -15,6 +15,7 @@ class OrderProduct extends Model
         return [
             'price' => 'decimal:2',
             'purchase_price' => 'decimal:2',
+            'unit_cost' => 'decimal:2',
             'base_price' => 'decimal:2',
             'commission_rate' => 'decimal:2',
             'commission_earned' => 'decimal:2',
@@ -34,6 +35,18 @@ class OrderProduct extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    /**
+     * Unit cost used for COGS (total), falling back to snapshotted purchase_price.
+     */
+    public function effectiveUnitCost(): float
+    {
+        if ($this->unit_cost !== null && $this->unit_cost !== '') {
+            return round((float) $this->unit_cost, 2);
+        }
+
+        return round((float) $this->purchase_price, 2);
     }
 
     public function imageUrl(): ?string

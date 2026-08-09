@@ -4,11 +4,14 @@ namespace App\Livewire\Admin;
 
 use App\Models\AiImagePrompt;
 use App\Models\Category;
+use App\Models\Material;
 use App\Models\Product;
+use App\Models\ProductCostHead;
 use App\Models\ProductImage;
 use App\Services\Admin\GeminiClient;
 use App\Services\Admin\ProductImageService;
 use App\Services\Admin\ProductPricedImageService;
+use App\Services\Admin\ProductUnitCostService;
 use App\Support\Fileinfo;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
@@ -41,7 +44,19 @@ class AdminProductEdit extends Component
 
     public string $purchase_price = '0';
 
+    public string $unit_cost_display = '0';
+
     public string $commission = '0';
+
+    public ?int $bomMaterialId = null;
+
+    public string $bomQuantity = '1';
+
+    public bool $bomIsPrimary = false;
+
+    public string $costHeadName = '';
+
+    public string $costHeadAmount = '0';
 
     public string $max_discount = '';
 
@@ -100,7 +115,11 @@ class AdminProductEdit extends Component
             return;
         }
 
-        $this->product = $product->load(['images' => fn ($q) => $q->orderBy('sort_order')]);
+        $this->product = $product->load([
+            'images' => fn ($q) => $q->orderBy('sort_order'),
+            'materials',
+            'costHeads',
+        ]);
         $this->syncImageAlts();
         $this->category_id = $product->category_id;
         $this->name = $product->name;
@@ -109,6 +128,7 @@ class AdminProductEdit extends Component
         $this->description = (string) ($product->description ?? '');
         $this->price = (string) (int) round((float) $product->price);
         $this->purchase_price = (string) (int) round((float) $product->purchase_price);
+        $this->unit_cost_display = (string) (int) round($product->effectiveUnitCost());
         $this->commission = (string) (int) round((float) $product->commission);
         $this->max_discount = $product->max_discount !== null
             ? (string) (int) round((float) $product->max_discount)
@@ -620,19 +640,138 @@ class AdminProductEdit extends Component
         $validated['sku'] = $validated['sku'] !== '' ? $validated['sku'] : null;
         $validated['description'] = $validated['description'] !== '' ? $validated['description'] : null;
 
-        $marginCap = $validated['price'] - $validated['purchase_price'];
+        if ($this->product) {
+            $this->product->update($validated);
+        } else {
+            $validated['unit_cost'] = $validated['purchase_price'];
+            $this->product = Product::query()->create($validated);
+        }
+
+        $this->product = app(ProductUnitCostService::class)->recalculate($this->product->fresh());
+        $this->purchase_price = (string) (int) round((float) $this->product->purchase_price);
+        $this->unit_cost_display = (string) (int) round($this->product->effectiveUnitCost());
+
+        $marginCap = (float) $validated['price'] - $this->product->effectiveUnitCost();
         if ($validated['max_discount'] !== null && $validated['max_discount'] > $marginCap) {
             $this->message = 'Warning: max discount (৳'.number_format($validated['max_discount'], 0).') exceeds unit margin (৳'.number_format(max(0, $marginCap), 0).'). Saved anyway.';
         }
 
-        if ($this->product) {
-            $this->product->update($validated);
-            $this->product->refresh();
-        } else {
-            $this->product = Product::query()->create($validated);
+        return $validated;
+    }
+
+    public function addBomMaterial(ProductUnitCostService $costs): void
+    {
+        $this->ensureProductSaved();
+
+        $validated = $this->validate([
+            'bomMaterialId' => ['required', 'integer', 'exists:materials,id'],
+            'bomQuantity' => ['required', 'numeric', 'gt:0'],
+            'bomIsPrimary' => ['boolean'],
+        ]);
+
+        if ($validated['bomIsPrimary']) {
+            $this->product->materials()->newPivotStatement()
+                ->where('product_id', $this->product->id)
+                ->update(['is_primary' => false]);
         }
 
-        return $validated;
+        $this->product->materials()->syncWithoutDetaching([
+            (int) $validated['bomMaterialId'] => [
+                'quantity' => round((float) $validated['bomQuantity'], 3),
+                'is_primary' => (bool) $validated['bomIsPrimary'],
+            ],
+        ]);
+
+        $this->refreshBom($costs);
+        $this->bomMaterialId = null;
+        $this->bomQuantity = '1';
+        $this->bomIsPrimary = false;
+        $this->message = 'Material linked and costs recalculated.';
+    }
+
+    public function updateBomQuantity(int $materialId, string $quantity, ProductUnitCostService $costs): void
+    {
+        if (! $this->product) {
+            return;
+        }
+
+        $qty = max(0.001, (float) $quantity);
+        $this->product->materials()->updateExistingPivot($materialId, [
+            'quantity' => round($qty, 3),
+        ]);
+        $this->refreshBom($costs);
+    }
+
+    public function setBomPrimary(int $materialId, ProductUnitCostService $costs): void
+    {
+        if (! $this->product) {
+            return;
+        }
+
+        $this->product->materials()->newPivotStatement()
+            ->where('product_id', $this->product->id)
+            ->update(['is_primary' => false]);
+
+        $this->product->materials()->updateExistingPivot($materialId, [
+            'is_primary' => true,
+        ]);
+        $this->refreshBom($costs);
+    }
+
+    public function removeBomMaterial(int $materialId, ProductUnitCostService $costs): void
+    {
+        if (! $this->product) {
+            return;
+        }
+
+        $this->product->materials()->detach($materialId);
+        $this->refreshBom($costs);
+        $this->message = 'Material removed and costs recalculated.';
+    }
+
+    public function addCostHead(ProductUnitCostService $costs): void
+    {
+        $this->ensureProductSaved();
+
+        $validated = $this->validate([
+            'costHeadName' => ['required', 'string', 'max:120'],
+            'costHeadAmount' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        ProductCostHead::query()->create([
+            'product_id' => $this->product->id,
+            'name' => $validated['costHeadName'],
+            'amount' => round((float) $validated['costHeadAmount'], 2),
+            'sort_order' => (int) $this->product->costHeads()->max('sort_order') + 1,
+        ]);
+
+        $this->refreshBom($costs);
+        $this->costHeadName = '';
+        $this->costHeadAmount = '0';
+        $this->message = 'Cost head added and unit cost recalculated.';
+    }
+
+    public function removeCostHead(int $headId, ProductUnitCostService $costs): void
+    {
+        if (! $this->product) {
+            return;
+        }
+
+        ProductCostHead::query()
+            ->where('product_id', $this->product->id)
+            ->whereKey($headId)
+            ->delete();
+
+        $this->refreshBom($costs);
+        $this->message = 'Cost head removed and unit cost recalculated.';
+    }
+
+    private function refreshBom(ProductUnitCostService $costs): void
+    {
+        $this->product = $costs->recalculate($this->product->fresh());
+        $this->product->load(['materials', 'costHeads', 'images' => fn ($q) => $q->orderBy('sort_order')]);
+        $this->purchase_price = (string) (int) round((float) $this->product->purchase_price);
+        $this->unit_cost_display = (string) (int) round($this->product->effectiveUnitCost());
     }
 
     public function delete(ProductImageService $images): void
@@ -742,8 +881,10 @@ class AdminProductEdit extends Component
 
         return view('livewire.admin.admin-product-edit', [
             'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
+            'materialsForBom' => Material::query()->orderBy('name')->get(['id', 'name', 'unit', 'unit_cost']),
             'recentAiPrompts' => $recentPrompts,
             'geminiConfigured' => app(GeminiClient::class)->isConfigured(),
+            'hasBomMaterials' => (bool) $this->product?->materials?->isNotEmpty(),
         ])->title($this->title());
     }
 

@@ -145,6 +145,9 @@ class ResellerOrderService
                 'base_price' => (float) $line['base_price'],
                 'price' => (float) $line['price'],
                 'purchase_price' => (float) ($line['purchase_price'] ?? 0),
+                'unit_cost' => array_key_exists('unit_cost', $line) && $line['unit_cost'] !== null
+                    ? (float) $line['unit_cost']
+                    : (float) ($line['purchase_price'] ?? 0),
                 'commission_rate' => (float) $line['commission_rate'],
                 'commission_earned' => 0,
                 'max_discount' => $maxDiscount !== null ? (float) $maxDiscount : null,

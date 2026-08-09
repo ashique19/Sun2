@@ -101,8 +101,10 @@ class AdminProductNeighborFilterScopeTest extends TestCase
         AdminProductListFilters::fromArray(['published' => '1'])->remember();
 
         Livewire::test(AdminProductShow::class, ['product' => $catalog['publishedA']])
+            ->assertSeeHtml('data-product-list-filters-toggle')
+            ->assertSeeHtml('aria-label="Search and filters"')
             ->assertSeeHtml('data-product-list-filters')
-            ->assertSee('Search & filters')
+            ->assertSeeHtml('filtersOpen: false')
             ->assertSeeHtml('data-next-url="'.route('admin.products.show', $catalog['publishedC']).'"')
             ->assertDontSeeHtml('data-next-url="'.route('admin.products.show', $catalog['draftB']).'"')
             ->assertSeeHtml(route('admin.products', ['published' => '1']));
@@ -130,8 +132,10 @@ class AdminProductNeighborFilterScopeTest extends TestCase
         AdminProductListFilters::fromArray(['published' => '1'])->remember();
 
         Livewire::test(AdminProductEdit::class, ['product' => $catalog['publishedA']])
+            ->assertSeeHtml('data-product-list-filters-toggle')
+            ->assertSeeHtml('aria-label="Search and filters"')
             ->assertSeeHtml('data-product-list-filters')
-            ->assertSeeHtml('x-data="{ open: false }"')
+            ->assertSeeHtml('filtersOpen: false')
             ->assertSeeHtml('data-next-url="'.route('admin.products.edit', $catalog['publishedC']).'"');
     }
 
@@ -142,6 +146,7 @@ class AdminProductNeighborFilterScopeTest extends TestCase
 
         Livewire::test(AdminProductEdit::class)
             ->assertDontSeeHtml('data-product-list-filters')
-            ->assertDontSee('Search & filters');
+            ->assertDontSeeHtml('data-product-list-filters-toggle')
+            ->assertDontSeeHtml('aria-label="Search and filters"');
     }
 }

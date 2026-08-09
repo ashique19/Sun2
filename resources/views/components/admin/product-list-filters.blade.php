@@ -1,6 +1,7 @@
 @props([
     'categories',
     'collapsible' => false,
+    'iconToggle' => false,
     'filters' => null,
 ])
 
@@ -9,7 +10,50 @@
     $activeCount = $filters->activeCount();
 @endphp
 
-@if ($collapsible)
+@if ($collapsible && $iconToggle)
+    {{-- Parent must provide Alpine `filtersOpen`; toggle lives in the page header. --}}
+    <div
+        id="product-list-filters-panel"
+        x-show="filtersOpen"
+        x-cloak
+        class="mb-6 rounded-xl border border-[#EFE7D6] bg-white px-4 py-3"
+        data-product-list-filters
+    >
+        <div class="mb-3 flex items-center justify-between gap-3">
+            <p class="text-sm font-medium text-[#1E1E1E]">Search &amp; filters</p>
+            @if ($activeCount > 0)
+                <button type="button"
+                    wire:click="clearAdminProductListFilters"
+                    class="text-xs font-medium text-[#6B6459] hover:text-[#C9A227]">
+                    Clear
+                </button>
+            @endif
+        </div>
+        <div class="flex flex-wrap gap-3">
+            <input type="search" wire:model.live.debounce.300ms="search" placeholder="Search name, SKU…"
+                class="min-w-[12rem] flex-1 rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+            <input type="number" min="0" step="1" inputmode="numeric"
+                wire:model.live.debounce.300ms="priceMin"
+                placeholder="Min price"
+                class="w-28 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums">
+            <input type="number" min="0" step="1" inputmode="numeric"
+                wire:model.live.debounce.300ms="priceMax"
+                placeholder="Max price"
+                class="w-28 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums">
+            <select wire:model.live="category" class="rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                <option value="">All categories</option>
+                @foreach ($categories as $cat)
+                    <option value="{{ $cat->id }}">{{ $cat->name }}</option>
+                @endforeach
+            </select>
+            <select wire:model.live="published" class="rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                <option value="">All</option>
+                <option value="1">Published</option>
+                <option value="0">Draft</option>
+            </select>
+        </div>
+    </div>
+@elseif ($collapsible)
     <div
         class="mb-6 rounded-xl border border-[#EFE7D6] bg-white overflow-hidden"
         x-data="{ open: false }"

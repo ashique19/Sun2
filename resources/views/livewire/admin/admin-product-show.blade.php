@@ -1,6 +1,6 @@
 <div
-    x-data="{ lightboxSrc: null, lightboxAlt: '' }"
-    @keydown.escape.window="lightboxSrc = null">
+    x-data="{ lightboxSrc: null, lightboxAlt: '', filtersOpen: false }"
+    @keydown.escape.window="lightboxSrc = null; filtersOpen = false">
     <div class="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div class="flex items-start gap-4 min-w-0">
             @php
@@ -37,6 +37,7 @@
         </div>
         <div class="flex flex-wrap items-center gap-2">
             <x-admin.product-neighbor-nav :product="$product" route-name="admin.products.show" />
+            <x-admin.product-list-filters-toggle :filters="$listFilters" />
             <a href="{{ route('admin.products.edit', $product) }}" wire:navigate
                 class="rounded-lg bg-[#C9A227] px-4 py-2 text-sm font-medium text-white hover:bg-[#b89220]">
                 Edit product
@@ -48,6 +49,7 @@
         :categories="$categories"
         :filters="$listFilters"
         collapsible
+        icon-toggle
     />
 
     <div class="grid items-start gap-4 sm:gap-6 xl:grid-cols-3 mb-6">

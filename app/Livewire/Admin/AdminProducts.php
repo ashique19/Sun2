@@ -8,6 +8,7 @@ use App\Services\Admin\ProductImageService;
 use App\Services\Admin\ProductPricedImageService;
 use App\Services\Admin\ProductUnitCostService;
 use App\Support\AdminAccess;
+use App\Support\AdminProductListFilters;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -264,21 +265,12 @@ class AdminProducts extends Component
 
     public function render()
     {
-        $priceMin = $this->normalizedPriceBound($this->priceMin);
-        $priceMax = $this->normalizedPriceBound($this->priceMax);
+        $filters = $this->listFilters();
+        $filters->remember();
 
-        if ($priceMin !== null && $priceMax !== null && $priceMin > $priceMax) {
-            [$priceMin, $priceMax] = [$priceMax, $priceMin];
-        }
-
-        $products = Product::query()
-            ->with(['category:id,name', 'images' => fn ($q) => $q->orderBy('sort_order')->limit(1)])
-            ->when($this->search !== '', fn ($q) => $q->searchTerm($this->search, includePrice: false))
-            ->when($priceMin !== null, fn ($q) => $q->where('price', '>=', $priceMin))
-            ->when($priceMax !== null, fn ($q) => $q->where('price', '<=', $priceMax))
-            ->when($this->category !== '', fn ($q) => $q->where('category_id', $this->category))
-            ->when($this->published === '1', fn ($q) => $q->where('is_published', true))
-            ->when($this->published === '0', fn ($q) => $q->where('is_published', false))
+        $products = $filters->apply(
+            Product::query()->with(['category:id,name', 'images' => fn ($q) => $q->orderBy('sort_order')->limit(1)])
+        )
             ->orderBy('display_order')
             ->orderByDesc('id')
             ->paginate(50);
@@ -289,14 +281,14 @@ class AdminProducts extends Component
         ]);
     }
 
-    private function normalizedPriceBound(string $value): ?float
+    private function listFilters(): AdminProductListFilters
     {
-        $digits = preg_replace('/[^\d.]/', '', trim($value)) ?? '';
-
-        if ($digits === '' || ! is_numeric($digits)) {
-            return null;
-        }
-
-        return max(0, (float) $digits);
+        return AdminProductListFilters::fromArray([
+            'search' => $this->search,
+            'category' => $this->category,
+            'published' => $this->published,
+            'priceMin' => $this->priceMin,
+            'priceMax' => $this->priceMax,
+        ]);
     }
 }

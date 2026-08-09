@@ -5,7 +5,7 @@
 
     <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
-            <a href="{{ route('admin.products') }}" wire:navigate class="text-sm text-[#C9A227] hover:underline">&larr; Products</a>
+            <a href="{{ route('admin.products', ($listFilters ?? \App\Support\AdminProductListFilters::recall())->queryParameters()) }}" wire:navigate class="text-sm text-[#C9A227] hover:underline">&larr; Products</a>
             <h1 class="font-serif text-3xl font-semibold mt-2 line-clamp-2">{{ $product?->name ?? 'Create Product' }}</h1>
         </div>
         @if ($product)
@@ -17,6 +17,14 @@
             </div>
         @endif
     </div>
+
+    @if ($product)
+        <x-admin.product-list-filters
+            :categories="$categories"
+            :filters="$listFilters"
+            collapsible
+        />
+    @endif
 
     @if ($message)
         <div class="rounded-lg bg-emerald-50 text-emerald-700 text-sm px-4 py-3 mb-4">{{ $message }}</div>

@@ -21,7 +21,7 @@
                 </button>
             @endif
             <div class="min-w-0">
-                <a href="{{ route('admin.products') }}" wire:navigate class="text-sm text-[#C9A227] hover:underline">&larr; Products</a>
+                <a href="{{ route('admin.products', $listFilters->queryParameters()) }}" wire:navigate class="text-sm text-[#C9A227] hover:underline">&larr; Products</a>
                 <h1 class="font-serif text-2xl sm:text-3xl font-semibold mt-1 truncate">{{ $product->name }}</h1>
                 <p class="mt-1 text-sm text-[#6B6459]">
                     {{ $product->sku ?: $product->slug }}
@@ -43,6 +43,12 @@
             </a>
         </div>
     </div>
+
+    <x-admin.product-list-filters
+        :categories="$categories"
+        :filters="$listFilters"
+        collapsible
+    />
 
     <div class="grid items-start gap-4 sm:gap-6 xl:grid-cols-3 mb-6">
         <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6 xl:col-span-2">

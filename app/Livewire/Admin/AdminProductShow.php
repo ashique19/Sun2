@@ -2,6 +2,8 @@
 
 namespace App\Livewire\Admin;
 
+use App\Livewire\Admin\Concerns\InteractsWithAdminProductListFilters;
+use App\Models\Category;
 use App\Models\Product;
 use App\Services\Admin\SalesReportService;
 use App\Support\AdminAccess;
@@ -11,11 +13,15 @@ use Livewire\Component;
 #[Layout('components.layouts.admin')]
 class AdminProductShow extends Component
 {
+    use InteractsWithAdminProductListFilters;
+
     public Product $product;
 
     public function mount(Product $product): void
     {
         AdminAccess::ensureStaffAdmin();
+
+        $this->hydrateAdminProductListFilters();
 
         $this->product = $product->load([
             'category:id,name',
@@ -30,6 +36,8 @@ class AdminProductShow extends Component
 
     public function render(SalesReportService $reports)
     {
+        $this->rememberAdminProductListFilters();
+
         $summary = $reports->productSummary($this->product);
         $channels = $reports->productChannelBreakdown($this->product);
         $rows = $reports->productPerformance($this->product, 48);
@@ -49,6 +57,8 @@ class AdminProductShow extends Component
             'channels' => $channels,
             'rows' => $rows,
             'monthTotals' => $monthTotals,
+            'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
+            'listFilters' => $this->currentAdminProductListFilters(),
         ])->title($this->title());
     }
 }

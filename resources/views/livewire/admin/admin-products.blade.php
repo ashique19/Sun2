@@ -64,29 +64,7 @@
         <div class="rounded-lg bg-rose-50 text-rose-700 text-sm px-4 py-3 mb-4">{{ $message }}</div>
     @enderror
 
-    <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-6 flex flex-wrap gap-3">
-        <input type="search" wire:model.live.debounce.300ms="search" placeholder="Search name, SKU…"
-            class="flex-1 min-w-[12rem] rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
-        <input type="number" min="0" step="1" inputmode="numeric"
-            wire:model.live.debounce.300ms="priceMin"
-            placeholder="Min price"
-            class="w-28 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums">
-        <input type="number" min="0" step="1" inputmode="numeric"
-            wire:model.live.debounce.300ms="priceMax"
-            placeholder="Max price"
-            class="w-28 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums">
-        <select wire:model.live="category" class="rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
-            <option value="">All categories</option>
-            @foreach ($categories as $cat)
-                <option value="{{ $cat->id }}">{{ $cat->name }}</option>
-            @endforeach
-        </select>
-        <select wire:model.live="published" class="rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
-            <option value="">All</option>
-            <option value="1">Published</option>
-            <option value="0">Draft</option>
-        </select>
-    </div>
+    <x-admin.product-list-filters :categories="$categories" />
 
     <div class="rounded-xl border border-[#EFE7D6] bg-white overflow-hidden">
         <div class="overflow-x-auto">

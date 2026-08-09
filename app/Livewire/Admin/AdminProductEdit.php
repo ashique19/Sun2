@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Admin;
 
+use App\Livewire\Admin\Concerns\InteractsWithAdminProductListFilters;
 use App\Models\AiImagePrompt;
 use App\Models\Category;
 use App\Models\Material;
@@ -26,6 +27,7 @@ use Throwable;
 #[Layout('components.layouts.admin')]
 class AdminProductEdit extends Component
 {
+    use InteractsWithAdminProductListFilters;
     use WithFileUploads;
 
     public ?Product $product = null;
@@ -111,6 +113,8 @@ class AdminProductEdit extends Component
 
     public function mount(?Product $product = null): void
     {
+        $this->hydrateAdminProductListFilters();
+
         if (! $product?->exists) {
             return;
         }
@@ -875,6 +879,8 @@ class AdminProductEdit extends Component
 
     public function render()
     {
+        $this->rememberAdminProductListFilters();
+
         $recentPrompts = AiImagePrompt::query()
             ->recent(12)
             ->get(['id', 'prompt', 'last_used_at', 'use_count']);
@@ -885,6 +891,7 @@ class AdminProductEdit extends Component
             'recentAiPrompts' => $recentPrompts,
             'geminiConfigured' => app(GeminiClient::class)->isConfigured(),
             'hasBomMaterials' => (bool) $this->product?->materials?->isNotEmpty(),
+            'listFilters' => $this->currentAdminProductListFilters(),
         ])->title($this->title());
     }
 

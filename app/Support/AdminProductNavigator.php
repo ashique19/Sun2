@@ -8,14 +8,19 @@ use Illuminate\Database\Eloquent\Builder;
 class AdminProductNavigator
 {
     /**
-     * Previous product in admin list order (display_order ASC, id DESC).
+     * Previous product in admin list order (display_order ASC, id DESC),
+     * scoped to the current admin product list filters when provided.
      */
-    public static function previous(Product $product): ?Product
+    public static function previous(Product $product, ?AdminProductListFilters $filters = null): ?Product
     {
+        $filters ??= AdminProductListFilters::recall();
         $displayOrder = (int) ($product->display_order ?? 0);
         $id = (int) $product->id;
 
-        return Product::query()
+        $query = Product::query();
+        $filters->apply($query);
+
+        return $query
             ->where(function (Builder $query) use ($displayOrder, $id): void {
                 $query->where('display_order', '<', $displayOrder)
                     ->orWhere(function (Builder $sameOrder) use ($displayOrder, $id): void {
@@ -29,14 +34,19 @@ class AdminProductNavigator
     }
 
     /**
-     * Next product in admin list order (display_order ASC, id DESC).
+     * Next product in admin list order (display_order ASC, id DESC),
+     * scoped to the current admin product list filters when provided.
      */
-    public static function next(Product $product): ?Product
+    public static function next(Product $product, ?AdminProductListFilters $filters = null): ?Product
     {
+        $filters ??= AdminProductListFilters::recall();
         $displayOrder = (int) ($product->display_order ?? 0);
         $id = (int) $product->id;
 
-        return Product::query()
+        $query = Product::query();
+        $filters->apply($query);
+
+        return $query
             ->where(function (Builder $query) use ($displayOrder, $id): void {
                 $query->where('display_order', '>', $displayOrder)
                     ->orWhere(function (Builder $sameOrder) use ($displayOrder, $id): void {

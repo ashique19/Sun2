@@ -34,8 +34,11 @@ class AdminDashboardLayoutTest extends TestCase
         Livewire::test(AdminDashboard::class)
             ->assertSeeHtml('aria-label="Create product"')
             ->assertSee(route('admin.products.create'), false)
+            // Product uses a cube icon; order keeps the plain "+".
+            ->assertSeeHtml('d="M10.362 1.093a.75.75 0 0 0-.724 0L2.523 5.018')
             ->assertSeeHtml('aria-label="Create order"')
             ->assertSee(route('admin.orders.create'), false)
+            ->assertSeeHtml('aria-label="Create order"')
             ->assertSeeHtml('aria-label="Open inbox"')
             ->assertSee(route('admin.inbox'), false)
             ->assertSee('Admin Attention')

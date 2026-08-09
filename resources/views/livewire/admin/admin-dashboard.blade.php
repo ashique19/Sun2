@@ -14,7 +14,7 @@
                 aria-label="Create product"
                 title="Create product">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
-                    <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                    <path d="M10.362 1.093a.75.75 0 0 0-.724 0L2.523 5.018a.75.75 0 0 0 0 1.326l6.726 3.863a2.25 2.25 0 0 0 2.156 0l6.726-3.863a.75.75 0 0 0 0-1.326L10.362 1.093ZM2.25 8.84v5.662c0 .536.288 1.03.755 1.3l6.5 3.75a.75.75 0 0 0 .745 0l6.5-3.75a1.5 1.5 0 0 0 .755-1.3V8.84l-5.974 3.432a3.75 3.75 0 0 1-3.592 0L2.25 8.84Z" />
                 </svg>
             </a>
             <a href="{{ route('admin.orders.create') }}"

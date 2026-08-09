@@ -8,6 +8,15 @@
     <div class="mb-6 flex items-center justify-between gap-3">
         <h1 class="font-serif text-3xl font-semibold">Dashboard</h1>
         <div class="flex items-center gap-2">
+            <a href="{{ route('admin.products.create') }}"
+                wire:navigate
+                class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227] hover:bg-[#FAF6EF] hover:text-[#C9A227] transition"
+                aria-label="Create product"
+                title="Create product">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+                    <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                </svg>
+            </a>
             <a href="{{ route('admin.orders.create') }}"
                 class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227] hover:bg-[#FAF6EF] hover:text-[#C9A227] transition"
                 aria-label="Create order"

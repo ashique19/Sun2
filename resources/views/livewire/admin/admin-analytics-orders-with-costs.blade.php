@@ -47,6 +47,28 @@
                         <th class="px-4 py-3 font-medium text-right">Direct</th>
                         <th class="px-4 py-3 font-medium text-right">P/L</th>
                     </tr>
+                    <tr class="border-t border-[#E7DFCF] text-[11px]">
+                        <th class="px-4 py-2 font-normal text-[#8C8474]">Filter 0</th>
+                        @foreach ([
+                            'zeroRevenue' => 'Revenue is ৳0',
+                            'zeroCogs' => 'COGS is ৳0',
+                            'zeroPackaging' => 'Packaging is ৳0',
+                            'zeroCourier' => 'Courier is ৳0',
+                            'zeroCod' => 'COD fee is ৳0',
+                            'zeroDirect' => 'Direct cost is ৳0',
+                            'zeroProfit' => 'P/L is ৳0',
+                        ] as $property => $label)
+                            <th class="px-4 py-2 text-right font-normal">
+                                <label class="inline-flex cursor-pointer items-center gap-1.5 text-[#6B6459]" title="{{ $label }}">
+                                    <input type="checkbox"
+                                        wire:model.live="{{ $property }}"
+                                        class="h-3.5 w-3.5 rounded border-[#E0D6C2] text-[#C9A227] focus:ring-[#C9A227]/40"
+                                        aria-label="{{ $label }}">
+                                    <span>0</span>
+                                </label>
+                            </th>
+                        @endforeach
+                    </tr>
                 </thead>
                 <tbody class="divide-y divide-[#E7DFCF]">
                     @forelse ($orders as $order)

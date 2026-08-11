@@ -269,4 +269,89 @@ class AdminAnalyticsOrdersWithCostsTest extends TestCase
             ->assertSee('COST-1001')
             ->assertDontSee('OTHER-9');
     }
+
+    #[Test]
+    public function zero_checkboxes_filter_each_numeric_column(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+
+        $withCosts = $this->orderWithCosts($courier);
+        $withCosts->update(['order_number' => 'HAS-COSTS']);
+
+        $zeroCogsProduct = Product::query()->create([
+            'name' => 'Zero',
+            'slug' => 'zero-cogs-filter',
+            'price' => 100,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'is_published' => true,
+        ]);
+
+        $zeroCogs = Order::query()->create([
+            'order_number' => 'ZERO-COGS',
+            'name' => 'Zero Cogs Customer',
+            'phone' => '01710000077',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'delivered',
+            'subtotal' => 500,
+            'delivery_charge' => 80,
+            'courier_charge' => 60,
+            'packaging_cost' => 20,
+            'collected_amount' => 580,
+            'total' => 580,
+            'courier_id' => $courier->id,
+            'actual_delivery_date' => now(),
+            'placed_at' => now(),
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $zeroCogs->id,
+            'product_id' => $zeroCogsProduct->id,
+            'name' => 'Zero',
+            'quantity' => 1,
+            'price' => 500,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'line_total' => 500,
+        ]);
+
+        $zeroPack = Order::query()->create([
+            'order_number' => 'ZERO-PACK',
+            'name' => 'Zero Pack',
+            'phone' => '01710000066',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'delivered',
+            'subtotal' => 500,
+            'delivery_charge' => 80,
+            'courier_charge' => 60,
+            'packaging_cost' => 0,
+            'collected_amount' => 580,
+            'total' => 580,
+            'courier_id' => $courier->id,
+            'actual_delivery_date' => now(),
+            'placed_at' => now(),
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $zeroPack->id,
+            'name' => 'Item',
+            'quantity' => 1,
+            'price' => 500,
+            'purchase_price' => 100,
+            'unit_cost' => 100,
+            'line_total' => 500,
+        ]);
+
+        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
+            ->assertSeeHtml('aria-label="COGS is ৳0"')
+            ->assertSeeHtml('aria-label="P/L is ৳0"')
+            ->set('zeroCogs', true)
+            ->assertSee('ZERO-COGS')
+            ->assertDontSee('HAS-COSTS')
+            ->set('zeroCogs', false)
+            ->set('zeroPackaging', true)
+            ->assertSee('ZERO-PACK')
+            ->assertDontSee('HAS-COSTS');
+    }
 }

@@ -9,6 +9,8 @@ use App\Services\Admin\AnalyticsService;
 use App\Services\Admin\ProductUnitCostService;
 use App\Support\AdminAccess;
 use App\Support\StorefrontAssets;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -29,6 +31,27 @@ class AdminAnalyticsOrdersWithCosts extends Component
 
     #[Url]
     public string $status = '';
+
+    #[Url]
+    public bool $zeroRevenue = false;
+
+    #[Url]
+    public bool $zeroCogs = false;
+
+    #[Url]
+    public bool $zeroPackaging = false;
+
+    #[Url]
+    public bool $zeroCourier = false;
+
+    #[Url]
+    public bool $zeroCod = false;
+
+    #[Url]
+    public bool $zeroDirect = false;
+
+    #[Url]
+    public bool $zeroProfit = false;
 
     public ?int $editingOrderId = null;
 
@@ -72,6 +95,48 @@ class AdminAnalyticsOrdersWithCosts extends Component
     }
 
     public function updatedStatus(): void
+    {
+        $this->resetPage();
+        $this->cancelInlineEdit();
+    }
+
+    public function updatedZeroRevenue(): void
+    {
+        $this->resetPage();
+        $this->cancelInlineEdit();
+    }
+
+    public function updatedZeroCogs(): void
+    {
+        $this->resetPage();
+        $this->cancelInlineEdit();
+    }
+
+    public function updatedZeroPackaging(): void
+    {
+        $this->resetPage();
+        $this->cancelInlineEdit();
+    }
+
+    public function updatedZeroCourier(): void
+    {
+        $this->resetPage();
+        $this->cancelInlineEdit();
+    }
+
+    public function updatedZeroCod(): void
+    {
+        $this->resetPage();
+        $this->cancelInlineEdit();
+    }
+
+    public function updatedZeroDirect(): void
+    {
+        $this->resetPage();
+        $this->cancelInlineEdit();
+    }
+
+    public function updatedZeroProfit(): void
     {
         $this->resetPage();
         $this->cancelInlineEdit();
@@ -282,6 +347,7 @@ class AdminAnalyticsOrdersWithCosts extends Component
                 });
             })
             ->when($this->status !== '', fn ($query) => $query->where('status', $this->status))
+            ->tap(fn (Builder $query) => $this->applyZeroFilters($query))
             ->orderByDesc('id')
             ->paginate(50);
 
@@ -306,6 +372,79 @@ class AdminAnalyticsOrdersWithCosts extends Component
                 'draft' => 'Draft',
             ],
         ]);
+    }
+
+    private function applyZeroFilters(Builder $query): void
+    {
+        $cogs = $this->cogsExpressionSql();
+        $cod = $this->codExpressionSql();
+        $packaging = 'COALESCE(orders.packaging_cost, 0)';
+        $courier = 'COALESCE(orders.courier_charge, 0)';
+        $revenue = 'COALESCE(orders.collected_amount, 0)';
+        $direct = "({$cogs} + {$packaging} + {$courier} + {$cod})";
+        $profit = "({$revenue} - {$direct})";
+
+        if ($this->zeroRevenue) {
+            $query->whereRaw("{$revenue} = 0");
+        }
+
+        if ($this->zeroCogs) {
+            $query->whereRaw("{$cogs} < 0.01");
+        }
+
+        if ($this->zeroPackaging) {
+            $query->whereRaw("{$packaging} = 0");
+        }
+
+        if ($this->zeroCourier) {
+            $query->whereRaw("{$courier} = 0");
+        }
+
+        if ($this->zeroCod) {
+            $query->whereRaw("{$cod} < 0.01");
+        }
+
+        if ($this->zeroDirect) {
+            $query->whereRaw("{$direct} < 0.01");
+        }
+
+        if ($this->zeroProfit) {
+            $query->whereRaw("ABS({$profit}) < 0.01");
+        }
+    }
+
+    private function cogsExpressionSql(): string
+    {
+        $qty = $this->greatestSql('(order_products.quantity - COALESCE(order_products.returned_quantity, 0))', '0');
+
+        return "COALESCE((
+            SELECT SUM({$qty} * COALESCE(order_products.unit_cost, order_products.purchase_price, 0))
+            FROM order_products
+            WHERE order_products.order_id = orders.id
+        ), 0)";
+    }
+
+    private function codExpressionSql(): string
+    {
+        $steadfastBase = $this->greatestSql(
+            '(COALESCE(orders.collected_amount, 0) - COALESCE(orders.delivery_charge, 0))',
+            '0',
+        );
+
+        return "CASE
+            WHEN COALESCE(orders.collected_amount, 0) <= 0 THEN 0
+            WHEN COALESCE((SELECT couriers.cod_percentage FROM couriers WHERE couriers.id = orders.courier_id), 1) <= 0 THEN 0
+            WHEN LOWER(COALESCE((SELECT couriers.slug FROM couriers WHERE couriers.id = orders.courier_id), '')) = 'steadfast'
+                THEN ROUND({$steadfastBase} * COALESCE((SELECT couriers.cod_percentage FROM couriers WHERE couriers.id = orders.courier_id), 1) / 100.0, 2)
+            ELSE ROUND(COALESCE(orders.collected_amount, 0) * COALESCE((SELECT couriers.cod_percentage FROM couriers WHERE couriers.id = orders.courier_id), 1) / 100.0, 2)
+        END";
+    }
+
+    private function greatestSql(string $left, string $right): string
+    {
+        return DB::connection()->getDriverName() === 'sqlite'
+            ? "max({$left}, {$right})"
+            : "GREATEST({$left}, {$right})";
     }
 
     private function refreshCogsModalRows(): void

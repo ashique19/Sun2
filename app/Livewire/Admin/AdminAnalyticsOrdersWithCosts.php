@@ -84,11 +84,30 @@ class AdminAnalyticsOrdersWithCosts extends Component
 
     public ?string $cogsModalMessage = null;
 
+    public bool $repairModalOpen = false;
+
+    public bool $repairRunning = false;
+
+    public bool $repairDone = false;
+
     public int $repairAfterId = 0;
 
-    public int $repairBatchSize = 20;
+    public int $repairTotal = 0;
 
-    public ?string $repairMessage = null;
+    public int $repairScanned = 0;
+
+    public int $repairFixedOrders = 0;
+
+    public int $repairBackfilledLines = 0;
+
+    public int $repairClearedReturnLines = 0;
+
+    public int $repairBatchNumber = 0;
+
+    /** @var list<string> */
+    public array $repairRecentFixes = [];
+
+    public ?string $repairStatusLine = null;
 
     public function mount(): void
     {
@@ -271,38 +290,105 @@ class AdminAnalyticsOrdersWithCosts extends Component
         $this->resetValidation();
     }
 
-    public function repairNextCostBatch(OrderCostSnapshotRepairService $repair): void
+    public function openCostRepairModal(OrderCostSnapshotRepairService $repair): void
     {
-        $this->repairBatchSize = in_array($this->repairBatchSize, [10, 20], true)
-            ? $this->repairBatchSize
-            : 20;
+        $this->repairModalOpen = true;
+        $this->repairRunning = false;
+        $this->repairDone = false;
+        $this->repairAfterId = 0;
+        $this->repairTotal = $repair->eligibleOrderCount();
+        $this->repairScanned = 0;
+        $this->repairFixedOrders = 0;
+        $this->repairBackfilledLines = 0;
+        $this->repairClearedReturnLines = 0;
+        $this->repairBatchNumber = 0;
+        $this->repairRecentFixes = [];
+        $this->repairStatusLine = $this->repairTotal === 0
+            ? 'No orders to scan.'
+            : 'Ready to scan '.number_format($this->repairTotal).' orders in batches of '.OrderCostSnapshotRepairService::BATCH_SIZE.'.';
+    }
 
-        $result = $repair->repairNextBatch($this->repairAfterId, $this->repairBatchSize);
-        $this->repairAfterId = $result['next_after_id'];
-
-        $parts = [
-            'Scanned '.$result['scanned'],
-            'fixed '.$result['fixed_orders'].' order(s)',
-            'backfilled '.$result['backfilled_lines'].' line(s)',
-            'cleared '.$result['cleared_return_lines'].' return line(s)',
-        ];
-
-        if ($result['sample_order_numbers'] !== []) {
-            $parts[] = 'e.g. '.implode(', ', $result['sample_order_numbers']);
+    public function startCostRepair(OrderCostSnapshotRepairService $repair): void
+    {
+        if (! $this->repairModalOpen || $this->repairRunning) {
+            return;
         }
 
-        $this->repairMessage = implode(' · ', $parts)
-            .($result['done'] ? ' · Done — restart from the top to rescan.' : ' · Click again for the next batch.');
+        if ($this->repairTotal < 1) {
+            $this->repairDone = true;
+            $this->repairStatusLine = 'No orders to scan.';
 
-        if ($result['done']) {
-            $this->repairAfterId = 0;
+            return;
+        }
+
+        $this->repairRunning = true;
+        $this->repairDone = false;
+        $this->repairStatusLine = 'Starting…';
+        $this->continueCostRepair($repair);
+    }
+
+    public function continueCostRepair(OrderCostSnapshotRepairService $repair): void
+    {
+        if (! $this->repairModalOpen || ! $this->repairRunning || $this->repairDone) {
+            return;
+        }
+
+        $result = $repair->repairNextBatch(
+            $this->repairAfterId,
+            OrderCostSnapshotRepairService::BATCH_SIZE,
+        );
+
+        $this->repairBatchNumber++;
+        $this->repairAfterId = $result['next_after_id'];
+        $this->repairScanned += $result['scanned'];
+        $this->repairFixedOrders += $result['fixed_orders'];
+        $this->repairBackfilledLines += $result['backfilled_lines'];
+        $this->repairClearedReturnLines += $result['cleared_return_lines'];
+
+        foreach ($result['sample_order_numbers'] as $orderNumber) {
+            if (! in_array($orderNumber, $this->repairRecentFixes, true)) {
+                $this->repairRecentFixes[] = $orderNumber;
+            }
+        }
+        $this->repairRecentFixes = array_slice($this->repairRecentFixes, -12);
+
+        $pct = $this->repairTotal > 0
+            ? min(100, (int) round(($this->repairScanned / $this->repairTotal) * 100))
+            : 100;
+
+        $this->repairStatusLine = 'Batch '.$this->repairBatchNumber
+            .' · scanned '.number_format($this->repairScanned).' / '.number_format($this->repairTotal)
+            .' ('.$pct.'%)'
+            .' · fixed '.number_format($this->repairFixedOrders).' orders'
+            .' · backfilled '.number_format($this->repairBackfilledLines)
+            .' · cleared '.number_format($this->repairClearedReturnLines).' return lines';
+
+        if ($result['done'] || $result['scanned'] === 0) {
+            $this->repairRunning = false;
+            $this->repairDone = true;
+            $this->repairStatusLine = 'Done · scanned '.number_format($this->repairScanned)
+                .' · fixed '.number_format($this->repairFixedOrders).' orders'
+                .' · backfilled '.number_format($this->repairBackfilledLines).' lines'
+                .' · cleared '.number_format($this->repairClearedReturnLines).' return lines';
         }
     }
 
-    public function resetCostRepairCursor(): void
+    public function stopCostRepair(): void
     {
-        $this->repairAfterId = 0;
-        $this->repairMessage = 'Repair cursor reset. Next run starts from the oldest order.';
+        if (! $this->repairRunning) {
+            return;
+        }
+
+        $this->repairRunning = false;
+        $this->repairStatusLine = 'Paused at '.number_format($this->repairScanned)
+            .' / '.number_format($this->repairTotal)
+            .' · fixed '.number_format($this->repairFixedOrders).' so far. Resume to continue.';
+    }
+
+    public function closeCostRepairModal(): void
+    {
+        $this->repairRunning = false;
+        $this->repairModalOpen = false;
     }
 
     public function saveCogsModalRow(int $index, ProductUnitCostService $costs): void

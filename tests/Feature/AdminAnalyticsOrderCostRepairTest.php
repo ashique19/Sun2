@@ -41,7 +41,7 @@ class AdminAnalyticsOrderCostRepairTest extends TestCase
     }
 
     #[Test]
-    public function repair_batch_backfills_open_orders_and_clears_return_cogs(): void
+    public function repair_modal_auto_runs_batches_with_live_progress(): void
     {
         $this->actingAs($this->adminUser());
         $product = $this->productWithCost();
@@ -92,25 +92,33 @@ class AdminAnalyticsOrderCostRepairTest extends TestCase
         ]);
 
         Livewire::test(AdminAnalyticsOrdersWithCosts::class)
-            ->set('repairBatchSize', 10)
-            ->assertSee('Repair next')
-            ->call('repairNextCostBatch')
-            ->assertSet('repairMessage', fn ($message) => is_string($message) && str_contains($message, 'fixed 2'))
-            ->assertSee('backfilled 1')
-            ->assertSee('cleared 1');
+            ->assertSee('Repair costs…')
+            ->call('openCostRepairModal')
+            ->assertSet('repairModalOpen', true)
+            ->assertSet('repairTotal', 2)
+            ->assertSee('Ready to scan')
+            ->call('startCostRepair')
+            ->assertSet('repairDone', true)
+            ->assertSet('repairRunning', false)
+            ->assertSet('repairScanned', 2)
+            ->assertSet('repairFixedOrders', 2)
+            ->assertSet('repairBackfilledLines', 1)
+            ->assertSet('repairClearedReturnLines', 1)
+            ->assertSee('Done')
+            ->assertSeeHtml('data-repair-scanned')
+            ->assertSeeHtml('aria-valuenow="100"');
 
         $open->refresh()->load('items');
         $returned->refresh()->load('items');
 
         $this->assertSame(150.0, (float) $open->items->first()->unit_cost);
         $this->assertSame(300.0, $open->cogs());
-
         $this->assertSame(0.0, (float) $returned->items->first()->unit_cost);
         $this->assertSame(0.0, $returned->cogs());
     }
 
     #[Test]
-    public function repair_batch_advances_cursor_across_clicks(): void
+    public function repair_continues_across_100_order_batches(): void
     {
         $this->actingAs($this->adminUser());
         $product = $this->productWithCost();
@@ -139,23 +147,79 @@ class AdminAnalyticsOrderCostRepairTest extends TestCase
             ]);
         }
 
-        $component = Livewire::test(AdminAnalyticsOrdersWithCosts::class)
-            ->set('repairBatchSize', 10)
-            ->call('repairNextCostBatch');
-
-        $afterFirst = (int) $component->get('repairAfterId');
-        // Batch of 3 with limit 10 finishes and resets cursor.
-        $this->assertSame(0, $afterFirst);
-        $this->assertStringContainsString('Done', (string) $component->get('repairMessage'));
-
         $service = app(OrderCostSnapshotRepairService::class);
+        $this->assertSame(3, $service->eligibleOrderCount());
+
         $first = $service->repairNextBatch(0, 2);
         $this->assertSame(2, $first['scanned']);
+        $this->assertSame(2, $first['fixed_orders']);
         $this->assertFalse($first['done']);
 
         $second = $service->repairNextBatch($first['next_after_id'], 2);
         $this->assertSame(1, $second['scanned']);
+        $this->assertSame(1, $second['fixed_orders']);
         $this->assertTrue($second['done']);
+
+        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
+            ->call('openCostRepairModal')
+            ->assertSet('repairTotal', 3)
+            ->call('startCostRepair')
+            ->assertSet('repairDone', true)
+            ->assertSet('repairScanned', 3)
+            // Already repaired above — live pass still walks every order.
+            ->assertSet('repairFixedOrders', 0);
+    }
+
+    #[Test]
+    public function pause_stops_auto_continue_until_resume(): void
+    {
+        $this->actingAs($this->adminUser());
+        $product = $this->productWithCost();
+        $ids = [];
+
+        foreach (range(1, 4) as $i) {
+            $order = Order::query()->create([
+                'order_number' => 'PAUSE-'.$i,
+                'name' => 'Pause '.$i,
+                'phone' => '0172000000'.$i,
+                'address' => 'Dhaka',
+                'status' => 'confirmed',
+                'subtotal' => 100,
+                'total' => 100,
+                'collected_amount' => 0,
+                'placed_at' => now(),
+            ]);
+            OrderProduct::query()->create([
+                'order_id' => $order->id,
+                'product_id' => $product->id,
+                'name' => $product->name,
+                'quantity' => 1,
+                'price' => 100,
+                'purchase_price' => 0,
+                'unit_cost' => 0,
+                'line_total' => 100,
+            ]);
+            $ids[] = $order->id;
+        }
+
+        sort($ids);
+        $midId = $ids[1];
+
+        $component = Livewire::test(AdminAnalyticsOrdersWithCosts::class)
+            ->call('openCostRepairModal')
+            ->assertSet('repairTotal', 4)
+            ->set('repairRunning', true)
+            ->set('repairDone', false)
+            ->set('repairAfterId', $midId)
+            ->set('repairScanned', 2)
+            ->call('stopCostRepair')
+            ->assertSet('repairRunning', false)
+            ->assertSee('Paused')
+            ->call('continueCostRepair')
+            ->assertSet('repairScanned', 2)
+            ->call('startCostRepair')
+            ->assertSet('repairDone', true)
+            ->assertSet('repairScanned', 4);
     }
 
     #[Test]
@@ -184,7 +248,7 @@ class AdminAnalyticsOrderCostRepairTest extends TestCase
             'line_total' => 500,
         ]);
 
-        $result = app(OrderCostSnapshotRepairService::class)->repairNextBatch(0, 20);
+        $result = app(OrderCostSnapshotRepairService::class)->repairNextBatch(0, 100);
 
         $this->assertSame(0, $result['backfilled_lines']);
         $this->assertSame(90.0, (float) $order->fresh(['items'])->items->first()->unit_cost);

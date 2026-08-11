@@ -8,9 +8,18 @@ use Illuminate\Support\Collection;
 
 class OrderCostSnapshotRepairService
 {
+    public const BATCH_SIZE = 100;
+
     public function __construct(
         private ProductUnitCostService $productCosts,
     ) {}
+
+    public function eligibleOrderCount(): int
+    {
+        return (int) Order::query()
+            ->where('status', '!=', Order::STATUS_DRAFT)
+            ->count();
+    }
 
     /**
      * Scan the next batch of orders (by id) and repair cost-snapshot mistakes.
@@ -29,9 +38,9 @@ class OrderCostSnapshotRepairService
      *     sample_order_numbers: list<string>
      * }
      */
-    public function repairNextBatch(int $afterId = 0, int $limit = 20): array
+    public function repairNextBatch(int $afterId = 0, int $limit = self::BATCH_SIZE): array
     {
-        $limit = max(1, min(50, $limit));
+        $limit = max(1, min(self::BATCH_SIZE, $limit));
 
         /** @var Collection<int, Order> $orders */
         $orders = Order::query()
@@ -66,7 +75,7 @@ class OrderCostSnapshotRepairService
 
             if ($changed) {
                 $fixedOrders++;
-                if (count($samples) < 5) {
+                if (count($samples) < 8) {
                     $samples[] = (string) $order->order_number;
                 }
             }

@@ -292,7 +292,7 @@
                                         <div>
                                             <label class="mb-1 block text-[11px] font-medium text-[#6B6459]">Purchase / main</label>
                                             <input type="number" min="0" step="1"
-                                                wire:model="cogsModalRows.{{ $index }}.purchase_price"
+                                                wire:model.live="cogsModalRows.{{ $index }}.purchase_price"
                                                 @disabled($row['has_materials'])
                                                 class="w-full rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-sm tabular-nums disabled:bg-[#FAF6EF] disabled:text-[#8C8474]">
                                             @error('cogsModalRows.'.$index.'.purchase_price')
@@ -302,7 +302,7 @@
                                         <div>
                                             <label class="mb-1 block text-[11px] font-medium text-[#6B6459]">Other cost</label>
                                             <input type="number" min="0" step="1"
-                                                wire:model="cogsModalRows.{{ $index }}.other_cost"
+                                                wire:model.live="cogsModalRows.{{ $index }}.other_cost"
                                                 class="w-full rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-sm tabular-nums">
                                             @error('cogsModalRows.'.$index.'.other_cost')
                                                 <p class="mt-1 text-[11px] text-rose-600">{{ $message }}</p>

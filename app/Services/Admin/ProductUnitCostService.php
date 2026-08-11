@@ -123,7 +123,11 @@ class ProductUnitCostService
     /**
      * Copy the product's current purchase_price + effective unit_cost onto matching order lines.
      *
-     * @return int Number of order_products rows updated
+     * Returns the number of matching lines (not PDO "rows changed"). MySQL does not count
+     * rows rewritten to the same values, which made single-order / already-saved syncs look
+     * like "0 lines" — common for cancelled / zero-revenue orders.
+     *
+     * @return int Number of order_products rows targeted
      */
     public function syncSnapshotsToOrderProducts(Product $product, ?int $onlyOrderId = null): int
     {
@@ -133,10 +137,18 @@ class ProductUnitCostService
             $query->where('order_id', $onlyOrderId);
         }
 
-        return $query->update([
+        $ids = (clone $query)->orderBy('id')->pluck('id');
+
+        if ($ids->isEmpty()) {
+            return 0;
+        }
+
+        OrderProduct::query()->whereIn('id', $ids)->update([
             'purchase_price' => round((float) $product->purchase_price, 2),
             'unit_cost' => $this->effectiveUnitCost($product),
         ]);
+
+        return $ids->count();
     }
 
     /**

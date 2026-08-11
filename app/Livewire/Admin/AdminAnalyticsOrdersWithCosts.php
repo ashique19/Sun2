@@ -266,48 +266,19 @@ class AdminAnalyticsOrdersWithCosts extends Component
 
     public function saveCogsModalRow(int $index, ProductUnitCostService $costs): void
     {
-        $row = $this->cogsModalRows[$index] ?? null;
+        $result = $this->persistCogsModalRow($index, $costs, syncAllOrders: false);
 
-        if (! $row || $this->cogsModalOrderId === null) {
+        if ($result === null) {
             return;
         }
 
-        $this->validate([
-            'cogsModalRows.'.$index.'.purchase_price' => ['required', 'numeric', 'min:0'],
-            'cogsModalRows.'.$index.'.other_cost' => ['required', 'numeric', 'min:0'],
-        ]);
-
-        $purchase = round((float) $this->cogsModalRows[$index]['purchase_price'], 2);
-        $other = round((float) $this->cogsModalRows[$index]['other_cost'], 2);
-
-        if ($row['product_id']) {
-            $product = Product::query()->with(['materials', 'costHeads'])->findOrFail($row['product_id']);
-
-            if ($product->materials->isNotEmpty() && abs($purchase - (float) $product->purchase_price) > 0.009) {
-                $this->addError(
-                    'cogsModalRows.'.$index.'.purchase_price',
-                    'Main cost comes from BOM materials. Edit the product, or change Other cost only.',
-                );
-
-                return;
-            }
-
-            $product = $costs->applyPurchaseAndOther($product, $purchase, $other);
-            $synced = $costs->syncSnapshotsToOrderProducts($product, $this->cogsModalOrderId);
-
-            $this->cogsModalRows[$index]['purchase_price'] = (string) (int) round((float) $product->purchase_price);
-            $this->cogsModalRows[$index]['other_cost'] = (string) (int) round((float) $product->costHeads()->sum('amount'));
-            $this->cogsModalMessage = 'Saved “'.$product->name.'” and updated '.$synced.' line(s) on this order.';
+        if ($result['product'] !== null) {
+            $this->cogsModalMessage = 'Saved “'.$result['product']->name.'” and updated '.$result['synced'].' line(s) on this order.';
         } else {
-            OrderProduct::query()->whereKey($row['order_product_id'])->update([
-                'purchase_price' => $purchase,
-                'unit_cost' => round($purchase + $other, 2),
-            ]);
-
             $this->cogsModalMessage = 'Saved line cost on this order (no linked product).';
         }
 
-        $this->refreshCogsModalRows();
+        $this->afterCogsModalCostWrite();
     }
 
     public function syncCogsModalRowToAllOrders(int $index, ProductUnitCostService $costs): void
@@ -320,17 +291,14 @@ class AdminAnalyticsOrdersWithCosts extends Component
             return;
         }
 
-        $this->saveCogsModalRow($index, $costs);
+        $result = $this->persistCogsModalRow($index, $costs, syncAllOrders: true);
 
-        if ($this->getErrorBag()->has('cogsModalRows.'.$index.'.purchase_price')) {
+        if ($result === null || $result['product'] === null) {
             return;
         }
 
-        $product = Product::query()->findOrFail($row['product_id']);
-        $synced = $costs->syncSnapshotsToOrderProducts($product);
-
-        $this->cogsModalMessage = 'Synced “'.$product->name.'” costs to '.$synced.' order line(s) across all orders.';
-        $this->refreshCogsModalRows();
+        $this->cogsModalMessage = 'Synced “'.$result['product']->name.'” costs to '.$result['synced'].' order line(s) across all orders.';
+        $this->afterCogsModalCostWrite();
     }
 
     public function render(AnalyticsService $analytics)
@@ -445,6 +413,75 @@ class AdminAnalyticsOrdersWithCosts extends Component
         return DB::connection()->getDriverName() === 'sqlite'
             ? "max({$left}, {$right})"
             : "GREATEST({$left}, {$right})";
+    }
+
+    /**
+     * Validate and persist modal row costs onto the product and/or order line snapshots.
+     *
+     * @return array{product: Product|null, synced: int}|null Null when validation blocked the write
+     */
+    private function persistCogsModalRow(int $index, ProductUnitCostService $costs, bool $syncAllOrders): ?array
+    {
+        $row = $this->cogsModalRows[$index] ?? null;
+
+        if (! $row || $this->cogsModalOrderId === null) {
+            return null;
+        }
+
+        $this->validate([
+            'cogsModalRows.'.$index.'.purchase_price' => ['required', 'numeric', 'min:0'],
+            'cogsModalRows.'.$index.'.other_cost' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        $purchase = round((float) $this->cogsModalRows[$index]['purchase_price'], 2);
+        $other = round((float) $this->cogsModalRows[$index]['other_cost'], 2);
+
+        if (! $row['product_id']) {
+            OrderProduct::query()->whereKey($row['order_product_id'])->update([
+                'purchase_price' => $purchase,
+                'unit_cost' => round($purchase + $other, 2),
+            ]);
+
+            return [
+                'product' => null,
+                'synced' => 1,
+            ];
+        }
+
+        $product = Product::query()->with(['materials', 'costHeads'])->findOrFail($row['product_id']);
+
+        if ($product->materials->isNotEmpty() && abs($purchase - (float) $product->purchase_price) > 0.009) {
+            $this->addError(
+                'cogsModalRows.'.$index.'.purchase_price',
+                'Main cost comes from BOM materials. Edit the product, or change Other cost only.',
+            );
+
+            return null;
+        }
+
+        $product = $costs->applyPurchaseAndOther($product, $purchase, $other);
+
+        $synced = $syncAllOrders
+            ? $costs->syncSnapshotsToOrderProducts($product)
+            : $costs->syncSnapshotsToOrderProducts($product, $this->cogsModalOrderId);
+
+        $this->cogsModalRows[$index]['purchase_price'] = (string) (int) round((float) $product->purchase_price);
+        $this->cogsModalRows[$index]['other_cost'] = (string) (int) round((float) $product->costHeads()->sum('amount'));
+
+        return [
+            'product' => $product,
+            'synced' => $synced,
+        ];
+    }
+
+    private function afterCogsModalCostWrite(): void
+    {
+        // Keep the edited order visible when the user had filtered to COGS = 0.
+        if ($this->zeroCogs) {
+            $this->zeroCogs = false;
+        }
+
+        $this->refreshCogsModalRows();
     }
 
     private function refreshCogsModalRows(): void

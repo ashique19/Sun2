@@ -163,5 +163,8 @@ class ProductUnitCostTest extends TestCase
         $this->assertSame(150.0, (float) $line->purchase_price);
         $this->assertSame(175.0, (float) $line->unit_cost);
         $this->assertSame(350.0, $order->fresh(['items'])->cogs());
+
+        // Second sync with identical values still reports the matching line count.
+        $this->assertSame(1, $service->syncSnapshotsToOrderProducts($product));
     }
 }

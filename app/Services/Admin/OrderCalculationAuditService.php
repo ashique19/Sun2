@@ -5,6 +5,7 @@ namespace App\Services\Admin;
 use App\Models\Order;
 use App\Models\Product;
 use App\Services\Orders\OrderCourierChargeSync;
+use App\Services\Orders\OrderEmptyProductDefaults;
 use App\Services\Orders\OrderPackagingCost;
 use Illuminate\Support\Collection;
 
@@ -178,8 +179,17 @@ class OrderCalculationAuditService
                 $issues[] = 'Cancelled/returned order still shows COGS ৳'.$this->money($order->cogs())
                     .' (should be ৳0 for contribution).';
             }
+        } elseif ($this->costSnapshots->hasNoProductQuantity($order)) {
+            if (abs($order->cogs() - OrderEmptyProductDefaults::COGS) >= 0.01) {
+                $issues[] = 'Order has no products; COGS is ৳'.$this->money($order->cogs())
+                    .' but should be ৳'.$this->money(OrderEmptyProductDefaults::COGS).'.';
+            }
         } else {
             foreach ($order->items as $item) {
+                if ((string) $item->name === OrderEmptyProductDefaults::COGS_LINE_NAME) {
+                    continue;
+                }
+
                 if ($item->effectiveUnitCost() >= 0.01) {
                     continue;
                 }

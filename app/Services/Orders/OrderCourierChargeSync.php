@@ -20,6 +20,7 @@ class OrderCourierChargeSync
 {
     public function __construct(
         private OrderAdjustmentAuditor $auditor,
+        private OrderEmptyProductDefaults $emptyProductDefaults = new OrderEmptyProductDefaults,
     ) {}
 
     /**
@@ -156,7 +157,7 @@ class OrderCourierChargeSync
         }
 
         $order->loadMissing('items');
-        $qty = (int) $order->items->sum(fn ($item) => (int) $item->quantity);
+        $qty = $this->emptyProductDefaults->sellableQuantity($order);
 
         if ($qty < 1) {
             return 0.0;

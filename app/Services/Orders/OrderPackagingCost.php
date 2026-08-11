@@ -18,6 +18,10 @@ use Carbon\CarbonInterface;
  */
 class OrderPackagingCost
 {
+    public function __construct(
+        private OrderEmptyProductDefaults $emptyProductDefaults = new OrderEmptyProductDefaults,
+    ) {}
+
     /**
      * @return array{first: float, extra: float, special_per_piece: float|null}
      */
@@ -51,9 +55,7 @@ class OrderPackagingCost
 
     public function productQuantity(Order $order): int
     {
-        $order->loadMissing('items');
-
-        return (int) $order->items->sum(fn ($item) => (int) $item->quantity);
+        return $this->emptyProductDefaults->sellableQuantity($order);
     }
 
     public function defaultFor(Order $order): float
@@ -63,6 +65,7 @@ class OrderPackagingCost
 
     /**
      * Full packaging estimate from line items + order date.
+     * Orders with no product quantity use a flat ৳21 packaging cost.
      */
     public function estimateFor(Order $order): float
     {
@@ -75,6 +78,10 @@ class OrderPackagingCost
         $standardQty = 0;
 
         foreach ($order->items as $item) {
+            if ($this->emptyProductDefaults->isPlaceholderLine($item)) {
+                continue;
+            }
+
             $qty = max(0, (int) $item->quantity);
 
             if ($qty < 1) {
@@ -86,6 +93,10 @@ class OrderPackagingCost
             } else {
                 $standardQty += $qty;
             }
+        }
+
+        if ($specialQty < 1 && $standardQty < 1) {
+            return OrderEmptyProductDefaults::PACKAGING;
         }
 
         $total = 0.0;

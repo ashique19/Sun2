@@ -3,15 +3,24 @@
 namespace App\Services\Admin;
 
 use App\Models\Order;
+use App\Models\OrderProduct;
 use App\Models\Product;
+use App\Services\Orders\OrderEmptyProductDefaults;
 use Illuminate\Support\Collection;
 
 class OrderCostSnapshotRepairService
 {
     public const BATCH_SIZE = 100;
 
+    /** @deprecated Use OrderEmptyProductDefaults::COGS */
+    public const EMPTY_ORDER_COGS = OrderEmptyProductDefaults::COGS;
+
+    /** @deprecated Use OrderEmptyProductDefaults::COGS_LINE_NAME */
+    public const EMPTY_ORDER_COGS_LINE_NAME = OrderEmptyProductDefaults::COGS_LINE_NAME;
+
     public function __construct(
         private ProductUnitCostService $productCosts,
+        private OrderEmptyProductDefaults $emptyProductDefaults,
     ) {}
 
     public function eligibleOrderCount(): int
@@ -25,6 +34,7 @@ class OrderCostSnapshotRepairService
      * Scan the next batch of orders (by id) and repair cost-snapshot mistakes.
      *
      * - Open orders: if a line has ~৳0 cost but its linked product has a cost, copy the product snapshot.
+     * - Open orders with no product quantity: set packaging via rate card (৳21) elsewhere; persist ৳50 COGS.
      * - Cancelled/returned: if contribution COGS is still > 0 (usually missing returned_quantity after a
      *   bad backfill), clear line cost snapshots so P/L is not inventing COGS on dead orders.
      *
@@ -96,6 +106,8 @@ class OrderCostSnapshotRepairService
 
         if (in_array($status, ['cancelled', 'returned'], true)) {
             $cleared = $this->clearCostsWhenReturnStillShowsCogs($order);
+        } elseif ($this->emptyProductDefaults->hasNoProductQuantity($order)) {
+            $backfilled = $this->ensureEmptyOrderCogs($order) ? 1 : 0;
         } else {
             $backfilled = $this->backfillMissingLineCostsFromProducts($order);
         }
@@ -105,6 +117,62 @@ class OrderCostSnapshotRepairService
             'backfilled_lines' => $backfilled,
             'cleared_return_lines' => $cleared,
         ];
+    }
+
+    public function hasNoProductQuantity(Order $order): bool
+    {
+        return $this->emptyProductDefaults->hasNoProductQuantity($order);
+    }
+
+    /**
+     * Persist a ৳50 COGS placeholder line when the order has no products.
+     */
+    public function ensureEmptyOrderCogs(Order $order): bool
+    {
+        $order->loadMissing('items');
+
+        $line = $order->items->first(
+            fn ($item) => $this->emptyProductDefaults->isPlaceholderLine($item)
+        );
+
+        if ($line) {
+            $needsUpdate = (int) $line->quantity !== 1
+                || round((float) $line->effectiveUnitCost(), 2) !== OrderEmptyProductDefaults::COGS
+                || (int) ($line->returned_quantity ?? 0) !== 0;
+
+            if (! $needsUpdate) {
+                return false;
+            }
+
+            $line->forceFill([
+                'quantity' => 1,
+                'returned_quantity' => 0,
+                'purchase_price' => OrderEmptyProductDefaults::COGS,
+                'unit_cost' => OrderEmptyProductDefaults::COGS,
+                'price' => 0,
+                'line_total' => 0,
+            ])->save();
+
+            return true;
+        }
+
+        if (round($order->cogs(), 2) === OrderEmptyProductDefaults::COGS) {
+            return false;
+        }
+
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'product_id' => null,
+            'name' => OrderEmptyProductDefaults::COGS_LINE_NAME,
+            'quantity' => 1,
+            'returned_quantity' => 0,
+            'price' => 0,
+            'purchase_price' => OrderEmptyProductDefaults::COGS,
+            'unit_cost' => OrderEmptyProductDefaults::COGS,
+            'line_total' => 0,
+        ]);
+
+        return true;
     }
 
     /**

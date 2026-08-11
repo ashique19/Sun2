@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\Product;
+use App\Services\Orders\OrderEmptyProductDefaults;
 use App\Services\Orders\OrderPackagingCost;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -107,5 +108,26 @@ class OrderPackagingCostTest extends TestCase
 
         // 2025+: no saree exception → 21+11=32
         $this->assertSame(32.0, $service->estimateFor($order2025->fresh(['items.product.category'])));
+    }
+
+    #[Test]
+    public function empty_order_uses_flat_packaging_of_21(): void
+    {
+        $service = new OrderPackagingCost;
+
+        $order = Order::query()->create([
+            'order_number' => 'PKG-EMPTY',
+            'name' => 'Empty',
+            'phone' => '017',
+            'address' => 'Dhaka',
+            'status' => 'delivered',
+            'subtotal' => 0,
+            'total' => 0,
+            'packaging_cost' => 0,
+            'placed_at' => '2024-06-15 10:00:00',
+        ]);
+
+        $this->assertSame(21.0, $service->estimateFor($order->fresh(['items'])));
+        $this->assertSame(OrderEmptyProductDefaults::PACKAGING, $service->estimateFor($order->fresh(['items'])));
     }
 }

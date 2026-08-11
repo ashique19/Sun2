@@ -36,13 +36,18 @@ php artisan admin:ensure-user
 
 **Windows note:** never pipe `mysqldump` through PowerShell (`| Set-Content` / `Out-File`) — that re-encodes UTF-8 Bengali into garbage (`αª…`). Use mysqldump’s `--result-file=path.sql` so the client writes the file directly.
 
-## Phase 2 — product descriptions (deferred)
+## Phase 2 — product descriptions
 
-Phase 1 intentionally **does not** import `product_detail` / `product_detail_bn` (those HTML blobs hung a prior full import). Descriptions are worth a separate later pass:
+Phase 1 intentionally **does not** import `product_detail` / `product_detail_bn` (those HTML blobs hung a prior full import). Use the dedicated command:
 
-- Add a dedicated command (e.g. `import:legacy-descriptions`) that `UPDATE`s `products.description` / `description_bn` by `id` from `sun_legacy`.
-- Chunk ≤ 25 rows; `SELECT` only `id, product_detail, product_detail_bn`; log progress; support `--from-id=` resume.
-- Sanitize/allowlist HTML before storefront `{!! !!}` rendering.
-- Re-dump `sun2` after backfill before uploading to production.
+```bash
+php artisan import:legacy-descriptions --dry-run
+php artisan import:legacy-descriptions
+# resume / overwrite:
+php artisan import:legacy-descriptions --from-id=500
+php artisan import:legacy-descriptions --force
+```
 
-Do **not** re-enable description import inside the main `import:legacy` products step.
+- Chunks ≤ 25 rows; selects only `id, product_detail, product_detail_bn`; allowlists HTML before storefront `{!! !!}` rendering.
+- Skips products that already have both descriptions unless `--force`.
+- Do **not** re-enable description import inside the main `import:legacy` products step.

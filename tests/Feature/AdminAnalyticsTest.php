@@ -86,7 +86,8 @@ class AdminAnalyticsTest extends TestCase
             ->assertSee('Analytics')
             ->assertSee('Profit & loss')
             ->assertSee('Ordered vs delivered')
-            ->assertSee('Revenue by category');
+            ->assertSee('Revenue by category')
+            ->assertSee('Investor pitch');
     }
 
     #[Test]

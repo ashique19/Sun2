@@ -12,7 +12,7 @@
         </a>
     </div>
 
-    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         @foreach ($tiles as $tile)
             <a href="{{ route($tile['route']) }}" wire:navigate
                 class="group rounded-xl border border-[#EFE7D6] bg-white p-5 transition hover:border-[#C9A227] hover:bg-[#FAF6EF]/50">

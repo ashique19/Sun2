@@ -50,6 +50,12 @@ class AdminAnalytics extends Component
                     'route' => 'admin.analytics.category-revenue',
                     'stat' => 'By delivery month · '.$year,
                 ],
+                [
+                    'title' => 'Investor pitch',
+                    'blurb' => 'Live LTM traction, growth, unit economics, and channel mix for fundraising.',
+                    'route' => 'admin.analytics.investor-pitch',
+                    'stat' => 'Auto-refresh · last 12 months',
+                ],
             ],
         ]);
     }

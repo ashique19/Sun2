@@ -21,7 +21,7 @@
 
     <x-admin.analytics-subnav active="orders-costs" />
 
-    <div class="mb-4 flex flex-wrap gap-3">
+    <div class="mb-4 flex flex-wrap items-center gap-3">
         <input type="search"
             wire:model.live.debounce.300ms="search"
             placeholder="Search order #, name, phone…"
@@ -31,6 +31,16 @@
                 <option value="{{ $value }}">{{ $label }}</option>
             @endforeach
         </select>
+        @php
+            $zeroFiltersActive = $zeroRevenue || $zeroCogs || $zeroPackaging || $zeroCourier
+                || $zeroCod || $zeroDirect || $zeroProfit;
+        @endphp
+        @if ($zeroFiltersActive)
+            <p class="text-sm tabular-nums text-[#6B6459]" data-zero-filter-count>
+                <span class="font-semibold text-[#1E1E1E]">{{ number_format($orders->total()) }}</span>
+                {{ $orders->total() === 1 ? 'order' : 'orders' }} match
+            </p>
+        @endif
     </div>
 
     <div class="overflow-hidden rounded-xl border border-[#EFE7D6] bg-white">
@@ -48,7 +58,18 @@
                         <th class="px-4 py-3 font-medium text-right">P/L</th>
                     </tr>
                     <tr class="border-t border-[#E7DFCF] text-[11px]">
-                        <th class="px-4 py-2 font-normal text-[#8C8474]">Filter 0</th>
+                        <th class="px-4 py-2 font-normal text-[#8C8474]">
+                            @if ($zeroFiltersActive)
+                                <span class="tabular-nums font-semibold text-[#1E1E1E]" data-zero-filter-count-inline>
+                                    {{ number_format($orders->total()) }}
+                                </span>
+                                <span class="block text-[10px] font-normal">
+                                    {{ $orders->total() === 1 ? 'order' : 'orders' }}
+                                </span>
+                            @else
+                                Filter 0
+                            @endif
+                        </th>
                         @foreach ([
                             'zeroRevenue' => 'Revenue is ৳0',
                             'zeroCogs' => 'COGS is ৳0',

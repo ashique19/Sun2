@@ -346,12 +346,18 @@ class AdminAnalyticsOrdersWithCostsTest extends TestCase
         Livewire::test(AdminAnalyticsOrdersWithCosts::class)
             ->assertSeeHtml('aria-label="COGS is ৳0"')
             ->assertSeeHtml('aria-label="P/L is ৳0"')
+            ->assertDontSeeHtml('data-zero-filter-count')
             ->set('zeroCogs', true)
             ->assertSee('ZERO-COGS')
             ->assertDontSee('HAS-COSTS')
+            ->assertSeeHtml('data-zero-filter-count')
+            ->assertSeeHtml('>1</span>')
+            ->assertSee('order match')
             ->set('zeroCogs', false)
             ->set('zeroPackaging', true)
             ->assertSee('ZERO-PACK')
-            ->assertDontSee('HAS-COSTS');
+            ->assertDontSee('HAS-COSTS')
+            ->assertSeeHtml('data-zero-filter-count')
+            ->assertSee('order match');
     }
 }

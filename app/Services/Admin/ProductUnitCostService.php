@@ -123,21 +123,28 @@ class ProductUnitCostService
     /**
      * Copy the product's current purchase_price + effective unit_cost onto matching order lines.
      *
+     * Skips cancelled/returned orders — those should not pick up contribution COGS from a
+     * backfill (revenue is usually ৳0; inventing cost makes P/L look wrongly negative when
+     * returned_quantity was never set).
+     *
      * Returns the number of matching lines (not PDO "rows changed"). MySQL does not count
-     * rows rewritten to the same values, which made single-order / already-saved syncs look
-     * like "0 lines" — common for cancelled / zero-revenue orders.
+     * rows rewritten to the same values, which made already-saved syncs look like "0 lines".
      *
      * @return int Number of order_products rows targeted
      */
     public function syncSnapshotsToOrderProducts(Product $product, ?int $onlyOrderId = null): int
     {
-        $query = OrderProduct::query()->where('product_id', $product->id);
+        $query = OrderProduct::query()
+            ->where('order_products.product_id', $product->id)
+            ->whereHas('order', function ($orderQuery) use ($onlyOrderId): void {
+                $orderQuery->whereNotIn('status', ['cancelled', 'returned']);
 
-        if ($onlyOrderId !== null) {
-            $query->where('order_id', $onlyOrderId);
-        }
+                if ($onlyOrderId !== null) {
+                    $orderQuery->whereKey($onlyOrderId);
+                }
+            });
 
-        $ids = (clone $query)->orderBy('id')->pluck('id');
+        $ids = (clone $query)->orderBy('order_products.id')->pluck('order_products.id');
 
         if ($ids->isEmpty()) {
             return 0;

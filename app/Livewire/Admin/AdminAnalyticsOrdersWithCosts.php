@@ -297,7 +297,7 @@ class AdminAnalyticsOrdersWithCosts extends Component
             return;
         }
 
-        $this->cogsModalMessage = 'Synced “'.$result['product']->name.'” costs to '.$result['synced'].' order line(s) across all orders.';
+        $this->cogsModalMessage = 'Synced “'.$result['product']->name.'” costs to '.$result['synced'].' open order line(s) (cancelled/returned skipped).';
         $this->afterCogsModalCostWrite();
     }
 

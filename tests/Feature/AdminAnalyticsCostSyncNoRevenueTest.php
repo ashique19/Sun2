@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\Product;
 use App\Models\User;
+use App\Services\Admin\ProductUnitCostService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
@@ -59,14 +60,20 @@ class AdminAnalyticsCostSyncNoRevenueTest extends TestCase
         string $orderNumber,
         float $collectedAmount,
         float $lineUnitCost = 0,
+        string $status = 'auto',
     ): Order {
+        if ($status === 'auto') {
+            // Zero collected is often "not settled yet", not a return.
+            $status = $collectedAmount > 0 ? 'delivered' : 'confirmed';
+        }
+
         $order = Order::query()->create([
             'order_number' => $orderNumber,
             'name' => 'Customer '.$orderNumber,
             'phone' => '01710000001',
             'address' => 'Dhaka',
             'city' => 'Dhaka',
-            'status' => $collectedAmount > 0 ? 'delivered' : 'cancelled',
+            'status' => $status,
             'subtotal' => 500,
             'delivery_charge' => 80,
             'courier_charge' => 60,
@@ -74,7 +81,7 @@ class AdminAnalyticsCostSyncNoRevenueTest extends TestCase
             'collected_amount' => $collectedAmount,
             'total' => 580,
             'courier_id' => $courier->id,
-            'actual_delivery_date' => $collectedAmount > 0 ? now() : null,
+            'actual_delivery_date' => $status === 'delivered' ? now() : null,
             'placed_at' => now(),
         ]);
 
@@ -99,8 +106,7 @@ class AdminAnalyticsCostSyncNoRevenueTest extends TestCase
         $courier = $this->steadfast();
         $product = $this->product();
 
-        // Only zero-revenue orders carry this product — the case that looked like "0 lines synced"
-        // after save-then-sync-all rewrote the same values.
+        // Active orders with ৳0 collected — still should receive cost snapshots.
         $a = $this->orderWithProduct($courier, $product, 'ZERO-ONLY-A', 0);
         $b = $this->orderWithProduct($courier, $product, 'ZERO-ONLY-B', 0);
 
@@ -115,7 +121,7 @@ class AdminAnalyticsCostSyncNoRevenueTest extends TestCase
             ->assertHasNoErrors()
             ->assertSet('zeroCogs', false)
             ->assertSee('Synced')
-            ->assertSee('2 order line');
+            ->assertSee('2 open order line');
 
         $a->refresh()->load('items');
         $b->refresh()->load('items');
@@ -127,11 +133,60 @@ class AdminAnalyticsCostSyncNoRevenueTest extends TestCase
         // Re-sync same values must still report both lines (not MySQL "0 changed").
         $component
             ->call('syncCogsModalRowToAllOrders', 0)
-            ->assertSee('2 order line');
+            ->assertSee('2 open order line');
     }
 
     #[Test]
-    public function sync_from_zero_revenue_order_updates_product_and_all_order_lines(): void
+    public function sync_skips_cancelled_and_returned_orders(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+        $product = $this->product();
+
+        $active = $this->orderWithProduct($courier, $product, 'ACTIVE-1', 580, status: 'delivered');
+        $cancelled = $this->orderWithProduct($courier, $product, 'CANCEL-1', 0, status: 'cancelled');
+        $returned = $this->orderWithProduct($courier, $product, 'RETURN-1', 0, status: 'returned');
+
+        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
+            ->call('openCogsModal', $active->id)
+            ->set('cogsModalRows.0.purchase_price', '180')
+            ->set('cogsModalRows.0.other_cost', '20')
+            ->call('syncCogsModalRowToAllOrders', 0)
+            ->assertHasNoErrors()
+            ->assertSee('1 open order line');
+
+        $active->refresh()->load('items');
+        $cancelled->refresh()->load('items');
+        $returned->refresh()->load('items');
+
+        $this->assertSame(200.0, (float) $active->items->first()->unit_cost);
+        $this->assertSame(200.0, $active->cogs());
+
+        // Returns/cancels keep zero line costs — inventing COGS there is wrong.
+        $this->assertSame(0.0, (float) $cancelled->items->first()->unit_cost);
+        $this->assertSame(0.0, (float) $returned->items->first()->unit_cost);
+        $this->assertSame(0.0, $cancelled->cogs());
+        $this->assertSame(0.0, $returned->cogs());
+    }
+
+    #[Test]
+    public function service_sync_skips_cancelled_even_when_targeting_that_order(): void
+    {
+        $product = $this->product();
+        $courier = $this->steadfast();
+        $cancelled = $this->orderWithProduct($courier, $product, 'CANCEL-ONLY', 0, status: 'cancelled');
+
+        $service = app(ProductUnitCostService::class);
+        $product = $service->applyPurchaseAndOther($product, 100, 0);
+        $synced = $service->syncSnapshotsToOrderProducts($product, $cancelled->id);
+
+        $this->assertSame(0, $synced);
+        $this->assertSame(0.0, (float) $cancelled->fresh(['items'])->items->first()->unit_cost);
+        $this->assertSame(0.0, $cancelled->fresh(['items'])->cogs());
+    }
+
+    #[Test]
+    public function sync_from_zero_revenue_active_order_updates_product_and_open_order_lines(): void
     {
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
@@ -151,7 +206,7 @@ class AdminAnalyticsCostSyncNoRevenueTest extends TestCase
             ->assertHasNoErrors()
             ->assertSet('cogsModalOpen', true)
             ->assertSee('Synced')
-            ->assertSee('2 order line');
+            ->assertSee('2 open order line');
 
         $product->refresh();
         $this->assertSame(150.0, (float) $product->purchase_price);
@@ -169,7 +224,7 @@ class AdminAnalyticsCostSyncNoRevenueTest extends TestCase
     }
 
     #[Test]
-    public function sync_from_revenue_order_updates_zero_revenue_order_lines(): void
+    public function sync_from_revenue_order_updates_zero_revenue_active_order_lines(): void
     {
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
@@ -192,7 +247,7 @@ class AdminAnalyticsCostSyncNoRevenueTest extends TestCase
     }
 
     #[Test]
-    public function save_on_zero_revenue_order_updates_that_order_cogs(): void
+    public function save_on_zero_revenue_active_order_updates_that_order_cogs(): void
     {
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();

@@ -9,7 +9,6 @@ use App\Services\Admin\AnalyticsService;
 use App\Services\Admin\OrderCalculationAuditService;
 use App\Services\Admin\OrderCostSnapshotRepairService;
 use App\Services\Admin\OrderPackagingCourierRepairService;
-use App\Services\Admin\OrderPaidStatusRepairService;
 use App\Services\Admin\ProductUnitCostService;
 use App\Support\AdminAccess;
 use App\Support\StorefrontAssets;
@@ -136,29 +135,6 @@ class AdminAnalyticsOrdersWithCosts extends Component
     public array $logisticsRepairRecentFixes = [];
 
     public ?string $logisticsRepairStatusLine = null;
-
-    public bool $paidRepairModalOpen = false;
-
-    public bool $paidRepairRunning = false;
-
-    public bool $paidRepairDone = false;
-
-    public int $paidRepairAfterId = 0;
-
-    public int $paidRepairTotal = 0;
-
-    public int $paidRepairScanned = 0;
-
-    public int $paidRepairFixedOrders = 0;
-
-    public int $paidRepairPaymentsCreated = 0;
-
-    public int $paidRepairBatchNumber = 0;
-
-    /** @var list<string> */
-    public array $paidRepairRecentFixes = [];
-
-    public ?string $paidRepairStatusLine = null;
 
     public bool $auditModalOpen = false;
 
@@ -571,103 +547,6 @@ class AdminAnalyticsOrdersWithCosts extends Component
     {
         $this->logisticsRepairRunning = false;
         $this->logisticsRepairModalOpen = false;
-    }
-
-    public function openPaidRepairModal(OrderPaidStatusRepairService $repair): void
-    {
-        $this->paidRepairModalOpen = true;
-        $this->paidRepairRunning = false;
-        $this->paidRepairDone = false;
-        $this->paidRepairAfterId = 0;
-        $this->paidRepairTotal = $repair->eligibleOrderCount();
-        $this->paidRepairScanned = 0;
-        $this->paidRepairFixedOrders = 0;
-        $this->paidRepairPaymentsCreated = 0;
-        $this->paidRepairBatchNumber = 0;
-        $this->paidRepairRecentFixes = [];
-        $this->paidRepairStatusLine = $this->paidRepairTotal === 0
-            ? 'No unpaid “paid”/delivered orders needing payment received.'
-            : 'Ready to repair '.number_format($this->paidRepairTotal).' orders (legacy paid + delivered missing payment) in batches of '.OrderPaidStatusRepairService::BATCH_SIZE.'.';
-    }
-
-    public function startPaidRepair(OrderPaidStatusRepairService $repair): void
-    {
-        if (! $this->paidRepairModalOpen || $this->paidRepairRunning) {
-            return;
-        }
-
-        if ($this->paidRepairTotal < 1) {
-            $this->paidRepairDone = true;
-            $this->paidRepairStatusLine = 'No unpaid “paid”/delivered orders needing payment received.';
-
-            return;
-        }
-
-        $this->paidRepairRunning = true;
-        $this->paidRepairDone = false;
-        $this->paidRepairStatusLine = 'Starting…';
-        $this->continuePaidRepair($repair);
-    }
-
-    public function continuePaidRepair(OrderPaidStatusRepairService $repair): void
-    {
-        if (! $this->paidRepairModalOpen || ! $this->paidRepairRunning || $this->paidRepairDone) {
-            return;
-        }
-
-        $result = $repair->repairNextBatch(
-            $this->paidRepairAfterId,
-            OrderPaidStatusRepairService::BATCH_SIZE,
-        );
-
-        $this->paidRepairBatchNumber++;
-        $this->paidRepairAfterId = $result['next_after_id'];
-        $this->paidRepairScanned += $result['scanned'];
-        $this->paidRepairFixedOrders += $result['fixed_orders'];
-        $this->paidRepairPaymentsCreated += $result['payments_created'];
-
-        foreach ($result['sample_order_numbers'] as $orderNumber) {
-            if (! in_array($orderNumber, $this->paidRepairRecentFixes, true)) {
-                $this->paidRepairRecentFixes[] = $orderNumber;
-            }
-        }
-        $this->paidRepairRecentFixes = array_slice($this->paidRepairRecentFixes, -12);
-
-        $pct = $this->paidRepairTotal > 0
-            ? min(100, (int) round(($this->paidRepairScanned / $this->paidRepairTotal) * 100))
-            : 100;
-
-        $this->paidRepairStatusLine = 'Batch '.$this->paidRepairBatchNumber
-            .' · scanned '.number_format($this->paidRepairScanned).' / '.number_format($this->paidRepairTotal)
-            .' ('.$pct.'%)'
-            .' · fixed '.number_format($this->paidRepairFixedOrders)
-            .' · payments '.number_format($this->paidRepairPaymentsCreated);
-
-        if ($result['done'] || $result['scanned'] === 0) {
-            $this->paidRepairRunning = false;
-            $this->paidRepairDone = true;
-            $this->paidRepairStatusLine = 'Done · scanned '.number_format($this->paidRepairScanned)
-                .' · fixed '.number_format($this->paidRepairFixedOrders)
-                .' · payment rows '.number_format($this->paidRepairPaymentsCreated);
-        }
-    }
-
-    public function stopPaidRepair(): void
-    {
-        if (! $this->paidRepairRunning) {
-            return;
-        }
-
-        $this->paidRepairRunning = false;
-        $this->paidRepairStatusLine = 'Paused at '.number_format($this->paidRepairScanned)
-            .' / '.number_format($this->paidRepairTotal)
-            .' · fixed '.number_format($this->paidRepairFixedOrders).' so far. Resume to continue.';
-    }
-
-    public function closePaidRepairModal(): void
-    {
-        $this->paidRepairRunning = false;
-        $this->paidRepairModalOpen = false;
     }
 
     public function openCalculationAuditModal(OrderCalculationAuditService $audit): void

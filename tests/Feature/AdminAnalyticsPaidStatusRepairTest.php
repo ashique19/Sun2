@@ -80,16 +80,13 @@ class AdminAnalyticsPaidStatusRepairTest extends TestCase
         ]);
 
         Livewire::test(AdminAnalyticsOrdersWithCosts::class)
-            ->assertSee('Repair payment received…')
+            ->assertDontSee('Repair payment received…')
             ->assertSee('Paid (legacy)')
-            ->call('openPaidRepairModal')
-            ->assertSet('paidRepairModalOpen', true)
-            ->assertSet('paidRepairTotal', 1)
-            ->call('startPaidRepair')
-            ->assertSet('paidRepairDone', true)
-            ->assertSet('paidRepairFixedOrders', 1)
-            ->assertSet('paidRepairPaymentsCreated', 1)
-            ->assertSee('Done');
+            ->assertSee('Audit calculations…');
+
+        $result = app(OrderPaidStatusRepairService::class)->repairNextBatch(0, 100);
+        $this->assertSame(1, $result['fixed_orders']);
+        $this->assertSame(1, $result['payments_created']);
 
         $order->refresh();
         $this->assertSame('delivered', $order->status);
@@ -187,12 +184,9 @@ class AdminAnalyticsPaidStatusRepairTest extends TestCase
             'line_total' => 900,
         ]);
 
-        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
-            ->call('openPaidRepairModal')
-            ->assertSet('paidRepairTotal', 1)
-            ->call('startPaidRepair')
-            ->assertSet('paidRepairDone', true)
-            ->assertSet('paidRepairPaymentsCreated', 1);
+        $result = app(OrderPaidStatusRepairService::class)->repairNextBatch(0, 100);
+        $this->assertSame(1, $result['fixed_orders']);
+        $this->assertSame(1, $result['payments_created']);
 
         $order->refresh();
         $this->assertSame('delivered', $order->status);

@@ -44,12 +44,6 @@
             Repair packaging / courier…
         </button>
         <button type="button"
-            wire:click="openPaidRepairModal"
-            class="rounded-lg border border-[#C9A227] bg-white px-3 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]"
-            title="Convert legacy Paid → Delivered, and backfill payment received on delivered orders missing collection">
-            Repair payment received…
-        </button>
-        <button type="button"
             wire:click="openCalculationAuditModal"
             class="rounded-lg border border-[#1E1E1E] bg-white px-3 py-2 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]"
             title="Audit every order against current cost/payment rules; auto-fix when safe, list the rest for manual review">
@@ -488,122 +482,6 @@
                             </button>
                             <button type="button"
                                 wire:click="closeLogisticsRepairModal"
-                                class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b89220]">
-                                Close
-                            </button>
-                        @endif
-                    </div>
-                </div>
-            </div>
-        </div>
-    @endif
-
-    @if ($paidRepairModalOpen)
-        @php
-            $paidPct = $paidRepairTotal > 0
-                ? min(100, (int) round(($paidRepairScanned / $paidRepairTotal) * 100))
-                : ($paidRepairDone ? 100 : 0);
-        @endphp
-        <div class="fixed inset-0 z-[75] flex items-end justify-center bg-black/50 p-4 sm:items-center"
-            wire:click.self="closePaidRepairModal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Repair payment received on paid/delivered orders">
-            @if ($paidRepairRunning)
-                <div wire:poll.400ms="continuePaidRepair" class="hidden" aria-hidden="true"></div>
-            @endif
-            <div class="w-full max-w-lg overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl">
-                <div class="flex items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
-                    <div class="min-w-0">
-                        <h2 class="text-base font-semibold text-[#1E1E1E]">Repair payment received</h2>
-                        <p class="mt-0.5 text-xs text-[#8C8474]">
-                            Legacy “paid” → delivered. Also backfills delivered orders where collection was never
-                            recorded (order total, or existing collected amount, onto the payment ledger).
-                            COD fee follows collected amount. Batches of {{ \App\Services\Admin\OrderPaidStatusRepairService::BATCH_SIZE }}.
-                        </p>
-                    </div>
-                    <button type="button"
-                        wire:click="closePaidRepairModal"
-                        class="rounded-lg border border-[#E0D6C2] px-2.5 py-1 text-xs text-[#6B6459] hover:border-[#C9A227]"
-                        aria-label="Close payment received repair">
-                        Close
-                    </button>
-                </div>
-
-                <div class="space-y-4 px-4 py-4">
-                    <div>
-                        <div class="mb-1.5 flex items-center justify-between text-xs text-[#6B6459]">
-                            <span data-paid-repair-progress-label>{{ $paidRepairStatusLine }}</span>
-                            <span class="tabular-nums font-medium text-[#1E1E1E]">{{ $paidPct }}%</span>
-                        </div>
-                        <div class="h-2 overflow-hidden rounded-full bg-[#EFE7D6]" role="progressbar"
-                            aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $paidPct }}">
-                            <div class="h-full rounded-full bg-[#C9A227] transition-[width] duration-300"
-                                style="width: {{ $paidPct }}%"></div>
-                        </div>
-                    </div>
-
-                    <dl class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
-                            <dt class="text-[11px] text-[#8C8474]">Scanned</dt>
-                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-paid-repair-scanned>
-                                {{ number_format($paidRepairScanned) }}
-                                <span class="font-normal text-[#8C8474]">/ {{ number_format($paidRepairTotal) }}</span>
-                            </dd>
-                        </div>
-                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
-                            <dt class="text-[11px] text-[#8C8474]">Converted</dt>
-                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-paid-repair-fixed>
-                                {{ number_format($paidRepairFixedOrders) }}
-                            </dd>
-                        </div>
-                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
-                            <dt class="text-[11px] text-[#8C8474]">Payments added</dt>
-                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-paid-repair-payments>
-                                {{ number_format($paidRepairPaymentsCreated) }}
-                            </dd>
-                        </div>
-                    </dl>
-
-                    @if ($paidRepairRecentFixes !== [])
-                        <div>
-                            <p class="text-[11px] font-medium text-[#6B6459]">Recent fixes</p>
-                            <p class="mt-1 text-xs tabular-nums text-[#8C8474]" data-paid-repair-recent>
-                                {{ implode(' · ', $paidRepairRecentFixes) }}
-                            </p>
-                        </div>
-                    @endif
-
-                    <div class="flex flex-wrap gap-2 border-t border-[#EFE7D6] pt-3">
-                        @if (! $paidRepairRunning && ! $paidRepairDone)
-                            <button type="button"
-                                wire:click="startPaidRepair"
-                                class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b89220]">
-                                Start
-                            </button>
-                        @endif
-                        @if ($paidRepairRunning)
-                            <button type="button"
-                                wire:click="stopPaidRepair"
-                                class="rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#6B6459] hover:border-[#C9A227]">
-                                Pause
-                            </button>
-                        @endif
-                        @if (! $paidRepairRunning && $paidRepairScanned > 0 && ! $paidRepairDone)
-                            <button type="button"
-                                wire:click="startPaidRepair"
-                                class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b89220]">
-                                Resume
-                            </button>
-                        @endif
-                        @if ($paidRepairDone)
-                            <button type="button"
-                                wire:click="openPaidRepairModal"
-                                class="rounded-lg border border-[#C9A227] px-3 py-1.5 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]">
-                                Run again
-                            </button>
-                            <button type="button"
-                                wire:click="closePaidRepairModal"
                                 class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b89220]">
                                 Close
                             </button>

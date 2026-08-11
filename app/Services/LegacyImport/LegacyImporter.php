@@ -423,6 +423,13 @@ class LegacyImporter
                     $paid = $this->decimalFromMixed($row->paid_amount);
                     $due = (float) $row->due_amount;
                     $collected = (float) $row->collected_amount;
+                    $total = (float) ($row->total ?? 0);
+
+                    // Legacy often left paid_amount blank while collected_amount held COD receipts.
+                    if ($paid <= 0.01 && $collected > 0.01) {
+                        $paid = $collected;
+                        $due = max(0.0, round($total - $paid, 2));
+                    }
 
                     $orders[] = [
                         'id' => $row->id,
@@ -442,12 +449,12 @@ class LegacyImporter
                         'charge' => $row->charge ?? 0,
                         'discount' => $row->discount ?? 0,
                         'coupon_id' => null,
-                        'total' => $row->total ?? 0,
+                        'total' => $total,
                         'cod_amount' => $row->cod ?? 0,
                         'collected_amount' => $collected,
                         'paid_amount' => $paid,
                         'due_amount' => $due,
-                        'payment_status' => $this->paymentStatus($paid, $due, (string) $row->status),
+                        'payment_status' => $this->paymentStatus($paid, $due, $collected, $total, (string) $row->status),
                         'payment_method' => $this->normalizePaymentMethod((string) $row->payment_gateway),
                         'status' => $this->normalizeOrderStatus((string) $row->status),
                         'courier_id' => $row->courier_id ?: null,
@@ -496,9 +503,30 @@ class LegacyImporter
         $lineCount = 0;
 
         DB::connection('legacy')->table('order_products')->orderBy('id')->chunk(self::CHUNK, function ($rows) use (&$lineCount) {
+            $productIds = collect($rows)->pluck('product_id')->filter()->unique()->values()->all();
+            $catalogCosts = $productIds === []
+                ? collect()
+                : DB::connection()->table('products')
+                    ->whereIn('id', $productIds)
+                    ->get(['id', 'purchase_price', 'unit_cost'])
+                    ->keyBy('id');
+
             $payload = [];
 
             foreach ($rows as $row) {
+                $purchase = (float) ($row->purchase_price ?? 0);
+                $unitCost = $purchase;
+
+                if ($purchase <= 0.01 && $row->product_id) {
+                    $catalog = $catalogCosts->get($row->product_id);
+                    if ($catalog && (float) $catalog->purchase_price > 0) {
+                        $purchase = (float) $catalog->purchase_price;
+                        $unitCost = (float) $catalog->unit_cost > 0
+                            ? (float) $catalog->unit_cost
+                            : $purchase;
+                    }
+                }
+
                 $payload[] = [
                     'id' => $row->id,
                     'order_id' => $row->order_id,
@@ -507,8 +535,8 @@ class LegacyImporter
                     'product_image' => $this->normalizeAssetPath($row->product_image),
                     'quantity' => $row->quantity ?? 0,
                     'price' => $row->price ?? 0,
-                    'purchase_price' => $row->purchase_price ?? 0,
-                    'unit_cost' => $row->purchase_price ?? 0,
+                    'purchase_price' => $purchase,
+                    'unit_cost' => $unitCost,
                     'line_total' => $row->value ?? 0,
                     'to_be_returned' => (bool) $row->to_be_returned,
                     'return_received' => (bool) $row->return_received,
@@ -686,17 +714,36 @@ class LegacyImporter
         return $clean === '' || $clean === '-' ? 0.0 : (float) $clean;
     }
 
-    private function paymentStatus(float $paid, float $due, string $legacyStatus): string
-    {
-        if ($due > 0.01) {
-            return 'partial';
+    /**
+     * Derive payment_status from effective receipts (paid or collected), not legacy due alone.
+     * Legacy dumps often set due=total while collected_amount already held COD cash.
+     */
+    private function paymentStatus(
+        float $paid,
+        float $due,
+        float $collected,
+        float $total,
+        string $legacyStatus,
+    ): string {
+        $effectivePaid = max($paid, $collected);
+
+        if ($effectivePaid <= 0.01) {
+            if (in_array(strtolower($legacyStatus), ['paid', 'delivered'], true) && $total <= 0.01) {
+                return 'paid';
+            }
+
+            return 'unpaid';
         }
 
-        if ($paid > 0.01 || in_array(strtolower($legacyStatus), ['paid', 'delivered'], true)) {
+        if ($total > 0.01 && $effectivePaid >= $total - 0.01) {
             return 'paid';
         }
 
-        return 'unpaid';
+        if ($due <= 0.01 && $effectivePaid > 0.01) {
+            return 'paid';
+        }
+
+        return 'partial';
     }
 
     private function normalizePaymentMethod(string $gateway): ?string

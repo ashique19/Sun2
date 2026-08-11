@@ -80,7 +80,7 @@ class AdminAnalyticsPaidStatusRepairTest extends TestCase
         ]);
 
         Livewire::test(AdminAnalyticsOrdersWithCosts::class)
-            ->assertSee('Repair paid status…')
+            ->assertSee('Repair payment received…')
             ->assertSee('Paid (legacy)')
             ->call('openPaidRepairModal')
             ->assertSet('paidRepairModalOpen', true)
@@ -149,5 +149,96 @@ class AdminAnalyticsPaidStatusRepairTest extends TestCase
         $second = $service->repairNextBatch(0, 100);
         $this->assertSame(0, $second['scanned']);
         $this->assertTrue($second['done']);
+    }
+
+    #[Test]
+    public function delivered_orders_missing_collection_get_order_total_as_payment_received(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+
+        $order = Order::query()->create([
+            'order_number' => 'DEL-NO-COLLECT',
+            'name' => 'Delivered Unsettled',
+            'phone' => '01710000003',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'delivered',
+            'subtotal' => 900,
+            'delivery_charge' => 80,
+            'courier_charge' => 60,
+            'total' => 980,
+            'collected_amount' => 0,
+            'paid_amount' => 0,
+            'due_amount' => 980,
+            'cod_amount' => 980,
+            'payment_status' => 'unpaid',
+            'courier_id' => $courier->id,
+            'actual_delivery_date' => now()->subDay(),
+            'placed_at' => now()->subDays(5),
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Item',
+            'quantity' => 1,
+            'price' => 900,
+            'purchase_price' => 300,
+            'unit_cost' => 300,
+            'line_total' => 900,
+        ]);
+
+        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
+            ->call('openPaidRepairModal')
+            ->assertSet('paidRepairTotal', 1)
+            ->call('startPaidRepair')
+            ->assertSet('paidRepairDone', true)
+            ->assertSet('paidRepairPaymentsCreated', 1);
+
+        $order->refresh();
+        $this->assertSame('delivered', $order->status);
+        $this->assertSame(980.0, (float) $order->collected_amount);
+        $this->assertSame(980.0, (float) $order->paid_amount);
+        $this->assertSame(0.0, (float) $order->due_amount);
+        $this->assertSame('paid', $order->payment_status);
+
+        $econ = app(AnalyticsService::class)->orderContribution($order->fresh(['items', 'courier']));
+        $this->assertSame(9.0, $econ['cod']); // (980-80)*1%
+    }
+
+    #[Test]
+    public function delivered_with_collected_but_no_ledger_syncs_from_collected_amount(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+
+        $order = Order::query()->create([
+            'order_number' => 'DEL-HAS-COLLECT',
+            'name' => 'Ledger Gap',
+            'phone' => '01710000004',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'delivered',
+            'subtotal' => 500,
+            'delivery_charge' => 0,
+            'total' => 500,
+            'collected_amount' => 500,
+            'paid_amount' => 0,
+            'due_amount' => 500,
+            'payment_status' => 'unpaid',
+            'courier_id' => $courier->id,
+            'actual_delivery_date' => now()->subDay(),
+            'placed_at' => now()->subDays(3),
+        ]);
+
+        $result = app(OrderPaidStatusRepairService::class)->repairNextBatch(0, 100);
+
+        $this->assertSame(1, $result['fixed_orders']);
+        $this->assertSame(1, $result['payments_created']);
+
+        $order->refresh();
+        $this->assertSame(500.0, (float) $order->collected_amount);
+        $this->assertSame(500.0, (float) $order->paid_amount);
+        $this->assertSame('paid', $order->payment_status);
+        $this->assertSame(0, app(OrderPaidStatusRepairService::class)->eligibleOrderCount());
     }
 }

@@ -46,8 +46,8 @@
         <button type="button"
             wire:click="openPaidRepairModal"
             class="rounded-lg border border-[#C9A227] bg-white px-3 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]"
-            title="Convert legacy Paid status to Delivered and record order value as payment received">
-            Repair paid status…
+            title="Convert legacy Paid → Delivered, and backfill payment received on delivered orders missing collection">
+            Repair payment received…
         </button>
         @php
             $zeroFiltersActive = $zeroRevenue || $zeroCogs || $zeroPackaging || $zeroCourier
@@ -502,24 +502,24 @@
             wire:click.self="closePaidRepairModal"
             role="dialog"
             aria-modal="true"
-            aria-label="Repair legacy paid status orders">
+            aria-label="Repair payment received on paid/delivered orders">
             @if ($paidRepairRunning)
                 <div wire:poll.400ms="continuePaidRepair" class="hidden" aria-hidden="true"></div>
             @endif
             <div class="w-full max-w-lg overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl">
                 <div class="flex items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
                     <div class="min-w-0">
-                        <h2 class="text-base font-semibold text-[#1E1E1E]">Repair paid status</h2>
+                        <h2 class="text-base font-semibold text-[#1E1E1E]">Repair payment received</h2>
                         <p class="mt-0.5 text-xs text-[#8C8474]">
-                            Legacy status “paid” → delivered. Order total is recorded as COD payment received
-                            (ledger sync updates collected / paid / due). COD fee on this page follows collected amount.
-                            Batches of {{ \App\Services\Admin\OrderPaidStatusRepairService::BATCH_SIZE }}.
+                            Legacy “paid” → delivered. Also backfills delivered orders where collection was never
+                            recorded (order total, or existing collected amount, onto the payment ledger).
+                            COD fee follows collected amount. Batches of {{ \App\Services\Admin\OrderPaidStatusRepairService::BATCH_SIZE }}.
                         </p>
                     </div>
                     <button type="button"
                         wire:click="closePaidRepairModal"
                         class="rounded-lg border border-[#E0D6C2] px-2.5 py-1 text-xs text-[#6B6459] hover:border-[#C9A227]"
-                        aria-label="Close paid status repair">
+                        aria-label="Close payment received repair">
                         Close
                     </button>
                 </div>

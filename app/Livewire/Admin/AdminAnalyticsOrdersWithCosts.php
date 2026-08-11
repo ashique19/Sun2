@@ -555,8 +555,8 @@ class AdminAnalyticsOrdersWithCosts extends Component
         $this->paidRepairBatchNumber = 0;
         $this->paidRepairRecentFixes = [];
         $this->paidRepairStatusLine = $this->paidRepairTotal === 0
-            ? 'No legacy “paid” status orders found.'
-            : 'Ready to convert '.number_format($this->paidRepairTotal).' “paid” orders → delivered (batches of '.OrderPaidStatusRepairService::BATCH_SIZE.').';
+            ? 'No unpaid “paid”/delivered orders needing payment received.'
+            : 'Ready to repair '.number_format($this->paidRepairTotal).' orders (legacy paid + delivered missing payment) in batches of '.OrderPaidStatusRepairService::BATCH_SIZE.'.';
     }
 
     public function startPaidRepair(OrderPaidStatusRepairService $repair): void
@@ -567,7 +567,7 @@ class AdminAnalyticsOrdersWithCosts extends Component
 
         if ($this->paidRepairTotal < 1) {
             $this->paidRepairDone = true;
-            $this->paidRepairStatusLine = 'No legacy “paid” status orders found.';
+            $this->paidRepairStatusLine = 'No unpaid “paid”/delivered orders needing payment received.';
 
             return;
         }

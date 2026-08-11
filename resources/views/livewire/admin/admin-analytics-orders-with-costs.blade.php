@@ -37,6 +37,7 @@
                         <th class="px-4 py-3 font-medium text-right">COD fee</th>
                         <th class="px-4 py-3 font-medium text-right">Direct</th>
                         <th class="px-4 py-3 font-medium text-right">P/L</th>
+                        <th class="px-4 py-3 font-medium text-right" title="P/L ÷ revenue">P/L %</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#E7DFCF]">
@@ -101,10 +102,21 @@
                             ])>
                                 {{ $money($econ['profit']) }}
                             </td>
+                            <td @class([
+                                'px-4 py-3 text-right tabular-nums font-medium',
+                                'text-emerald-700' => ($econ['profit_pct'] ?? 0) >= 0,
+                                'text-rose-700' => ($econ['profit_pct'] ?? 0) < 0,
+                            ])>
+                                @if ($econ['profit_pct'] === null)
+                                    <span class="text-[#8C8474]">—</span>
+                                @else
+                                    {{ number_format($econ['profit_pct'], 1) }}%
+                                @endif
+                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="px-4 py-10 text-center text-sm text-[#8C8474]">
+                            <td colspan="9" class="px-4 py-10 text-center text-sm text-[#8C8474]">
                                 No orders match these filters.
                             </td>
                         </tr>

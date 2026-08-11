@@ -598,7 +598,8 @@ class AnalyticsService
      *     courier: float,
      *     cod: float,
      *     direct: float,
-     *     profit: float
+     *     profit: float,
+     *     profit_pct: float|null
      * }
      */
     public function orderContribution(Order $order): array
@@ -616,7 +617,8 @@ class AnalyticsService
      *     courier: float,
      *     cod: float,
      *     direct: float,
-     *     profit: float
+     *     profit: float,
+     *     profit_pct: float|null
      * }
      */
     private function orderEconomics(Order $order): array
@@ -627,6 +629,7 @@ class AnalyticsService
         $courier = (float) ($order->courier_charge ?? 0);
         $cod = $order->codCharge();
         $direct = $cogs + $packaging + $courier + $cod;
+        $profit = $revenue - $direct;
 
         return [
             'revenue' => round($revenue, 2),
@@ -635,7 +638,10 @@ class AnalyticsService
             'courier' => round($courier, 2),
             'cod' => round($cod, 2),
             'direct' => round($direct, 2),
-            'profit' => round($revenue - $direct, 2),
+            'profit' => round($profit, 2),
+            'profit_pct' => $revenue > 0
+                ? round(($profit / $revenue) * 100, 1)
+                : null,
         ];
     }
 }

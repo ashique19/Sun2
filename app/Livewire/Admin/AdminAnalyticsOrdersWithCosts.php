@@ -119,7 +119,7 @@ class AdminAnalyticsOrdersWithCosts extends Component
             ->orderByDesc('id')
             ->paginate(50);
 
-        /** @var array<int, array{revenue: float, cogs: float, packaging: float, courier: float, cod: float, direct: float, profit: float}> $economicsById */
+        /** @var array<int, array{revenue: float, cogs: float, packaging: float, courier: float, cod: float, direct: float, profit: float, profit_pct: float|null}> $economicsById */
         $economicsById = [];
 
         foreach ($orders as $order) {

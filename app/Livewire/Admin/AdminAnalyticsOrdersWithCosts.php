@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\Product;
 use App\Services\Admin\AnalyticsService;
+use App\Services\Admin\OrderCostSnapshotRepairService;
 use App\Services\Admin\ProductUnitCostService;
 use App\Support\AdminAccess;
 use App\Support\StorefrontAssets;
@@ -82,6 +83,12 @@ class AdminAnalyticsOrdersWithCosts extends Component
     public array $cogsModalRows = [];
 
     public ?string $cogsModalMessage = null;
+
+    public int $repairAfterId = 0;
+
+    public int $repairBatchSize = 20;
+
+    public ?string $repairMessage = null;
 
     public function mount(): void
     {
@@ -262,6 +269,40 @@ class AdminAnalyticsOrdersWithCosts extends Component
         $this->cogsModalRows = [];
         $this->cogsModalMessage = null;
         $this->resetValidation();
+    }
+
+    public function repairNextCostBatch(OrderCostSnapshotRepairService $repair): void
+    {
+        $this->repairBatchSize = in_array($this->repairBatchSize, [10, 20], true)
+            ? $this->repairBatchSize
+            : 20;
+
+        $result = $repair->repairNextBatch($this->repairAfterId, $this->repairBatchSize);
+        $this->repairAfterId = $result['next_after_id'];
+
+        $parts = [
+            'Scanned '.$result['scanned'],
+            'fixed '.$result['fixed_orders'].' order(s)',
+            'backfilled '.$result['backfilled_lines'].' line(s)',
+            'cleared '.$result['cleared_return_lines'].' return line(s)',
+        ];
+
+        if ($result['sample_order_numbers'] !== []) {
+            $parts[] = 'e.g. '.implode(', ', $result['sample_order_numbers']);
+        }
+
+        $this->repairMessage = implode(' · ', $parts)
+            .($result['done'] ? ' · Done — restart from the top to rescan.' : ' · Click again for the next batch.');
+
+        if ($result['done']) {
+            $this->repairAfterId = 0;
+        }
+    }
+
+    public function resetCostRepairCursor(): void
+    {
+        $this->repairAfterId = 0;
+        $this->repairMessage = 'Repair cursor reset. Next run starts from the oldest order.';
     }
 
     public function saveCogsModalRow(int $index, ProductUnitCostService $costs): void

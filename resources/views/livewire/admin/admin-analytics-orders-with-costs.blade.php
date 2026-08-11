@@ -31,6 +31,26 @@
                 <option value="{{ $value }}">{{ $label }}</option>
             @endforeach
         </select>
+        <label class="inline-flex items-center gap-1.5 text-sm text-[#6B6459]">
+            <span class="sr-only">Repair batch size</span>
+            <select wire:model="repairBatchSize" class="rounded-lg border border-[#E0D6C2] bg-white px-2 py-2 text-sm">
+                <option value="10">10</option>
+                <option value="20">20</option>
+            </select>
+        </label>
+        <button type="button"
+            wire:click="repairNextCostBatch"
+            class="rounded-lg border border-[#C9A227] bg-white px-3 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]"
+            title="Scan the next batch: backfill missing line costs on open orders; clear invented COGS on cancelled/returned">
+            Repair next {{ $repairBatchSize }}
+        </button>
+        @if ($repairAfterId > 0)
+            <button type="button"
+                wire:click="resetCostRepairCursor"
+                class="text-xs font-medium text-[#8C8474] hover:text-[#1E1E1E] hover:underline">
+                Reset cursor
+            </button>
+        @endif
         @php
             $zeroFiltersActive = $zeroRevenue || $zeroCogs || $zeroPackaging || $zeroCourier
                 || $zeroCod || $zeroDirect || $zeroProfit;
@@ -42,6 +62,12 @@
             </p>
         @endif
     </div>
+
+    @if ($repairMessage)
+        <div class="mb-4 rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2 text-sm text-[#6B6459]" data-repair-message>
+            {{ $repairMessage }}
+        </div>
+    @endif
 
     <div class="overflow-hidden rounded-xl border border-[#EFE7D6] bg-white">
         <div class="overflow-x-auto">

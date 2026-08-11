@@ -319,7 +319,6 @@
                                         @if ($row['product_id'])
                                             <button type="button"
                                                 wire:click="syncCogsModalRowToAllOrders({{ $index }})"
-                                                wire:confirm="Update this product’s costs and overwrite purchase/unit cost on every order line for this product?"
                                                 class="rounded-lg border border-[#C9A227] px-3 py-1.5 text-xs font-medium text-[#C9A227] hover:bg-[#FAF6EF]">
                                                 Sync to all orders with this product
                                             </button>

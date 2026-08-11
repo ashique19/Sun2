@@ -601,6 +601,24 @@ class AnalyticsService
      *     profit: float
      * }
      */
+    public function orderContribution(Order $order): array
+    {
+        return $this->orderEconomics($order);
+    }
+
+    /**
+     * Per-order contribution (before business-level indirect expenses).
+     *
+     * @return array{
+     *     revenue: float,
+     *     cogs: float,
+     *     packaging: float,
+     *     courier: float,
+     *     cod: float,
+     *     direct: float,
+     *     profit: float
+     * }
+     */
     private function orderEconomics(Order $order): array
     {
         $revenue = (float) ($order->collected_amount ?? 0);

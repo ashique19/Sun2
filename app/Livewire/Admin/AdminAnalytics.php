@@ -33,6 +33,12 @@ class AdminAnalytics extends Component
                     'stat' => '৳'.number_format($overview['revenue'], 0).' collected · '.$year,
                 ],
                 [
+                    'title' => 'All orders with costs',
+                    'blurb' => 'Order-by-order revenue, COGS, packaging, courier, and contribution P/L.',
+                    'route' => 'admin.analytics.orders-with-costs',
+                    'stat' => 'Editable packaging · courier · COGS',
+                ],
+                [
                     'title' => 'Ordered vs delivered',
                     'blurb' => 'Compare placement volume/value with delivery volume/value.',
                     'route' => 'admin.analytics.ordered-delivered',

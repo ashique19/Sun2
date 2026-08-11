@@ -10,6 +10,7 @@ use App\Livewire\Admin\AdminAnalytics;
 use App\Livewire\Admin\AdminAnalyticsCategoryRevenue;
 use App\Livewire\Admin\AdminAnalyticsDetail;
 use App\Livewire\Admin\AdminAnalyticsOrderedDelivered;
+use App\Livewire\Admin\AdminAnalyticsOrdersWithCosts;
 use App\Livewire\Admin\AdminAnalyticsPnl;
 use App\Livewire\Admin\AdminAreaEdit;
 use App\Livewire\Admin\AdminAreas;
@@ -250,6 +251,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/users/{user}/edit', AdminUserEdit::class)->whereNumber('user')->name('users.edit');
         Route::get('/analytics', AdminAnalytics::class)->name('analytics');
         Route::get('/analytics/pnl', AdminAnalyticsPnl::class)->name('analytics.pnl');
+        Route::get('/analytics/orders-with-costs', AdminAnalyticsOrdersWithCosts::class)->name('analytics.orders-with-costs');
         Route::get('/analytics/ordered-delivered', AdminAnalyticsOrderedDelivered::class)->name('analytics.ordered-delivered');
         Route::get('/analytics/category-revenue', AdminAnalyticsCategoryRevenue::class)->name('analytics.category-revenue');
         Route::get('/analytics/{year}/{month}/{metric}', AdminAnalyticsDetail::class)

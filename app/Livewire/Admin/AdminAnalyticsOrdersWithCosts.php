@@ -814,25 +814,32 @@ class AdminAnalyticsOrdersWithCosts extends Component
             return;
         }
 
-        $this->cogsModalMessage = 'Synced “'.$result['product']->name.'” costs to '.$result['synced'].' open order line(s) (cancelled/returned skipped).';
-        $this->afterCogsModalCostWrite();
+        $message = 'Synced “'.$result['product']->name.'” costs to '.$result['synced']
+            .' open order line(s) (cancelled/returned skipped).';
+
+        $nextId = $this->nextOrderIdForCogsModal();
+
+        if ($nextId === null) {
+            $this->closeCogsModal();
+
+            return;
+        }
+
+        if ($nextId === $this->cogsModalOrderId) {
+            $this->cogsModalMessage = $message;
+            $this->refreshCogsModalRows();
+
+            return;
+        }
+
+        $this->openCogsModal($nextId);
+        $this->cogsModalMessage = $message.' Now editing '.$this->cogsModalOrderNumber.'.';
     }
 
     public function render(AnalyticsService $analytics)
     {
-        $orders = Order::query()
+        $orders = $this->filteredOrdersQuery()
             ->with(['items', 'courier:id,name,slug,cod_percentage'])
-            ->when($this->status === '', fn ($query) => $query->where('status', '!=', Order::STATUS_DRAFT))
-            ->when($this->search !== '', function ($query): void {
-                $term = '%'.str_replace(['%', '_'], ['\\%', '\\_'], $this->search).'%';
-                $query->where(function ($inner) use ($term): void {
-                    $inner->where('order_number', 'like', $term)
-                        ->orWhere('name', 'like', $term)
-                        ->orWhere('phone', 'like', $term);
-                });
-            })
-            ->when($this->status !== '', fn ($query) => $query->where('status', $this->status))
-            ->tap(fn (Builder $query) => $this->applyZeroFilters($query))
             ->orderByDesc('id')
             ->paginate(50);
 
@@ -858,6 +865,83 @@ class AdminAnalyticsOrdersWithCosts extends Component
                 'draft' => 'Draft',
             ],
         ]);
+    }
+
+    private function filteredOrdersQuery(): Builder
+    {
+        return Order::query()
+            ->when($this->status === '', fn ($query) => $query->where('status', '!=', Order::STATUS_DRAFT))
+            ->when($this->search !== '', function ($query): void {
+                $term = '%'.str_replace(['%', '_'], ['\\%', '\\_'], $this->search).'%';
+                $query->where(function ($inner) use ($term): void {
+                    $inner->where('order_number', 'like', $term)
+                        ->orWhere('name', 'like', $term)
+                        ->orWhere('phone', 'like', $term);
+                });
+            })
+            ->when($this->status !== '', fn ($query) => $query->where('status', $this->status))
+            ->tap(fn (Builder $query) => $this->applyZeroFilters($query));
+    }
+
+    /**
+     * Next order to edit in the Fix product costs modal after a sync.
+     * Stays on the current order when any kept line still has ৳0 COGS;
+     * otherwise moves to the next order in the current table filters.
+     */
+    private function nextOrderIdForCogsModal(): ?int
+    {
+        $currentId = $this->cogsModalOrderId;
+
+        if ($currentId === null) {
+            return null;
+        }
+
+        $current = Order::query()->with('items')->find($currentId);
+
+        if ($current && $this->orderStillNeedsProductCostFix($current)) {
+            return $currentId;
+        }
+
+        $base = $this->filteredOrdersQuery();
+
+        $next = (clone $base)
+            ->where('id', '<', $currentId)
+            ->orderByDesc('id')
+            ->value('id');
+
+        if ($next !== null) {
+            return (int) $next;
+        }
+
+        $wrapped = (clone $base)
+            ->where('id', '!=', $currentId)
+            ->orderByDesc('id')
+            ->value('id');
+
+        return $wrapped !== null ? (int) $wrapped : null;
+    }
+
+    private function orderStillNeedsProductCostFix(Order $order): bool
+    {
+        $status = strtolower((string) $order->status);
+
+        if (in_array($status, ['cancelled', 'returned', Order::STATUS_DRAFT], true)) {
+            return false;
+        }
+
+        foreach ($order->items as $item) {
+            $kept = max(0, (int) $item->quantity - (int) ($item->returned_quantity ?? 0));
+
+            if ($kept < 1) {
+                continue;
+            }
+
+            if ($item->effectiveUnitCost() < 0.01) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function applyZeroFilters(Builder $query): void

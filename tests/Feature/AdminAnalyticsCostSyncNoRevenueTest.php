@@ -120,8 +120,8 @@ class AdminAnalyticsCostSyncNoRevenueTest extends TestCase
             ->call('syncCogsModalRowToAllOrders', 0)
             ->assertHasNoErrors()
             ->assertSet('zeroCogs', true)
-            ->assertSee('Synced')
-            ->assertSee('2 open order line');
+            // Both zero-COGS orders shared this product, so the filter is empty and the modal closes.
+            ->assertSet('cogsModalOpen', false);
 
         $a->refresh()->load('items');
         $b->refresh()->load('items');
@@ -131,9 +131,125 @@ class AdminAnalyticsCostSyncNoRevenueTest extends TestCase
         $this->assertSame(150.0, $b->cogs());
 
         // Re-sync same values must still report both lines (not MySQL "0 changed").
-        $component
+        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
+            ->call('openCogsModal', $a->id)
             ->call('syncCogsModalRowToAllOrders', 0)
             ->assertSee('2 open order line');
+    }
+
+    #[Test]
+    public function sync_advances_to_next_zero_cogs_order(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+
+        $firstProduct = Product::query()->create([
+            'name' => 'First SKU',
+            'slug' => 'first-sku',
+            'price' => 500,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'is_published' => true,
+        ]);
+        $secondProduct = Product::query()->create([
+            'name' => 'Second SKU',
+            'slug' => 'second-sku',
+            'price' => 500,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'is_published' => true,
+        ]);
+
+        // Lower id first so the later order is "next" in the desc list after the higher id is fixed.
+        $nextOrder = $this->orderWithProduct($courier, $secondProduct, 'NEXT-ORDER', 0);
+        $currentOrder = $this->orderWithProduct($courier, $firstProduct, 'CURRENT-ORDER', 0);
+
+        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
+            ->set('zeroCogs', true)
+            ->call('openCogsModal', $currentOrder->id)
+            ->assertSet('cogsModalOrderNumber', 'CURRENT-ORDER')
+            ->set('cogsModalRows.0.purchase_price', '100')
+            ->set('cogsModalRows.0.other_cost', '20')
+            ->call('syncCogsModalRowToAllOrders', 0)
+            ->assertHasNoErrors()
+            ->assertSet('cogsModalOpen', true)
+            ->assertSet('cogsModalOrderId', $nextOrder->id)
+            ->assertSet('cogsModalOrderNumber', 'NEXT-ORDER')
+            ->assertSee('Synced')
+            ->assertSee('Now editing NEXT-ORDER');
+    }
+
+    #[Test]
+    public function sync_stays_on_order_when_another_line_still_has_zero_cogs(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+
+        $productA = Product::query()->create([
+            'name' => 'Line A',
+            'slug' => 'line-a',
+            'price' => 300,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'is_published' => true,
+        ]);
+        $productB = Product::query()->create([
+            'name' => 'Line B',
+            'slug' => 'line-b',
+            'price' => 200,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'is_published' => true,
+        ]);
+
+        $order = Order::query()->create([
+            'order_number' => 'MULTI-LINE',
+            'name' => 'Multi',
+            'phone' => '01710000099',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'confirmed',
+            'subtotal' => 500,
+            'delivery_charge' => 80,
+            'courier_charge' => 60,
+            'packaging_cost' => 20,
+            'collected_amount' => 0,
+            'total' => 580,
+            'courier_id' => $courier->id,
+            'placed_at' => now(),
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'product_id' => $productA->id,
+            'name' => $productA->name,
+            'quantity' => 1,
+            'price' => 300,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'line_total' => 300,
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'product_id' => $productB->id,
+            'name' => $productB->name,
+            'quantity' => 1,
+            'price' => 200,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'line_total' => 200,
+        ]);
+
+        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
+            ->set('zeroCogs', true)
+            ->call('openCogsModal', $order->id)
+            ->set('cogsModalRows.0.purchase_price', '80')
+            ->set('cogsModalRows.0.other_cost', '10')
+            ->call('syncCogsModalRowToAllOrders', 0)
+            ->assertHasNoErrors()
+            ->assertSet('cogsModalOpen', true)
+            ->assertSet('cogsModalOrderId', $order->id)
+            ->assertSee('Synced')
+            ->assertDontSee('Now editing');
     }
 
     #[Test]
@@ -204,9 +320,7 @@ class AdminAnalyticsCostSyncNoRevenueTest extends TestCase
             ->set('cogsModalRows.0.other_cost', '25')
             ->call('syncCogsModalRowToAllOrders', 0)
             ->assertHasNoErrors()
-            ->assertSet('cogsModalOpen', true)
-            ->assertSee('Synced')
-            ->assertSee('2 open order line');
+            ->assertSet('cogsModalOpen', false);
 
         $product->refresh();
         $this->assertSame(150.0, (float) $product->purchase_price);
@@ -238,8 +352,7 @@ class AdminAnalyticsCostSyncNoRevenueTest extends TestCase
             ->set('cogsModalRows.0.purchase_price', '200')
             ->set('cogsModalRows.0.other_cost', '0')
             ->call('syncCogsModalRowToAllOrders', 0)
-            ->assertHasNoErrors()
-            ->assertSee('Synced');
+            ->assertHasNoErrors();
 
         $zeroRevenue->refresh()->load('items');
         $this->assertSame(200.0, (float) $zeroRevenue->items->first()->unit_cost);

@@ -3,7 +3,11 @@
     $p = $deck['prior'];
     $g = $deck['growth'];
     $u = $deck['unit_economics'];
-    $maxMonthlyGmv = max(1, collect($deck['monthly'])->max('gmv') ?: 1);
+    $maxMonthlyGmv = max(
+        1,
+        (float) (collect($deck['monthly'])->max('gmv') ?: 0),
+        (float) (collect($deck['monthly'])->max('prior_gmv') ?: 0),
+    );
 
     $fmt = fn (?float $n) => $n === null ? '—' : '৳'.number_format($n, 0);
     $pct = function (?float $n, bool $signed = true): string {
@@ -22,7 +26,7 @@
     };
 @endphp
 
-<div wire:poll.60s="refreshDeck" class="investor-pitch">
+<div class="investor-pitch">
     <div class="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
             <div class="mb-1 flex flex-wrap items-center gap-2 text-sm">
@@ -32,13 +36,24 @@
             </div>
             <h1 class="font-serif text-3xl font-semibold">Investor pitch deck</h1>
             <p class="mt-1 text-sm text-[#8C8474]">
-                Live LTM snapshot from orders · auto-refreshes every 60s · as of {{ $deck['as_of'] }}
+                Yearly report from orders · compared with prior year · as of {{ $deck['as_of'] }}
             </p>
         </div>
-        <button type="button" wire:click="refreshDeck"
-            class="rounded-full border border-[#E0D6C2] px-4 py-2 text-xs font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
-            Refresh now
-        </button>
+        <div class="flex flex-wrap items-end gap-3">
+            <div>
+                <label class="mb-1 block text-xs font-medium text-[#6B6459]">Year</label>
+                <select wire:model.live="year"
+                    class="rounded-lg border border-[#E0D6C2] bg-white px-3 py-2 text-sm text-[#1E1E1E]">
+                    @foreach ($years as $y)
+                        <option value="{{ $y }}">{{ $y }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <button type="button" wire:click="refreshDeck"
+                class="rounded-full border border-[#E0D6C2] px-4 py-2 text-xs font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
+                Refresh now
+            </button>
+        </div>
     </div>
 
     <x-admin.analytics-subnav active="investor" />
@@ -51,19 +66,23 @@
         </h2>
         <p class="mt-3 max-w-xl text-sm text-[#6B6459]">
             {{ $deck['window']['label'] }} ({{ $deck['window']['start'] }} → {{ $deck['window']['end'] }})
+            vs {{ $deck['prior_window']['label'] }}
             · Bangladesh mobile-first · cash on delivery
+            @if ($deck['is_partial_year'])
+                <span class="ml-1 rounded-full bg-white/80 px-2 py-0.5 text-[11px] text-[#C9A227] ring-1 ring-[#EFE7D6]">YTD</span>
+            @endif
         </p>
 
         <div class="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div class="rounded-xl bg-white/80 p-4 ring-1 ring-[#EFE7D6]">
                 <p class="text-xs text-[#8C8474]">Placed GMV</p>
                 <p class="mt-1 font-serif text-2xl font-semibold tabular-nums">{{ $fmt($t['gmv_placed']) }}</p>
-                <p class="mt-1 text-xs {{ $growthTone($g['gmv_placed_pct']) }}">{{ $pct($g['gmv_placed_pct']) }} YoY</p>
+                <p class="mt-1 text-xs {{ $growthTone($g['gmv_placed_pct']) }}">{{ $pct($g['gmv_placed_pct']) }} vs {{ $deck['prior_year'] }}</p>
             </div>
             <div class="rounded-xl bg-white/80 p-4 ring-1 ring-[#EFE7D6]">
                 <p class="text-xs text-[#8C8474]">Orders</p>
                 <p class="mt-1 font-serif text-2xl font-semibold tabular-nums">{{ number_format($t['orders']) }}</p>
-                <p class="mt-1 text-xs {{ $growthTone($g['orders_pct']) }}">{{ $pct($g['orders_pct']) }} YoY · AOV {{ $fmt($t['aov']) }}</p>
+                <p class="mt-1 text-xs {{ $growthTone($g['orders_pct']) }}">{{ $pct($g['orders_pct']) }} vs {{ $deck['prior_year'] }} · AOV {{ $fmt($t['aov']) }}</p>
             </div>
             <div class="rounded-xl bg-white/80 p-4 ring-1 ring-[#EFE7D6]">
                 <p class="text-xs text-[#8C8474]">Collected (delivered)</p>
@@ -80,15 +99,18 @@
 
     {{-- Slide 2: Growth --}}
     <section class="mb-6 rounded-2xl border border-[#EFE7D6] bg-white p-6">
-        <h2 class="font-serif text-xl font-semibold">Growth vs prior year</h2>
-        <p class="mt-1 text-sm text-[#8C8474]">{{ $deck['prior_window']['label'] }} as baseline</p>
+        <h2 class="font-serif text-xl font-semibold">{{ $deck['year'] }} vs {{ $deck['prior_year'] }}</h2>
+        <p class="mt-1 text-sm text-[#8C8474]">
+            {{ $deck['window']['label'] }} compared with {{ $deck['prior_window']['label'] }}
+            ({{ $deck['prior_window']['start'] }} → {{ $deck['prior_window']['end'] }})
+        </p>
         <div class="mt-5 overflow-x-auto">
             <table class="min-w-full text-sm">
                 <thead>
                     <tr class="border-b border-[#EFE7D6] text-left text-xs text-[#8C8474]">
                         <th class="py-2 pr-4 font-medium">Metric</th>
-                        <th class="py-2 pr-4 font-medium">LTM</th>
-                        <th class="py-2 pr-4 font-medium">Prior LTM</th>
+                        <th class="py-2 pr-4 font-medium">{{ $deck['window']['label'] }}</th>
+                        <th class="py-2 pr-4 font-medium">{{ $deck['prior_window']['label'] }}</th>
                         <th class="py-2 font-medium">Change</th>
                     </tr>
                 </thead>
@@ -115,7 +137,7 @@
     {{-- Slide 3: Unit economics --}}
     <section class="mb-6 rounded-2xl border border-[#EFE7D6] bg-white p-6">
         <h2 class="font-serif text-xl font-semibold">Unit economics</h2>
-        <p class="mt-1 text-sm text-[#8C8474]">Delivered LTM · contribution before ads &amp; salaries</p>
+        <p class="mt-1 text-sm text-[#8C8474]">Delivered in {{ $deck['window']['label'] }} · contribution before ads &amp; salaries</p>
         <div class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div class="rounded-xl bg-[#FAF6EF] p-4">
                 <p class="text-xs text-[#8C8474]">Merch GM (known COGS)</p>
@@ -145,27 +167,40 @@
         </div>
     </section>
 
-    {{-- Slide 4: Monthly pulse --}}
+    {{-- Slide 4: Monthly pulse with prior year --}}
     <section class="mb-6 rounded-2xl border border-[#EFE7D6] bg-white p-6">
-        <h2 class="font-serif text-xl font-semibold">Monthly pulse</h2>
-        <p class="mt-1 text-sm text-[#8C8474]">Placed GMV by month · bars scaled to peak</p>
-        <div class="mt-5 space-y-2">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+            <div>
+                <h2 class="font-serif text-xl font-semibold">Monthly pulse</h2>
+                <p class="mt-1 text-sm text-[#8C8474]">Placed GMV by month · {{ $deck['year'] }} vs {{ $deck['prior_year'] }}</p>
+            </div>
+            <div class="flex items-center gap-3 text-[11px] text-[#6B6459]">
+                <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-[#C9A227]"></span>{{ $deck['year'] }}</span>
+                <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-[#E0D6C2]"></span>{{ $deck['prior_year'] }}</span>
+            </div>
+        </div>
+        <div class="mt-5 space-y-3">
             @foreach ($deck['monthly'] as $row)
-                <div class="grid grid-cols-[4.5rem_1fr_auto] items-center gap-3 text-xs sm:grid-cols-[6rem_1fr_auto]">
+                <div class="grid grid-cols-[2.5rem_1fr_auto] items-center gap-3 text-xs">
                     <span class="text-[#6B6459]">{{ $row['label'] }}</span>
-                    <div class="h-2.5 overflow-hidden rounded-full bg-[#F5F0E6]">
-                        <div class="h-full rounded-full bg-[#C9A227]"
-                            style="width: {{ min(100, round($row['gmv'] * 100 / $maxMonthlyGmv, 1)) }}%"></div>
+                    <div class="space-y-1">
+                        <div class="h-2 overflow-hidden rounded-full bg-[#F5F0E6]">
+                            <div class="h-full rounded-full bg-[#C9A227]"
+                                style="width: {{ min(100, round($row['gmv'] * 100 / $maxMonthlyGmv, 1)) }}%"></div>
+                        </div>
+                        <div class="h-2 overflow-hidden rounded-full bg-[#F5F0E6]">
+                            <div class="h-full rounded-full bg-[#E0D6C2]"
+                                style="width: {{ min(100, round($row['prior_gmv'] * 100 / $maxMonthlyGmv, 1)) }}%"></div>
+                        </div>
                     </div>
-                    <span class="min-w-[7rem] text-right tabular-nums text-[#1E1E1E]">
+                    <span class="min-w-[8.5rem] text-right tabular-nums text-[#1E1E1E]">
                         {{ $fmt($row['gmv']) }}
-                        <span class="text-[#8C8474]">· {{ $row['orders'] }}</span>
+                        <span class="text-[#8C8474]">/ {{ $fmt($row['prior_gmv']) }}</span>
                     </span>
                 </div>
             @endforeach
         </div>
     </section>
-
     <div class="mb-6 grid gap-6 lg:grid-cols-3">
         {{-- Channels --}}
         <section class="rounded-2xl border border-[#EFE7D6] bg-white p-6">

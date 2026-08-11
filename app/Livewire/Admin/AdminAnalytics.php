@@ -52,9 +52,9 @@ class AdminAnalytics extends Component
                 ],
                 [
                     'title' => 'Investor pitch',
-                    'blurb' => 'Live LTM traction, growth, unit economics, and channel mix for fundraising.',
+                    'blurb' => 'Yearly traction, YoY growth, unit economics, and channel mix for fundraising.',
                     'route' => 'admin.analytics.investor-pitch',
-                    'stat' => 'Auto-refresh · last 12 months',
+                    'stat' => 'Calendar year · vs prior year',
                 ],
             ],
         ]);

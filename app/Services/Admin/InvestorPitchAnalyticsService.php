@@ -16,6 +16,9 @@ class InvestorPitchAnalyticsService
     /**
      * @return array{
      *     as_of: string,
+     *     year: int,
+     *     prior_year: int,
+     *     is_partial_year: bool,
      *     window: array{start: string, end: string, label: string},
      *     prior_window: array{start: string, end: string, label: string},
      *     traction: array<string, mixed>,
@@ -25,47 +28,95 @@ class InvestorPitchAnalyticsService
      *     channels: list<array{via: string, orders: int, gmv: float, share_pct: float}>,
      *     geos: list<array{city: string, orders: int, gmv: float}>,
      *     categories: list<array{name: string, orders: int, revenue: float}>,
-     *     monthly: list<array{ym: string, label: string, orders: int, gmv: float, delivered: int, collected: float, dispatched: int}>,
+     *     monthly: list<array{month: int, label: string, orders: int, gmv: float, delivered: int, collected: float, dispatched: int, prior_gmv: float, prior_orders: int}>,
      *     caveats: list<string>
      * }
      */
-    public function deck(?Carbon $asOf = null): array
+    public function deck(int $year, ?Carbon $asOf = null): array
     {
         $asOf = ($asOf ?? now('Asia/Dhaka'))->copy()->timezone('Asia/Dhaka');
-        $ltmStart = $asOf->copy()->subYear()->startOfDay();
-        $priorEnd = $ltmStart->copy()->subSecond();
-        $priorStart = $priorEnd->copy()->subYear()->addSecond()->startOfDay();
+        $currentYear = (int) $asOf->year;
 
-        $traction = $this->windowMetrics($ltmStart, $asOf);
+        if ($year < 2000 || $year > $currentYear + 1) {
+            $year = $currentYear;
+        }
+
+        $yearStart = Carbon::create($year, 1, 1, 0, 0, 0, 'Asia/Dhaka')->startOfDay();
+        $yearEndFull = $yearStart->copy()->endOfYear();
+        $isPartial = $year === $currentYear;
+        $yearEnd = $isPartial ? $asOf->copy() : $yearEndFull;
+
+        $priorYear = $year - 1;
+        $priorStart = Carbon::create($priorYear, 1, 1, 0, 0, 0, 'Asia/Dhaka')->startOfDay();
+        // Like-for-like: YTD selected year vs same calendar span last year.
+        $priorEnd = $yearEnd->copy()->subYear();
+
+        $traction = $this->windowMetrics($yearStart, $yearEnd);
         $prior = $this->windowMetrics($priorStart, $priorEnd);
 
         return [
             'as_of' => $asOf->format('Y-m-d H:i T'),
+            'year' => $year,
+            'prior_year' => $priorYear,
+            'is_partial_year' => $isPartial,
             'window' => [
-                'start' => $ltmStart->toDateString(),
-                'end' => $asOf->toDateString(),
-                'label' => 'Last 12 months',
+                'start' => $yearStart->toDateString(),
+                'end' => $yearEnd->toDateString(),
+                'label' => $isPartial ? "{$year} YTD" : (string) $year,
             ],
             'prior_window' => [
                 'start' => $priorStart->toDateString(),
                 'end' => $priorEnd->toDateString(),
-                'label' => 'Prior 12 months',
+                'label' => $isPartial ? "{$priorYear} same period" : (string) $priorYear,
             ],
             'traction' => $traction,
             'prior' => $prior,
             'growth' => $this->growth($traction, $prior),
-            'unit_economics' => $this->unitEconomics($ltmStart, $asOf, $traction),
-            'channels' => $this->channels($ltmStart, $asOf),
-            'geos' => $this->geos($ltmStart, $asOf),
-            'categories' => $this->categories($ltmStart, $asOf),
-            'monthly' => $this->monthly($ltmStart, $asOf),
+            'unit_economics' => $this->unitEconomics($yearStart, $yearEnd, $traction),
+            'channels' => $this->channels($yearStart, $yearEnd),
+            'geos' => $this->geos($yearStart, $yearEnd),
+            'categories' => $this->categories($yearStart, $yearEnd),
+            'monthly' => $this->monthlyByYear($year, $yearStart, $yearEnd, $priorStart, $priorEnd),
             'caveats' => [
+                $isPartial
+                    ? "Selected year {$year} is year-to-date through {$yearEnd->toDateString()}; prior year uses the same calendar span for a fair YoY compare."
+                    : "Selected year {$year} is a full calendar year versus full {$priorYear}.",
                 'Merchandise gross margin uses lines with purchase_price > 0; zero-cost lines are excluded from GM%.',
                 'Courier cost uses snapshotted courier_charge (estimated or confirmed); historical gaps remain where fee was never stored.',
                 'Contribution is before ads, salaries, rent, and other opex not fully captured in expenses.',
                 'Unsettled dispatched orders are excluded from delivered/collected until settlement is recorded.',
             ],
         ];
+    }
+
+    /**
+     * Years that have placed orders (newest first), always including the current Dhaka year.
+     *
+     * @return list<int>
+     */
+    public function availableYears(): array
+    {
+        $years = Order::query()
+            ->whereNotNull('placed_at')
+            ->where('status', '!=', Order::STATUS_DRAFT)
+            ->get(['placed_at'])
+            ->map(fn (Order $order) => (int) $order->placed_at->timezone('Asia/Dhaka')->year)
+            ->unique()
+            ->sortDesc()
+            ->values()
+            ->all();
+
+        $current = (int) now('Asia/Dhaka')->year;
+
+        if ($years === []) {
+            return [$current];
+        }
+
+        if (! in_array($current, $years, true)) {
+            array_unshift($years, $current);
+        }
+
+        return $years;
     }
 
     /**
@@ -285,59 +336,84 @@ class InvestorPitchAnalyticsService
     }
 
     /**
-     * @return list<array{ym: string, label: string, orders: int, gmv: float, delivered: int, collected: float, dispatched: int}>
+     * Calendar months for the selected year, with prior-year same-month GMV for comparison.
+     *
+     * @return list<array{month: int, label: string, orders: int, gmv: float, delivered: int, collected: float, dispatched: int, prior_gmv: float, prior_orders: int}>
      */
-    private function monthly(Carbon $start, Carbon $end): array
-    {
-        $cursor = $start->copy()->startOfMonth();
+    private function monthlyByYear(
+        int $year,
+        Carbon $start,
+        Carbon $end,
+        Carbon $priorStart,
+        Carbon $priorEnd,
+    ): array {
         $months = [];
 
-        while ($cursor->lte($end)) {
-            $ym = $cursor->format('Y-m');
-            $months[$ym] = [
-                'ym' => $ym,
-                'label' => $cursor->format('M Y'),
+        for ($month = 1; $month <= 12; $month++) {
+            $months[$month] = [
+                'month' => $month,
+                'label' => Carbon::create($year, $month, 1)->format('M'),
                 'orders' => 0,
                 'gmv' => 0.0,
                 'delivered' => 0,
                 'collected' => 0.0,
                 'dispatched' => 0,
+                'prior_gmv' => 0.0,
+                'prior_orders' => 0,
             ];
-            $cursor->addMonth();
         }
 
         foreach ($this->ordersInWindow($start, $end) as $order) {
-            $placed = $order->placed_at?->timezone('Asia/Dhaka') ?? $order->created_at?->timezone('Asia/Dhaka');
+            $placed = $order->placed_at?->timezone('Asia/Dhaka');
 
             if ($placed === null) {
                 continue;
             }
 
-            $ym = $placed->format('Y-m');
-
-            if (! isset($months[$ym])) {
-                continue;
-            }
-
-            $months[$ym]['orders']++;
-            $months[$ym]['gmv'] += (float) $order->total;
+            $month = (int) $placed->month;
+            $months[$month]['orders']++;
+            $months[$month]['gmv'] += (float) $order->total;
 
             if ($order->status === 'delivered') {
-                $months[$ym]['delivered']++;
-                $months[$ym]['collected'] += (float) $order->collected_amount;
+                $months[$month]['delivered']++;
+                $months[$month]['collected'] += (float) $order->collected_amount;
             }
 
             if ($order->status === 'dispatched') {
-                $months[$ym]['dispatched']++;
+                $months[$month]['dispatched']++;
             }
         }
 
-        return array_values(array_map(function (array $row): array {
+        foreach ($this->ordersInWindow($priorStart, $priorEnd) as $order) {
+            $placed = $order->placed_at?->timezone('Asia/Dhaka');
+
+            if ($placed === null) {
+                continue;
+            }
+
+            $month = (int) $placed->month;
+            $months[$month]['prior_orders']++;
+            $months[$month]['prior_gmv'] += (float) $order->total;
+        }
+
+        // Hide future months in a partial current year (no activity expected).
+        $lastMonth = (int) $end->timezone('Asia/Dhaka')->month;
+
+        return array_values(array_map(function (array $row) use ($lastMonth, $end, $year): array {
             $row['gmv'] = round($row['gmv'], 2);
             $row['collected'] = round($row['collected'], 2);
+            $row['prior_gmv'] = round($row['prior_gmv'], 2);
+
+            if ($year === (int) $end->year && $row['month'] > $lastMonth) {
+                $row['orders'] = 0;
+                $row['gmv'] = 0.0;
+                $row['delivered'] = 0;
+                $row['collected'] = 0.0;
+                $row['dispatched'] = 0;
+            }
 
             return $row;
-        }, $months));
+        }, array_filter($months, fn (array $row) => $year !== (int) $end->year || $row['month'] <= $lastMonth)));
     }
 
     /**

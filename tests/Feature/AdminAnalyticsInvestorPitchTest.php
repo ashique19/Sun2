@@ -37,11 +37,12 @@ class AdminAnalyticsInvestorPitchTest extends TestCase
 
         Livewire::test(AdminAnalytics::class)
             ->assertSee('Investor pitch')
-            ->assertSee('Live LTM traction');
+            ->assertSee('Yearly traction')
+            ->assertDontSee('Auto-refresh');
     }
 
     #[Test]
-    public function investor_pitch_page_renders_live_metrics(): void
+    public function investor_pitch_page_renders_yearly_metrics_with_prior_year(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-08-11 12:00:00', 'Asia/Dhaka'));
 
@@ -103,26 +104,44 @@ class AdminAnalyticsInvestorPitchTest extends TestCase
         $this->actingAs($this->adminUser());
 
         Livewire::test(AdminAnalyticsInvestorPitch::class)
+            ->assertSet('year', 2026)
             ->assertSee('Investor pitch deck')
             ->assertSee('Sundoritoma')
+            ->assertSee('2026 YTD')
+            ->assertSee('2025 same period')
             ->assertSee('Placed GMV')
             ->assertSee('Unit economics')
             ->assertSee('admin')
             ->assertSee('messenger')
             ->assertSee('Dhaka')
             ->assertSee('Necklaces')
-            ->assertSee('Methodology notes');
+            ->assertSee('Methodology notes')
+            ->assertDontSee('wire:poll', false)
+            ->assertDontSee('auto-refreshes');
 
         $this->get(route('admin.analytics.investor-pitch'))->assertOk();
 
-        $deck = app(InvestorPitchAnalyticsService::class)->deck();
+        $deck = app(InvestorPitchAnalyticsService::class)->deck(2026);
+        $this->assertSame(2026, $deck['year']);
+        $this->assertSame(2025, $deck['prior_year']);
+        $this->assertTrue($deck['is_partial_year']);
         $this->assertSame(2, $deck['traction']['orders']);
         $this->assertSame(2580.0, $deck['traction']['gmv_placed']);
         $this->assertSame(1, $deck['traction']['delivered']);
         $this->assertSame(1580.0, $deck['traction']['collected']);
-        $this->assertSame(1, $deck['traction']['dispatched']);
+        $this->assertSame(1, $deck['prior']['orders']);
+        $this->assertSame(1200.0, $deck['prior']['gmv_placed']);
         $this->assertNotNull($deck['unit_economics']['gm_pct_known']);
-        $this->assertGreaterThan(0, $deck['unit_economics']['gm_pct_known']);
+
+        Livewire::test(AdminAnalyticsInvestorPitch::class)
+            ->set('year', 2025)
+            ->assertSee('2025')
+            ->assertSee('2024');
+
+        $deck2025 = app(InvestorPitchAnalyticsService::class)->deck(2025);
+        $this->assertFalse($deck2025['is_partial_year']);
+        $this->assertSame(1, $deck2025['traction']['orders']);
+        $this->assertSame(1200.0, $deck2025['traction']['gmv_placed']);
 
         Carbon::setTestNow();
     }

@@ -6,6 +6,7 @@
         'pnl' => ['route' => 'admin.analytics.pnl', 'label' => 'Profit & loss'],
         'ordered' => ['route' => 'admin.analytics.ordered-delivered', 'label' => 'Ordered vs delivered'],
         'category' => ['route' => 'admin.analytics.category-revenue', 'label' => 'By category'],
+        'investor' => ['route' => 'admin.analytics.investor-pitch', 'label' => 'Investor pitch'],
     ];
 @endphp
 

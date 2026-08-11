@@ -994,11 +994,6 @@ class AdminAnalyticsOrdersWithCosts extends Component
 
     private function afterCogsModalCostWrite(): void
     {
-        // Keep the edited order visible when the user had filtered to COGS = 0.
-        if ($this->zeroCogs) {
-            $this->zeroCogs = false;
-        }
-
         $this->refreshCogsModalRows();
     }
 

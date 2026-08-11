@@ -119,7 +119,7 @@ class AdminAnalyticsCostSyncNoRevenueTest extends TestCase
             ->set('cogsModalRows.0.other_cost', '30')
             ->call('syncCogsModalRowToAllOrders', 0)
             ->assertHasNoErrors()
-            ->assertSet('zeroCogs', false)
+            ->assertSet('zeroCogs', true)
             ->assertSee('Synced')
             ->assertSee('2 open order line');
 
@@ -262,7 +262,7 @@ class AdminAnalyticsCostSyncNoRevenueTest extends TestCase
             ->set('cogsModalRows.0.other_cost', '10')
             ->call('saveCogsModalRow', 0)
             ->assertHasNoErrors()
-            ->assertSet('zeroCogs', false)
+            ->assertSet('zeroCogs', true)
             ->assertSee('Saved');
 
         $order->refresh()->load('items');

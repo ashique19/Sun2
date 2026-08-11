@@ -57,24 +57,12 @@ class OrderCostSnapshotRepairService
         $samples = [];
 
         foreach ($orders as $order) {
-            $changed = false;
+            $result = $this->repairOrder($order);
 
-            if (in_array($order->status, ['cancelled', 'returned'], true)) {
-                $clearedHere = $this->clearCostsWhenReturnStillShowsCogs($order);
-                if ($clearedHere > 0) {
-                    $cleared += $clearedHere;
-                    $changed = true;
-                }
-            } else {
-                $backfilledHere = $this->backfillMissingLineCostsFromProducts($order);
-                if ($backfilledHere > 0) {
-                    $backfilled += $backfilledHere;
-                    $changed = true;
-                }
-            }
-
-            if ($changed) {
+            if ($result['changed']) {
                 $fixedOrders++;
+                $backfilled += $result['backfilled_lines'];
+                $cleared += $result['cleared_return_lines'];
                 if (count($samples) < 8) {
                     $samples[] = (string) $order->order_number;
                 }
@@ -91,6 +79,31 @@ class OrderCostSnapshotRepairService
             'next_after_id' => (int) $lastId,
             'done' => $orders->count() < $limit,
             'sample_order_numbers' => $samples,
+        ];
+    }
+
+    /**
+     * Apply COGS snapshot repair for a single order (open backfill or return clear).
+     *
+     * @return array{changed: bool, backfilled_lines: int, cleared_return_lines: int}
+     */
+    public function repairOrder(Order $order): array
+    {
+        $order = $order->fresh(['items.product']);
+        $status = strtolower((string) $order->status);
+        $backfilled = 0;
+        $cleared = 0;
+
+        if (in_array($status, ['cancelled', 'returned'], true)) {
+            $cleared = $this->clearCostsWhenReturnStillShowsCogs($order);
+        } else {
+            $backfilled = $this->backfillMissingLineCostsFromProducts($order);
+        }
+
+        return [
+            'changed' => ($backfilled + $cleared) > 0,
+            'backfilled_lines' => $backfilled,
+            'cleared_return_lines' => $cleared,
         ];
     }
 

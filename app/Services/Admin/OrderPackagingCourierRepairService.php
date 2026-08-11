@@ -61,39 +61,12 @@ class OrderPackagingCourierRepairService
         $samples = [];
 
         foreach ($orders as $order) {
-            $changed = false;
+            $result = $this->repairOrder($order);
 
-            if (round((float) ($order->packaging_cost ?? 0), 2) < 0.01) {
-                $estimate = $this->packaging->estimateFor($order);
-
-                if ($estimate >= 0.01) {
-                    $this->packaging->apply($order, $estimate);
-                    $packagingFixed++;
-                    $changed = true;
-                }
-            }
-
-            if (round((float) ($order->courier_charge ?? 0), 2) < 0.01) {
-                $fee = $this->courierCharges->estimateMerchantDeliveryFee($order, $order->courier);
-
-                if ($fee >= 0.01) {
-                    $this->courierCharges->set(
-                        $order->fresh(),
-                        $fee,
-                        'manual',
-                        null,
-                        [
-                            'source' => 'packaging_courier_repair',
-                            'rule' => 'piece_based_rate_card',
-                        ],
-                    );
-                    $courierFixed++;
-                    $changed = true;
-                }
-            }
-
-            if ($changed) {
+            if ($result['changed']) {
                 $fixedOrders++;
+                $packagingFixed += $result['packaging_fixed'] ? 1 : 0;
+                $courierFixed += $result['courier_fixed'] ? 1 : 0;
                 if (count($samples) < 8) {
                     $samples[] = (string) $order->order_number;
                 }
@@ -110,6 +83,51 @@ class OrderPackagingCourierRepairService
             'next_after_id' => (int) $lastId,
             'done' => $orders->count() < $limit,
             'sample_order_numbers' => $samples,
+        ];
+    }
+
+    /**
+     * Fill ৳0 packaging / courier from the current rate cards when possible.
+     *
+     * @return array{changed: bool, packaging_fixed: bool, courier_fixed: bool}
+     */
+    public function repairOrder(Order $order): array
+    {
+        $order = $order->fresh(['items.product.category', 'courier']);
+        $packagingFixed = false;
+        $courierFixed = false;
+
+        if (round((float) ($order->packaging_cost ?? 0), 2) < 0.01) {
+            $estimate = $this->packaging->estimateFor($order);
+
+            if ($estimate >= 0.01) {
+                $this->packaging->apply($order, $estimate);
+                $packagingFixed = true;
+            }
+        }
+
+        if (round((float) ($order->courier_charge ?? 0), 2) < 0.01) {
+            $fee = $this->courierCharges->estimateMerchantDeliveryFee($order, $order->courier);
+
+            if ($fee >= 0.01) {
+                $this->courierCharges->set(
+                    $order->fresh(),
+                    $fee,
+                    'manual',
+                    null,
+                    [
+                        'source' => 'packaging_courier_repair',
+                        'rule' => 'piece_based_rate_card',
+                    ],
+                );
+                $courierFixed = true;
+            }
+        }
+
+        return [
+            'changed' => $packagingFixed || $courierFixed,
+            'packaging_fixed' => $packagingFixed,
+            'courier_fixed' => $courierFixed,
         ];
     }
 }

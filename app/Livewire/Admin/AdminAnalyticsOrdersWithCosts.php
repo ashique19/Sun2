@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\Product;
 use App\Services\Admin\AnalyticsService;
+use App\Services\Admin\OrderCalculationAuditService;
 use App\Services\Admin\OrderCostSnapshotRepairService;
 use App\Services\Admin\OrderPackagingCourierRepairService;
 use App\Services\Admin\OrderPaidStatusRepairService;
@@ -158,6 +159,36 @@ class AdminAnalyticsOrdersWithCosts extends Component
     public array $paidRepairRecentFixes = [];
 
     public ?string $paidRepairStatusLine = null;
+
+    public bool $auditModalOpen = false;
+
+    public bool $auditRunning = false;
+
+    public bool $auditDone = false;
+
+    public int $auditAfterId = 0;
+
+    public int $auditTotal = 0;
+
+    public int $auditScanned = 0;
+
+    public int $auditAutoFixed = 0;
+
+    public int $auditManualNeeded = 0;
+
+    public int $auditBatchNumber = 0;
+
+    /** @var list<string> */
+    public array $auditRecentFixes = [];
+
+    /**
+     * @var list<array{order_id: int, order_number: string, url: string, issues: list<string>}>
+     */
+    public array $auditIssues = [];
+
+    public bool $auditIssuesTruncated = false;
+
+    public ?string $auditStatusLine = null;
 
     public function mount(): void
     {
@@ -637,6 +668,117 @@ class AdminAnalyticsOrdersWithCosts extends Component
     {
         $this->paidRepairRunning = false;
         $this->paidRepairModalOpen = false;
+    }
+
+    public function openCalculationAuditModal(OrderCalculationAuditService $audit): void
+    {
+        $this->auditModalOpen = true;
+        $this->auditRunning = false;
+        $this->auditDone = false;
+        $this->auditAfterId = 0;
+        $this->auditTotal = $audit->eligibleOrderCount();
+        $this->auditScanned = 0;
+        $this->auditAutoFixed = 0;
+        $this->auditManualNeeded = 0;
+        $this->auditBatchNumber = 0;
+        $this->auditRecentFixes = [];
+        $this->auditIssues = [];
+        $this->auditIssuesTruncated = false;
+        $this->auditStatusLine = $this->auditTotal === 0
+            ? 'No non-draft orders to audit.'
+            : 'Ready to audit '.number_format($this->auditTotal).' orders against current cost/payment rules in batches of '.OrderCalculationAuditService::BATCH_SIZE.'.';
+    }
+
+    public function startCalculationAudit(OrderCalculationAuditService $audit): void
+    {
+        if (! $this->auditModalOpen || $this->auditRunning) {
+            return;
+        }
+
+        if ($this->auditTotal < 1) {
+            $this->auditDone = true;
+            $this->auditStatusLine = 'No non-draft orders to audit.';
+
+            return;
+        }
+
+        $this->auditRunning = true;
+        $this->auditDone = false;
+        $this->auditStatusLine = 'Starting…';
+        $this->continueCalculationAudit($audit);
+    }
+
+    public function continueCalculationAudit(OrderCalculationAuditService $audit): void
+    {
+        if (! $this->auditModalOpen || ! $this->auditRunning || $this->auditDone) {
+            return;
+        }
+
+        $result = $audit->auditNextBatch(
+            $this->auditAfterId,
+            OrderCalculationAuditService::BATCH_SIZE,
+        );
+
+        $this->auditBatchNumber++;
+        $this->auditAfterId = $result['next_after_id'];
+        $this->auditScanned += $result['scanned'];
+        $this->auditAutoFixed += $result['auto_fixed'];
+        $this->auditManualNeeded += $result['manual_needed'];
+
+        foreach ($result['sample_auto_fixes'] as $orderNumber) {
+            if (! in_array($orderNumber, $this->auditRecentFixes, true)) {
+                $this->auditRecentFixes[] = $orderNumber;
+            }
+        }
+        $this->auditRecentFixes = array_slice($this->auditRecentFixes, -12);
+
+        foreach ($result['issues'] as $issue) {
+            if (count($this->auditIssues) >= OrderCalculationAuditService::MAX_STORED_ISSUES) {
+                $this->auditIssuesTruncated = true;
+                break;
+            }
+            $this->auditIssues[] = $issue;
+        }
+
+        $pct = $this->auditTotal > 0
+            ? min(100, (int) round(($this->auditScanned / $this->auditTotal) * 100))
+            : 100;
+
+        $this->auditStatusLine = 'Batch '.$this->auditBatchNumber
+            .' · scanned '.number_format($this->auditScanned).' / '.number_format($this->auditTotal)
+            .' ('.$pct.'%)'
+            .' · auto-fixed '.number_format($this->auditAutoFixed)
+            .' · manual '.number_format($this->auditManualNeeded);
+
+        if ($result['done']) {
+            $this->auditRunning = false;
+            $this->auditDone = true;
+            $this->auditStatusLine = 'Done · scanned '.number_format($this->auditScanned)
+                .' · auto-fixed '.number_format($this->auditAutoFixed)
+                .' · need manual review '.number_format($this->auditManualNeeded)
+                .($this->auditIssuesTruncated
+                    ? ' (showing first '.number_format(count($this->auditIssues)).' issue rows)'
+                    : '');
+        }
+    }
+
+    public function stopCalculationAudit(): void
+    {
+        if (! $this->auditRunning) {
+            return;
+        }
+
+        $this->auditRunning = false;
+        $this->auditStatusLine = 'Paused at '.number_format($this->auditScanned)
+            .' / '.number_format($this->auditTotal)
+            .' · auto-fixed '.number_format($this->auditAutoFixed)
+            .' · manual '.number_format($this->auditManualNeeded).' so far. Resume to continue.';
+    }
+
+    public function closeCalculationAuditModal(): void
+    {
+        $this->auditRunning = false;
+        $this->auditModalOpen = false;
     }
 
     public function saveCogsModalRow(int $index, ProductUnitCostService $costs): void

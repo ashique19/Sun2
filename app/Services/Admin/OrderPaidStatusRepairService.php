@@ -82,6 +82,14 @@ class OrderPaidStatusRepairService
     /**
      * @return int Number of payment transactions created (0 or 1)
      */
+    public function repairOrder(Order $order): int
+    {
+        return DB::transaction(fn (): int => $this->repairOne($order));
+    }
+
+    /**
+     * @return int Number of payment transactions created (0 or 1)
+     */
     private function repairOne(Order $order): int
     {
         $order = $order->fresh(['paymentTransactions', 'courier']);
@@ -164,6 +172,32 @@ class OrderPaidStatusRepairService
         }
 
         return $created;
+    }
+
+    public function needsRepair(Order $order): bool
+    {
+        $status = strtolower((string) $order->status);
+
+        if ($status === 'paid') {
+            return true;
+        }
+
+        if ($status !== 'delivered') {
+            return false;
+        }
+
+        if (round((float) $order->total, 2) < 0.01) {
+            return false;
+        }
+
+        $collected = round((float) ($order->collected_amount ?? 0), 2);
+        $paid = round((float) ($order->paid_amount ?? 0), 2);
+
+        if ($collected < 0.01 && $paid < 0.01) {
+            return true;
+        }
+
+        return $collected >= 0.01 && $paid < 0.01;
     }
 
     /**

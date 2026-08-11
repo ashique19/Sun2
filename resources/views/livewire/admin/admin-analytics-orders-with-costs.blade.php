@@ -49,6 +49,12 @@
             title="Convert legacy Paid → Delivered, and backfill payment received on delivered orders missing collection">
             Repair payment received…
         </button>
+        <button type="button"
+            wire:click="openCalculationAuditModal"
+            class="rounded-lg border border-[#1E1E1E] bg-white px-3 py-2 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]"
+            title="Audit every order against current cost/payment rules; auto-fix when safe, list the rest for manual review">
+            Audit calculations…
+        </button>
         @php
             $zeroFiltersActive = $zeroRevenue || $zeroCogs || $zeroPackaging || $zeroCourier
                 || $zeroCod || $zeroDirect || $zeroProfit;
@@ -599,6 +605,156 @@
                             <button type="button"
                                 wire:click="closePaidRepairModal"
                                 class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b89220]">
+                                Close
+                            </button>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    @if ($auditModalOpen)
+        @php
+            $auditPct = $auditTotal > 0
+                ? min(100, (int) round(($auditScanned / $auditTotal) * 100))
+                : ($auditDone ? 100 : 0);
+        @endphp
+        <div class="fixed inset-0 z-[76] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+            wire:click.self="closeCalculationAuditModal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Audit order calculations">
+            @if ($auditRunning)
+                <div wire:poll.400ms="continueCalculationAudit" class="hidden" aria-hidden="true"></div>
+            @endif
+            <div class="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl">
+                <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
+                    <div class="min-w-0">
+                        <h2 class="text-base font-semibold text-[#1E1E1E]">Audit calculations</h2>
+                        <p class="mt-0.5 text-xs text-[#8C8474]">
+                            Checks every non-draft order against current packaging, courier, COGS, and payment-received rules.
+                            Auto-fixes zeros and known repair cases; lists mismatches that need a manual look.
+                            Batches of {{ \App\Services\Admin\OrderCalculationAuditService::BATCH_SIZE }}.
+                        </p>
+                    </div>
+                    <button type="button"
+                        wire:click="closeCalculationAuditModal"
+                        class="rounded-lg border border-[#E0D6C2] px-2.5 py-1 text-xs text-[#6B6459] hover:border-[#C9A227]"
+                        aria-label="Close calculation audit">
+                        Close
+                    </button>
+                </div>
+
+                <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+                    <div>
+                        <div class="mb-1.5 flex items-center justify-between text-xs text-[#6B6459]">
+                            <span data-audit-progress-label>{{ $auditStatusLine }}</span>
+                            <span class="tabular-nums font-medium text-[#1E1E1E]">{{ $auditPct }}%</span>
+                        </div>
+                        <div class="h-2 overflow-hidden rounded-full bg-[#EFE7D6]" role="progressbar"
+                            aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $auditPct }}">
+                            <div class="h-full rounded-full bg-[#1E1E1E] transition-[width] duration-300"
+                                style="width: {{ $auditPct }}%"></div>
+                        </div>
+                    </div>
+
+                    <dl class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
+                            <dt class="text-[11px] text-[#8C8474]">Scanned</dt>
+                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-audit-scanned>
+                                {{ number_format($auditScanned) }}
+                                <span class="font-normal text-[#8C8474]">/ {{ number_format($auditTotal) }}</span>
+                            </dd>
+                        </div>
+                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
+                            <dt class="text-[11px] text-[#8C8474]">Auto-fixed</dt>
+                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-audit-auto-fixed>
+                                {{ number_format($auditAutoFixed) }}
+                            </dd>
+                        </div>
+                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
+                            <dt class="text-[11px] text-[#8C8474]">Need manual review</dt>
+                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-audit-manual>
+                                {{ number_format($auditManualNeeded) }}
+                            </dd>
+                        </div>
+                    </dl>
+
+                    @if ($auditRecentFixes !== [])
+                        <div>
+                            <p class="text-[11px] font-medium text-[#6B6459]">Recent auto-fixes</p>
+                            <p class="mt-1 text-xs tabular-nums text-[#8C8474]" data-audit-recent>
+                                {{ implode(' · ', $auditRecentFixes) }}
+                            </p>
+                        </div>
+                    @endif
+
+                    @if ($auditIssues !== [])
+                        <div data-audit-issues>
+                            <p class="text-[11px] font-medium text-[#6B6459]">
+                                Orders needing manual review
+                                @if ($auditIssuesTruncated)
+                                    <span class="font-normal">(list capped)</span>
+                                @endif
+                            </p>
+                            <ul class="mt-2 max-h-64 space-y-2 overflow-y-auto text-sm">
+                                @foreach ($auditIssues as $row)
+                                    <li wire:key="audit-issue-{{ $row['order_id'] }}"
+                                        class="rounded-lg border border-[#EFE7D6] px-3 py-2">
+                                        <a href="{{ $row['url'] }}"
+                                            target="_blank"
+                                            rel="noopener"
+                                            class="font-medium text-[#C9A227] hover:underline"
+                                            data-audit-order-link>
+                                            {{ $row['order_number'] }}
+                                        </a>
+                                        <ul class="mt-1 list-disc space-y-0.5 pl-4 text-xs text-[#6B6459]">
+                                            @foreach ($row['issues'] as $issue)
+                                                <li>{{ $issue }}</li>
+                                            @endforeach
+                                        </ul>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @elseif ($auditDone && $auditManualNeeded === 0)
+                        <p class="text-sm text-emerald-800" data-audit-all-clear>
+                            All scanned orders match the current calculation strategy (or were auto-fixed).
+                        </p>
+                    @endif
+
+                    <div class="flex flex-wrap gap-2 border-t border-[#EFE7D6] pt-3">
+                        @if (! $auditRunning && ! $auditDone)
+                            <button type="button"
+                                wire:click="startCalculationAudit"
+                                class="rounded-lg bg-[#1E1E1E] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#333]">
+                                Start
+                            </button>
+                        @endif
+                        @if ($auditRunning)
+                            <button type="button"
+                                wire:click="stopCalculationAudit"
+                                class="rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#6B6459] hover:border-[#C9A227]">
+                                Pause
+                            </button>
+                        @endif
+                        @if (! $auditRunning && $auditScanned > 0 && ! $auditDone)
+                            <button type="button"
+                                wire:click="startCalculationAudit"
+                                class="rounded-lg bg-[#1E1E1E] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#333]">
+                                Resume
+                            </button>
+                        @endif
+                        @if ($auditDone)
+                            <button type="button"
+                                wire:click="openCalculationAuditModal"
+                                class="rounded-lg border border-[#1E1E1E] px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
+                                Run again
+                            </button>
+                            <button type="button"
+                                wire:click="closeCalculationAuditModal"
+                                class="rounded-lg bg-[#1E1E1E] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#333]">
                                 Close
                             </button>
                         @endif

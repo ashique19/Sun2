@@ -133,23 +133,53 @@ class OrderCourierChargeSync
 
     /**
      * Estimate courier fee from catalog rates (Dhaka vs outside).
+     *
+     * @deprecated Prefer estimateMerchantDeliveryFee() for piece-based rates.
      */
     public function estimateFromCatalog(Order $order, ?Courier $courier): float
     {
+        return $this->estimateMerchantDeliveryFee($order, $courier);
+    }
+
+    /**
+     * Merchant delivery fee (orders.courier_charge) from piece-based rate card.
+     *
+     * RedX: ৳50 / ৳100 first piece (Dhaka / outside), +৳10 each extra.
+     * Others: ৳60 / ৳120 first piece (Dhaka / outside), +৳10 each extra.
+     */
+    public function estimateMerchantDeliveryFee(Order $order, ?Courier $courier = null): float
+    {
+        $courier ??= $order->relationLoaded('courier') ? $order->courier : $order->courier()->first();
+
         if (! $courier) {
             return 0.0;
         }
 
-        return $this->isDhakaOrder($order)
-            ? (float) $courier->charge
-            : (float) $courier->osd_charge;
+        $order->loadMissing('items');
+        $qty = (int) $order->items->sum(fn ($item) => (int) $item->quantity);
+
+        if ($qty < 1) {
+            return 0.0;
+        }
+
+        $isRedx = strtolower(trim((string) $courier->slug)) === 'redx';
+        $isDhaka = $this->isDhakaOrder($order);
+
+        $first = match (true) {
+            $isRedx && $isDhaka => 50.0,
+            $isRedx && ! $isDhaka => 100.0,
+            ! $isRedx && $isDhaka => 60.0,
+            default => 120.0,
+        };
+
+        return round($first + (($qty - 1) * 10.0), 2);
     }
 
     /**
      * Default for the confirm-courier-charges UI: what the courier charges us.
      *
      * Prefer the order's existing courier_charge (dispatch/API estimate).
-     * Otherwise fall back to courier Dhaka/outside catalog rates.
+     * Otherwise fall back to piece-based Dhaka/outside rates.
      *
      * Never uses areas.delivery_charge_* — that is what we charge the customer.
      */
@@ -163,7 +193,7 @@ class OrderCourierChargeSync
 
         $courier ??= $order->relationLoaded('courier') ? $order->courier : $order->courier()->first();
 
-        return round($this->estimateFromCatalog($order, $courier), 2);
+        return round($this->estimateMerchantDeliveryFee($order, $courier), 2);
     }
 
     /**

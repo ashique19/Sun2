@@ -152,7 +152,7 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
         Livewire::test(AdminDashboard::class)
             ->assertSet('pendingCourierCharges.'.$withEstimate->id, '72')
             ->assertSet('pendingCourierCharges.'.$dhakaZero->id, '60')
-            ->assertSet('pendingCourierCharges.'.$outsideZero->id, '110')
+            ->assertSet('pendingCourierCharges.'.$outsideZero->id, '120')
             ->assertSee('What the courier charges us')
             ->assertSee('Mirpur')
             ->assertSee('Agrabad');
@@ -197,7 +197,7 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
 
         Livewire::test(AdminDashboard::class)
             ->assertSet('pendingCourierCharges.'.$dhaka->id, '60')
-            ->assertSet('pendingCourierCharges.'.$outside->id, '110');
+            ->assertSet('pendingCourierCharges.'.$outside->id, '120');
     }
 
     #[Test]
@@ -212,8 +212,8 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
 
         Livewire::test(AdminDashboard::class)
             ->assertSet('pendingPackagingCosts.'.$one->id, '21')
-            ->assertSet('pendingPackagingCosts.'.$two->id, '30')
-            ->assertSet('pendingPackagingCosts.'.$three->id, '41');
+            ->assertSet('pendingPackagingCosts.'.$two->id, '32')
+            ->assertSet('pendingPackagingCosts.'.$three->id, '43');
     }
 
     #[Test]
@@ -225,7 +225,7 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
         $order = $this->dispatchedOrder($courier, 'Karim Hossain', 60, null, 'Dhaka', null, 2);
 
         Livewire::test(AdminDashboard::class)
-            ->assertSet('pendingPackagingCosts.'.$order->id, '30')
+            ->assertSet('pendingPackagingCosts.'.$order->id, '32')
             ->set('pendingCourierCharges.'.$order->id, '75')
             ->set('pendingPackagingCosts.'.$order->id, '35')
             ->call('confirmCourierCharge', $order->id)
@@ -265,7 +265,7 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
         $order = $this->dispatchedOrder($courier, 'Show Default', 0, null, 'Sylhet', 'Zindabazar');
 
         Livewire::test(AdminOrderShow::class, ['order' => $order])
-            ->assertSet('courierChargeOverride', '110');
+            ->assertSet('courierChargeOverride', '120');
     }
 
     #[Test]

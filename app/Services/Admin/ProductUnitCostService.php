@@ -3,6 +3,7 @@
 namespace App\Services\Admin;
 
 use App\Models\Material;
+use App\Models\OrderProduct;
 use App\Models\Product;
 use Illuminate\Support\Facades\DB;
 
@@ -117,5 +118,52 @@ class ProductUnitCostService
         }
 
         return round((float) $product->purchase_price, 2);
+    }
+
+    /**
+     * Copy the product's current purchase_price + effective unit_cost onto matching order lines.
+     *
+     * @return int Number of order_products rows updated
+     */
+    public function syncSnapshotsToOrderProducts(Product $product, ?int $onlyOrderId = null): int
+    {
+        $query = OrderProduct::query()->where('product_id', $product->id);
+
+        if ($onlyOrderId !== null) {
+            $query->where('order_id', $onlyOrderId);
+        }
+
+        return $query->update([
+            'purchase_price' => round((float) $product->purchase_price, 2),
+            'unit_cost' => $this->effectiveUnitCost($product),
+        ]);
+    }
+
+    /**
+     * Apply simple purchase + other overhead (no BOM edit). Replaces cost heads with a single "Other" head.
+     */
+    public function applyPurchaseAndOther(Product $product, float $purchasePrice, float $otherCost): Product
+    {
+        $purchasePrice = max(0, round($purchasePrice, 2));
+        $otherCost = max(0, round($otherCost, 2));
+
+        $product->loadMissing('materials');
+
+        if ($product->materials->isEmpty()) {
+            $product->purchase_price = $purchasePrice;
+            $product->save();
+        }
+
+        $product->costHeads()->delete();
+
+        if ($otherCost > 0) {
+            $product->costHeads()->create([
+                'name' => 'Other',
+                'amount' => $otherCost,
+                'sort_order' => 0,
+            ]);
+        }
+
+        return $this->recalculate($product->fresh());
     }
 }

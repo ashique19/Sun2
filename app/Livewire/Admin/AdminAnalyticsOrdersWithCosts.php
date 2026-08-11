@@ -4,8 +4,11 @@ namespace App\Livewire\Admin;
 
 use App\Models\Order;
 use App\Models\OrderProduct;
+use App\Models\Product;
 use App\Services\Admin\AnalyticsService;
+use App\Services\Admin\ProductUnitCostService;
 use App\Support\AdminAccess;
+use App\Support\StorefrontAssets;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -33,6 +36,30 @@ class AdminAnalyticsOrdersWithCosts extends Component
 
     public string $editingValue = '';
 
+    public bool $cogsModalOpen = false;
+
+    public ?int $cogsModalOrderId = null;
+
+    public string $cogsModalOrderNumber = '';
+
+    /**
+     * @var list<array{
+     *     key: string,
+     *     order_product_id: int,
+     *     product_id: int|null,
+     *     name: string,
+     *     thumb: string|null,
+     *     qty: int,
+     *     purchase_price: string,
+     *     other_cost: string,
+     *     has_materials: bool,
+     *     edit_url: string|null
+     * }>
+     */
+    public array $cogsModalRows = [];
+
+    public ?string $cogsModalMessage = null;
+
     public function mount(): void
     {
         AdminAccess::ensureStaffAdmin();
@@ -53,6 +80,12 @@ class AdminAnalyticsOrdersWithCosts extends Component
     public function startInlineEdit(int $orderId, string $field, string $value = ''): void
     {
         if (! in_array($field, self::INLINE_FIELDS, true)) {
+            return;
+        }
+
+        if ($field === 'cogs' && (float) $value < 0.01) {
+            $this->openCogsModal($orderId);
+
             return;
         }
 
@@ -94,12 +127,145 @@ class AdminAnalyticsOrdersWithCosts extends Component
         $amount = round((float) $this->editingValue, 2);
 
         if ($field === 'cogs') {
+            if ($order->cogs() < 0.01) {
+                $this->openCogsModal($order->id);
+                $this->cancelInlineEdit();
+
+                return;
+            }
+
             $this->applyCogsOverride($order, $amount);
         } else {
             $order->update([$field => $amount]);
         }
 
         $this->cancelInlineEdit();
+    }
+
+    public function openCogsModal(int $orderId): void
+    {
+        $order = Order::query()
+            ->with([
+                'items.product.listingImage',
+                'items.product.materials',
+                'items.product.costHeads',
+            ])
+            ->findOrFail($orderId);
+
+        $this->cogsModalOpen = true;
+        $this->cogsModalOrderId = $order->id;
+        $this->cogsModalOrderNumber = (string) $order->order_number;
+        $this->cogsModalMessage = null;
+        $this->cogsModalRows = [];
+        $this->resetValidation();
+
+        foreach ($order->items as $item) {
+            $product = $item->product;
+            $path = $item->product_image
+                ?: $product?->primaryImagePath();
+            $thumb = $path
+                ? (StorefrontAssets::smallUrl($path) ?? StorefrontAssets::url($path))
+                : null;
+
+            $purchase = $product
+                ? (float) $product->purchase_price
+                : (float) $item->purchase_price;
+            $other = $product
+                ? (float) $product->costHeads->sum('amount')
+                : max(0, (float) $item->effectiveUnitCost() - (float) $item->purchase_price);
+
+            $this->cogsModalRows[] = [
+                'key' => 'line-'.$item->id,
+                'order_product_id' => $item->id,
+                'product_id' => $item->product_id ? (int) $item->product_id : null,
+                'name' => $item->displayName(),
+                'thumb' => $thumb,
+                'qty' => max(0, (int) $item->quantity - (int) ($item->returned_quantity ?? 0)),
+                'purchase_price' => (string) (int) round($purchase),
+                'other_cost' => (string) (int) round($other),
+                'has_materials' => (bool) $product?->materials->isNotEmpty(),
+                'edit_url' => $product ? route('admin.products.edit', $product) : null,
+            ];
+        }
+    }
+
+    public function closeCogsModal(): void
+    {
+        $this->cogsModalOpen = false;
+        $this->cogsModalOrderId = null;
+        $this->cogsModalOrderNumber = '';
+        $this->cogsModalRows = [];
+        $this->cogsModalMessage = null;
+        $this->resetValidation();
+    }
+
+    public function saveCogsModalRow(int $index, ProductUnitCostService $costs): void
+    {
+        $row = $this->cogsModalRows[$index] ?? null;
+
+        if (! $row || $this->cogsModalOrderId === null) {
+            return;
+        }
+
+        $this->validate([
+            'cogsModalRows.'.$index.'.purchase_price' => ['required', 'numeric', 'min:0'],
+            'cogsModalRows.'.$index.'.other_cost' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        $purchase = round((float) $this->cogsModalRows[$index]['purchase_price'], 2);
+        $other = round((float) $this->cogsModalRows[$index]['other_cost'], 2);
+
+        if ($row['product_id']) {
+            $product = Product::query()->with(['materials', 'costHeads'])->findOrFail($row['product_id']);
+
+            if ($product->materials->isNotEmpty() && abs($purchase - (float) $product->purchase_price) > 0.009) {
+                $this->addError(
+                    'cogsModalRows.'.$index.'.purchase_price',
+                    'Main cost comes from BOM materials. Edit the product, or change Other cost only.',
+                );
+
+                return;
+            }
+
+            $product = $costs->applyPurchaseAndOther($product, $purchase, $other);
+            $synced = $costs->syncSnapshotsToOrderProducts($product, $this->cogsModalOrderId);
+
+            $this->cogsModalRows[$index]['purchase_price'] = (string) (int) round((float) $product->purchase_price);
+            $this->cogsModalRows[$index]['other_cost'] = (string) (int) round((float) $product->costHeads()->sum('amount'));
+            $this->cogsModalMessage = 'Saved “'.$product->name.'” and updated '.$synced.' line(s) on this order.';
+        } else {
+            OrderProduct::query()->whereKey($row['order_product_id'])->update([
+                'purchase_price' => $purchase,
+                'unit_cost' => round($purchase + $other, 2),
+            ]);
+
+            $this->cogsModalMessage = 'Saved line cost on this order (no linked product).';
+        }
+
+        $this->refreshCogsModalRows();
+    }
+
+    public function syncCogsModalRowToAllOrders(int $index, ProductUnitCostService $costs): void
+    {
+        $row = $this->cogsModalRows[$index] ?? null;
+
+        if (! $row || ! $row['product_id']) {
+            $this->addError('cogsModalRows.'.$index.'.purchase_price', 'This line has no linked product to sync.');
+
+            return;
+        }
+
+        $this->saveCogsModalRow($index, $costs);
+
+        if ($this->getErrorBag()->has('cogsModalRows.'.$index.'.purchase_price')) {
+            return;
+        }
+
+        $product = Product::query()->findOrFail($row['product_id']);
+        $synced = $costs->syncSnapshotsToOrderProducts($product);
+
+        $this->cogsModalMessage = 'Synced “'.$product->name.'” costs to '.$synced.' order line(s) across all orders.';
+        $this->refreshCogsModalRows();
     }
 
     public function render(AnalyticsService $analytics)
@@ -140,6 +306,18 @@ class AdminAnalyticsOrdersWithCosts extends Component
                 'draft' => 'Draft',
             ],
         ]);
+    }
+
+    private function refreshCogsModalRows(): void
+    {
+        if ($this->cogsModalOrderId === null) {
+            return;
+        }
+
+        $orderId = $this->cogsModalOrderId;
+        $message = $this->cogsModalMessage;
+        $this->openCogsModal($orderId);
+        $this->cogsModalMessage = $message;
     }
 
     private function applyCogsOverride(Order $order, float $targetCogs): void

@@ -7,6 +7,7 @@ use App\Livewire\Admin\AdminAnalyticsOrdersWithCosts;
 use App\Models\Courier;
 use App\Models\Order;
 use App\Models\OrderProduct;
+use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -41,7 +42,7 @@ class AdminAnalyticsOrdersWithCostsTest extends TestCase
         ]);
     }
 
-    private function orderWithCosts(Courier $courier): Order
+    private function orderWithCosts(Courier $courier, ?Product $product = null, float $unitCost = 200): Order
     {
         $order = Order::query()->create([
             'order_number' => 'COST-1001',
@@ -63,11 +64,12 @@ class AdminAnalyticsOrdersWithCostsTest extends TestCase
 
         OrderProduct::query()->create([
             'order_id' => $order->id,
-            'name' => 'Ring',
+            'product_id' => $product?->id,
+            'name' => $product?->name ?? 'Ring',
             'quantity' => 2,
             'price' => 500,
-            'purchase_price' => 200,
-            'unit_cost' => 200,
+            'purchase_price' => $unitCost,
+            'unit_cost' => $unitCost,
             'line_total' => 1000,
         ]);
 
@@ -147,6 +149,100 @@ class AdminAnalyticsOrdersWithCostsTest extends TestCase
 
         $this->assertSame(500.0, $order->cogs());
         $this->assertSame(250.0, (float) $order->items->first()->unit_cost);
+    }
+
+    #[Test]
+    public function zero_cogs_double_click_opens_product_cost_modal(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $product = Product::query()->create([
+            'name' => 'Zero Cost Ring',
+            'slug' => 'zero-cost-ring',
+            'price' => 500,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'is_published' => true,
+        ]);
+
+        $order = $this->orderWithCosts($this->steadfast(), $product, 0);
+
+        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
+            ->call('startInlineEdit', $order->id, 'cogs', '0')
+            ->assertSet('cogsModalOpen', true)
+            ->assertSet('cogsModalOrderId', $order->id)
+            ->assertSee('Fix product costs')
+            ->assertSee('Zero Cost Ring')
+            ->assertSee('Save product + this order')
+            ->assertSee('Sync to all orders with this product');
+    }
+
+    #[Test]
+    public function modal_saves_product_costs_and_syncs_all_order_lines(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+
+        $product = Product::query()->create([
+            'name' => 'Sync Ring',
+            'slug' => 'sync-ring',
+            'price' => 500,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'is_published' => true,
+        ]);
+
+        $orderA = $this->orderWithCosts($courier, $product, 0);
+
+        $orderB = Order::query()->create([
+            'order_number' => 'COST-2002',
+            'name' => 'Other Customer',
+            'phone' => '01710000088',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'delivered',
+            'subtotal' => 500,
+            'delivery_charge' => 80,
+            'courier_charge' => 60,
+            'packaging_cost' => 10,
+            'collected_amount' => 580,
+            'total' => 580,
+            'courier_id' => $courier->id,
+            'actual_delivery_date' => now(),
+            'placed_at' => now(),
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $orderB->id,
+            'product_id' => $product->id,
+            'name' => 'Sync Ring',
+            'quantity' => 1,
+            'price' => 500,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'line_total' => 500,
+        ]);
+
+        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
+            ->call('openCogsModal', $orderA->id)
+            ->set('cogsModalRows.0.purchase_price', '180')
+            ->set('cogsModalRows.0.other_cost', '20')
+            ->call('syncCogsModalRowToAllOrders', 0)
+            ->assertSet('cogsModalOpen', true)
+            ->assertSee('Synced');
+
+        $product->refresh();
+        $this->assertSame(180.0, (float) $product->purchase_price);
+        $this->assertSame(200.0, (float) $product->unit_cost);
+
+        $orderA->refresh()->load('items');
+        $orderB->refresh()->load('items');
+
+        $this->assertSame(200.0, (float) $orderA->items->first()->unit_cost);
+        $this->assertSame(180.0, (float) $orderA->items->first()->purchase_price);
+        $this->assertSame(400.0, $orderA->cogs()); // 2 × 200
+
+        $this->assertSame(200.0, (float) $orderB->items->first()->unit_cost);
+        $this->assertSame(200.0, $orderB->cogs());
     }
 
     #[Test]

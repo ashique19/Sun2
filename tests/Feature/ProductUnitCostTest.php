@@ -124,4 +124,44 @@ class ProductUnitCostTest extends TestCase
 
         $this->assertSame(120.0, $line->effectiveUnitCost());
     }
+
+    #[Test]
+    public function apply_purchase_and_other_then_sync_updates_order_snapshots(): void
+    {
+        $product = $this->product(['purchase_price' => 0, 'unit_cost' => 0]);
+        $order = Order::query()->create([
+            'order_number' => 'UT-SYNC-'.uniqid(),
+            'status' => 'delivered',
+            'name' => 'Buyer',
+            'phone' => '01700000000',
+            'address' => 'Dhaka',
+            'subtotal' => 500,
+            'delivery_charge' => 0,
+            'total' => 500,
+            'collected_amount' => 500,
+        ]);
+        $line = OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'product_id' => $product->id,
+            'name' => $product->name,
+            'quantity' => 2,
+            'price' => 250,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'line_total' => 500,
+        ]);
+
+        $service = app(ProductUnitCostService::class);
+        $product = $service->applyPurchaseAndOther($product, 150, 25);
+        $synced = $service->syncSnapshotsToOrderProducts($product);
+
+        $this->assertSame(1, $synced);
+        $this->assertSame(150.0, (float) $product->purchase_price);
+        $this->assertSame(175.0, (float) $product->unit_cost);
+
+        $line->refresh();
+        $this->assertSame(150.0, (float) $line->purchase_price);
+        $this->assertSame(175.0, (float) $line->unit_cost);
+        $this->assertSame(350.0, $order->fresh(['items'])->cogs());
+    }
 }

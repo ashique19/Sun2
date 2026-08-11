@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\Product;
 use App\Services\Admin\AnalyticsService;
+use App\Services\Admin\OrderCostSnapshotRepairService;
 use App\Services\Admin\ProductUnitCostService;
 use App\Support\AdminAccess;
 use App\Support\StorefrontAssets;
@@ -82,6 +83,31 @@ class AdminAnalyticsOrdersWithCosts extends Component
     public array $cogsModalRows = [];
 
     public ?string $cogsModalMessage = null;
+
+    public bool $repairModalOpen = false;
+
+    public bool $repairRunning = false;
+
+    public bool $repairDone = false;
+
+    public int $repairAfterId = 0;
+
+    public int $repairTotal = 0;
+
+    public int $repairScanned = 0;
+
+    public int $repairFixedOrders = 0;
+
+    public int $repairBackfilledLines = 0;
+
+    public int $repairClearedReturnLines = 0;
+
+    public int $repairBatchNumber = 0;
+
+    /** @var list<string> */
+    public array $repairRecentFixes = [];
+
+    public ?string $repairStatusLine = null;
 
     public function mount(): void
     {
@@ -264,50 +290,122 @@ class AdminAnalyticsOrdersWithCosts extends Component
         $this->resetValidation();
     }
 
-    public function saveCogsModalRow(int $index, ProductUnitCostService $costs): void
+    public function openCostRepairModal(OrderCostSnapshotRepairService $repair): void
     {
-        $row = $this->cogsModalRows[$index] ?? null;
+        $this->repairModalOpen = true;
+        $this->repairRunning = false;
+        $this->repairDone = false;
+        $this->repairAfterId = 0;
+        $this->repairTotal = $repair->eligibleOrderCount();
+        $this->repairScanned = 0;
+        $this->repairFixedOrders = 0;
+        $this->repairBackfilledLines = 0;
+        $this->repairClearedReturnLines = 0;
+        $this->repairBatchNumber = 0;
+        $this->repairRecentFixes = [];
+        $this->repairStatusLine = $this->repairTotal === 0
+            ? 'No orders to scan.'
+            : 'Ready to scan '.number_format($this->repairTotal).' orders in batches of '.OrderCostSnapshotRepairService::BATCH_SIZE.'.';
+    }
 
-        if (! $row || $this->cogsModalOrderId === null) {
+    public function startCostRepair(OrderCostSnapshotRepairService $repair): void
+    {
+        if (! $this->repairModalOpen || $this->repairRunning) {
             return;
         }
 
-        $this->validate([
-            'cogsModalRows.'.$index.'.purchase_price' => ['required', 'numeric', 'min:0'],
-            'cogsModalRows.'.$index.'.other_cost' => ['required', 'numeric', 'min:0'],
-        ]);
+        if ($this->repairTotal < 1) {
+            $this->repairDone = true;
+            $this->repairStatusLine = 'No orders to scan.';
 
-        $purchase = round((float) $this->cogsModalRows[$index]['purchase_price'], 2);
-        $other = round((float) $this->cogsModalRows[$index]['other_cost'], 2);
+            return;
+        }
 
-        if ($row['product_id']) {
-            $product = Product::query()->with(['materials', 'costHeads'])->findOrFail($row['product_id']);
+        $this->repairRunning = true;
+        $this->repairDone = false;
+        $this->repairStatusLine = 'Starting…';
+        $this->continueCostRepair($repair);
+    }
 
-            if ($product->materials->isNotEmpty() && abs($purchase - (float) $product->purchase_price) > 0.009) {
-                $this->addError(
-                    'cogsModalRows.'.$index.'.purchase_price',
-                    'Main cost comes from BOM materials. Edit the product, or change Other cost only.',
-                );
+    public function continueCostRepair(OrderCostSnapshotRepairService $repair): void
+    {
+        if (! $this->repairModalOpen || ! $this->repairRunning || $this->repairDone) {
+            return;
+        }
 
-                return;
+        $result = $repair->repairNextBatch(
+            $this->repairAfterId,
+            OrderCostSnapshotRepairService::BATCH_SIZE,
+        );
+
+        $this->repairBatchNumber++;
+        $this->repairAfterId = $result['next_after_id'];
+        $this->repairScanned += $result['scanned'];
+        $this->repairFixedOrders += $result['fixed_orders'];
+        $this->repairBackfilledLines += $result['backfilled_lines'];
+        $this->repairClearedReturnLines += $result['cleared_return_lines'];
+
+        foreach ($result['sample_order_numbers'] as $orderNumber) {
+            if (! in_array($orderNumber, $this->repairRecentFixes, true)) {
+                $this->repairRecentFixes[] = $orderNumber;
             }
+        }
+        $this->repairRecentFixes = array_slice($this->repairRecentFixes, -12);
 
-            $product = $costs->applyPurchaseAndOther($product, $purchase, $other);
-            $synced = $costs->syncSnapshotsToOrderProducts($product, $this->cogsModalOrderId);
+        $pct = $this->repairTotal > 0
+            ? min(100, (int) round(($this->repairScanned / $this->repairTotal) * 100))
+            : 100;
 
-            $this->cogsModalRows[$index]['purchase_price'] = (string) (int) round((float) $product->purchase_price);
-            $this->cogsModalRows[$index]['other_cost'] = (string) (int) round((float) $product->costHeads()->sum('amount'));
-            $this->cogsModalMessage = 'Saved “'.$product->name.'” and updated '.$synced.' line(s) on this order.';
+        $this->repairStatusLine = 'Batch '.$this->repairBatchNumber
+            .' · scanned '.number_format($this->repairScanned).' / '.number_format($this->repairTotal)
+            .' ('.$pct.'%)'
+            .' · fixed '.number_format($this->repairFixedOrders).' orders'
+            .' · backfilled '.number_format($this->repairBackfilledLines)
+            .' · cleared '.number_format($this->repairClearedReturnLines).' return lines';
+
+        if ($result['done'] || $result['scanned'] === 0) {
+            $this->repairRunning = false;
+            $this->repairDone = true;
+            $this->repairStatusLine = 'Done · scanned '.number_format($this->repairScanned)
+                .' · fixed '.number_format($this->repairFixedOrders).' orders'
+                .' · backfilled '.number_format($this->repairBackfilledLines).' lines'
+                .' · cleared '.number_format($this->repairClearedReturnLines).' return lines';
+        }
+    }
+
+    public function stopCostRepair(): void
+    {
+        if (! $this->repairRunning) {
+            return;
+        }
+
+        $this->repairRunning = false;
+        $this->repairStatusLine = 'Paused at '.number_format($this->repairScanned)
+            .' / '.number_format($this->repairTotal)
+            .' · fixed '.number_format($this->repairFixedOrders).' so far. Resume to continue.';
+    }
+
+    public function closeCostRepairModal(): void
+    {
+        $this->repairRunning = false;
+        $this->repairModalOpen = false;
+    }
+
+    public function saveCogsModalRow(int $index, ProductUnitCostService $costs): void
+    {
+        $result = $this->persistCogsModalRow($index, $costs, syncAllOrders: false);
+
+        if ($result === null) {
+            return;
+        }
+
+        if ($result['product'] !== null) {
+            $this->cogsModalMessage = 'Saved “'.$result['product']->name.'” and updated '.$result['synced'].' line(s) on this order.';
         } else {
-            OrderProduct::query()->whereKey($row['order_product_id'])->update([
-                'purchase_price' => $purchase,
-                'unit_cost' => round($purchase + $other, 2),
-            ]);
-
             $this->cogsModalMessage = 'Saved line cost on this order (no linked product).';
         }
 
-        $this->refreshCogsModalRows();
+        $this->afterCogsModalCostWrite();
     }
 
     public function syncCogsModalRowToAllOrders(int $index, ProductUnitCostService $costs): void
@@ -320,17 +418,14 @@ class AdminAnalyticsOrdersWithCosts extends Component
             return;
         }
 
-        $this->saveCogsModalRow($index, $costs);
+        $result = $this->persistCogsModalRow($index, $costs, syncAllOrders: true);
 
-        if ($this->getErrorBag()->has('cogsModalRows.'.$index.'.purchase_price')) {
+        if ($result === null || $result['product'] === null) {
             return;
         }
 
-        $product = Product::query()->findOrFail($row['product_id']);
-        $synced = $costs->syncSnapshotsToOrderProducts($product);
-
-        $this->cogsModalMessage = 'Synced “'.$product->name.'” costs to '.$synced.' order line(s) across all orders.';
-        $this->refreshCogsModalRows();
+        $this->cogsModalMessage = 'Synced “'.$result['product']->name.'” costs to '.$result['synced'].' open order line(s) (cancelled/returned skipped).';
+        $this->afterCogsModalCostWrite();
     }
 
     public function render(AnalyticsService $analytics)
@@ -445,6 +540,75 @@ class AdminAnalyticsOrdersWithCosts extends Component
         return DB::connection()->getDriverName() === 'sqlite'
             ? "max({$left}, {$right})"
             : "GREATEST({$left}, {$right})";
+    }
+
+    /**
+     * Validate and persist modal row costs onto the product and/or order line snapshots.
+     *
+     * @return array{product: Product|null, synced: int}|null Null when validation blocked the write
+     */
+    private function persistCogsModalRow(int $index, ProductUnitCostService $costs, bool $syncAllOrders): ?array
+    {
+        $row = $this->cogsModalRows[$index] ?? null;
+
+        if (! $row || $this->cogsModalOrderId === null) {
+            return null;
+        }
+
+        $this->validate([
+            'cogsModalRows.'.$index.'.purchase_price' => ['required', 'numeric', 'min:0'],
+            'cogsModalRows.'.$index.'.other_cost' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        $purchase = round((float) $this->cogsModalRows[$index]['purchase_price'], 2);
+        $other = round((float) $this->cogsModalRows[$index]['other_cost'], 2);
+
+        if (! $row['product_id']) {
+            OrderProduct::query()->whereKey($row['order_product_id'])->update([
+                'purchase_price' => $purchase,
+                'unit_cost' => round($purchase + $other, 2),
+            ]);
+
+            return [
+                'product' => null,
+                'synced' => 1,
+            ];
+        }
+
+        $product = Product::query()->with(['materials', 'costHeads'])->findOrFail($row['product_id']);
+
+        if ($product->materials->isNotEmpty() && abs($purchase - (float) $product->purchase_price) > 0.009) {
+            $this->addError(
+                'cogsModalRows.'.$index.'.purchase_price',
+                'Main cost comes from BOM materials. Edit the product, or change Other cost only.',
+            );
+
+            return null;
+        }
+
+        $product = $costs->applyPurchaseAndOther($product, $purchase, $other);
+
+        $synced = $syncAllOrders
+            ? $costs->syncSnapshotsToOrderProducts($product)
+            : $costs->syncSnapshotsToOrderProducts($product, $this->cogsModalOrderId);
+
+        $this->cogsModalRows[$index]['purchase_price'] = (string) (int) round((float) $product->purchase_price);
+        $this->cogsModalRows[$index]['other_cost'] = (string) (int) round((float) $product->costHeads()->sum('amount'));
+
+        return [
+            'product' => $product,
+            'synced' => $synced,
+        ];
+    }
+
+    private function afterCogsModalCostWrite(): void
+    {
+        // Keep the edited order visible when the user had filtered to COGS = 0.
+        if ($this->zeroCogs) {
+            $this->zeroCogs = false;
+        }
+
+        $this->refreshCogsModalRows();
     }
 
     private function refreshCogsModalRows(): void

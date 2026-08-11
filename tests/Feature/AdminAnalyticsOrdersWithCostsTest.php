@@ -174,7 +174,7 @@ class AdminAnalyticsOrdersWithCostsTest extends TestCase
             ->assertSee('Fix product costs')
             ->assertSee('Zero Cost Ring')
             ->assertSee('Save product + this order')
-            ->assertSee('Sync to all orders with this product');
+            ->assertSee('Sync to open orders with this product');
     }
 
     #[Test]

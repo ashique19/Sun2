@@ -31,6 +31,12 @@
                 <option value="{{ $value }}">{{ $label }}</option>
             @endforeach
         </select>
+        <button type="button"
+            wire:click="openCostRepairModal"
+            class="rounded-lg border border-[#C9A227] bg-white px-3 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]"
+            title="Scan all orders in batches of 100 and repair cost snapshot mistakes">
+            Repair costs…
+        </button>
         @php
             $zeroFiltersActive = $zeroRevenue || $zeroCogs || $zeroPackaging || $zeroCourier
                 || $zeroCod || $zeroDirect || $zeroProfit;
@@ -231,6 +237,127 @@
         @endif
     </div>
 
+    @if ($repairModalOpen)
+        @php
+            $repairPct = $repairTotal > 0
+                ? min(100, (int) round(($repairScanned / $repairTotal) * 100))
+                : ($repairDone ? 100 : 0);
+        @endphp
+        <div class="fixed inset-0 z-[75] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+            wire:click.self="closeCostRepairModal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Repair order cost snapshots">
+            @if ($repairRunning)
+                <div wire:poll.400ms="continueCostRepair" class="hidden" aria-hidden="true"></div>
+            @endif
+            <div class="w-full max-w-lg overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl">
+                <div class="flex items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
+                    <div class="min-w-0">
+                        <h2 class="text-base font-semibold text-[#1E1E1E]">Repair cost snapshots</h2>
+                        <p class="mt-0.5 text-xs text-[#8C8474]">
+                            Walks all non-draft orders in batches of {{ \App\Services\Admin\OrderCostSnapshotRepairService::BATCH_SIZE }}.
+                            Backfills missing costs on open orders; clears invented COGS on cancelled/returned.
+                        </p>
+                    </div>
+                    <button type="button"
+                        wire:click="closeCostRepairModal"
+                        class="rounded-lg border border-[#E0D6C2] px-2.5 py-1 text-xs text-[#6B6459] hover:border-[#C9A227]"
+                        aria-label="Close repair">
+                        Close
+                    </button>
+                </div>
+
+                <div class="space-y-4 px-4 py-4">
+                    <div>
+                        <div class="mb-1.5 flex items-center justify-between text-xs text-[#6B6459]">
+                            <span data-repair-progress-label>{{ $repairStatusLine }}</span>
+                            <span class="tabular-nums font-medium text-[#1E1E1E]">{{ $repairPct }}%</span>
+                        </div>
+                        <div class="h-2 overflow-hidden rounded-full bg-[#EFE7D6]" role="progressbar"
+                            aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $repairPct }}">
+                            <div class="h-full rounded-full bg-[#C9A227] transition-[width] duration-300"
+                                style="width: {{ $repairPct }}%"></div>
+                        </div>
+                    </div>
+
+                    <dl class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
+                            <dt class="text-[11px] text-[#8C8474]">Scanned</dt>
+                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-repair-scanned>
+                                {{ number_format($repairScanned) }}
+                                <span class="font-normal text-[#8C8474]">/ {{ number_format($repairTotal) }}</span>
+                            </dd>
+                        </div>
+                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
+                            <dt class="text-[11px] text-[#8C8474]">Orders fixed</dt>
+                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-repair-fixed>
+                                {{ number_format($repairFixedOrders) }}
+                            </dd>
+                        </div>
+                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
+                            <dt class="text-[11px] text-[#8C8474]">Backfilled</dt>
+                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-repair-backfilled>
+                                {{ number_format($repairBackfilledLines) }}
+                            </dd>
+                        </div>
+                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
+                            <dt class="text-[11px] text-[#8C8474]">Returns cleared</dt>
+                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-repair-cleared>
+                                {{ number_format($repairClearedReturnLines) }}
+                            </dd>
+                        </div>
+                    </dl>
+
+                    @if ($repairRecentFixes !== [])
+                        <div>
+                            <p class="text-[11px] font-medium text-[#6B6459]">Recent fixes</p>
+                            <p class="mt-1 text-xs tabular-nums text-[#8C8474]" data-repair-recent>
+                                {{ implode(' · ', $repairRecentFixes) }}
+                            </p>
+                        </div>
+                    @endif
+
+                    <div class="flex flex-wrap gap-2 border-t border-[#EFE7D6] pt-3">
+                        @if (! $repairRunning && ! $repairDone)
+                            <button type="button"
+                                wire:click="startCostRepair"
+                                class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b89220]">
+                                Start
+                            </button>
+                        @endif
+                        @if ($repairRunning)
+                            <button type="button"
+                                wire:click="stopCostRepair"
+                                class="rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#6B6459] hover:border-[#C9A227]">
+                                Pause
+                            </button>
+                        @endif
+                        @if (! $repairRunning && $repairScanned > 0 && ! $repairDone)
+                            <button type="button"
+                                wire:click="startCostRepair"
+                                class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b89220]">
+                                Resume
+                            </button>
+                        @endif
+                        @if ($repairDone)
+                            <button type="button"
+                                wire:click="openCostRepairModal"
+                                class="rounded-lg border border-[#C9A227] px-3 py-1.5 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]">
+                                Run again
+                            </button>
+                            <button type="button"
+                                wire:click="closeCostRepairModal"
+                                class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b89220]">
+                                Close
+                            </button>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
     @if ($cogsModalOpen)
         <div class="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-4 sm:items-center"
             wire:click.self="closeCogsModal"
@@ -292,7 +419,7 @@
                                         <div>
                                             <label class="mb-1 block text-[11px] font-medium text-[#6B6459]">Purchase / main</label>
                                             <input type="number" min="0" step="1"
-                                                wire:model="cogsModalRows.{{ $index }}.purchase_price"
+                                                wire:model.live="cogsModalRows.{{ $index }}.purchase_price"
                                                 @disabled($row['has_materials'])
                                                 class="w-full rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-sm tabular-nums disabled:bg-[#FAF6EF] disabled:text-[#8C8474]">
                                             @error('cogsModalRows.'.$index.'.purchase_price')
@@ -302,7 +429,7 @@
                                         <div>
                                             <label class="mb-1 block text-[11px] font-medium text-[#6B6459]">Other cost</label>
                                             <input type="number" min="0" step="1"
-                                                wire:model="cogsModalRows.{{ $index }}.other_cost"
+                                                wire:model.live="cogsModalRows.{{ $index }}.other_cost"
                                                 class="w-full rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-sm tabular-nums">
                                             @error('cogsModalRows.'.$index.'.other_cost')
                                                 <p class="mt-1 text-[11px] text-rose-600">{{ $message }}</p>
@@ -320,7 +447,7 @@
                                             <button type="button"
                                                 wire:click="syncCogsModalRowToAllOrders({{ $index }})"
                                                 class="rounded-lg border border-[#C9A227] px-3 py-1.5 text-xs font-medium text-[#C9A227] hover:bg-[#FAF6EF]">
-                                                Sync to all orders with this product
+                                                Sync to open orders with this product
                                             </button>
                                         @endif
                                     </div>

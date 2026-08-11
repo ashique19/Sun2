@@ -91,7 +91,7 @@ class AdminAnalyticsOrdersWithCostsTest extends TestCase
         $order = $this->orderWithCosts($this->steadfast());
 
         // COGS 400 + pack 20 + courier 60 + COD (1080-80)*1% = 10 → direct 490
-        // P/L = 1080 - 490 = 590 · P/L % = 590/1080 ≈ 54.6%
+        // P/L = 1080 - 490 = 590 · P/L % = 590/1080 ≈ 54.6% (shown under P/L)
         Livewire::test(AdminAnalyticsOrdersWithCosts::class)
             ->assertSee('All orders with costs')
             ->assertSeeHtml(route('admin.orders.show', $order))
@@ -103,8 +103,13 @@ class AdminAnalyticsOrdersWithCostsTest extends TestCase
             ->assertSee('৳ 10')
             ->assertSee('৳ 490')
             ->assertSee('৳ 590')
-            ->assertSee('P/L %')
-            ->assertSee('54.6%');
+            ->assertDontSeeHtml('>P/L %</')
+            ->assertSee('37.0%') // COGS
+            ->assertSee('1.9%') // packaging
+            ->assertSee('5.6%') // courier
+            ->assertSee('0.9%') // COD
+            ->assertSee('45.4%') // direct
+            ->assertSee('54.6%'); // P/L
     }
 
     #[Test]

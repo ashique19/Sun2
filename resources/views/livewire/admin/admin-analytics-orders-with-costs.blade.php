@@ -1,5 +1,12 @@
 @php
     $money = fn (float $value): string => '৳ '.number_format($value, 0);
+    $pctOfRevenue = function (float $value, float $revenue): ?float {
+        if ($revenue <= 0) {
+            return null;
+        }
+
+        return round(($value / $revenue) * 100, 1);
+    };
 @endphp
 
 <div>
@@ -7,6 +14,7 @@
         <h1 class="font-serif text-3xl font-semibold">All orders with costs</h1>
         <p class="mt-1 text-sm text-[#8C8474]">
             Revenue, direct costs, and contribution P/L. Double-click COGS, packaging, or courier to edit.
+            Tiny % under each cost is share of revenue.
         </p>
     </div>
 
@@ -37,13 +45,13 @@
                         <th class="px-4 py-3 font-medium text-right">COD fee</th>
                         <th class="px-4 py-3 font-medium text-right">Direct</th>
                         <th class="px-4 py-3 font-medium text-right">P/L</th>
-                        <th class="px-4 py-3 font-medium text-right" title="P/L ÷ revenue">P/L %</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#E7DFCF]">
                     @forelse ($orders as $order)
                         @php
                             $econ = $economicsById[$order->id];
+                            $revenue = (float) $econ['revenue'];
                             $isEditing = fn (string $field): bool => $editingOrderId === $order->id && $editingField === $field;
                         @endphp
                         <tr wire:key="order-costs-{{ $order->id }}" class="hover:bg-[#FAF6EF]/50">
@@ -88,35 +96,49 @@
                                             <p class="mt-1 text-[11px] text-rose-600">{{ $message }}</p>
                                         @enderror
                                     @else
-                                        {{ $money($value) }}
+                                        <div>{{ $money($value) }}</div>
+                                        @php $pct = $pctOfRevenue((float) $value, $revenue); @endphp
+                                        <div class="text-[10px] leading-tight tabular-nums text-[#8C8474]">
+                                            {{ $pct === null ? '—' : number_format($pct, 1).'%' }}
+                                        </div>
                                     @endif
                                 </td>
                             @endforeach
 
-                            <td class="px-4 py-3 text-right tabular-nums text-[#6B6459]">{{ $money($econ['cod']) }}</td>
-                            <td class="px-4 py-3 text-right tabular-nums text-[#6B6459]">{{ $money($econ['direct']) }}</td>
+                            <td class="px-4 py-3 text-right tabular-nums text-[#6B6459]">
+                                <div>{{ $money($econ['cod']) }}</div>
+                                @php $pct = $pctOfRevenue((float) $econ['cod'], $revenue); @endphp
+                                <div class="text-[10px] leading-tight tabular-nums text-[#8C8474]">
+                                    {{ $pct === null ? '—' : number_format($pct, 1).'%' }}
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 text-right tabular-nums text-[#6B6459]">
+                                <div>{{ $money($econ['direct']) }}</div>
+                                @php $pct = $pctOfRevenue((float) $econ['direct'], $revenue); @endphp
+                                <div class="text-[10px] leading-tight tabular-nums text-[#8C8474]">
+                                    {{ $pct === null ? '—' : number_format($pct, 1).'%' }}
+                                </div>
+                            </td>
                             <td @class([
                                 'px-4 py-3 text-right tabular-nums font-medium',
                                 'text-emerald-700' => $econ['profit'] >= 0,
                                 'text-rose-700' => $econ['profit'] < 0,
                             ])>
-                                {{ $money($econ['profit']) }}
-                            </td>
-                            <td @class([
-                                'px-4 py-3 text-right tabular-nums font-medium',
-                                'text-emerald-700' => ($econ['profit_pct'] ?? 0) >= 0,
-                                'text-rose-700' => ($econ['profit_pct'] ?? 0) < 0,
-                            ])>
-                                @if ($econ['profit_pct'] === null)
-                                    <span class="text-[#8C8474]">—</span>
-                                @else
-                                    {{ number_format($econ['profit_pct'], 1) }}%
-                                @endif
+                                <div>{{ $money($econ['profit']) }}</div>
+                                @php $pct = $pctOfRevenue((float) $econ['profit'], $revenue); @endphp
+                                <div @class([
+                                    'text-[10px] leading-tight tabular-nums font-normal',
+                                    'text-emerald-700/80' => ($pct ?? 0) >= 0,
+                                    'text-rose-700/80' => ($pct ?? 0) < 0,
+                                    'text-[#8C8474]' => $pct === null,
+                                ])>
+                                    {{ $pct === null ? '—' : number_format($pct, 1).'%' }}
+                                </div>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="px-4 py-10 text-center text-sm text-[#8C8474]">
+                            <td colspan="8" class="px-4 py-10 text-center text-sm text-[#8C8474]">
                                 No orders match these filters.
                             </td>
                         </tr>

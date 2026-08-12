@@ -151,6 +151,7 @@ class OrderCourierChargeSync
     public function estimateMerchantDeliveryFee(Order $order, ?Courier $courier = null): float
     {
         $courier ??= $order->relationLoaded('courier') ? $order->courier : $order->courier()->first();
+        $courier ??= $this->resolveDefaultCourier();
 
         if (! $courier) {
             return 0.0;
@@ -158,13 +159,16 @@ class OrderCourierChargeSync
 
         $order->loadMissing('items');
         $qty = $this->emptyProductDefaults->sellableQuantity($order);
+        $status = strtolower((string) $order->status);
 
         // Returned / fully-returned delivered parcels still incurred a courier trip.
-        if ($qty < 1) {
-            $status = strtolower((string) $order->status);
-            if (in_array($status, ['delivered', 'returned', 'dispatched', 'partial'], true)) {
-                $qty = $this->emptyProductDefaults->shippedQuantity($order);
-            }
+        if ($qty < 1 && in_array($status, ['delivered', 'returned', 'dispatched', 'partial'], true)) {
+            $qty = $this->emptyProductDefaults->shippedQuantity($order);
+        }
+
+        // Delivered/returned with no line qty still paid for a trip — bill 1 piece.
+        if ($qty < 1 && in_array($status, ['delivered', 'returned'], true)) {
+            $qty = 1;
         }
 
         if ($qty < 1) {
@@ -342,5 +346,21 @@ class OrderCourierChargeSync
         return (bool) City::query()
             ->whereRaw('LOWER(name) = ?', [$normalized])
             ->value('is_dhaka');
+    }
+
+    /**
+     * Active default courier (or first active) for rate-card estimates when the order has none.
+     */
+    public function resolveDefaultCourier(): ?Courier
+    {
+        return Courier::query()
+            ->where('is_active', true)
+            ->where('is_default', true)
+            ->first()
+            ?? Courier::query()
+                ->where('is_active', true)
+                ->orderByDesc('is_default')
+                ->orderBy('id')
+                ->first();
     }
 }

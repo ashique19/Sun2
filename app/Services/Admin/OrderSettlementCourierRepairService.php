@@ -108,7 +108,8 @@ class OrderSettlementCourierRepairService
         $settlementFixed = false;
 
         if ($this->needsCourierRepair($order)) {
-            $fee = $this->courierCharges->estimateMerchantDeliveryFee($order, $order->courier);
+            $courier = $order->courier ?? $this->courierCharges->resolveDefaultCourier();
+            $fee = $this->courierCharges->estimateMerchantDeliveryFee($order, $courier);
 
             if ($fee >= 0.01) {
                 $this->courierCharges->set(
@@ -119,6 +120,8 @@ class OrderSettlementCourierRepairService
                     [
                         'source' => 'settlement_courier_repair',
                         'rule' => 'piece_based_rate_card',
+                        'courier_id_used' => $courier?->id,
+                        'order_had_courier_id' => (bool) $order->courier_id,
                     ],
                 );
                 $courierFixed = true;
@@ -155,23 +158,15 @@ class OrderSettlementCourierRepairService
             return false;
         }
 
-        if (round((float) ($order->courier_charge ?? 0), 2) >= 0.01) {
-            return false;
-        }
-
-        if (! $order->courier_id) {
-            return false;
-        }
-
-        return true;
+        return round((float) ($order->courier_charge ?? 0), 2) < 0.01;
     }
 
     private function eligibleQuery(): Builder
     {
         return Order::query()->where(function (Builder $query): void {
             $query->where(function (Builder $courier): void {
+                // Delivered/returned with ৳0 courier — courier_id optional (rate card uses default).
                 $courier->whereIn('status', ['delivered', 'returned'])
-                    ->whereNotNull('courier_id')
                     ->where('courier_charge', '<', 0.01);
             })->orWhere(function (Builder $settle): void {
                 // Mirror OrderPaidStatusRepairService eligibility (legacy paid + delivered gaps).

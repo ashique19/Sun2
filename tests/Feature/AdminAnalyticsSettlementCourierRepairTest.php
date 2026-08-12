@@ -199,4 +199,73 @@ class AdminAnalyticsSettlementCourierRepairTest extends TestCase
         $this->assertSame(60.0, (float) $order->fresh()->courier_charge);
         $this->assertSame(0, PaymentTransaction::query()->where('order_id', $order->id)->count());
     }
+
+    #[Test]
+    public function fills_courier_when_order_has_no_courier_id_using_default(): void
+    {
+        $this->steadfast();
+
+        $order = Order::query()->create([
+            'order_number' => 'NO-COUR-ID',
+            'name' => 'No courier',
+            'phone' => '01710000005',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'delivered',
+            'subtotal' => 500,
+            'delivery_charge' => 80,
+            'total' => 580,
+            'courier_charge' => 0,
+            'courier_id' => null,
+            'collected_amount' => 580,
+            'paid_amount' => 580,
+            'due_amount' => 0,
+            'payment_status' => 'paid',
+            'actual_delivery_date' => now()->subDay(),
+            'placed_at' => now()->subDays(2),
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Item',
+            'quantity' => 1,
+            'price' => 500,
+            'purchase_price' => 200,
+            'unit_cost' => 200,
+            'line_total' => 500,
+        ]);
+
+        $service = app(OrderSettlementCourierRepairService::class);
+
+        $this->assertSame(1, $service->eligibleOrderCount());
+        $result = $service->repairOrder($order->fresh());
+
+        $this->assertTrue($result['courier_fixed']);
+        $this->assertSame(60.0, (float) $order->fresh()->courier_charge);
+        $this->assertNull($order->fresh()->courier_id);
+    }
+
+    #[Test]
+    public function fills_one_piece_courier_when_delivered_has_no_line_qty(): void
+    {
+        $this->steadfast();
+
+        $order = Order::query()->create([
+            'order_number' => 'NO-LINES',
+            'name' => 'Empty lines',
+            'phone' => '01710000006',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'returned',
+            'subtotal' => 0,
+            'total' => 0,
+            'courier_charge' => 0,
+            'courier_id' => null,
+            'placed_at' => now()->subDay(),
+        ]);
+
+        $result = app(OrderSettlementCourierRepairService::class)->repairOrder($order->fresh());
+
+        $this->assertTrue($result['courier_fixed']);
+        $this->assertSame(60.0, (float) $order->fresh()->courier_charge);
+    }
 }

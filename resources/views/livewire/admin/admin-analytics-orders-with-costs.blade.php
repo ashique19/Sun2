@@ -263,7 +263,8 @@
                         <h2 class="text-base font-semibold text-[#1E1E1E]">Repair settlement &amp; courier</h2>
                         <p class="mt-0.5 text-xs text-[#8C8474]">
                             Batches of {{ \App\Services\Admin\OrderSettlementCourierRepairService::BATCH_SIZE }}.
-                            Fills ৳0 courier on delivered/returned from the piece-based rate card,
+                            Fills ৳0 courier on delivered/returned from the piece-based rate card
+                            (uses the order’s courier, or the default courier when unset; min 1 piece),
                             then settles delivered non-exchange bills to payment ledger (mark paid).
                         </p>
                     </div>

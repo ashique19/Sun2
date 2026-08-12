@@ -43,7 +43,7 @@ class AdminAnalyticsPackagingCourierRepairTest extends TestCase
     }
 
     #[Test]
-    public function logistics_repair_modal_fills_zero_packaging_and_courier(): void
+    public function logistics_repair_fills_zero_packaging_and_courier(): void
     {
         $this->actingAs($this->adminUser());
         $steadfast = $this->courier('steadfast');
@@ -98,15 +98,13 @@ class AdminAnalyticsPackagingCourierRepairTest extends TestCase
         ]);
 
         Livewire::test(AdminAnalyticsOrdersWithCosts::class)
-            ->assertSee('Repair packaging / courier…')
-            ->call('openLogisticsRepairModal')
-            ->assertSet('logisticsRepairModalOpen', true)
-            ->assertSet('logisticsRepairTotal', 2)
-            ->call('startLogisticsRepair')
-            ->assertSet('logisticsRepairDone', true)
-            ->assertSet('logisticsRepairPackagingFixed', 1)
-            ->assertSet('logisticsRepairCourierFixed', 1)
-            ->assertSee('Done');
+            ->assertDontSee('Repair packaging / courier…')
+            ->assertSee('Audit calculations…');
+
+        $result = app(OrderPackagingCourierRepairService::class)->repairNextBatch(0, 100);
+        $this->assertSame(2, $result['scanned']);
+        $this->assertSame(1, $result['packaging_fixed']);
+        $this->assertSame(1, $result['courier_fixed']);
 
         $packZero->refresh();
         $courierZero->refresh();

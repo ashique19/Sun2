@@ -8,7 +8,6 @@ use App\Models\Product;
 use App\Services\Admin\AnalyticsService;
 use App\Services\Admin\OrderCalculationAuditService;
 use App\Services\Admin\OrderCostSnapshotRepairService;
-use App\Services\Admin\OrderPackagingCourierRepairService;
 use App\Services\Admin\ProductUnitCostService;
 use App\Support\AdminAccess;
 use App\Support\StorefrontAssets;
@@ -110,31 +109,6 @@ class AdminAnalyticsOrdersWithCosts extends Component
     public array $repairRecentFixes = [];
 
     public ?string $repairStatusLine = null;
-
-    public bool $logisticsRepairModalOpen = false;
-
-    public bool $logisticsRepairRunning = false;
-
-    public bool $logisticsRepairDone = false;
-
-    public int $logisticsRepairAfterId = 0;
-
-    public int $logisticsRepairTotal = 0;
-
-    public int $logisticsRepairScanned = 0;
-
-    public int $logisticsRepairFixedOrders = 0;
-
-    public int $logisticsRepairPackagingFixed = 0;
-
-    public int $logisticsRepairCourierFixed = 0;
-
-    public int $logisticsRepairBatchNumber = 0;
-
-    /** @var list<string> */
-    public array $logisticsRepairRecentFixes = [];
-
-    public ?string $logisticsRepairStatusLine = null;
 
     public bool $auditModalOpen = false;
 
@@ -448,107 +422,6 @@ class AdminAnalyticsOrdersWithCosts extends Component
     {
         $this->repairRunning = false;
         $this->repairModalOpen = false;
-    }
-
-    public function openLogisticsRepairModal(OrderPackagingCourierRepairService $repair): void
-    {
-        $this->logisticsRepairModalOpen = true;
-        $this->logisticsRepairRunning = false;
-        $this->logisticsRepairDone = false;
-        $this->logisticsRepairAfterId = 0;
-        $this->logisticsRepairTotal = $repair->eligibleOrderCount();
-        $this->logisticsRepairScanned = 0;
-        $this->logisticsRepairFixedOrders = 0;
-        $this->logisticsRepairPackagingFixed = 0;
-        $this->logisticsRepairCourierFixed = 0;
-        $this->logisticsRepairBatchNumber = 0;
-        $this->logisticsRepairRecentFixes = [];
-        $this->logisticsRepairStatusLine = $this->logisticsRepairTotal === 0
-            ? 'No orders with ৳0 packaging or courier to repair.'
-            : 'Ready to repair '.number_format($this->logisticsRepairTotal).' orders (৳0 packaging and/or courier) in batches of '.OrderPackagingCourierRepairService::BATCH_SIZE.'.';
-    }
-
-    public function startLogisticsRepair(OrderPackagingCourierRepairService $repair): void
-    {
-        if (! $this->logisticsRepairModalOpen || $this->logisticsRepairRunning) {
-            return;
-        }
-
-        if ($this->logisticsRepairTotal < 1) {
-            $this->logisticsRepairDone = true;
-            $this->logisticsRepairStatusLine = 'No orders with ৳0 packaging or courier to repair.';
-
-            return;
-        }
-
-        $this->logisticsRepairRunning = true;
-        $this->logisticsRepairDone = false;
-        $this->logisticsRepairStatusLine = 'Starting…';
-        $this->continueLogisticsRepair($repair);
-    }
-
-    public function continueLogisticsRepair(OrderPackagingCourierRepairService $repair): void
-    {
-        if (! $this->logisticsRepairModalOpen || ! $this->logisticsRepairRunning || $this->logisticsRepairDone) {
-            return;
-        }
-
-        $result = $repair->repairNextBatch(
-            $this->logisticsRepairAfterId,
-            OrderPackagingCourierRepairService::BATCH_SIZE,
-        );
-
-        $this->logisticsRepairBatchNumber++;
-        $this->logisticsRepairAfterId = $result['next_after_id'];
-        $this->logisticsRepairScanned += $result['scanned'];
-        $this->logisticsRepairFixedOrders += $result['fixed_orders'];
-        $this->logisticsRepairPackagingFixed += $result['packaging_fixed'];
-        $this->logisticsRepairCourierFixed += $result['courier_fixed'];
-
-        foreach ($result['sample_order_numbers'] as $orderNumber) {
-            if (! in_array($orderNumber, $this->logisticsRepairRecentFixes, true)) {
-                $this->logisticsRepairRecentFixes[] = $orderNumber;
-            }
-        }
-        $this->logisticsRepairRecentFixes = array_slice($this->logisticsRepairRecentFixes, -12);
-
-        $pct = $this->logisticsRepairTotal > 0
-            ? min(100, (int) round(($this->logisticsRepairScanned / $this->logisticsRepairTotal) * 100))
-            : 100;
-
-        $this->logisticsRepairStatusLine = 'Batch '.$this->logisticsRepairBatchNumber
-            .' · scanned '.number_format($this->logisticsRepairScanned).' / '.number_format($this->logisticsRepairTotal)
-            .' ('.$pct.'%)'
-            .' · fixed '.number_format($this->logisticsRepairFixedOrders).' orders'
-            .' · packaging '.number_format($this->logisticsRepairPackagingFixed)
-            .' · courier '.number_format($this->logisticsRepairCourierFixed);
-
-        if ($result['done'] || $result['scanned'] === 0) {
-            $this->logisticsRepairRunning = false;
-            $this->logisticsRepairDone = true;
-            $this->logisticsRepairStatusLine = 'Done · scanned '.number_format($this->logisticsRepairScanned)
-                .' · fixed '.number_format($this->logisticsRepairFixedOrders).' orders'
-                .' · packaging '.number_format($this->logisticsRepairPackagingFixed)
-                .' · courier '.number_format($this->logisticsRepairCourierFixed);
-        }
-    }
-
-    public function stopLogisticsRepair(): void
-    {
-        if (! $this->logisticsRepairRunning) {
-            return;
-        }
-
-        $this->logisticsRepairRunning = false;
-        $this->logisticsRepairStatusLine = 'Paused at '.number_format($this->logisticsRepairScanned)
-            .' / '.number_format($this->logisticsRepairTotal)
-            .' · fixed '.number_format($this->logisticsRepairFixedOrders).' so far. Resume to continue.';
-    }
-
-    public function closeLogisticsRepairModal(): void
-    {
-        $this->logisticsRepairRunning = false;
-        $this->logisticsRepairModalOpen = false;
     }
 
     public function openCalculationAuditModal(OrderCalculationAuditService $audit): void

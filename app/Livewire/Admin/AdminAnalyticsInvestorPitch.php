@@ -108,24 +108,6 @@ class AdminAnalyticsInvestorPitch extends Component
         ]));
     }
 
-    public function copyCreatedShareUrl(): void
-    {
-        if ($this->createdShareUrl === null || $this->createdShareUrl === '') {
-            return;
-        }
-
-        $this->js('window.sunCopyText('.json_encode($this->createdShareUrl, JSON_THROW_ON_ERROR).')');
-    }
-
-    public function copyCreatedSharePassword(): void
-    {
-        if ($this->createdSharePassword === null || $this->createdSharePassword === '') {
-            return;
-        }
-
-        $this->js('window.sunCopyText('.json_encode($this->createdSharePassword, JSON_THROW_ON_ERROR).')');
-    }
-
     public function dismissCreatedShare(): void
     {
         $this->createdShareUrl = null;
@@ -153,6 +135,31 @@ class AdminAnalyticsInvestorPitch extends Component
             $this->addError(
                 'sharePassword',
                 'Could not revoke the share link: '.$e->getMessage(),
+            );
+        }
+    }
+
+    public function deleteShare(int $shareId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        try {
+            app(InvestorPitchShareService::class)->ensureSchema();
+
+            $share = InvestorPitchShare::query()->findOrFail($shareId);
+            $url = $share->url();
+            $share->lockSession();
+            $share->delete();
+
+            if ($this->createdShareUrl === $url) {
+                $this->dismissCreatedShare();
+            }
+        } catch (\Throwable $e) {
+            report($e);
+
+            $this->addError(
+                'sharePassword',
+                'Could not delete the share link: '.$e->getMessage(),
             );
         }
     }

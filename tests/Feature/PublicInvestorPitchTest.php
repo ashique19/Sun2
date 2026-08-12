@@ -229,11 +229,38 @@ class PublicInvestorPitchTest extends TestCase
         Livewire::test(AdminAnalyticsInvestorPitch::class)
             ->assertSee('To revoke')
             ->assertSee('Active')
+            ->assertSee('Copy link')
+            ->assertSee('Delete')
+            ->assertSeeHtml('wire:click="revokeShare('.$share->id.')"')
+            ->assertSeeHtml('wire:click="deleteShare('.$share->id.')"')
             ->call('revokeShare', $share->id)
             ->assertSee('Revoked');
 
         $this->assertTrue($share->fresh()->isRevoked());
         $this->assertFalse($share->fresh()->isAccessible());
+    }
+
+    #[Test]
+    public function admin_can_delete_share_link(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $share = InvestorPitchShare::query()->create([
+            'token' => str_repeat('f', 48),
+            'label' => 'To delete',
+            'password' => 'deck-password',
+            'expires_at' => now()->addDays(3),
+            'created_by' => auth()->id(),
+        ]);
+
+        Livewire::test(AdminAnalyticsInvestorPitch::class)
+            ->assertSee('To delete')
+            ->call('deleteShare', $share->id)
+            ->assertDontSee('To delete');
+
+        $this->assertDatabaseMissing('investor_pitch_shares', [
+            'id' => $share->id,
+        ]);
     }
 
     /**

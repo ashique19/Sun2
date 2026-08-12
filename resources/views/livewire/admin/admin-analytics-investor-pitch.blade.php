@@ -106,20 +106,36 @@
                         <p class="min-w-0 flex-1 break-all font-mono text-xs">{{ $createdShareUrl }}</p>
                         <button
                             type="button"
-                            wire:click="copyCreatedShareUrl"
+                            x-data="{ copied: false }"
+                            data-copy-text="{{ $createdShareUrl }}"
+                            x-on:click="
+                                window.sunCopyText($el.dataset.copyText).then((ok) => {
+                                    if (! ok) return;
+                                    copied = true;
+                                    setTimeout(() => copied = false, 2000);
+                                })
+                            "
                             class="shrink-0 rounded-full border border-emerald-300 bg-white px-3 py-1 text-xs font-medium text-emerald-900 hover:bg-emerald-100"
                         >
-                            Copy link
+                            <span x-text="copied ? 'Copied' : 'Copy link'">Copy link</span>
                         </button>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
                         <p class="text-xs">Password: <span class="font-mono font-semibold">{{ $createdSharePassword }}</span></p>
                         <button
                             type="button"
-                            wire:click="copyCreatedSharePassword"
+                            x-data="{ copied: false }"
+                            data-copy-text="{{ $createdSharePassword }}"
+                            x-on:click="
+                                window.sunCopyText($el.dataset.copyText).then((ok) => {
+                                    if (! ok) return;
+                                    copied = true;
+                                    setTimeout(() => copied = false, 2000);
+                                })
+                            "
                             class="shrink-0 rounded-full border border-emerald-300 bg-white px-3 py-1 text-xs font-medium text-emerald-900 hover:bg-emerald-100"
                         >
-                            Copy password
+                            <span x-text="copied ? 'Copied' : 'Copy password'">Copy password</span>
                         </button>
                     </div>
                 </div>
@@ -142,6 +158,7 @@
                         @foreach ($shares as $share)
                             @php
                                 $status = $share->isRevoked() ? 'Revoked' : ($share->isExpired() ? 'Expired' : 'Active');
+                                $shareUrl = $share->url();
                             @endphp
                             <tr class="border-b border-[#F5F0E6]" wire:key="share-{{ $share->id }}">
                                 <td class="py-2.5 pr-4 text-[#1E1E1E]">
@@ -166,16 +183,41 @@
                                     ])>{{ $status }}</span>
                                 </td>
                                 <td class="py-2.5 text-right">
-                                    @if ($status === 'Active')
+                                    <div class="flex flex-wrap items-center justify-end gap-3">
                                         <button
                                             type="button"
-                                            wire:click="revokeShare({{ $share->id }})"
-                                            wire:confirm="Revoke this share link? The recipient will lose access immediately."
+                                            x-data="{ copied: false }"
+                                            data-copy-text="{{ $shareUrl }}"
+                                            x-on:click="
+                                                window.sunCopyText($el.dataset.copyText).then((ok) => {
+                                                    if (! ok) return;
+                                                    copied = true;
+                                                    setTimeout(() => copied = false, 2000);
+                                                })
+                                            "
+                                            class="text-xs font-medium text-[#2F6F4E] hover:underline"
+                                        >
+                                            <span x-text="copied ? 'Copied' : 'Copy link'">Copy link</span>
+                                        </button>
+                                        @if ($status === 'Active')
+                                            <button
+                                                type="button"
+                                                wire:click="revokeShare({{ $share->id }})"
+                                                wire:confirm="Revoke this share link? The recipient will lose access immediately."
+                                                class="text-xs font-medium text-amber-800 hover:underline"
+                                            >
+                                                Revoke
+                                            </button>
+                                        @endif
+                                        <button
+                                            type="button"
+                                            wire:click="deleteShare({{ $share->id }})"
+                                            wire:confirm="Delete this share link permanently? This cannot be undone."
                                             class="text-xs font-medium text-rose-700 hover:underline"
                                         >
-                                            Revoke
+                                            Delete
                                         </button>
-                                    @endif
+                                    </div>
                                 </td>
                             </tr>
                         @endforeach

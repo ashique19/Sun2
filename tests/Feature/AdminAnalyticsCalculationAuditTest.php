@@ -44,7 +44,7 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
     }
 
     #[Test]
-    public function audit_auto_fixes_zero_packaging_and_reports_packaging_mismatch(): void
+    public function audit_auto_fixes_zero_packaging_and_ignores_packaging_mismatch(): void
     {
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
@@ -83,7 +83,7 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
             'subtotal' => 500,
             'total' => 500,
             'packaging_cost' => 99,
-            'courier_charge' => 60,
+            'courier_charge' => 90,
             'courier_id' => $courier->id,
             'placed_at' => '2025-03-01 10:00:00',
         ]);
@@ -105,16 +105,16 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
             ->call('startCalculationAudit')
             ->assertSet('auditDone', true)
             ->assertSet('auditAutoFixed', 1)
-            ->assertSet('auditManualNeeded', 1)
-            ->assertSee('AUD-PACK-MISMATCH')
-            ->assertSee('differs from rate card')
-            ->assertSeeHtml(route('admin.orders.show', $mismatch));
+            ->assertSet('auditManualNeeded', 0)
+            ->assertDontSee('differs from rate card')
+            ->assertDontSee('differs from estimate');
 
         $zeroPack->refresh();
         $this->assertSame(21.0, (float) $zeroPack->packaging_cost);
 
         $mismatch->refresh();
         $this->assertSame(99.0, (float) $mismatch->packaging_cost);
+        $this->assertSame(90.0, (float) $mismatch->courier_charge);
     }
 
     #[Test]
@@ -194,7 +194,7 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
             ->assertSet('auditAutoFixed', 1)
             ->assertSet('auditManualNeeded', 1)
             ->assertSee('AUD-NO-COGS')
-            ->assertSee('no unit cost set');
+            ->assertSee('no other order with this product/name has a cost to copy');
 
         $paid->refresh();
         $this->assertSame('delivered', $paid->status);

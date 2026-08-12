@@ -111,10 +111,11 @@ class ProductUnitCostService
 
     /**
      * Unit cost used for COGS snapshots (total, with fallback to main purchase_price).
+     * Treat ~৳0 unit_cost as unset.
      */
     public function effectiveUnitCost(Product $product): float
     {
-        if ($product->unit_cost !== null && $product->unit_cost !== '') {
+        if ($product->unit_cost !== null && $product->unit_cost !== '' && (float) $product->unit_cost >= 0.01) {
             return round((float) $product->unit_cost, 2);
         }
 
@@ -160,8 +161,137 @@ class ProductUnitCostService
     }
 
     /**
-     * When a product has no unit cost, copy purchase/unit cost from its newest
-     * non-cancelled/returned order line that already has a COGS snapshot.
+     * Snapshot COGS from a line: prefer unit_cost, else purchase_price.
+     */
+    public function lineSnapshotCost(OrderProduct $line): float
+    {
+        return $line->effectiveUnitCost();
+    }
+
+    /**
+     * Find the newest usable cost snapshot for a product id and/or line name.
+     */
+    public function findCostSourceLine(?int $productId, ?string $lineName): ?OrderProduct
+    {
+        $base = OrderProduct::query()
+            ->where(function ($query): void {
+                $query->where('unit_cost', '>=', 0.01)
+                    ->orWhere('purchase_price', '>=', 0.01);
+            })
+            ->whereHas('order', function ($orderQuery): void {
+                $orderQuery->whereNotIn('status', ['cancelled', 'returned', Order::STATUS_DRAFT]);
+            });
+
+        if ($productId) {
+            /** @var OrderProduct|null $byProduct */
+            $byProduct = (clone $base)
+                ->where('product_id', $productId)
+                ->orderByDesc('id')
+                ->first();
+
+            if ($byProduct && $this->lineSnapshotCost($byProduct) >= 0.01) {
+                return $byProduct;
+            }
+        }
+
+        $name = trim((string) $lineName);
+
+        if ($name === '') {
+            return null;
+        }
+
+        /** @var OrderProduct|null $byName */
+        $byName = (clone $base)
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+            ->orderByDesc('id')
+            ->first();
+
+        if ($byName && $this->lineSnapshotCost($byName) >= 0.01) {
+            return $byName;
+        }
+
+        // Line may display a short name while the catalog product has the full title.
+        if ($productId) {
+            return null;
+        }
+
+        $product = Product::query()
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+            ->first();
+
+        if ($product && $this->effectiveUnitCost($product) >= 0.01) {
+            // Synthetic: return newest line for that product if any, else null —
+            // caller can also resolve via findProductCostByName.
+            return (clone $base)
+                ->where('product_id', $product->id)
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{purchase: float, unit_cost: float}|null
+     */
+    public function resolveCostSnapshot(?int $productId, ?string $lineName): ?array
+    {
+        if ($productId) {
+            $product = Product::query()->find($productId);
+
+            if ($product && $this->effectiveUnitCost($product) >= 0.01) {
+                return [
+                    'purchase' => round((float) $product->purchase_price, 2) >= 0.01
+                        ? round((float) $product->purchase_price, 2)
+                        : $this->effectiveUnitCost($product),
+                    'unit_cost' => $this->effectiveUnitCost($product),
+                ];
+            }
+        }
+
+        $line = $this->findCostSourceLine($productId, $lineName);
+
+        if ($line && $this->lineSnapshotCost($line) >= 0.01) {
+            $unitCost = $this->lineSnapshotCost($line);
+            $purchase = round((float) $line->purchase_price, 2);
+
+            if ($purchase < 0.01) {
+                $purchase = $unitCost;
+            }
+
+            if ($purchase > $unitCost) {
+                $purchase = $unitCost;
+            }
+
+            return [
+                'purchase' => $purchase,
+                'unit_cost' => $unitCost,
+            ];
+        }
+
+        $name = trim((string) $lineName);
+
+        if ($name !== '') {
+            $product = Product::query()
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+                ->first();
+
+            if ($product && $this->effectiveUnitCost($product) >= 0.01) {
+                return [
+                    'purchase' => round((float) $product->purchase_price, 2) >= 0.01
+                        ? round((float) $product->purchase_price, 2)
+                        : $this->effectiveUnitCost($product),
+                    'unit_cost' => $this->effectiveUnitCost($product),
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * When a product has no unit cost, copy purchase/unit cost from order lines
+     * (same product_id first, then same line name).
      *
      * Skips products with BOM materials (those costs are owned by materials).
      */
@@ -177,34 +307,39 @@ class ProductUnitCostService
             return false;
         }
 
-        /** @var OrderProduct|null $line */
-        $line = OrderProduct::query()
-            ->where('product_id', $product->id)
-            ->where(function ($query): void {
-                $query->where('unit_cost', '>=', 0.01)
-                    ->orWhere('purchase_price', '>=', 0.01);
-            })
-            ->whereHas('order', function ($orderQuery): void {
-                $orderQuery->whereNotIn('status', ['cancelled', 'returned', Order::STATUS_DRAFT]);
-            })
-            ->orderByDesc('id')
-            ->first();
+        $snapshot = $this->resolveCostSnapshot((int) $product->id, (string) $product->name);
 
-        if ($line === null || $line->effectiveUnitCost() < 0.01) {
+        // Catalog title often differs from short order-line names ("Necklace" vs long SEO title).
+        // Try distinct line names used with this product so we can still learn from peers.
+        if ($snapshot === null) {
+            $lineNames = OrderProduct::query()
+                ->where('product_id', $product->id)
+                ->whereNotNull('name')
+                ->distinct()
+                ->orderBy('name')
+                ->pluck('name');
+
+            foreach ($lineNames as $lineName) {
+                $trimmed = trim((string) $lineName);
+
+                if ($trimmed === '' || strcasecmp($trimmed, trim((string) $product->name)) === 0) {
+                    continue;
+                }
+
+                $snapshot = $this->resolveCostSnapshot(null, $trimmed);
+
+                if ($snapshot !== null) {
+                    break;
+                }
+            }
+        }
+
+        if ($snapshot === null) {
             return false;
         }
 
-        $unitCost = $line->effectiveUnitCost();
-        $purchase = round((float) $line->purchase_price, 2);
-
-        if ($purchase < 0.01) {
-            $purchase = $unitCost;
-        }
-
-        if ($purchase > $unitCost) {
-            $purchase = $unitCost;
-        }
-
+        $purchase = $snapshot['purchase'];
+        $unitCost = $snapshot['unit_cost'];
         $other = max(0.0, round($unitCost - $purchase, 2));
 
         $this->applyPurchaseAndOther($product, $purchase, $other);
@@ -213,36 +348,70 @@ class ProductUnitCostService
     }
 
     /**
+     * For each line on the order: fill missing catalog product costs, then fill
+     * ৳0 order lines from product / other order snapshots (including by name).
+     *
+     * @return array{products_updated: int, lines_updated: int}
+     */
+    public function backfillMissingCostsForOrder(Order $order): array
+    {
+        $order->loadMissing('items.product.materials');
+        $productsUpdated = 0;
+        $linesUpdated = 0;
+        $seenProducts = [];
+
+        foreach ($order->items as $item) {
+            if ($item->product_id && $item->product instanceof Product) {
+                $productId = (int) $item->product_id;
+
+                if (! isset($seenProducts[$productId])) {
+                    $seenProducts[$productId] = true;
+
+                    if ($this->backfillMissingFromOrderSnapshots($item->product)) {
+                        $productsUpdated++;
+                        $item->setRelation('product', $item->product->fresh(['materials', 'costHeads']));
+                    }
+                }
+            }
+        }
+
+        foreach ($order->items as $item) {
+            $kept = max(0, (int) $item->quantity - (int) ($item->returned_quantity ?? 0));
+
+            if ($kept < 1 || $item->effectiveUnitCost() >= 0.01) {
+                continue;
+            }
+
+            $productId = $item->product_id ? (int) $item->product_id : null;
+            $snapshot = $this->resolveCostSnapshot($productId, (string) $item->name);
+
+            if ($snapshot === null) {
+                continue;
+            }
+
+            $item->forceFill([
+                'purchase_price' => $snapshot['purchase'],
+                'unit_cost' => $snapshot['unit_cost'],
+            ])->save();
+
+            $linesUpdated++;
+        }
+
+        return [
+            'products_updated' => $productsUpdated,
+            'lines_updated' => $linesUpdated,
+        ];
+    }
+
+    /**
      * For each linked product on the order that still has ৳0 catalog cost, try to
-     * fill it from any order-line snapshot for that product.
+     * fill it from any order-line snapshot for that product or matching name.
      *
      * @return int Number of products updated
      */
     public function backfillMissingProductsFromOrder(Order $order): int
     {
-        $order->loadMissing('items.product.materials');
-        $updated = 0;
-        $seen = [];
-
-        foreach ($order->items as $item) {
-            if (! $item->product_id || ! $item->product instanceof Product) {
-                continue;
-            }
-
-            $productId = (int) $item->product_id;
-
-            if (isset($seen[$productId])) {
-                continue;
-            }
-
-            $seen[$productId] = true;
-
-            if ($this->backfillMissingFromOrderSnapshots($item->product)) {
-                $updated++;
-            }
-        }
-
-        return $updated;
+        return $this->backfillMissingCostsForOrder($order)['products_updated'];
     }
 
     /**

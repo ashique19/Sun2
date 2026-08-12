@@ -103,20 +103,24 @@ class OrderCostSnapshotRepairService
         $status = strtolower((string) $order->status);
         $backfilled = 0;
         $cleared = 0;
+        $productsUpdated = 0;
 
         if (in_array($status, ['cancelled', 'returned'], true)) {
             $cleared = $this->clearCostsWhenReturnStillShowsCogs($order);
         } elseif ($this->emptyProductDefaults->hasNoProductQuantity($order)) {
             $backfilled = $this->ensureEmptyOrderCogs($order) ? 1 : 0;
         } else {
-            // Catalog products with ৳0 cost can learn from order line snapshots first.
-            $this->productCosts->backfillMissingProductsFromOrder($order);
+            // Fill missing catalog costs + ৳0 lines (by product_id or line name), then
+            // refresh any remaining linked lines from the live catalog.
+            $costBackfill = $this->productCosts->backfillMissingCostsForOrder($order);
+            $productsUpdated = $costBackfill['products_updated'];
             $order = $order->fresh(['items.product']);
-            $backfilled = $this->backfillMissingLineCostsFromProducts($order);
+            $backfilled = $costBackfill['lines_updated']
+                + $this->backfillMissingLineCostsFromProducts($order);
         }
 
         return [
-            'changed' => ($backfilled + $cleared) > 0,
+            'changed' => ($backfilled + $cleared + $productsUpdated) > 0,
             'backfilled_lines' => $backfilled,
             'cleared_return_lines' => $cleared,
         ];

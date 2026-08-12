@@ -117,9 +117,10 @@ class OrderCalculationAuditService
             $fixes[] = 'packaging_courier';
         }
 
-        // Order lines already have COGS but catalog products may still be ৳0 —
-        // reverse-fill products first so later line backfill / audits stay consistent.
-        if ($this->productCosts->backfillMissingProductsFromOrder($order) > 0) {
+        // Fill missing catalog costs + ৳0 lines from product / prior order snapshots
+        // (same product_id or same line name, including short names like “Necklace”).
+        $backfill = $this->productCosts->backfillMissingCostsForOrder($order);
+        if ($backfill['products_updated'] > 0 || $backfill['lines_updated'] > 0) {
             $fixes[] = 'product_cost_from_orders';
         }
 
@@ -155,15 +156,13 @@ class OrderCalculationAuditService
                 .', paid ৳'.$this->money((float) ($order->paid_amount ?? 0)).').';
         }
 
+        // Only flag missing (৳0) packaging/courier — historical non-zero values that
+        // differ from today's rate card are common on old orders and are not actionable.
         $expectedPackaging = round($this->packaging->estimateFor($order), 2);
         $actualPackaging = round((float) ($order->packaging_cost ?? 0), 2);
 
         if ($expectedPackaging >= 0.01 && $actualPackaging < 0.01) {
             $issues[] = 'Packaging is ৳0; rate card expects ৳'.$this->money($expectedPackaging).'.';
-        } elseif ($actualPackaging >= 0.01 && $expectedPackaging >= 0.01
-            && abs($actualPackaging - $expectedPackaging) >= 0.01) {
-            $issues[] = 'Packaging ৳'.$this->money($actualPackaging)
-                .' differs from rate card ৳'.$this->money($expectedPackaging).'.';
         }
 
         $expectedCourier = round(
@@ -174,10 +173,6 @@ class OrderCalculationAuditService
 
         if ($order->courier_id && $expectedCourier >= 0.01 && $actualCourier < 0.01) {
             $issues[] = 'Courier charge is ৳0; estimate expects ৳'.$this->money($expectedCourier).'.';
-        } elseif ($order->courier_id && $actualCourier >= 0.01 && $expectedCourier >= 0.01
-            && abs($actualCourier - $expectedCourier) >= 0.01) {
-            $issues[] = 'Courier ৳'.$this->money($actualCourier)
-                .' differs from estimate ৳'.$this->money($expectedCourier).'.';
         }
 
         if (in_array($status, ['cancelled', 'returned'], true)) {
@@ -208,7 +203,8 @@ class OrderCalculationAuditService
                 $label = trim((string) ($item->name ?: 'Line #'.$item->id));
 
                 if (! $item->product_id || ! $item->product instanceof Product) {
-                    $issues[] = 'Line “'.$label.'” has ৳0 COGS and no linked product cost to backfill.';
+                    $issues[] = 'Line “'.$label.'” has ৳0 COGS and no other order line named “'
+                        .$label.'” has a cost to copy.';
 
                     continue;
                 }
@@ -217,7 +213,7 @@ class OrderCalculationAuditService
 
                 if ($productCost < 0.01) {
                     $issues[] = 'Line “'.$label.'” has ৳0 COGS and product “'.$item->product->name
-                        .'” has no unit cost set.';
+                        .'” has no unit cost (and no other order with this product/name has a cost to copy).';
                 } else {
                     $issues[] = 'Line “'.$label.'” still has ৳0 COGS though product cost is ৳'
                         .$this->money($productCost).'.';

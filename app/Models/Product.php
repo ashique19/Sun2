@@ -55,11 +55,11 @@ class Product extends Model
     }
 
     /**
-     * Total unit cost for COGS (falls back to main purchase_price when unset).
+     * Total unit cost for COGS (falls back to main purchase_price when unset / ~৳0).
      */
     public function effectiveUnitCost(): float
     {
-        if ($this->unit_cost !== null && $this->unit_cost !== '') {
+        if ($this->unit_cost !== null && $this->unit_cost !== '' && (float) $this->unit_cost >= 0.01) {
             return round((float) $this->unit_cost, 2);
         }
 

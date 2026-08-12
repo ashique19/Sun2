@@ -293,4 +293,165 @@ class ProductCostBackfillFromOrdersTest extends TestCase
         $this->assertSame([], $result['issues']);
         $this->assertSame(75.0, (float) $product->fresh()->unit_cost);
     }
+
+    #[Test]
+    public function fills_zero_line_from_same_short_name_on_another_order(): void
+    {
+        $courier = $this->steadfast();
+
+        $source = Order::query()->create([
+            'order_number' => 'NAME-SRC',
+            'name' => 'A',
+            'phone' => '01710000010',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'delivered',
+            'subtotal' => 600,
+            'total' => 600,
+            'packaging_cost' => 21,
+            'courier_charge' => 60,
+            'courier_id' => $courier->id,
+            'collected_amount' => 600,
+            'placed_at' => now()->subDay(),
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $source->id,
+            'product_id' => null,
+            'name' => 'Necklace',
+            'quantity' => 1,
+            'price' => 600,
+            'purchase_price' => 140,
+            'unit_cost' => 160,
+            'line_total' => 600,
+        ]);
+
+        $target = Order::query()->create([
+            'order_number' => 'NAME-TGT',
+            'name' => 'B',
+            'phone' => '01710000011',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'confirmed',
+            'subtotal' => 600,
+            'total' => 600,
+            'packaging_cost' => 21,
+            'courier_charge' => 60,
+            'courier_id' => $courier->id,
+            'placed_at' => now(),
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $target->id,
+            'product_id' => null,
+            'name' => 'Necklace',
+            'quantity' => 1,
+            'price' => 600,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'line_total' => 600,
+        ]);
+
+        $result = app(ProductUnitCostService::class)->backfillMissingCostsForOrder($target->fresh(['items']));
+
+        $this->assertSame(0, $result['products_updated']);
+        $this->assertSame(1, $result['lines_updated']);
+        $this->assertSame(160.0, (float) $target->fresh('items')->items->first()->unit_cost);
+    }
+
+    #[Test]
+    public function fills_linked_zero_line_from_short_name_even_when_catalog_title_differs(): void
+    {
+        $courier = $this->steadfast();
+
+        $product = Product::query()->create([
+            'name' => 'Ethnic Oxidized Silver Sunflower Ring | Traditional Floral Jewellery',
+            'slug' => 'sunflower-ring',
+            'sku' => 'SR-1',
+            'price' => 450,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'is_published' => true,
+        ]);
+
+        $peer = Order::query()->create([
+            'order_number' => 'PEER-RING',
+            'name' => 'A',
+            'phone' => '01710000012',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'delivered',
+            'subtotal' => 450,
+            'total' => 450,
+            'packaging_cost' => 21,
+            'courier_charge' => 60,
+            'courier_id' => $courier->id,
+            'collected_amount' => 450,
+            'placed_at' => now()->subDay(),
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $peer->id,
+            'product_id' => null,
+            'name' => 'Finger Ring',
+            'quantity' => 1,
+            'price' => 450,
+            'purchase_price' => 80,
+            'unit_cost' => 95,
+            'line_total' => 450,
+        ]);
+
+        $order = Order::query()->create([
+            'order_number' => 'ZERO-RING',
+            'name' => 'B',
+            'phone' => '01710000013',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'processing',
+            'subtotal' => 450,
+            'total' => 450,
+            'packaging_cost' => 21,
+            'courier_charge' => 60,
+            'courier_id' => $courier->id,
+            'placed_at' => now(),
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'product_id' => $product->id,
+            'name' => 'Finger Ring',
+            'quantity' => 1,
+            'price' => 450,
+            'purchase_price' => 0,
+            'unit_cost' => 0,
+            'line_total' => 450,
+        ]);
+
+        $result = app(OrderCalculationAuditService::class)->auditOrder($order->fresh());
+
+        $this->assertTrue($result['auto_fixed']);
+        $this->assertSame([], $result['issues']);
+        $this->assertSame(95.0, (float) $order->fresh('items')->items->first()->unit_cost);
+        $this->assertSame(95.0, (float) $product->fresh()->unit_cost);
+    }
+
+    #[Test]
+    public function treats_zero_unit_cost_as_unset_and_uses_purchase_price(): void
+    {
+        $product = Product::query()->create([
+            'name' => 'Purchase Only',
+            'slug' => 'purchase-only',
+            'sku' => 'PO-1',
+            'price' => 300,
+            'purchase_price' => 120,
+            'unit_cost' => 0,
+            'is_published' => true,
+        ]);
+
+        $this->assertSame(120.0, $product->effectiveUnitCost());
+        $this->assertSame(120.0, app(ProductUnitCostService::class)->effectiveUnitCost($product));
+
+        $line = new OrderProduct([
+            'purchase_price' => 110,
+            'unit_cost' => 0,
+        ]);
+
+        $this->assertSame(110.0, $line->effectiveUnitCost());
+    }
 }

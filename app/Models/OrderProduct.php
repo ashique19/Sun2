@@ -39,10 +39,11 @@ class OrderProduct extends Model
 
     /**
      * Unit cost used for COGS (total), falling back to snapshotted purchase_price.
+     * Treat ~৳0 unit_cost as unset so legacy purchase_price snapshots still count.
      */
     public function effectiveUnitCost(): float
     {
-        if ($this->unit_cost !== null && $this->unit_cost !== '') {
+        if ($this->unit_cost !== null && $this->unit_cost !== '' && (float) $this->unit_cost >= 0.01) {
             return round((float) $this->unit_cost, 2);
         }
 

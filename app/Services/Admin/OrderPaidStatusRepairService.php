@@ -9,6 +9,14 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Settle delivered non-exchange orders to the customer bill ({@see Order::$total}).
+ *
+ * Analytics revenue stays {@see Order::$collected_amount} (COD ledger sum). For a normal
+ * delivered parcel that is: product (subtotal) + customer delivery + other charges − discount.
+ *
+ * Courier charge is a cost after collection — it is not deducted from paid/collected.
+ */
 class OrderPaidStatusRepairService
 {
     public const BATCH_SIZE = 100;
@@ -24,12 +32,6 @@ class OrderPaidStatusRepairService
     }
 
     /**
-     * Settle payment received for:
-     * - legacy status "paid" → delivered + order total as COD receipt
-     * - delivered orders with order value not yet on the payment ledger / collected
-     *
-     * COD fee on analytics follows collected_amount after OrderPaymentSync.
-     *
      * @return array{
      *     scanned: int,
      *     fixed_orders: int,
@@ -45,6 +47,7 @@ class OrderPaidStatusRepairService
 
         /** @var Collection<int, Order> $orders */
         $orders = $this->eligibleQuery()
+            ->with(['paymentTransactions', 'courier'])
             ->where('id', '>', $afterId)
             ->orderBy('id')
             ->limit($limit)
@@ -55,6 +58,10 @@ class OrderPaidStatusRepairService
         $samples = [];
 
         foreach ($orders as $order) {
+            if (! $this->needsRepair($order)) {
+                continue;
+            }
+
             $created = DB::transaction(function () use ($order): int {
                 return $this->repairOne($order);
             });
@@ -98,13 +105,7 @@ class OrderPaidStatusRepairService
         $created = 0;
 
         $targetReceived = $this->targetReceivedAmount($order);
-
-        $alreadyPaid = round(
-            (float) $order->paymentTransactions
-                ->filter(fn (PaymentTransaction $tx) => $tx->isSuccessful())
-                ->sum(fn (PaymentTransaction $tx) => (float) $tx->amount),
-            2,
-        );
+        $alreadyPaid = $this->successfulLedgerTotal($order);
 
         if ($targetReceived >= 0.01 && $alreadyPaid + 0.009 < $targetReceived) {
             $amount = round($targetReceived - $alreadyPaid, 2);
@@ -135,11 +136,11 @@ class OrderPaidStatusRepairService
                     'external_id' => $externalId,
                     'meta' => [
                         'source' => 'payment_received_repair',
-                        'from' => round((float) $order->collected_amount, 2) >= 0.01
-                            ? 'orders.collected_amount'
-                            : 'orders.total',
+                        'from' => 'orders.total',
                         'previous_status' => $previousStatus,
                         'target_received' => $targetReceived,
+                        'ledger_before' => $alreadyPaid,
+                        'is_replacement' => (bool) $order->is_replacement,
                     ],
                 ]);
                 $created = 1;
@@ -159,14 +160,14 @@ class OrderPaidStatusRepairService
             $this->statuses->update(
                 $order->fresh(),
                 'delivered',
-                'Legacy status “paid” converted to delivered; order value recorded as payment received.',
+                'Legacy status “paid” converted to delivered; bill total recorded as payment received.',
                 auth()->id(),
                 $extras,
             );
         } elseif ($created > 0) {
             $this->statuses->record(
                 $order->fresh(),
-                'Payment received backfilled for delivered order (received amount was unaccounted).',
+                'Delivered settlement backfilled to bill total (payment ledger / due amount).',
                 auth()->id(),
             );
         }
@@ -186,31 +187,44 @@ class OrderPaidStatusRepairService
             return false;
         }
 
-        if (round((float) $order->total, 2) < 0.01) {
+        if ((bool) $order->is_replacement) {
             return false;
         }
 
-        $collected = round((float) ($order->collected_amount ?? 0), 2);
-        $paid = round((float) ($order->paid_amount ?? 0), 2);
+        $total = round((float) $order->total, 2);
 
-        if ($collected < 0.01 && $paid < 0.01) {
+        if ($total < 0.01) {
+            return false;
+        }
+
+        $ledgerPaid = $this->successfulLedgerTotal($order);
+
+        if ($ledgerPaid + 0.009 < $total) {
             return true;
         }
 
-        return $collected >= 0.01 && $paid < 0.01;
+        $due = round((float) ($order->due_amount ?? 0), 2);
+        $paymentStatus = strtolower((string) ($order->payment_status ?? ''));
+        $collected = round((float) ($order->collected_amount ?? 0), 2);
+        $paid = round((float) ($order->paid_amount ?? 0), 2);
+
+        // Scalars/ledger out of sync (common after migration set collected=paid=total with no txns).
+        if ($due >= 0.01 || $paymentStatus !== 'paid') {
+            return true;
+        }
+
+        if (abs($collected - $total) >= 0.01 || abs($paid - $total) >= 0.01) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
-     * Prefer an existing collected figure when present; otherwise the order total.
+     * Full customer bill for delivered non-exchange (and legacy paid → delivered).
      */
     private function targetReceivedAmount(Order $order): float
     {
-        $collected = round((float) ($order->collected_amount ?? 0), 2);
-
-        if ($collected >= 0.01) {
-            return $collected;
-        }
-
         $total = round((float) $order->total, 2);
 
         if ($total >= 0.01) {
@@ -220,23 +234,37 @@ class OrderPaidStatusRepairService
         return round((float) $order->collectableAmount(), 2);
     }
 
+    private function successfulLedgerTotal(Order $order): float
+    {
+        $order->loadMissing('paymentTransactions');
+
+        return round(
+            (float) $order->paymentTransactions
+                ->filter(fn (PaymentTransaction $tx) => $tx->isSuccessful())
+                ->sum(fn (PaymentTransaction $tx) => (float) $tx->amount),
+            2,
+        );
+    }
+
     private function eligibleQuery(): Builder
     {
         return Order::query()->where(function (Builder $query): void {
             $query->whereRaw('LOWER(status) = ?', ['paid'])
                 ->orWhere(function (Builder $delivered): void {
                     $delivered->where('status', 'delivered')
+                        ->where(function (Builder $notExchange): void {
+                            $notExchange->where('is_replacement', false)
+                                ->orWhereNull('is_replacement');
+                        })
                         ->where('total', '>=', 0.01)
-                        ->where(function (Builder $unsettled): void {
-                            // Nothing on the ledger / collected yet.
-                            $unsettled->where(function (Builder $zero): void {
-                                $zero->where('collected_amount', '<', 0.01)
-                                    ->where('paid_amount', '<', 0.01);
-                            })->orWhere(function (Builder $ledgerGap): void {
-                                // Collected set but paid_amount / ledger never synced.
-                                $ledgerGap->where('collected_amount', '>=', 0.01)
-                                    ->where('paid_amount', '<', 0.01);
-                            });
+                        ->where(function (Builder $gap): void {
+                            $gap->where('due_amount', '>=', 0.01)
+                                ->orWhere('payment_status', '!=', 'paid')
+                                ->orWhere('collected_amount', '<', DB::raw('orders.total - 0.009'))
+                                ->orWhere('paid_amount', '<', DB::raw('orders.total - 0.009'))
+                                ->orWhereDoesntHave('paymentTransactions', function (Builder $tx): void {
+                                    $tx->whereIn('status', PaymentTransaction::SUCCESSFUL_STATUSES);
+                                });
                         });
                 });
         });

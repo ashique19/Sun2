@@ -265,6 +265,26 @@ class OrderCalculationAuditService
                 .' (collected_amount missing — analytics revenue will understate this year).';
         }
 
+        if ($status === 'delivered' && ! (bool) $order->is_replacement) {
+            $total = round((float) ($order->total ?? 0), 2);
+            $due = round((float) ($order->due_amount ?? 0), 2);
+            $collected = round((float) ($order->collected_amount ?? 0), 2);
+            $paid = round((float) ($order->paid_amount ?? 0), 2);
+            $paymentStatus = strtolower((string) ($order->payment_status ?? ''));
+
+            $notFullyPaid = $due >= 0.01
+                || ($paymentStatus !== 'paid'
+                    && ($collected + 0.009 < $total || $paid + 0.009 < $total));
+
+            if ($total >= 0.01 && $notFullyPaid) {
+                $issues[] = 'Delivered non-exchange bill ৳'.$this->money($total)
+                    .' is not fully marked paid (due ৳'.$this->money($due)
+                    .', collected ৳'.$this->money($collected)
+                    .', payment_status '.$paymentStatus
+                    .'). Run orders:repair-delivered-settlement.';
+            }
+        }
+
         return $issues;
     }
 

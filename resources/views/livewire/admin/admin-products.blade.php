@@ -102,7 +102,7 @@
                                         <img src="{{ \App\Support\StorefrontAssets::url($thumb) }}" alt="" class="h-[7.5rem] w-[7.5rem] shrink-0 rounded object-cover bg-[#FAF6EF]">
                                     @endif
                                     <div>
-                                        <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                        <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                                             <a href="{{ route('admin.products.show', $product) }}" wire:navigate
                                                 class="font-medium line-clamp-1 text-[#C9A227] hover:underline">
                                                 {{ $product->name }}
@@ -118,7 +118,7 @@
                                                         setTimeout(() => copied = false, 2000);
                                                     })
                                                 "
-                                                class="shrink-0 text-[11px] font-medium text-[#8C8474] underline-offset-2 hover:text-[#C9A227] hover:underline"
+                                                class="my-0.5 ml-1 shrink-0 rounded-md border border-[#E0D6C2] bg-white px-2 py-1 text-[11px] font-semibold text-[#1E1E1E] hover:border-[#C9A227] hover:text-[#C9A227]"
                                                 title="Copy storefront product URL">
                                                 <span x-text="copied ? 'Copied' : 'Copy public link'">Copy public link</span>
                                             </button>

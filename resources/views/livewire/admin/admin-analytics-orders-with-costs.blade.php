@@ -643,13 +643,14 @@
     @endif
 
     @if ($cogsModalOpen)
-        <div class="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+        <div class="fixed inset-0 z-[70] flex items-end justify-center overflow-y-auto overscroll-contain bg-black/50 p-4 sm:items-center"
             wire:click.self="closeCogsModal"
             role="dialog"
             aria-modal="true"
             aria-label="Fix product costs for order {{ $cogsModalOrderNumber }}">
-            <div class="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl">
-                <div class="flex items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
+            <div class="flex max-h-[min(90vh,100%)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl"
+                data-cogs-modal-panel>
+                <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
                     <div class="min-w-0">
                         <h2 class="text-base font-semibold text-[#1E1E1E]">Fix product costs</h2>
                         <p class="mt-0.5 text-xs text-[#8C8474]">
@@ -666,12 +667,13 @@
                 </div>
 
                 @if ($cogsModalMessage)
-                    <div class="border-b border-emerald-100 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+                    <div class="shrink-0 border-b border-emerald-100 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
                         {{ $cogsModalMessage }}
                     </div>
                 @endif
 
-                <div class="max-h-[70vh] space-y-4 overflow-y-auto px-4 py-4">
+                <div class="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4"
+                    data-cogs-modal-body>
                     @forelse ($cogsModalRows as $index => $row)
                         <div wire:key="{{ $row['key'] }}" class="rounded-xl border border-[#EFE7D6] p-3">
                             <div class="flex gap-3">

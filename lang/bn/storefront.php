@@ -69,7 +69,7 @@ return [
     'new_badge' => 'নতুন',
     'best_seller' => 'বেস্ট সেলার',
     'cash_on_delivery' => 'ক্যাশ অন ডেলিভারি চলবে',
-    'free_delivery_dhaka' => 'ঢাকায় ফ্রি ডেলিভারি',
+    'free_delivery_dhaka' => 'সারা দেশে হোম ডেলিভারি',
     'helpline_with_number' => 'WhatsApp: ০১৮৮০০০১২৫৫',
     'view_cart' => 'কার্ট দেখুন',
     'added_to_cart' => 'কার্টে রাখা হয়েছে',

@@ -117,7 +117,13 @@ class OrderCalculationAuditService
             $fixes[] = 'packaging_courier';
         }
 
-        $cogs = $this->costSnapshots->repairOrder($order);
+        // Order lines already have COGS but catalog products may still be ৳0 —
+        // reverse-fill products first so later line backfill / audits stay consistent.
+        if ($this->productCosts->backfillMissingProductsFromOrder($order) > 0) {
+            $fixes[] = 'product_cost_from_orders';
+        }
+
+        $cogs = $this->costSnapshots->repairOrder($order->fresh(['items.product']));
         if ($cogs['changed']) {
             $fixes[] = 'cogs';
         }

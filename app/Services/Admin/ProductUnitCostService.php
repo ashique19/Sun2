@@ -3,6 +3,7 @@
 namespace App\Services\Admin;
 
 use App\Models\Material;
+use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\Product;
 use Illuminate\Support\Facades\DB;
@@ -156,6 +157,92 @@ class ProductUnitCostService
         ]);
 
         return $ids->count();
+    }
+
+    /**
+     * When a product has no unit cost, copy purchase/unit cost from its newest
+     * non-cancelled/returned order line that already has a COGS snapshot.
+     *
+     * Skips products with BOM materials (those costs are owned by materials).
+     */
+    public function backfillMissingFromOrderSnapshots(Product $product): bool
+    {
+        $product->loadMissing('materials');
+
+        if ($this->effectiveUnitCost($product) >= 0.01) {
+            return false;
+        }
+
+        if ($product->materials->isNotEmpty()) {
+            return false;
+        }
+
+        /** @var OrderProduct|null $line */
+        $line = OrderProduct::query()
+            ->where('product_id', $product->id)
+            ->where(function ($query): void {
+                $query->where('unit_cost', '>=', 0.01)
+                    ->orWhere('purchase_price', '>=', 0.01);
+            })
+            ->whereHas('order', function ($orderQuery): void {
+                $orderQuery->whereNotIn('status', ['cancelled', 'returned', Order::STATUS_DRAFT]);
+            })
+            ->orderByDesc('id')
+            ->first();
+
+        if ($line === null || $line->effectiveUnitCost() < 0.01) {
+            return false;
+        }
+
+        $unitCost = $line->effectiveUnitCost();
+        $purchase = round((float) $line->purchase_price, 2);
+
+        if ($purchase < 0.01) {
+            $purchase = $unitCost;
+        }
+
+        if ($purchase > $unitCost) {
+            $purchase = $unitCost;
+        }
+
+        $other = max(0.0, round($unitCost - $purchase, 2));
+
+        $this->applyPurchaseAndOther($product, $purchase, $other);
+
+        return $this->effectiveUnitCost($product->fresh()) >= 0.01;
+    }
+
+    /**
+     * For each linked product on the order that still has ৳0 catalog cost, try to
+     * fill it from any order-line snapshot for that product.
+     *
+     * @return int Number of products updated
+     */
+    public function backfillMissingProductsFromOrder(Order $order): int
+    {
+        $order->loadMissing('items.product.materials');
+        $updated = 0;
+        $seen = [];
+
+        foreach ($order->items as $item) {
+            if (! $item->product_id || ! $item->product instanceof Product) {
+                continue;
+            }
+
+            $productId = (int) $item->product_id;
+
+            if (isset($seen[$productId])) {
+                continue;
+            }
+
+            $seen[$productId] = true;
+
+            if ($this->backfillMissingFromOrderSnapshots($item->product)) {
+                $updated++;
+            }
+        }
+
+        return $updated;
     }
 
     /**

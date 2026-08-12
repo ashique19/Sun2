@@ -109,6 +109,9 @@ class OrderCostSnapshotRepairService
         } elseif ($this->emptyProductDefaults->hasNoProductQuantity($order)) {
             $backfilled = $this->ensureEmptyOrderCogs($order) ? 1 : 0;
         } else {
+            // Catalog products with ৳0 cost can learn from order line snapshots first.
+            $this->productCosts->backfillMissingProductsFromOrder($order);
+            $order = $order->fresh(['items.product']);
             $backfilled = $this->backfillMissingLineCostsFromProducts($order);
         }
 

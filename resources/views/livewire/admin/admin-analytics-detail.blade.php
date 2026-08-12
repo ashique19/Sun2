@@ -109,7 +109,7 @@
                         <tr>
                             <th class="px-4 py-3 font-medium">Order</th>
                             <th class="px-4 py-3 font-medium">Customer</th>
-                            <th class="px-4 py-3 font-medium">Delivered</th>
+                            <th class="px-4 py-3 font-medium">Created</th>
                             @if ($metric === 'revenue')
                                 <th class="px-4 py-3 font-medium text-right">Collected</th>
                             @elseif ($metric === 'direct')
@@ -135,7 +135,7 @@
                                     </a>
                                 </td>
                                 <td class="px-4 py-3">{{ $row['name'] }}</td>
-                                <td class="px-4 py-3 text-[#8C8474] whitespace-nowrap">{{ $row['delivered_at'] ?? '—' }}</td>
+                                <td class="px-4 py-3 text-[#8C8474] whitespace-nowrap">{{ $row['created_at'] ?? '—' }}</td>
                                 @if ($metric === 'revenue')
                                     <td class="px-4 py-3 text-right tabular-nums">&#2547; {{ number_format($row['revenue'], 0) }}</td>
                                 @elseif ($metric === 'direct')

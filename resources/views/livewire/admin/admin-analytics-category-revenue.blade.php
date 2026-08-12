@@ -19,7 +19,7 @@
             </div>
             <h1 class="font-serif text-3xl font-semibold">Revenue by category</h1>
             <p class="mt-1 text-sm text-[#8C8474]">
-                Delivered line totals by product category, stacked by month for the selected year.
+                Delivered line totals by product category, stacked by order created month for the selected year.
             </p>
         </div>
         <div>

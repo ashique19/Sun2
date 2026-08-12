@@ -119,7 +119,7 @@
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 class="text-sm font-semibold text-[#1E1E1E]">Months in {{ $year }}</h2>
             <p class="text-xs text-[#8C8474]">
-                Year collected:
+                Year collected (by created date):
                 <span class="font-medium tabular-nums text-[#1E1E1E]">&#2547; {{ number_format($yearOverview['revenue'], 0) }}</span>
                 · {{ number_format($yearOverview['order_count']) }} delivered
             </p>

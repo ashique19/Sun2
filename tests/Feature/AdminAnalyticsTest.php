@@ -46,6 +46,8 @@ class AdminAnalyticsTest extends TestCase
         ?string $placedAt = null,
         ?int $productId = null,
     ): Order {
+        $cohortAt = $placedAt ?? $deliveredAt;
+
         $order = Order::query()->create([
             'order_number' => 'AN-'.uniqid(),
             'name' => $name,
@@ -61,7 +63,9 @@ class AdminAnalyticsTest extends TestCase
             'total' => $collected,
             'courier_id' => $courier->id,
             'actual_delivery_date' => $deliveredAt,
-            'placed_at' => $placedAt ?? $deliveredAt,
+            'placed_at' => $cohortAt,
+            'created_at' => $cohortAt,
+            'updated_at' => $cohortAt,
         ]);
 
         OrderProduct::query()->create([
@@ -148,7 +152,7 @@ class AdminAnalyticsTest extends TestCase
     }
 
     #[Test]
-    public function ordered_vs_delivered_uses_placement_month_cohort(): void
+    public function ordered_vs_delivered_uses_created_month_cohort(): void
     {
         $courier = Courier::query()->create([
             'name' => 'Steadfast',
@@ -157,7 +161,7 @@ class AdminAnalyticsTest extends TestCase
             'is_active' => true,
         ]);
 
-        // Placed in June, delivered in July
+        // Created in June, delivered in July
         $this->seedDeliveredOrder(
             $courier,
             'Ayesha',
@@ -170,7 +174,7 @@ class AdminAnalyticsTest extends TestCase
             '2026-06-20 09:00:00',
         );
 
-        // Placed and delivered in July
+        // Created and delivered in July
         $this->seedDeliveredOrder(
             $courier,
             'Karim',
@@ -183,7 +187,7 @@ class AdminAnalyticsTest extends TestCase
             '2026-07-01 08:00:00',
         );
 
-        // Still open — placed in July, not delivered
+        // Still open — created in July, not delivered
         Order::query()->create([
             'order_number' => 'AN-pending-'.uniqid(),
             'name' => 'Pending',
@@ -196,18 +200,20 @@ class AdminAnalyticsTest extends TestCase
             'total' => 580,
             'courier_id' => $courier->id,
             'placed_at' => '2026-07-10 08:00:00',
+            'created_at' => '2026-07-10 08:00:00',
+            'updated_at' => '2026-07-10 08:00:00',
         ]);
 
         $report = app(AnalyticsService::class)->orderedVsDeliveredByMonth(2026);
         $byMonth = collect($report['months'])->keyBy('month');
 
-        // June cohort: one order placed, later delivered (even though delivery was in July)
+        // June cohort: one order created, later delivered (even though delivery was in July)
         $this->assertSame(1, $byMonth[6]['ordered_count']);
         $this->assertSame(1080.0, $byMonth[6]['ordered_value']);
         $this->assertSame(1, $byMonth[6]['delivered_count']);
         $this->assertSame(1080.0, $byMonth[6]['delivered_value']);
 
-        // July cohort: two placed, one delivered so far
+        // July cohort: two created, one delivered so far
         $this->assertSame(2, $byMonth[7]['ordered_count']);
         $this->assertSame(2740.0, $byMonth[7]['ordered_value']);
         $this->assertSame(1, $byMonth[7]['delivered_count']);

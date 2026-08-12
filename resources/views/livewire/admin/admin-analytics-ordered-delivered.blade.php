@@ -15,7 +15,7 @@
             </div>
             <h1 class="font-serif text-3xl font-semibold">Ordered vs delivered</h1>
             <p class="mt-1 text-sm text-[#8C8474]">
-                Same cohort: of orders placed that month, how many were delivered and how much was collected.
+                Same cohort: of orders created that month, how many were delivered and how much was collected.
             </p>
         </div>
         <div>
@@ -59,7 +59,7 @@
 
         @if (! $hasOvdData)
             <p class="rounded-lg border border-dashed border-[#E0D6C2] px-4 py-8 text-center text-sm text-[#8C8474]">
-                No orders placed or delivered in {{ $year }} yet.
+                No orders created in {{ $year }} yet.
             </p>
         @else
             <div class="grid gap-6 lg:grid-cols-2">
@@ -109,7 +109,7 @@
                 <table class="w-full min-w-[36rem] text-xs sm:text-sm">
                     <thead class="text-left text-[#8C8474]">
                         <tr class="border-b border-[#EFE7D6]">
-                            <th class="py-2 pr-3 font-medium">Month placed</th>
+                            <th class="py-2 pr-3 font-medium">Month created</th>
                             <th class="py-2 pr-3 font-medium text-right">Ordered #</th>
                             <th class="py-2 pr-3 font-medium text-right">Ordered ৳</th>
                             <th class="py-2 pr-3 font-medium text-right">Delivered #</th>

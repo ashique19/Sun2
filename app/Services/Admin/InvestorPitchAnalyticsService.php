@@ -90,7 +90,7 @@ class InvestorPitchAnalyticsService
     }
 
     /**
-     * Years that have placed orders (newest first), always including the current Dhaka year.
+     * Years that have non-draft orders by created_at (newest first), always including the current Dhaka year.
      *
      * @return list<int>
      */
@@ -99,13 +99,13 @@ class InvestorPitchAnalyticsService
         $years = [];
 
         DB::table('orders')
-            ->whereNotNull('placed_at')
+            ->whereNotNull('created_at')
             ->where('status', '!=', Order::STATUS_DRAFT)
             ->orderBy('id')
-            ->select(['id', 'placed_at'])
+            ->select(['id', 'created_at'])
             ->chunkById(1000, function ($rows) use (&$years): void {
                 foreach ($rows as $row) {
-                    $year = app(AnalyticsService::class)->safeDhakaYear($row->placed_at ?? null);
+                    $year = app(AnalyticsService::class)->safeDhakaYear($row->created_at ?? null);
 
                     if ($year !== null) {
                         $years[$year] = true;
@@ -374,13 +374,13 @@ class InvestorPitchAnalyticsService
         }
 
         foreach ($this->ordersInWindow($start, $end) as $order) {
-            $placed = $order->placed_at?->timezone('Asia/Dhaka');
+            $created = $order->created_at?->timezone('Asia/Dhaka');
 
-            if ($placed === null) {
+            if ($created === null) {
                 continue;
             }
 
-            $month = (int) $placed->month;
+            $month = (int) $created->month;
             $months[$month]['orders']++;
             $months[$month]['gmv'] += (float) $order->total;
 
@@ -395,13 +395,13 @@ class InvestorPitchAnalyticsService
         }
 
         foreach ($this->ordersInWindow($priorStart, $priorEnd) as $order) {
-            $placed = $order->placed_at?->timezone('Asia/Dhaka');
+            $created = $order->created_at?->timezone('Asia/Dhaka');
 
-            if ($placed === null) {
+            if ($created === null) {
                 continue;
             }
 
-            $month = (int) $placed->month;
+            $month = (int) $created->month;
             $months[$month]['prior_orders']++;
             $months[$month]['prior_gmv'] += (float) $order->total;
         }
@@ -433,8 +433,8 @@ class InvestorPitchAnalyticsService
     {
         return Order::query()
             ->where('status', '!=', Order::STATUS_DRAFT)
-            ->whereNotNull('placed_at')
-            ->whereBetween('placed_at', [
+            ->whereNotNull('created_at')
+            ->whereBetween('created_at', [
                 $start->copy()->timezone('Asia/Dhaka')->format('Y-m-d H:i:s'),
                 $end->copy()->timezone('Asia/Dhaka')->format('Y-m-d H:i:s'),
             ])

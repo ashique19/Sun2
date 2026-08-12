@@ -28,7 +28,7 @@ class AdminAnalytics extends Component
             'tiles' => [
                 [
                     'title' => 'Profit & loss',
-                    'blurb' => 'Month-by-month revenue, direct cost, expenses, and profit.',
+                    'blurb' => 'Month-by-month revenue, direct cost, expenses, and profit (by order created date).',
                     'route' => 'admin.analytics.pnl',
                     'stat' => '৳'.number_format($overview['revenue'], 0).' collected · '.$year,
                 ],
@@ -40,7 +40,7 @@ class AdminAnalytics extends Component
                 ],
                 [
                     'title' => 'Ordered vs delivered',
-                    'blurb' => 'Compare placement volume/value with delivery volume/value.',
+                    'blurb' => 'Of orders created that month, how many delivered and how much collected.',
                     'route' => 'admin.analytics.ordered-delivered',
                     'stat' => number_format($ovd['totals']['ordered_count']).' ordered · '.number_format($ovd['totals']['delivered_count']).' delivered',
                 ],
@@ -48,13 +48,13 @@ class AdminAnalytics extends Component
                     'title' => 'Revenue by category',
                     'blurb' => 'Delivered line revenue split by product category each month.',
                     'route' => 'admin.analytics.category-revenue',
-                    'stat' => 'By delivery month · '.$year,
+                    'stat' => 'By created month · '.$year,
                 ],
                 [
                     'title' => 'Investor pitch',
                     'blurb' => 'Yearly traction, YoY growth, unit economics, and channel mix for fundraising.',
                     'route' => 'admin.analytics.investor-pitch',
-                    'stat' => 'Calendar year · vs prior year',
+                    'stat' => 'By created date · vs prior year',
                 ],
             ],
         ]);

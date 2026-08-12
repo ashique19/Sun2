@@ -188,6 +188,8 @@ class AdminAnalyticsColumnIntegrityAuditTest extends TestCase
             'subtotal' => 100,
             'total' => 100,
             'placed_at' => '2022-05-01 10:00:00',
+            'created_at' => '2022-05-01 10:00:00',
+            'updated_at' => '2022-05-01 10:00:00',
         ]);
 
         $bad = Order::query()->create([
@@ -199,11 +201,13 @@ class AdminAnalyticsColumnIntegrityAuditTest extends TestCase
             'subtotal' => 100,
             'total' => 100,
             'placed_at' => '2022-05-02 10:00:00',
+            'created_at' => '2022-05-02 10:00:00',
+            'updated_at' => '2022-05-02 10:00:00',
         ]);
 
         DB::table('orders')
             ->where('id', $bad->id)
-            ->update(['placed_at' => '0000-00-00 00:00:00']);
+            ->update(['created_at' => '0000-00-00 00:00:00']);
 
         $years = app(AnalyticsService::class)->availableYears();
 

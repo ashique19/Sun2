@@ -322,6 +322,8 @@ class PublicInvestorPitchTest extends TestCase
             'payment_status' => $data['collected_amount'] > 0 ? 'paid' : 'unpaid',
             'payment_method' => 'cod',
             'placed_at' => $data['placed_at'],
+            'created_at' => $data['placed_at'],
+            'updated_at' => $data['placed_at'],
             'actual_delivery_date' => $data['status'] === 'delivered' ? $data['placed_at'] : null,
             'placed_via' => $data['placed_via'],
         ]);

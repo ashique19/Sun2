@@ -14,7 +14,7 @@ class AnalyticsService
     public const METRICS = ['revenue', 'direct', 'indirect', 'profit'];
 
     /**
-     * Years that have placed or delivered orders.
+     * Years that have non-draft orders (by created_at).
      *
      * @return list<int>
      */
@@ -22,28 +22,20 @@ class AnalyticsService
     {
         $years = [];
 
-        foreach ([
-            ['status' => 'delivered', 'column' => 'actual_delivery_date'],
-            ['status' => null, 'column' => 'placed_at'],
-        ] as $source) {
-            $query = DB::table('orders')->whereNotNull($source['column']);
+        DB::table('orders')
+            ->where('status', '!=', Order::STATUS_DRAFT)
+            ->whereNotNull('created_at')
+            ->orderBy('id')
+            ->select(['id', 'created_at'])
+            ->chunkById(1000, function ($rows) use (&$years): void {
+                foreach ($rows as $row) {
+                    $year = $this->safeDhakaYear($row->created_at ?? null);
 
-            if ($source['status'] !== null) {
-                $query->where('status', $source['status']);
-            }
-
-            $query->orderBy('id')
-                ->select(['id', $source['column']])
-                ->chunkById(1000, function ($rows) use ($source, &$years): void {
-                    foreach ($rows as $row) {
-                        $year = $this->safeDhakaYear($row->{$source['column']} ?? null);
-
-                        if ($year !== null) {
-                            $years[$year] = true;
-                        }
+                    if ($year !== null) {
+                        $years[$year] = true;
                     }
-                });
-        }
+                }
+            });
 
         $list = array_keys($years);
         rsort($list, SORT_NUMERIC);
@@ -119,7 +111,7 @@ class AnalyticsService
     }
 
     /**
-     * Year overview: months sized by collected revenue (delivered orders).
+     * Year overview: months sized by collected revenue (delivered orders, by created_at).
      *
      * @return array{
      *     year: int,
@@ -130,17 +122,12 @@ class AnalyticsService
      */
     public function yearOverview(int $year): array
     {
-        $start = Carbon::create($year, 1, 1, 0, 0, 0, 'Asia/Dhaka')->startOfDay();
-        $end = $start->copy()->endOfYear();
+        [$start, $end] = $this->createdAtYearBounds($year);
 
         $rows = Order::query()
             ->where('status', 'delivered')
-            ->whereNotNull('actual_delivery_date')
-            ->whereBetween('actual_delivery_date', [
-                $start->format('Y-m-d H:i:s'),
-                $end->format('Y-m-d H:i:s'),
-            ])
-            ->get(['id', 'collected_amount', 'actual_delivery_date']);
+            ->whereBetween('created_at', [$start, $end])
+            ->get(['id', 'collected_amount', 'created_at']);
 
         $byMonth = [];
 
@@ -154,7 +141,7 @@ class AnalyticsService
         }
 
         foreach ($rows as $order) {
-            $month = $this->safeDhakaMonth($order->getAttributes()['actual_delivery_date'] ?? $order->actual_delivery_date);
+            $month = $this->safeDhakaMonth($order->getAttributes()['created_at'] ?? $order->created_at);
 
             if ($month === null) {
                 continue;
@@ -179,9 +166,8 @@ class AnalyticsService
     }
 
     /**
-     * Monthly ordered vs delivered cohort by placement month (placed_at).
-     * Delivered count/value are from orders placed that month that later reached delivered status
-     * (not when the delivery date fell).
+     * Monthly ordered vs delivered cohort by order created_at month.
+     * Delivered count/value are from orders created that month that later reached delivered status.
      *
      * @return array{
      *     year: int,
@@ -203,8 +189,7 @@ class AnalyticsService
      */
     public function orderedVsDeliveredByMonth(int $year): array
     {
-        $start = Carbon::create($year, 1, 1, 0, 0, 0, 'Asia/Dhaka')->startOfDay();
-        $end = $start->copy()->endOfYear();
+        [$start, $end] = $this->createdAtYearBounds($year);
 
         $months = [];
 
@@ -219,17 +204,13 @@ class AnalyticsService
             ];
         }
 
-        $placed = Order::query()
-            ->whereNotNull('placed_at')
+        $created = Order::query()
             ->where('status', '!=', Order::STATUS_DRAFT)
-            ->whereBetween('placed_at', [
-                $start->format('Y-m-d H:i:s'),
-                $end->format('Y-m-d H:i:s'),
-            ])
-            ->get(['id', 'total', 'placed_at', 'status', 'collected_amount']);
+            ->whereBetween('created_at', [$start, $end])
+            ->get(['id', 'total', 'created_at', 'status', 'collected_amount']);
 
-        foreach ($placed as $order) {
-            $month = $this->safeDhakaMonth($order->getAttributes()['placed_at'] ?? $order->placed_at);
+        foreach ($created as $order) {
+            $month = $this->safeDhakaMonth($order->getAttributes()['created_at'] ?? $order->created_at);
 
             if ($month === null) {
                 continue;
@@ -269,7 +250,7 @@ class AnalyticsService
     }
 
     /**
-     * Delivered line revenue by product category × month (actual_delivery_date).
+     * Delivered line revenue by product category × month (order created_at).
      * Values are order-line `line_total` sums (not prorated collected amounts).
      *
      * @return array{
@@ -282,8 +263,7 @@ class AnalyticsService
      */
     public function revenueByCategoryByMonth(int $year): array
     {
-        $start = Carbon::create($year, 1, 1, 0, 0, 0, 'Asia/Dhaka')->startOfDay();
-        $end = $start->copy()->endOfYear();
+        [$start, $end] = $this->createdAtYearBounds($year);
         $palette = [
             '#1F4E79', '#C9A227', '#2F6F4E', '#C45C26', '#6B8F71',
             '#8B5E3C', '#3D6B8E', '#A04820', '#7A4E3A', '#4F7A5A',
@@ -291,14 +271,10 @@ class AnalyticsService
         ];
 
         $lines = OrderProduct::query()
-            ->with(['product:id,category_id', 'product.category:id,name', 'order:id,status,actual_delivery_date'])
+            ->with(['product:id,category_id', 'product.category:id,name', 'order:id,status,created_at'])
             ->whereHas('order', function ($query) use ($start, $end) {
                 $query->where('status', 'delivered')
-                    ->whereNotNull('actual_delivery_date')
-                    ->whereBetween('actual_delivery_date', [
-                        $start->format('Y-m-d H:i:s'),
-                        $end->format('Y-m-d H:i:s'),
-                    ]);
+                    ->whereBetween('created_at', [$start, $end]);
             })
             ->get(['id', 'order_id', 'product_id', 'line_total']);
 
@@ -309,12 +285,12 @@ class AnalyticsService
         foreach ($lines as $line) {
             $order = $line->order;
 
-            if (! $order?->actual_delivery_date) {
+            if (! $order) {
                 continue;
             }
 
             $month = $this->safeDhakaMonth(
-                $order->getAttributes()['actual_delivery_date'] ?? $order->actual_delivery_date
+                $order->getAttributes()['created_at'] ?? $order->created_at
             );
 
             if ($month === null) {
@@ -471,14 +447,14 @@ class AnalyticsService
                 return null;
             }
 
-            $deliveredRaw = $order->getAttributes()['actual_delivery_date'] ?? null;
-            $deliveredLabel = null;
+            $createdRaw = $order->getAttributes()['created_at'] ?? null;
+            $createdLabel = null;
 
-            if ($deliveredRaw && $this->safeDhakaYear($deliveredRaw) !== null) {
+            if ($createdRaw && $this->safeDhakaYear($createdRaw) !== null) {
                 try {
-                    $deliveredLabel = Carbon::parse($deliveredRaw)->timezone('Asia/Dhaka')->format('d M Y');
+                    $createdLabel = Carbon::parse($createdRaw)->timezone('Asia/Dhaka')->format('d M Y');
                 } catch (\Throwable) {
-                    $deliveredLabel = null;
+                    $createdLabel = null;
                 }
             }
 
@@ -486,7 +462,7 @@ class AnalyticsService
                 'id' => $order->id,
                 'order_number' => $order->order_number,
                 'name' => $order->name,
-                'delivered_at' => $deliveredLabel,
+                'created_at' => $createdLabel,
                 'revenue' => $line['revenue'],
                 'cogs' => $line['cogs'],
                 'packaging' => $line['packaging'],
@@ -516,7 +492,7 @@ class AnalyticsService
         $summary = match ($metric) {
             'revenue' => [
                 'title' => 'Revenue',
-                'blurb' => 'Collected amount on delivered orders (by delivery date).',
+                'blurb' => 'Collected amount on delivered orders (by order created date).',
                 'total' => $totals['revenue'],
             ],
             'direct' => [
@@ -564,12 +540,11 @@ class AnalyticsService
                 'adjustments:id,order_id,type,label,amount',
             ])
             ->where('status', 'delivered')
-            ->whereNotNull('actual_delivery_date')
-            ->whereBetween('actual_delivery_date', [
+            ->whereBetween('created_at', [
                 $start->format('Y-m-d H:i:s'),
                 $end->format('Y-m-d H:i:s'),
             ])
-            ->orderBy('actual_delivery_date')
+            ->orderBy('created_at')
             ->orderBy('id')
             ->get([
                 'id',
@@ -588,8 +563,23 @@ class AnalyticsService
                 'due_amount',
                 'cod_amount',
                 'courier_id',
+                'created_at',
                 'actual_delivery_date',
             ]);
+    }
+
+    /**
+     * @return array{0: string, 1: string} Inclusive created_at bounds for a Dhaka calendar year.
+     */
+    private function createdAtYearBounds(int $year): array
+    {
+        $start = Carbon::create($year, 1, 1, 0, 0, 0, 'Asia/Dhaka')->startOfDay();
+        $end = $start->copy()->endOfYear();
+
+        return [
+            $start->format('Y-m-d H:i:s'),
+            $end->format('Y-m-d H:i:s'),
+        ];
     }
 
     /**

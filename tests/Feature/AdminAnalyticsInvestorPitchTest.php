@@ -119,6 +119,8 @@ class AdminAnalyticsInvestorPitchTest extends TestCase
             ->assertSee('Necklaces')
             ->assertSee('Methodology notes')
             ->assertDontSee('auto-refreshes')
+            ->assertDontSee('Refresh now')
+            ->assertSee('Share link not configured')
             ->call('selectYear', 2025)
             ->assertSet('year', 2025)
             ->assertSee('2025')

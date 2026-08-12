@@ -6,6 +6,7 @@ use App\Models\InvestorPitchShare;
 use App\Services\Admin\InvestorPitchAnalyticsService;
 use App\Services\Admin\InvestorPitchShareService;
 use App\Support\AdminAccess;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -66,12 +67,23 @@ class AdminAnalyticsInvestorPitch extends Component
             'sharePassword.min' => 'Use at least 6 characters for the share password.',
         ]);
 
-        $created = $shares->create(
-            $this->shareLabel,
-            $this->sharePassword,
-            $this->shareDays,
-            auth()->id(),
-        );
+        try {
+            $created = $shares->create(
+                $this->shareLabel,
+                $this->sharePassword,
+                $this->shareDays,
+                auth()->id(),
+            );
+        } catch (\Throwable $e) {
+            report($e);
+
+            $this->addError(
+                'sharePassword',
+                'Could not create the share link. Confirm the investor_pitch_shares table exists, then try again.',
+            );
+
+            return;
+        }
 
         $this->createdShareUrl = $created['url'];
         $this->createdSharePassword = $created['plain_password'];
@@ -84,6 +96,24 @@ class AdminAnalyticsInvestorPitch extends Component
         $this->sharePassword = '';
         $this->shareDays = 7;
         $this->resetErrorBag();
+    }
+
+    public function copyCreatedShareUrl(): void
+    {
+        if ($this->createdShareUrl === null || $this->createdShareUrl === '') {
+            return;
+        }
+
+        $this->js('window.sunCopyText('.json_encode($this->createdShareUrl, JSON_THROW_ON_ERROR).')');
+    }
+
+    public function copyCreatedSharePassword(): void
+    {
+        if ($this->createdSharePassword === null || $this->createdSharePassword === '') {
+            return;
+        }
+
+        $this->js('window.sunCopyText('.json_encode($this->createdSharePassword, JSON_THROW_ON_ERROR).')');
     }
 
     public function dismissCreatedShare(): void
@@ -115,14 +145,24 @@ class AdminAnalyticsInvestorPitch extends Component
             rsort($years);
         }
 
-        return view('livewire.admin.admin-analytics-investor-pitch', [
-            'years' => $years,
-            'deck' => $analytics->deck($this->year),
-            'shares' => InvestorPitchShare::query()
+        $shares = collect();
+
+        try {
+            $shares = InvestorPitchShare::query()
                 ->with('creator:id,name')
                 ->latest()
                 ->limit(20)
-                ->get(),
+                ->get();
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        return view('livewire.admin.admin-analytics-investor-pitch', [
+            'years' => $years,
+            'deck' => $analytics->deck($this->year),
+            'shares' => $shares,
+            'sharesUnavailable' => $shares->isEmpty()
+                && ! Schema::hasTable('investor_pitch_shares'),
         ]);
     }
 }

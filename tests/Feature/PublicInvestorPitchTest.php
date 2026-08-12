@@ -12,6 +12,7 @@ use App\Models\Product;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
@@ -28,6 +29,22 @@ class PublicInvestorPitchTest extends TestCase
         $user->assignRole('admin');
 
         return $user;
+    }
+
+    #[Test]
+    public function create_share_shows_inline_error_when_table_missing(): void
+    {
+        Schema::dropIfExists('investor_pitch_shares');
+
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminAnalyticsInvestorPitch::class)
+            ->assertSee('Share links are unavailable')
+            ->set('sharePassword', 'investor-secret')
+            ->set('shareDays', 7)
+            ->call('createShare')
+            ->assertHasErrors('sharePassword')
+            ->assertSee('Could not create the share link');
     }
 
     #[Test]

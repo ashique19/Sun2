@@ -25,6 +25,16 @@
             </div>
         </div>
 
+        @if ($sharesUnavailable ?? false)
+            <div class="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-950">
+                <p class="font-medium">Share links are unavailable</p>
+                <p class="mt-1 text-xs text-rose-900/80">
+                    The <code class="rounded bg-white/70 px-1">investor_pitch_shares</code> table is missing.
+                    Run the migration (or the production SQL) on this database, then reload.
+                </p>
+            </div>
+        @endif
+
         <form wire:submit="createShare" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div class="sm:col-span-2 lg:col-span-1">
                 <label for="share-label" class="block text-xs font-medium text-[#6B6459]">Recipient label (optional)</label>
@@ -70,6 +80,7 @@
                 <button
                     type="submit"
                     class="w-full rounded-lg bg-[#1E1E1E] px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+                    @disabled($sharesUnavailable ?? false)
                 >
                     Create share link
                 </button>
@@ -95,32 +106,20 @@
                         <p class="min-w-0 flex-1 break-all font-mono text-xs">{{ $createdShareUrl }}</p>
                         <button
                             type="button"
-                            x-data="{ copied: false }"
-                            x-on:click="
-                                navigator.clipboard.writeText(@js($createdShareUrl)).then(() => {
-                                    copied = true;
-                                    setTimeout(() => copied = false, 2000);
-                                })
-                            "
+                            wire:click="copyCreatedShareUrl"
                             class="shrink-0 rounded-full border border-emerald-300 bg-white px-3 py-1 text-xs font-medium text-emerald-900 hover:bg-emerald-100"
                         >
-                            <span x-text="copied ? 'Copied' : 'Copy link'"></span>
+                            Copy link
                         </button>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
                         <p class="text-xs">Password: <span class="font-mono font-semibold">{{ $createdSharePassword }}</span></p>
                         <button
                             type="button"
-                            x-data="{ copied: false }"
-                            x-on:click="
-                                navigator.clipboard.writeText(@js($createdSharePassword)).then(() => {
-                                    copied = true;
-                                    setTimeout(() => copied = false, 2000);
-                                })
-                            "
+                            wire:click="copyCreatedSharePassword"
                             class="shrink-0 rounded-full border border-emerald-300 bg-white px-3 py-1 text-xs font-medium text-emerald-900 hover:bg-emerald-100"
                         >
-                            <span x-text="copied ? 'Copied' : 'Copy password'"></span>
+                            Copy password
                         </button>
                     </div>
                 </div>

@@ -17,6 +17,10 @@
             this.imageUrl = data.imageUrl || '';
             this.productUrl = data.productUrl || '';
             this.productName = data.productName || '';
+            // Avoid an empty black full-screen overlay when a bad/empty event fires.
+            if (! this.imageUrl) {
+                return;
+            }
             this.open = true;
             document.body.classList.add('overflow-hidden');
         },

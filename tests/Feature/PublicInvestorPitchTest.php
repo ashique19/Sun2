@@ -45,13 +45,13 @@ class PublicInvestorPitchTest extends TestCase
             ->set('shareDays', 7)
             ->call('createShare')
             ->assertHasNoErrors()
-            ->assertSee('Link ready')
-            ->assertSee('Auto schema');
+            ->assertRedirect(route('admin.analytics.investor-pitch', ['year' => (int) now('Asia/Dhaka')->year]));
 
         $this->assertTrue(Schema::hasTable('investor_pitch_shares'));
         $this->assertDatabaseHas('investor_pitch_shares', [
             'label' => 'Auto schema',
         ]);
+        $this->assertSame('investor-secret', session('investor_pitch_share_created.password'));
     }
 
     #[Test]
@@ -74,10 +74,7 @@ class PublicInvestorPitchTest extends TestCase
             ->set('shareDays', 14)
             ->call('createShare')
             ->assertHasNoErrors()
-            ->assertSet('createdSharePassword', 'investor-secret')
-            ->assertSee('Link ready')
-            ->assertSee('Acme Ventures')
-            ->assertSee('Copy link');
+            ->assertRedirect(route('admin.analytics.investor-pitch', ['year' => 2026]));
 
         $share = InvestorPitchShare::query()->first();
         $this->assertNotNull($share);
@@ -89,6 +86,23 @@ class PublicInvestorPitchTest extends TestCase
             Carbon::parse('2026-08-26 10:00:00', 'Asia/Dhaka')->timestamp,
             $share->expires_at->timestamp,
         );
+
+        $flash = session('investor_pitch_share_created');
+        $this->assertIsArray($flash);
+        $this->assertSame('investor-secret', $flash['password']);
+        $this->assertSame('Acme Ventures', $flash['label']);
+        $this->assertStringContainsString($share->token, $flash['url']);
+
+        // Follow the redirect: flash is pulled into component state for one-time display.
+        session()->flash('investor_pitch_share_created', $flash);
+
+        Livewire::test(AdminAnalyticsInvestorPitch::class)
+            ->assertSet('createdSharePassword', 'investor-secret')
+            ->assertSet('createdShareLabel', 'Acme Ventures')
+            ->assertSee('Link ready')
+            ->assertSee('Acme Ventures')
+            ->assertSee('Copy link')
+            ->assertDontSee('Refresh now');
 
         Carbon::setTestNow();
     }

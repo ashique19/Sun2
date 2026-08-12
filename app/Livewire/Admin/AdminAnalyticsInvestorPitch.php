@@ -17,6 +17,8 @@ use Livewire\Component;
 #[Layout('components.layouts.admin')]
 class AdminAnalyticsInvestorPitch extends Component
 {
+    public const CREATED_SHARE_SESSION_KEY = 'investor_pitch_share_created';
+
     #[Url]
     public int $year = 0;
 
@@ -44,6 +46,8 @@ class AdminAnalyticsInvestorPitch extends Component
         if ($this->year <= 0 || ! in_array($this->year, $years, true)) {
             $this->year = in_array($current, $years, true) ? $current : ($years[0] ?? $current);
         }
+
+        $this->hydrateCreatedShareFromSession();
     }
 
     public function selectYear(int $year): void
@@ -76,17 +80,14 @@ class AdminAnalyticsInvestorPitch extends Component
                 auth()->id(),
             );
 
-            $this->createdShareUrl = $created['url'];
-            $this->createdSharePassword = $created['plain_password'];
-            $this->createdShareLabel = $created['share']->label;
-            $this->createdShareExpiresAt = $created['share']->expires_at
-                ->timezone('Asia/Dhaka')
-                ->format('d M Y, h:i A');
-
-            $this->shareLabel = '';
-            $this->sharePassword = '';
-            $this->shareDays = 7;
-            $this->resetErrorBag();
+            session()->flash(self::CREATED_SHARE_SESSION_KEY, [
+                'url' => $created['url'],
+                'password' => $created['plain_password'],
+                'label' => $created['share']->label,
+                'expires_at' => $created['share']->expires_at
+                    ->timezone('Asia/Dhaka')
+                    ->format('d M Y, h:i A'),
+            ]);
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Throwable $e) {
@@ -96,7 +97,15 @@ class AdminAnalyticsInvestorPitch extends Component
                 'sharePassword',
                 'Could not create the share link: '.$e->getMessage(),
             );
+
+            return;
         }
+
+        // Full redirect avoids re-rendering the heavy deck in the same Livewire
+        // request (that path was returning a 500 and Livewire's empty black dialog).
+        $this->redirect(route('admin.analytics.investor-pitch', [
+            'year' => $this->year,
+        ]));
     }
 
     public function copyCreatedShareUrl(): void
@@ -179,5 +188,21 @@ class AdminAnalyticsInvestorPitch extends Component
             'shares' => $shares,
             'sharesUnavailable' => $sharesUnavailable,
         ]);
+    }
+
+    private function hydrateCreatedShareFromSession(): void
+    {
+        $flash = session()->pull(self::CREATED_SHARE_SESSION_KEY);
+
+        if (! is_array($flash)) {
+            return;
+        }
+
+        $this->createdShareUrl = isset($flash['url']) ? (string) $flash['url'] : null;
+        $this->createdSharePassword = isset($flash['password']) ? (string) $flash['password'] : null;
+        $this->createdShareLabel = array_key_exists('label', $flash) && $flash['label'] !== null
+            ? (string) $flash['label']
+            : null;
+        $this->createdShareExpiresAt = isset($flash['expires_at']) ? (string) $flash['expires_at'] : null;
     }
 }

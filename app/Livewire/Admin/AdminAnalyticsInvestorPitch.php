@@ -4,6 +4,7 @@ namespace App\Livewire\Admin;
 
 use App\Services\Admin\InvestorPitchAnalyticsService;
 use App\Support\AdminAccess;
+use App\Support\InvestorPitchShare;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -28,11 +29,6 @@ class AdminAnalyticsInvestorPitch extends Component
         }
     }
 
-    public function refreshDeck(): void
-    {
-        // Manual refresh — re-query on next render.
-    }
-
     public function selectYear(int $year): void
     {
         if ($year < 2000) {
@@ -54,6 +50,7 @@ class AdminAnalyticsInvestorPitch extends Component
         return view('livewire.admin.admin-analytics-investor-pitch', [
             'years' => $years,
             'deck' => $analytics->deck($this->year),
+            'shareUrl' => InvestorPitchShare::url(),
         ]);
     }
 }

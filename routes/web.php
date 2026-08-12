@@ -50,6 +50,7 @@ use App\Livewire\Admin\AdminSocialPostsShow;
 use App\Livewire\Admin\AdminSteadfastWebhooks;
 use App\Livewire\Admin\AdminUserEdit;
 use App\Livewire\Admin\AdminUsers;
+use App\Livewire\PublicInvestorPitch;
 use App\Livewire\PublicProductShare;
 use App\Livewire\Reseller\ResellerDashboard;
 use App\Livewire\Reseller\ResellerOrderCreate;
@@ -104,6 +105,9 @@ Route::get('/page/{page:slug}', StorefrontPage::class)->name('page.show');
 Route::get('/share/products/{token}', PublicProductShare::class)
     ->where('token', '[A-Za-z0-9]{32,64}')
     ->name('share.products');
+Route::get('/share/investor-pitch/{token}', PublicInvestorPitch::class)
+    ->where('token', '[A-Za-z0-9_-]{16,64}')
+    ->name('share.investor-pitch');
 Route::get('/social-post/{socialPost}', StorefrontSocialPostShow::class)
     ->whereNumber('socialPost')
     ->name('social-post.show');

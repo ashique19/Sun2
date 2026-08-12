@@ -199,6 +199,23 @@
                                         >
                                             <span x-text="copied ? 'Copied' : 'Copy link'">Copy link</span>
                                         </button>
+                                        @if (filled($share->plaintextPassword()))
+                                            <button
+                                                type="button"
+                                                x-data="{ copied: false }"
+                                                data-copy-text="{{ $share->plaintextPassword() }}"
+                                                x-on:click="
+                                                    window.sunCopyText($el.dataset.copyText).then((ok) => {
+                                                        if (! ok) return;
+                                                        copied = true;
+                                                        setTimeout(() => copied = false, 2000);
+                                                    })
+                                                "
+                                                class="text-xs font-medium text-[#2F6F4E] hover:underline"
+                                            >
+                                                <span x-text="copied ? 'Copied' : 'Copy password'">Copy password</span>
+                                            </button>
+                                        @endif
                                         @if ($status === 'Active')
                                             <button
                                                 type="button"

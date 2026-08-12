@@ -12,6 +12,7 @@ use App\Models\Product;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
@@ -230,6 +231,7 @@ class PublicInvestorPitchTest extends TestCase
             ->assertSee('To revoke')
             ->assertSee('Active')
             ->assertSee('Copy link')
+            ->assertSee('Copy password')
             ->assertSee('Delete')
             ->assertSeeHtml('wire:click="revokeShare('.$share->id.')"')
             ->assertSeeHtml('wire:click="deleteShare('.$share->id.')"')
@@ -238,6 +240,36 @@ class PublicInvestorPitchTest extends TestCase
 
         $this->assertTrue($share->fresh()->isRevoked());
         $this->assertFalse($share->fresh()->isAccessible());
+        $this->assertSame('deck-password', $share->fresh()->plaintextPassword());
+    }
+
+    #[Test]
+    public function legacy_hashed_share_passwords_still_unlock_but_are_not_copyable(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $token = str_repeat('g', 48);
+
+        InvestorPitchShare::query()->insert([
+            'token' => $token,
+            'label' => 'Legacy hash',
+            'password' => Hash::make('legacy-secret'),
+            'expires_at' => now()->addDays(3),
+            'created_by' => auth()->id(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $share = InvestorPitchShare::query()->where('token', $token)->firstOrFail();
+
+        $this->assertNull($share->plaintextPassword());
+        $this->assertTrue($share->passwordMatches('legacy-secret'));
+        $this->assertFalse($share->passwordMatches('wrong'));
+
+        Livewire::test(AdminAnalyticsInvestorPitch::class)
+            ->assertSee('Legacy hash')
+            ->assertSee('Copy link')
+            ->assertDontSeeHtml('data-copy-text="legacy-secret"');
     }
 
     #[Test]

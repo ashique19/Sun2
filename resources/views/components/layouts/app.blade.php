@@ -42,6 +42,7 @@
     <meta name="twitter:image:alt" content="{{ $seoImageAlt }}">
 
     <link rel="icon" type="image/png" href="/img/settings/favicon.png">
+    <x-google-analytics />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <x-seo.json-ld :data="\App\Support\JsonLd::organization()" />
     @isset($seoJsonLd)

@@ -32,19 +32,26 @@ class PublicInvestorPitchTest extends TestCase
     }
 
     #[Test]
-    public function create_share_shows_inline_error_when_table_missing(): void
+    public function create_share_auto_creates_missing_table(): void
     {
         Schema::dropIfExists('investor_pitch_shares');
+        $this->assertFalse(Schema::hasTable('investor_pitch_shares'));
 
         $this->actingAs($this->adminUser());
 
         Livewire::test(AdminAnalyticsInvestorPitch::class)
-            ->assertSee('Share links are unavailable')
+            ->set('shareLabel', 'Auto schema')
             ->set('sharePassword', 'investor-secret')
             ->set('shareDays', 7)
             ->call('createShare')
-            ->assertHasErrors('sharePassword')
-            ->assertSee('Could not create the share link');
+            ->assertHasNoErrors()
+            ->assertSee('Link ready')
+            ->assertSee('Auto schema');
+
+        $this->assertTrue(Schema::hasTable('investor_pitch_shares'));
+        $this->assertDatabaseHas('investor_pitch_shares', [
+            'label' => 'Auto schema',
+        ]);
     }
 
     #[Test]

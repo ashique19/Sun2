@@ -29,8 +29,8 @@
             <div class="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-950">
                 <p class="font-medium">Share links are unavailable</p>
                 <p class="mt-1 text-xs text-rose-900/80">
-                    The <code class="rounded bg-white/70 px-1">investor_pitch_shares</code> table is missing.
-                    Run the migration (or the production SQL) on this database, then reload.
+                    Could not prepare the <code class="rounded bg-white/70 px-1">investor_pitch_shares</code> table.
+                    Check database permissions, then reload.
                 </p>
             </div>
         @endif
@@ -79,7 +79,7 @@
             <div class="flex items-end">
                 <button
                     type="submit"
-                    class="w-full rounded-lg bg-[#1E1E1E] px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+                    class="w-full rounded-lg bg-[#1E1E1E] px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
                     @disabled($sharesUnavailable ?? false)
                 >
                     Create share link

@@ -7,6 +7,7 @@ use App\Services\Admin\InvestorPitchAnalyticsService;
 use App\Services\Admin\InvestorPitchShareService;
 use App\Support\AdminAccess;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -54,48 +55,48 @@ class AdminAnalyticsInvestorPitch extends Component
         $this->year = $year;
     }
 
-    public function createShare(InvestorPitchShareService $shares): void
+    public function createShare(): void
     {
         AdminAccess::ensureStaffAdmin();
 
-        $this->validate([
-            'shareLabel' => ['nullable', 'string', 'max:120'],
-            'sharePassword' => ['required', 'string', 'min:6', 'max:100'],
-            'shareDays' => ['required', 'integer', 'min:1', 'max:90'],
-        ], [
-            'sharePassword.required' => 'Enter a password for the recipient.',
-            'sharePassword.min' => 'Use at least 6 characters for the share password.',
-        ]);
-
         try {
-            $created = $shares->create(
+            $this->validate([
+                'shareLabel' => ['nullable', 'string', 'max:120'],
+                'sharePassword' => ['required', 'string', 'min:6', 'max:100'],
+                'shareDays' => ['required', 'integer', 'min:1', 'max:90'],
+            ], [
+                'sharePassword.required' => 'Enter a password for the recipient.',
+                'sharePassword.min' => 'Use at least 6 characters for the share password.',
+            ]);
+
+            $created = app(InvestorPitchShareService::class)->create(
                 $this->shareLabel,
                 $this->sharePassword,
                 $this->shareDays,
                 auth()->id(),
             );
+
+            $this->createdShareUrl = $created['url'];
+            $this->createdSharePassword = $created['plain_password'];
+            $this->createdShareLabel = $created['share']->label;
+            $this->createdShareExpiresAt = $created['share']->expires_at
+                ->timezone('Asia/Dhaka')
+                ->format('d M Y, h:i A');
+
+            $this->shareLabel = '';
+            $this->sharePassword = '';
+            $this->shareDays = 7;
+            $this->resetErrorBag();
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             report($e);
 
             $this->addError(
                 'sharePassword',
-                'Could not create the share link. Confirm the investor_pitch_shares table exists, then try again.',
+                'Could not create the share link: '.$e->getMessage(),
             );
-
-            return;
         }
-
-        $this->createdShareUrl = $created['url'];
-        $this->createdSharePassword = $created['plain_password'];
-        $this->createdShareLabel = $created['share']->label;
-        $this->createdShareExpiresAt = $created['share']->expires_at
-            ->timezone('Asia/Dhaka')
-            ->format('d M Y, h:i A');
-
-        $this->shareLabel = '';
-        $this->sharePassword = '';
-        $this->shareDays = 7;
-        $this->resetErrorBag();
     }
 
     public function copyCreatedShareUrl(): void
@@ -128,11 +129,22 @@ class AdminAnalyticsInvestorPitch extends Component
     {
         AdminAccess::ensureStaffAdmin();
 
-        $share = InvestorPitchShare::query()->findOrFail($shareId);
-        $share->revoke();
+        try {
+            app(InvestorPitchShareService::class)->ensureSchema();
 
-        if ($this->createdShareUrl === $share->url()) {
-            $this->dismissCreatedShare();
+            $share = InvestorPitchShare::query()->findOrFail($shareId);
+            $share->revoke();
+
+            if ($this->createdShareUrl === $share->url()) {
+                $this->dismissCreatedShare();
+            }
+        } catch (\Throwable $e) {
+            report($e);
+
+            $this->addError(
+                'sharePassword',
+                'Could not revoke the share link: '.$e->getMessage(),
+            );
         }
     }
 
@@ -146,8 +158,11 @@ class AdminAnalyticsInvestorPitch extends Component
         }
 
         $shares = collect();
+        $sharesUnavailable = false;
 
         try {
+            app(InvestorPitchShareService::class)->ensureSchema();
+
             $shares = InvestorPitchShare::query()
                 ->with('creator:id,name')
                 ->latest()
@@ -155,14 +170,14 @@ class AdminAnalyticsInvestorPitch extends Component
                 ->get();
         } catch (\Throwable $e) {
             report($e);
+            $sharesUnavailable = ! Schema::hasTable('investor_pitch_shares');
         }
 
         return view('livewire.admin.admin-analytics-investor-pitch', [
             'years' => $years,
             'deck' => $analytics->deck($this->year),
             'shares' => $shares,
-            'sharesUnavailable' => $shares->isEmpty()
-                && ! Schema::hasTable('investor_pitch_shares'),
+            'sharesUnavailable' => $sharesUnavailable,
         ]);
     }
 }

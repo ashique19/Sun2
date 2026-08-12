@@ -106,7 +106,7 @@ Route::get('/share/products/{token}', PublicProductShare::class)
     ->where('token', '[A-Za-z0-9]{32,64}')
     ->name('share.products');
 Route::get('/share/investor-pitch/{token}', PublicInvestorPitch::class)
-    ->where('token', '[A-Za-z0-9_-]{16,64}')
+    ->where('token', '[A-Za-z0-9]{32,64}')
     ->name('share.investor-pitch');
 Route::get('/social-post/{socialPost}', StorefrontSocialPostShow::class)
     ->whereNumber('socialPost')

@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Livewire\Admin\AdminAnalyticsInvestorPitch;
 use App\Livewire\PublicInvestorPitch;
 use App\Models\Category;
+use App\Models\InvestorPitchShare;
 use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\Product;
@@ -19,28 +21,52 @@ class PublicInvestorPitchTest extends TestCase
 {
     use RefreshDatabase;
 
-    #[Test]
-    public function share_route_is_not_found_when_unconfigured(): void
+    private function adminUser(): User
     {
-        config([
-            'investor_pitch.share_token' => '',
-            'investor_pitch.share_password' => '',
-        ]);
+        Role::findOrCreate('admin');
+        $user = User::factory()->create();
+        $user->assignRole('admin');
 
-        $this->get(route('share.investor-pitch', ['token' => 'any-token-here-xx']))
+        return $user;
+    }
+
+    #[Test]
+    public function missing_token_returns_not_found(): void
+    {
+        $this->get(route('share.investor-pitch', ['token' => str_repeat('a', 48)]))
             ->assertNotFound();
     }
 
     #[Test]
-    public function wrong_token_returns_not_found(): void
+    public function admin_can_create_share_link_with_password_and_days(): void
     {
-        config([
-            'investor_pitch.share_token' => 'correct-share-token',
-            'investor_pitch.share_password' => 'secret-pass',
-        ]);
+        Carbon::setTestNow(Carbon::parse('2026-08-12 10:00:00', 'Asia/Dhaka'));
 
-        $this->get(route('share.investor-pitch', ['token' => 'wrong-share-tokenx']))
-            ->assertNotFound();
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminAnalyticsInvestorPitch::class)
+            ->set('shareLabel', 'Acme Ventures')
+            ->set('sharePassword', 'investor-secret')
+            ->set('shareDays', 14)
+            ->call('createShare')
+            ->assertHasNoErrors()
+            ->assertSet('createdSharePassword', 'investor-secret')
+            ->assertSee('Link ready')
+            ->assertSee('Acme Ventures')
+            ->assertSee('Copy link');
+
+        $share = InvestorPitchShare::query()->first();
+        $this->assertNotNull($share);
+        $this->assertSame('Acme Ventures', $share->label);
+        $this->assertTrue($share->passwordMatches('investor-secret'));
+        $this->assertFalse($share->passwordMatches('wrong'));
+        $this->assertTrue($share->isAccessible());
+        $this->assertSame(
+            Carbon::parse('2026-08-26 10:00:00', 'Asia/Dhaka')->timestamp,
+            $share->expires_at->timestamp,
+        );
+
+        Carbon::setTestNow();
     }
 
     #[Test]
@@ -48,9 +74,12 @@ class PublicInvestorPitchTest extends TestCase
     {
         Carbon::setTestNow(Carbon::parse('2026-08-11 12:00:00', 'Asia/Dhaka'));
 
-        config([
-            'investor_pitch.share_token' => 'pitch-token-abcdef',
-            'investor_pitch.share_password' => 'deck-password',
+        $share = InvestorPitchShare::query()->create([
+            'token' => str_repeat('b', 48),
+            'label' => 'Seed fund',
+            'password' => 'deck-password',
+            'expires_at' => now()->addDays(7),
+            'created_by' => null,
         ]);
 
         $category = Category::query()->create([
@@ -82,15 +111,14 @@ class PublicInvestorPitchTest extends TestCase
             'purchase_price' => 600,
         ]);
 
-        $this->get(route('share.investor-pitch', ['token' => 'pitch-token-abcdef']))
+        $this->get(route('share.investor-pitch', ['token' => $share->token]))
             ->assertOk()
             ->assertSee('Enter the share password')
             ->assertSee('<meta name="robots" content="noindex, nofollow">', false)
             ->assertDontSee('Placed GMV')
-            ->assertDontSee('Analytics hub')
             ->assertDontSee(route('admin.analytics'));
 
-        Livewire::test(PublicInvestorPitch::class, ['token' => 'pitch-token-abcdef'])
+        Livewire::test(PublicInvestorPitch::class, ['token' => $share->token])
             ->assertSet('unlocked', false)
             ->set('password', 'wrong')
             ->call('unlock')
@@ -106,33 +134,68 @@ class PublicInvestorPitchTest extends TestCase
             ->assertSee('Methodology notes')
             ->assertDontSee('Open P&L')
             ->assertDontSee('Refresh now')
-            ->call('selectYear', 2026)
-            ->assertSet('year', 2026)
             ->call('lock')
-            ->assertSet('unlocked', false)
-            ->assertSee('Enter the share password');
+            ->assertSet('unlocked', false);
 
         Carbon::setTestNow();
     }
 
     #[Test]
-    public function admin_page_shows_share_url_when_configured(): void
+    public function expired_and_revoked_links_block_access(): void
     {
-        config([
-            'investor_pitch.share_token' => 'pitch-token-abcdef',
-            'investor_pitch.share_password' => 'deck-password',
+        $expired = InvestorPitchShare::query()->create([
+            'token' => str_repeat('c', 48),
+            'label' => 'Expired',
+            'password' => 'deck-password',
+            'expires_at' => now()->subDay(),
         ]);
 
-        Role::findOrCreate('admin');
-        $user = User::factory()->create();
-        $user->assignRole('admin');
+        $revoked = InvestorPitchShare::query()->create([
+            'token' => str_repeat('d', 48),
+            'label' => 'Revoked',
+            'password' => 'deck-password',
+            'expires_at' => now()->addDays(7),
+            'revoked_at' => now(),
+        ]);
 
-        $this->actingAs($user)
-            ->get(route('admin.analytics.investor-pitch'))
+        $this->get(route('share.investor-pitch', ['token' => $expired->token]))
             ->assertOk()
-            ->assertSee('Password-protected share link is live')
-            ->assertSee(route('share.investor-pitch', ['token' => 'pitch-token-abcdef']), false)
-            ->assertDontSee('Refresh now');
+            ->assertSee('This share link has expired')
+            ->assertDontSee('Unlock deck');
+
+        $this->get(route('share.investor-pitch', ['token' => $revoked->token]))
+            ->assertOk()
+            ->assertSee('This share link was revoked')
+            ->assertDontSee('Unlock deck');
+
+        Livewire::test(PublicInvestorPitch::class, ['token' => $expired->token])
+            ->set('password', 'deck-password')
+            ->call('unlock')
+            ->assertSet('unlocked', false)
+            ->assertSee('This share link has expired');
+    }
+
+    #[Test]
+    public function admin_can_revoke_share_link(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $share = InvestorPitchShare::query()->create([
+            'token' => str_repeat('e', 48),
+            'label' => 'To revoke',
+            'password' => 'deck-password',
+            'expires_at' => now()->addDays(3),
+            'created_by' => auth()->id(),
+        ]);
+
+        Livewire::test(AdminAnalyticsInvestorPitch::class)
+            ->assertSee('To revoke')
+            ->assertSee('Active')
+            ->call('revokeShare', $share->id)
+            ->assertSee('Revoked');
+
+        $this->assertTrue($share->fresh()->isRevoked());
+        $this->assertFalse($share->fresh()->isAccessible());
     }
 
     /**

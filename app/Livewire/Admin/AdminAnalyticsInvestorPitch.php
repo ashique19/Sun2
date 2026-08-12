@@ -2,9 +2,10 @@
 
 namespace App\Livewire\Admin;
 
+use App\Models\InvestorPitchShare;
 use App\Services\Admin\InvestorPitchAnalyticsService;
+use App\Services\Admin\InvestorPitchShareService;
 use App\Support\AdminAccess;
-use App\Support\InvestorPitchShare;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -16,6 +17,20 @@ class AdminAnalyticsInvestorPitch extends Component
 {
     #[Url]
     public int $year = 0;
+
+    public string $shareLabel = '';
+
+    public string $sharePassword = '';
+
+    public int $shareDays = 7;
+
+    public ?string $createdShareUrl = null;
+
+    public ?string $createdSharePassword = null;
+
+    public ?string $createdShareLabel = null;
+
+    public ?string $createdShareExpiresAt = null;
 
     public function mount(InvestorPitchAnalyticsService $analytics): void
     {
@@ -38,6 +53,59 @@ class AdminAnalyticsInvestorPitch extends Component
         $this->year = $year;
     }
 
+    public function createShare(InvestorPitchShareService $shares): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->validate([
+            'shareLabel' => ['nullable', 'string', 'max:120'],
+            'sharePassword' => ['required', 'string', 'min:6', 'max:100'],
+            'shareDays' => ['required', 'integer', 'min:1', 'max:90'],
+        ], [
+            'sharePassword.required' => 'Enter a password for the recipient.',
+            'sharePassword.min' => 'Use at least 6 characters for the share password.',
+        ]);
+
+        $created = $shares->create(
+            $this->shareLabel,
+            $this->sharePassword,
+            $this->shareDays,
+            auth()->id(),
+        );
+
+        $this->createdShareUrl = $created['url'];
+        $this->createdSharePassword = $created['plain_password'];
+        $this->createdShareLabel = $created['share']->label;
+        $this->createdShareExpiresAt = $created['share']->expires_at
+            ->timezone('Asia/Dhaka')
+            ->format('d M Y, h:i A');
+
+        $this->shareLabel = '';
+        $this->sharePassword = '';
+        $this->shareDays = 7;
+        $this->resetErrorBag();
+    }
+
+    public function dismissCreatedShare(): void
+    {
+        $this->createdShareUrl = null;
+        $this->createdSharePassword = null;
+        $this->createdShareLabel = null;
+        $this->createdShareExpiresAt = null;
+    }
+
+    public function revokeShare(int $shareId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $share = InvestorPitchShare::query()->findOrFail($shareId);
+        $share->revoke();
+
+        if ($this->createdShareUrl === $share->url()) {
+            $this->dismissCreatedShare();
+        }
+    }
+
     public function render(InvestorPitchAnalyticsService $analytics)
     {
         $years = $analytics->availableYears();
@@ -50,7 +118,11 @@ class AdminAnalyticsInvestorPitch extends Component
         return view('livewire.admin.admin-analytics-investor-pitch', [
             'years' => $years,
             'deck' => $analytics->deck($this->year),
-            'shareUrl' => InvestorPitchShare::url(),
+            'shares' => InvestorPitchShare::query()
+                ->with('creator:id,name')
+                ->latest()
+                ->limit(20)
+                ->get(),
         ]);
     }
 }

@@ -1,6 +1,16 @@
 <div>
     <div class="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        @if (! $unlocked)
+        @if ($revoked || $expired)
+            <div class="mx-auto max-w-md rounded-2xl border border-[#EFE7D6] bg-white p-8 text-center">
+                <p class="text-xs font-semibold uppercase tracking-[0.2em] text-[#C9A227]">Sundoritoma</p>
+                <h1 class="mt-2 font-serif text-2xl font-semibold text-[#1E1E1E]">
+                    {{ $revoked ? 'This share link was revoked' : 'This share link has expired' }}
+                </h1>
+                <p class="mt-2 text-sm text-[#6B6459]">
+                    Ask your Sundoritoma contact for a fresh link if you still need access.
+                </p>
+            </div>
+        @elseif (! $unlocked)
             <div class="mx-auto max-w-md space-y-6">
                 <div>
                     <p class="text-xs font-semibold uppercase tracking-[0.2em] text-[#C9A227]">Sundoritoma</p>
@@ -8,6 +18,11 @@
                     <p class="mt-2 text-sm text-[#6B6459]">
                         Enter the share password to view the live calendar-year deck.
                     </p>
+                    @if ($share?->expires_at)
+                        <p class="mt-1 text-xs text-[#8C8474]">
+                            Valid until {{ $share->expires_at->timezone('Asia/Dhaka')->format('d M Y, h:i A') }} (Asia/Dhaka)
+                        </p>
+                    @endif
                 </div>
 
                 <form wire:submit="unlock" class="space-y-4 rounded-2xl border border-[#EFE7D6] bg-white p-6">
@@ -41,6 +56,11 @@
                     <p class="mt-1 text-sm text-[#6B6459]">
                         Yearly report from orders · compared with prior year · as of {{ $deck['as_of'] }}
                     </p>
+                    @if ($share?->expires_at)
+                        <p class="mt-1 text-xs text-[#8C8474]">
+                            Link valid until {{ $share->expires_at->timezone('Asia/Dhaka')->format('d M Y, h:i A') }}
+                        </p>
+                    @endif
                 </div>
                 <button
                     type="button"

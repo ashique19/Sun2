@@ -2,8 +2,8 @@
 
 namespace App\Livewire;
 
+use App\Models\InvestorPitchShare;
 use App\Services\Admin\InvestorPitchAnalyticsService;
-use App\Support\InvestorPitchShare;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -18,13 +18,22 @@ class PublicInvestorPitch extends Component
 
     public bool $unlocked = false;
 
+    public bool $expired = false;
+
+    public bool $revoked = false;
+
     public function mount(string $token, InvestorPitchAnalyticsService $analytics): void
     {
-        abort_unless(InvestorPitchShare::isConfigured(), 404);
-        abort_unless(InvestorPitchShare::tokenMatches($token), 404);
+        $share = InvestorPitchShare::query()->where('token', $token)->first();
+        abort_unless($share !== null, 404);
 
         $this->token = $token;
-        $this->unlocked = InvestorPitchShare::isUnlocked($token);
+        $this->revoked = $share->isRevoked();
+        $this->expired = ! $this->revoked && $share->isExpired();
+
+        if ($share->isAccessible() && InvestorPitchShare::isUnlocked($token)) {
+            $this->unlocked = true;
+        }
 
         $years = $analytics->availableYears();
         $current = (int) now('Asia/Dhaka')->year;
@@ -36,19 +45,27 @@ class PublicInvestorPitch extends Component
 
     public function unlock(): void
     {
-        abort_unless(InvestorPitchShare::tokenMatches($this->token), 404);
+        $share = $this->shareOrAbort();
+
+        if (! $share->isAccessible()) {
+            $this->revoked = $share->isRevoked();
+            $this->expired = ! $this->revoked && $share->isExpired();
+            $this->unlocked = false;
+
+            return;
+        }
 
         $this->validate([
             'password' => ['required', 'string'],
         ]);
 
-        if (! InvestorPitchShare::passwordMatches($this->password)) {
+        if (! $share->passwordMatches($this->password)) {
             $this->addError('password', 'That password is incorrect.');
 
             return;
         }
 
-        InvestorPitchShare::unlock($this->token);
+        $share->unlockSession();
         $this->unlocked = true;
         $this->password = '';
         $this->resetErrorBag();
@@ -56,7 +73,8 @@ class PublicInvestorPitch extends Component
 
     public function lock(): void
     {
-        InvestorPitchShare::lock($this->token);
+        $share = InvestorPitchShare::query()->where('token', $this->token)->first();
+        $share?->lockSession();
         $this->unlocked = false;
         $this->password = '';
     }
@@ -74,10 +92,21 @@ class PublicInvestorPitch extends Component
 
     public function render(InvestorPitchAnalyticsService $analytics)
     {
-        if (! $this->unlocked) {
+        $share = InvestorPitchShare::query()->where('token', $this->token)->first();
+        abort_unless($share !== null, 404);
+
+        $this->revoked = $share->isRevoked();
+        $this->expired = ! $this->revoked && $share->isExpired();
+
+        if (! $share->isAccessible()) {
+            $this->unlocked = false;
+        }
+
+        if (! $this->unlocked || ! $share->isAccessible()) {
             return view('livewire.public-investor-pitch', [
                 'years' => [],
                 'deck' => null,
+                'share' => $share,
             ])
                 ->title('Investor pitch')
                 ->layoutData([
@@ -95,10 +124,19 @@ class PublicInvestorPitch extends Component
         return view('livewire.public-investor-pitch', [
             'years' => $years,
             'deck' => $analytics->deck($this->year),
+            'share' => $share,
         ])
             ->title('Investor pitch')
             ->layoutData([
                 'seoRobots' => 'noindex, nofollow',
             ]);
+    }
+
+    private function shareOrAbort(): InvestorPitchShare
+    {
+        $share = InvestorPitchShare::query()->where('token', $this->token)->first();
+        abort_unless($share !== null, 404);
+
+        return $share;
     }
 }

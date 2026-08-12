@@ -309,6 +309,8 @@ class AdminAnalyticsOrdersWithCosts extends Component
 
         foreach ($order->items as $item) {
             $product = $item->product;
+            // Orphan product_id (deleted catalog row) — treat as unlinked for cost edits.
+            $productId = $product ? (int) $item->product_id : null;
             $path = $item->product_image
                 ?: $product?->primaryImagePath();
             $thumb = $path
@@ -325,7 +327,7 @@ class AdminAnalyticsOrdersWithCosts extends Component
             $this->cogsModalRows[] = [
                 'key' => 'line-'.$item->id,
                 'order_product_id' => $item->id,
-                'product_id' => $item->product_id ? (int) $item->product_id : null,
+                'product_id' => $productId,
                 'name' => $item->displayName(),
                 'thumb' => $thumb,
                 'qty' => max(0, (int) $item->quantity - (int) ($item->returned_quantity ?? 0)),
@@ -916,20 +918,33 @@ class AdminAnalyticsOrdersWithCosts extends Component
 
         $purchase = round((float) $this->cogsModalRows[$index]['purchase_price'], 2);
         $other = round((float) $this->cogsModalRows[$index]['other_cost'], 2);
+        $unitCost = round($purchase + $other, 2);
 
-        if (! $row['product_id']) {
+        $product = null;
+        if ($row['product_id']) {
+            $product = Product::query()->with(['materials', 'costHeads'])->find($row['product_id']);
+        }
+
+        // No catalog row (never linked, or product deleted) — update this order line only.
+        if ($product === null) {
             OrderProduct::query()->whereKey($row['order_product_id'])->update([
                 'purchase_price' => $purchase,
-                'unit_cost' => round($purchase + $other, 2),
+                'unit_cost' => $unitCost,
+                // Clear orphaned FK so later saves stay on the line-only path.
+                'product_id' => null,
             ]);
+
+            $this->cogsModalRows[$index]['product_id'] = null;
+            $this->cogsModalRows[$index]['edit_url'] = null;
+            $this->cogsModalRows[$index]['has_materials'] = false;
+            $this->cogsModalRows[$index]['purchase_price'] = (string) (int) round($purchase);
+            $this->cogsModalRows[$index]['other_cost'] = (string) (int) round($other);
 
             return [
                 'product' => null,
                 'synced' => 1,
             ];
         }
-
-        $product = Product::query()->with(['materials', 'costHeads'])->findOrFail($row['product_id']);
 
         if ($product->materials->isNotEmpty() && abs($purchase - (float) $product->purchase_price) > 0.009) {
             $this->addError(

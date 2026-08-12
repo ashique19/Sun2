@@ -102,10 +102,27 @@
                                         <img src="{{ \App\Support\StorefrontAssets::url($thumb) }}" alt="" class="h-[7.5rem] w-[7.5rem] shrink-0 rounded object-cover bg-[#FAF6EF]">
                                     @endif
                                     <div>
-                                        <a href="{{ route('admin.products.show', $product) }}" wire:navigate
-                                            class="font-medium line-clamp-1 text-[#C9A227] hover:underline">
-                                            {{ $product->name }}
-                                        </a>
+                                        <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                            <a href="{{ route('admin.products.show', $product) }}" wire:navigate
+                                                class="font-medium line-clamp-1 text-[#C9A227] hover:underline">
+                                                {{ $product->name }}
+                                            </a>
+                                            <button type="button"
+                                                x-data="{ copied: false }"
+                                                data-copy-text="{{ route('product.show', $product) }}"
+                                                data-copy-public-link
+                                                x-on:click="
+                                                    window.sunCopyText($el.dataset.copyText).then((ok) => {
+                                                        if (! ok) return;
+                                                        copied = true;
+                                                        setTimeout(() => copied = false, 2000);
+                                                    })
+                                                "
+                                                class="shrink-0 text-[11px] font-medium text-[#8C8474] underline-offset-2 hover:text-[#C9A227] hover:underline"
+                                                title="Copy storefront product URL">
+                                                <span x-text="copied ? 'Copied' : 'Copy public link'">Copy public link</span>
+                                            </button>
+                                        </div>
                                         <div class="text-xs text-[#8C8474]">{{ $product->sku ?: $product->slug }}</div>
                                     </div>
                                 </div>

@@ -159,6 +159,14 @@ class OrderCourierChargeSync
         $order->loadMissing('items');
         $qty = $this->emptyProductDefaults->sellableQuantity($order);
 
+        // Returned / fully-returned delivered parcels still incurred a courier trip.
+        if ($qty < 1) {
+            $status = strtolower((string) $order->status);
+            if (in_array($status, ['delivered', 'returned', 'dispatched', 'partial'], true)) {
+                $qty = $this->emptyProductDefaults->shippedQuantity($order);
+            }
+        }
+
         if ($qty < 1) {
             return 0.0;
         }

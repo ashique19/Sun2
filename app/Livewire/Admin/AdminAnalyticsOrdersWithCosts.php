@@ -7,6 +7,7 @@ use App\Models\OrderProduct;
 use App\Models\Product;
 use App\Services\Admin\AnalyticsService;
 use App\Services\Admin\OrderCalculationAuditService;
+use App\Services\Admin\OrderSettlementCourierRepairService;
 use App\Services\Admin\ProductUnitCostService;
 use App\Support\AdminAccess;
 use App\Support\StorefrontAssets;
@@ -114,6 +115,33 @@ class AdminAnalyticsOrdersWithCosts extends Component
     public bool $auditIssuesTruncated = false;
 
     public ?string $auditStatusLine = null;
+
+    public bool $settlementModalOpen = false;
+
+    public bool $settlementRunning = false;
+
+    public bool $settlementDone = false;
+
+    public int $settlementAfterId = 0;
+
+    public int $settlementTotal = 0;
+
+    public int $settlementScanned = 0;
+
+    public int $settlementFixedOrders = 0;
+
+    public int $settlementCourierFixed = 0;
+
+    public int $settlementSettlementFixed = 0;
+
+    public int $settlementPaymentsCreated = 0;
+
+    public int $settlementBatchNumber = 0;
+
+    /** @var list<string> */
+    public array $settlementRecentFixes = [];
+
+    public ?string $settlementStatusLine = null;
 
     public function mount(): void
     {
@@ -436,6 +464,112 @@ class AdminAnalyticsOrdersWithCosts extends Component
         return 'Ready to check column integrity for '.number_format($this->auditTotal)
             .' orders ('.$scope.') in batches of '.OrderCalculationAuditService::BATCH_SIZE
             .'. Report only — nothing is auto-changed.';
+    }
+
+    public function openSettlementRepairModal(OrderSettlementCourierRepairService $repair): void
+    {
+        $this->settlementModalOpen = true;
+        $this->settlementRunning = false;
+        $this->settlementDone = false;
+        $this->settlementAfterId = 0;
+        $this->settlementTotal = $repair->eligibleOrderCount();
+        $this->settlementScanned = 0;
+        $this->settlementFixedOrders = 0;
+        $this->settlementCourierFixed = 0;
+        $this->settlementSettlementFixed = 0;
+        $this->settlementPaymentsCreated = 0;
+        $this->settlementBatchNumber = 0;
+        $this->settlementRecentFixes = [];
+        $this->settlementStatusLine = $this->settlementTotal === 0
+            ? 'No orders need settlement or courier repair.'
+            : 'Ready to repair '.number_format($this->settlementTotal)
+                .' orders in batches of '.OrderSettlementCourierRepairService::BATCH_SIZE
+                .' (৳0 courier on delivered/returned + unpaid delivered bills).';
+    }
+
+    public function startSettlementRepair(OrderSettlementCourierRepairService $repair): void
+    {
+        if (! $this->settlementModalOpen || $this->settlementRunning) {
+            return;
+        }
+
+        if ($this->settlementTotal < 1) {
+            $this->settlementDone = true;
+            $this->settlementStatusLine = 'No orders need settlement or courier repair.';
+
+            return;
+        }
+
+        $this->settlementRunning = true;
+        $this->settlementDone = false;
+        $this->settlementStatusLine = 'Starting…';
+        $this->continueSettlementRepair($repair);
+    }
+
+    public function continueSettlementRepair(OrderSettlementCourierRepairService $repair): void
+    {
+        if (! $this->settlementModalOpen || ! $this->settlementRunning || $this->settlementDone) {
+            return;
+        }
+
+        $result = $repair->repairNextBatch(
+            $this->settlementAfterId,
+            OrderSettlementCourierRepairService::BATCH_SIZE,
+        );
+
+        $this->settlementBatchNumber++;
+        $this->settlementAfterId = $result['next_after_id'];
+        $this->settlementScanned += $result['scanned'];
+        $this->settlementFixedOrders += $result['fixed_orders'];
+        $this->settlementCourierFixed += $result['courier_fixed'];
+        $this->settlementSettlementFixed += $result['settlement_fixed'];
+        $this->settlementPaymentsCreated += $result['payments_created'];
+
+        foreach ($result['sample_order_numbers'] as $orderNumber) {
+            if (! in_array($orderNumber, $this->settlementRecentFixes, true)) {
+                $this->settlementRecentFixes[] = $orderNumber;
+            }
+        }
+        $this->settlementRecentFixes = array_slice($this->settlementRecentFixes, -12);
+
+        $pct = $this->settlementTotal > 0
+            ? min(100, (int) round(($this->settlementScanned / $this->settlementTotal) * 100))
+            : 100;
+
+        $this->settlementStatusLine = 'Batch '.$this->settlementBatchNumber
+            .' · scanned '.number_format($this->settlementScanned).' / '.number_format($this->settlementTotal)
+            .' ('.$pct.'%)'
+            .' · fixed '.number_format($this->settlementFixedOrders)
+            .' · courier '.number_format($this->settlementCourierFixed)
+            .' · settled '.number_format($this->settlementSettlementFixed);
+
+        if ($result['done'] || $result['scanned'] === 0) {
+            $this->settlementRunning = false;
+            $this->settlementDone = true;
+            $this->settlementStatusLine = 'Done · scanned '.number_format($this->settlementScanned)
+                .' · fixed '.number_format($this->settlementFixedOrders).' orders'
+                .' · courier filled '.number_format($this->settlementCourierFixed)
+                .' · settlements '.number_format($this->settlementSettlementFixed)
+                .' · payments created '.number_format($this->settlementPaymentsCreated);
+        }
+    }
+
+    public function stopSettlementRepair(): void
+    {
+        if (! $this->settlementRunning) {
+            return;
+        }
+
+        $this->settlementRunning = false;
+        $this->settlementStatusLine = 'Paused at '.number_format($this->settlementScanned)
+            .' / '.number_format($this->settlementTotal)
+            .' · fixed '.number_format($this->settlementFixedOrders).' so far. Resume to continue.';
+    }
+
+    public function closeSettlementRepairModal(): void
+    {
+        $this->settlementRunning = false;
+        $this->settlementModalOpen = false;
     }
 
     public function saveCogsModalRow(int $index, ProductUnitCostService $costs): void

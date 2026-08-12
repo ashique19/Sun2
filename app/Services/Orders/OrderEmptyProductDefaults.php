@@ -37,6 +37,19 @@ class OrderEmptyProductDefaults
             ));
     }
 
+    /**
+     * Pieces originally shipped (ignores returns). Used for courier fee estimates on
+     * delivered/returned parcels where sellable qty is already 0.
+     */
+    public function shippedQuantity(Order $order): int
+    {
+        $order->loadMissing('items');
+
+        return (int) $order->items
+            ->filter(fn (OrderProduct $item) => ! $this->isPlaceholderLine($item))
+            ->sum(fn (OrderProduct $item) => max(0, (int) $item->quantity));
+    }
+
     public function isPlaceholderLine(OrderProduct $item): bool
     {
         return (string) $item->name === self::COGS_LINE_NAME;

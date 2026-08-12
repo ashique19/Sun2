@@ -107,6 +107,8 @@ class AdminAnalyticsInvestorPitchTest extends TestCase
             ->assertSet('year', 2026)
             ->assertSee('Investor pitch deck')
             ->assertSee('Sundoritoma')
+            ->assertSeeHtml('wire:click="selectYear(2026)"')
+            ->assertSeeHtml('wire:click="selectYear(2025)"')
             ->assertSee('2026 YTD')
             ->assertSee('2025 same period')
             ->assertSee('Placed GMV')
@@ -116,8 +118,11 @@ class AdminAnalyticsInvestorPitchTest extends TestCase
             ->assertSee('Dhaka')
             ->assertSee('Necklaces')
             ->assertSee('Methodology notes')
-            ->assertDontSee('wire:poll', false)
-            ->assertDontSee('auto-refreshes');
+            ->assertDontSee('auto-refreshes')
+            ->call('selectYear', 2025)
+            ->assertSet('year', 2025)
+            ->assertSee('2025')
+            ->assertSee('2024');
 
         $this->get(route('admin.analytics.investor-pitch'))->assertOk();
 
@@ -132,11 +137,6 @@ class AdminAnalyticsInvestorPitchTest extends TestCase
         $this->assertSame(1, $deck['prior']['orders']);
         $this->assertSame(1200.0, $deck['prior']['gmv_placed']);
         $this->assertNotNull($deck['unit_economics']['gm_pct_known']);
-
-        Livewire::test(AdminAnalyticsInvestorPitch::class)
-            ->set('year', 2025)
-            ->assertSee('2025')
-            ->assertSee('2024');
 
         $deck2025 = app(InvestorPitchAnalyticsService::class)->deck(2025);
         $this->assertFalse($deck2025['is_partial_year']);

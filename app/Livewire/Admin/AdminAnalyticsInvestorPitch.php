@@ -33,6 +33,15 @@ class AdminAnalyticsInvestorPitch extends Component
         // Manual refresh — re-query on next render.
     }
 
+    public function selectYear(int $year): void
+    {
+        if ($year < 2000) {
+            return;
+        }
+
+        $this->year = $year;
+    }
+
     public function render(InvestorPitchAnalyticsService $analytics)
     {
         $years = $analytics->availableYears();

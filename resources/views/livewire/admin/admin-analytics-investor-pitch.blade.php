@@ -39,24 +39,27 @@
                 Yearly report from orders · compared with prior year · as of {{ $deck['as_of'] }}
             </p>
         </div>
-        <div class="flex flex-wrap items-end gap-3">
-            <div>
-                <label class="mb-1 block text-xs font-medium text-[#6B6459]">Year</label>
-                <select wire:model.live="year"
-                    class="rounded-lg border border-[#E0D6C2] bg-white px-3 py-2 text-sm text-[#1E1E1E]">
-                    @foreach ($years as $y)
-                        <option value="{{ $y }}">{{ $y }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <button type="button" wire:click="refreshDeck"
-                class="rounded-full border border-[#E0D6C2] px-4 py-2 text-xs font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
-                Refresh now
-            </button>
-        </div>
+        <button type="button" wire:click="refreshDeck"
+            class="rounded-full border border-[#E0D6C2] px-4 py-2 text-xs font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
+            Refresh now
+        </button>
     </div>
 
     <x-admin.analytics-subnav active="investor" />
+
+    <div class="mb-5 flex flex-wrap items-center gap-2" role="group" aria-label="Report year">
+        <span class="mr-1 text-xs font-medium text-[#8C8474]">Year</span>
+        @foreach ($years as $y)
+            <button type="button" wire:click="selectYear({{ $y }})"
+                @class([
+                    'rounded-full px-3 py-1.5 text-xs font-medium transition border tabular-nums',
+                    'border-[#C9A227] bg-[#FAF6EF] text-[#1E1E1E]' => (int) $year === (int) $y,
+                    'border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227]' => (int) $year !== (int) $y,
+                ])>
+                {{ $y }}
+            </button>
+        @endforeach
+    </div>
 
     {{-- Slide 1: Brand + headline traction --}}
     <section class="mb-6 overflow-hidden rounded-2xl border border-[#EFE7D6] bg-gradient-to-br from-[#FAF6EF] via-white to-[#F3EBD8] p-6 sm:p-8">

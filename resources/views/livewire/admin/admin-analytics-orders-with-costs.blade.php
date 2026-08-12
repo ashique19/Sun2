@@ -32,16 +32,10 @@
             @endforeach
         </select>
         <button type="button"
-            wire:click="openCostRepairModal"
-            class="rounded-lg border border-[#C9A227] bg-white px-3 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]"
-            title="Scan all orders in batches of 100 and repair cost snapshot mistakes">
-            Repair costs…
-        </button>
-        <button type="button"
             wire:click="openCalculationAuditModal"
             class="rounded-lg border border-[#1E1E1E] bg-white px-3 py-2 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]"
-            title="Audit every order against current cost/payment rules; auto-fix when safe, list the rest for manual review">
-            Audit calculations…
+            title="Scan orders for column integrity and data that can crash year analytics">
+            Audit columns…
         </button>
         @php
             $zeroFiltersActive = $zeroRevenue || $zeroCogs || $zeroPackaging || $zeroCourier
@@ -243,127 +237,6 @@
         @endif
     </div>
 
-    @if ($repairModalOpen)
-        @php
-            $repairPct = $repairTotal > 0
-                ? min(100, (int) round(($repairScanned / $repairTotal) * 100))
-                : ($repairDone ? 100 : 0);
-        @endphp
-        <div class="fixed inset-0 z-[75] flex items-end justify-center bg-black/50 p-4 sm:items-center"
-            wire:click.self="closeCostRepairModal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Repair order cost snapshots">
-            @if ($repairRunning)
-                <div wire:poll.400ms="continueCostRepair" class="hidden" aria-hidden="true"></div>
-            @endif
-            <div class="w-full max-w-lg overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl">
-                <div class="flex items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
-                    <div class="min-w-0">
-                        <h2 class="text-base font-semibold text-[#1E1E1E]">Repair cost snapshots</h2>
-                        <p class="mt-0.5 text-xs text-[#8C8474]">
-                            Walks all non-draft orders in batches of {{ \App\Services\Admin\OrderCostSnapshotRepairService::BATCH_SIZE }}.
-                            Backfills missing costs on open orders; clears invented COGS on cancelled/returned.
-                        </p>
-                    </div>
-                    <button type="button"
-                        wire:click="closeCostRepairModal"
-                        class="rounded-lg border border-[#E0D6C2] px-2.5 py-1 text-xs text-[#6B6459] hover:border-[#C9A227]"
-                        aria-label="Close repair">
-                        Close
-                    </button>
-                </div>
-
-                <div class="space-y-4 px-4 py-4">
-                    <div>
-                        <div class="mb-1.5 flex items-center justify-between text-xs text-[#6B6459]">
-                            <span data-repair-progress-label>{{ $repairStatusLine }}</span>
-                            <span class="tabular-nums font-medium text-[#1E1E1E]">{{ $repairPct }}%</span>
-                        </div>
-                        <div class="h-2 overflow-hidden rounded-full bg-[#EFE7D6]" role="progressbar"
-                            aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $repairPct }}">
-                            <div class="h-full rounded-full bg-[#C9A227] transition-[width] duration-300"
-                                style="width: {{ $repairPct }}%"></div>
-                        </div>
-                    </div>
-
-                    <dl class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
-                            <dt class="text-[11px] text-[#8C8474]">Scanned</dt>
-                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-repair-scanned>
-                                {{ number_format($repairScanned) }}
-                                <span class="font-normal text-[#8C8474]">/ {{ number_format($repairTotal) }}</span>
-                            </dd>
-                        </div>
-                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
-                            <dt class="text-[11px] text-[#8C8474]">Orders fixed</dt>
-                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-repair-fixed>
-                                {{ number_format($repairFixedOrders) }}
-                            </dd>
-                        </div>
-                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
-                            <dt class="text-[11px] text-[#8C8474]">Backfilled</dt>
-                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-repair-backfilled>
-                                {{ number_format($repairBackfilledLines) }}
-                            </dd>
-                        </div>
-                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
-                            <dt class="text-[11px] text-[#8C8474]">Returns cleared</dt>
-                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-repair-cleared>
-                                {{ number_format($repairClearedReturnLines) }}
-                            </dd>
-                        </div>
-                    </dl>
-
-                    @if ($repairRecentFixes !== [])
-                        <div>
-                            <p class="text-[11px] font-medium text-[#6B6459]">Recent fixes</p>
-                            <p class="mt-1 text-xs tabular-nums text-[#8C8474]" data-repair-recent>
-                                {{ implode(' · ', $repairRecentFixes) }}
-                            </p>
-                        </div>
-                    @endif
-
-                    <div class="flex flex-wrap gap-2 border-t border-[#EFE7D6] pt-3">
-                        @if (! $repairRunning && ! $repairDone)
-                            <button type="button"
-                                wire:click="startCostRepair"
-                                class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b89220]">
-                                Start
-                            </button>
-                        @endif
-                        @if ($repairRunning)
-                            <button type="button"
-                                wire:click="stopCostRepair"
-                                class="rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#6B6459] hover:border-[#C9A227]">
-                                Pause
-                            </button>
-                        @endif
-                        @if (! $repairRunning && $repairScanned > 0 && ! $repairDone)
-                            <button type="button"
-                                wire:click="startCostRepair"
-                                class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b89220]">
-                                Resume
-                            </button>
-                        @endif
-                        @if ($repairDone)
-                            <button type="button"
-                                wire:click="openCostRepairModal"
-                                class="rounded-lg border border-[#C9A227] px-3 py-1.5 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]">
-                                Run again
-                            </button>
-                            <button type="button"
-                                wire:click="closeCostRepairModal"
-                                class="rounded-lg bg-[#C9A227] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b89220]">
-                                Close
-                            </button>
-                        @endif
-                    </div>
-                </div>
-            </div>
-        </div>
-    @endif
-
     @if ($auditModalOpen)
         @php
             $auditPct = $auditTotal > 0
@@ -374,29 +247,45 @@
             wire:click.self="closeCalculationAuditModal"
             role="dialog"
             aria-modal="true"
-            aria-label="Audit order calculations">
+            aria-label="Audit order columns">
             @if ($auditRunning)
                 <div wire:poll.400ms="continueCalculationAudit" class="hidden" aria-hidden="true"></div>
             @endif
             <div class="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl">
                 <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
                     <div class="min-w-0">
-                        <h2 class="text-base font-semibold text-[#1E1E1E]">Audit calculations</h2>
+                        <h2 class="text-base font-semibold text-[#1E1E1E]">Audit order columns</h2>
                         <p class="mt-0.5 text-xs text-[#8C8474]">
-                            Checks every non-draft order against current packaging, courier, COGS, and payment-received rules.
-                            Auto-fixes zeros and known repair cases; lists mismatches that need a manual look.
+                            Report-only: checks Revenue / COGS / packaging / courier / COD / Direct / P/L integrity,
+                            missing costs, and bad dates that can 500 year analytics pages.
                             Batches of {{ \App\Services\Admin\OrderCalculationAuditService::BATCH_SIZE }}.
                         </p>
                     </div>
                     <button type="button"
                         wire:click="closeCalculationAuditModal"
                         class="rounded-lg border border-[#E0D6C2] px-2.5 py-1 text-xs text-[#6B6459] hover:border-[#C9A227]"
-                        aria-label="Close calculation audit">
+                        aria-label="Close column audit">
                         Close
                     </button>
                 </div>
 
                 <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+                    @if (! $auditRunning && ! $auditDone)
+                        <label class="block text-sm text-[#6B6459]">
+                            <span class="text-[11px] font-medium uppercase tracking-wide text-[#8C8474]">Scope</span>
+                            <select wire:model.live="auditYear"
+                                data-audit-year
+                                class="mt-1 w-full rounded-lg border border-[#E0D6C2] bg-white px-3 py-2 text-sm">
+                                <option value="">All years</option>
+                                @foreach ($auditYearOptions as $yearOption)
+                                    <option value="{{ $yearOption }}">{{ $yearOption }}</option>
+                                @endforeach
+                            </select>
+                        </label>
+                    @elseif ($auditYear !== '')
+                        <p class="text-xs text-[#8C8474]" data-audit-year-locked>Scoped to year {{ $auditYear }}</p>
+                    @endif
+
                     <div>
                         <div class="mb-1.5 flex items-center justify-between text-xs text-[#6B6459]">
                             <span data-audit-progress-label>{{ $auditStatusLine }}</span>
@@ -409,7 +298,7 @@
                         </div>
                     </div>
 
-                    <dl class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                    <dl class="grid grid-cols-2 gap-3 text-sm">
                         <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
                             <dt class="text-[11px] text-[#8C8474]">Scanned</dt>
                             <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-audit-scanned>
@@ -418,32 +307,17 @@
                             </dd>
                         </div>
                         <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
-                            <dt class="text-[11px] text-[#8C8474]">Auto-fixed</dt>
-                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-audit-auto-fixed>
-                                {{ number_format($auditAutoFixed) }}
-                            </dd>
-                        </div>
-                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
-                            <dt class="text-[11px] text-[#8C8474]">Need manual review</dt>
+                            <dt class="text-[11px] text-[#8C8474]">Orders with issues</dt>
                             <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-audit-manual>
                                 {{ number_format($auditManualNeeded) }}
                             </dd>
                         </div>
                     </dl>
 
-                    @if ($auditRecentFixes !== [])
-                        <div>
-                            <p class="text-[11px] font-medium text-[#6B6459]">Recent auto-fixes</p>
-                            <p class="mt-1 text-xs tabular-nums text-[#8C8474]" data-audit-recent>
-                                {{ implode(' · ', $auditRecentFixes) }}
-                            </p>
-                        </div>
-                    @endif
-
                     @if ($auditIssues !== [])
                         <div data-audit-issues>
                             <p class="text-[11px] font-medium text-[#6B6459]">
-                                Orders needing manual review
+                                Issues found
                                 @if ($auditIssuesTruncated)
                                     <span class="font-normal">(list capped)</span>
                                 @endif
@@ -470,7 +344,7 @@
                         </div>
                     @elseif ($auditDone && $auditManualNeeded === 0)
                         <p class="text-sm text-emerald-800" data-audit-all-clear>
-                            All scanned orders match the current calculation strategy (or were auto-fixed).
+                            All scanned orders have consistent contribution columns and readable dates.
                         </p>
                     @endif
 

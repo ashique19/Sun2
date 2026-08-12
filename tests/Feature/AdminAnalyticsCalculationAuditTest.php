@@ -44,7 +44,7 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
     }
 
     #[Test]
-    public function audit_auto_fixes_zero_packaging_and_ignores_packaging_mismatch(): void
+    public function audit_reports_zero_packaging_but_ignores_non_zero_mismatch(): void
     {
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
@@ -98,60 +98,29 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
         ]);
 
         Livewire::test(AdminAnalyticsOrdersWithCosts::class)
-            ->assertSee('Audit calculations…')
+            ->assertSee('Audit columns…')
             ->call('openCalculationAuditModal')
             ->assertSet('auditModalOpen', true)
             ->assertSet('auditTotal', 2)
             ->call('startCalculationAudit')
             ->assertSet('auditDone', true)
-            ->assertSet('auditAutoFixed', 1)
-            ->assertSet('auditManualNeeded', 0)
-            ->assertDontSee('differs from rate card')
-            ->assertDontSee('differs from estimate');
+            ->assertSet('auditManualNeeded', 1)
+            ->assertSee('AUD-ZERO-PACK')
+            ->assertSee('Packaging is ৳0')
+            ->assertDontSee('differs from rate card');
 
+        // Report-only: zero packaging is not auto-filled.
         $zeroPack->refresh();
-        $this->assertSame(21.0, (float) $zeroPack->packaging_cost);
-
+        $this->assertSame(0.0, (float) $zeroPack->packaging_cost);
         $mismatch->refresh();
         $this->assertSame(99.0, (float) $mismatch->packaging_cost);
-        $this->assertSame(90.0, (float) $mismatch->courier_charge);
     }
 
     #[Test]
-    public function audit_auto_fixes_legacy_paid_and_flags_missing_product_cogs(): void
+    public function audit_flags_missing_product_cogs_without_mutating(): void
     {
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
-
-        $paid = Order::query()->create([
-            'order_number' => 'AUD-PAID',
-            'name' => 'Legacy',
-            'phone' => '01710000003',
-            'address' => 'Dhaka',
-            'city' => 'Dhaka',
-            'status' => 'paid',
-            'subtotal' => 1000,
-            'delivery_charge' => 80,
-            'courier_charge' => 60,
-            'packaging_cost' => 21,
-            'total' => 1080,
-            'collected_amount' => 0,
-            'paid_amount' => 0,
-            'due_amount' => 1080,
-            'cod_amount' => 1080,
-            'payment_status' => 'unpaid',
-            'courier_id' => $courier->id,
-            'placed_at' => '2025-03-01 10:00:00',
-        ]);
-        OrderProduct::query()->create([
-            'order_id' => $paid->id,
-            'name' => 'Item',
-            'quantity' => 1,
-            'price' => 1000,
-            'purchase_price' => 400,
-            'unit_cost' => 400,
-            'line_total' => 1000,
-        ]);
 
         $product = Product::query()->create([
             'name' => 'No Cost Product',
@@ -191,18 +160,15 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
             ->call('openCalculationAuditModal')
             ->call('startCalculationAudit')
             ->assertSet('auditDone', true)
-            ->assertSet('auditAutoFixed', 1)
             ->assertSet('auditManualNeeded', 1)
             ->assertSee('AUD-NO-COGS')
-            ->assertSee('no other order with this product/name has a cost to copy');
+            ->assertSee('no unit cost');
 
-        $paid->refresh();
-        $this->assertSame('delivered', $paid->status);
-        $this->assertSame(1080.0, (float) $paid->paid_amount);
+        $this->assertSame(0.0, (float) $product->fresh()->unit_cost);
     }
 
     #[Test]
-    public function audit_service_backfills_cogs_from_product_catalog(): void
+    public function audit_service_reports_zero_cogs_when_catalog_has_cost(): void
     {
         $courier = $this->steadfast();
 
@@ -240,15 +206,15 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
             'line_total' => 500,
         ]);
 
-        $result = app(OrderCalculationAuditService::class)->auditOrder($order->fresh());
+        $result = app(OrderCalculationAuditService::class)->auditOrder($order->fresh(['items.product', 'courier']));
 
-        $this->assertTrue($result['auto_fixed']);
-        $this->assertSame([], $result['issues']);
-        $this->assertSame(180.0, (float) $order->fresh('items')->items->first()->unit_cost);
+        $this->assertFalse($result['auto_fixed']);
+        $this->assertNotEmpty($result['issues']);
+        $this->assertSame(0.0, (float) $order->fresh('items')->items->first()->unit_cost);
     }
 
     #[Test]
-    public function audit_auto_fixes_empty_order_packaging_and_cogs(): void
+    public function audit_flags_empty_order_missing_default_cogs(): void
     {
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
@@ -272,14 +238,13 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
             ->call('openCalculationAuditModal')
             ->call('startCalculationAudit')
             ->assertSet('auditDone', true)
-            ->assertSet('auditAutoFixed', 1)
-            ->assertSet('auditManualNeeded', 0);
+            ->assertSet('auditManualNeeded', 1)
+            ->assertSee('AUD-EMPTY');
 
         $order->refresh()->load('items');
-        $this->assertSame(21.0, (float) $order->packaging_cost);
-        $this->assertSame(50.0, $order->cogs());
-        $this->assertSame(0.0, (float) $order->courier_charge);
-        $this->assertTrue(
+        $this->assertSame(0.0, (float) $order->packaging_cost);
+        $this->assertSame(0.0, $order->cogs());
+        $this->assertFalse(
             $order->items->contains(
                 fn ($item) => (string) $item->name === OrderEmptyProductDefaults::COGS_LINE_NAME
             )

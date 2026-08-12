@@ -82,7 +82,7 @@ class AdminAnalyticsPaidStatusRepairTest extends TestCase
         Livewire::test(AdminAnalyticsOrdersWithCosts::class)
             ->assertDontSee('Repair payment received…')
             ->assertSee('Paid (legacy)')
-            ->assertSee('Audit calculations…');
+            ->assertSee('Audit columns…');
 
         $result = app(OrderPaidStatusRepairService::class)->repairNextBatch(0, 100);
         $this->assertSame(1, $result['fixed_orders']);

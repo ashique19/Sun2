@@ -96,27 +96,37 @@ class InvestorPitchAnalyticsService
      */
     public function availableYears(): array
     {
-        $years = Order::query()
+        $years = [];
+
+        DB::table('orders')
             ->whereNotNull('placed_at')
             ->where('status', '!=', Order::STATUS_DRAFT)
-            ->get(['placed_at'])
-            ->map(fn (Order $order) => (int) $order->placed_at->timezone('Asia/Dhaka')->year)
-            ->unique()
-            ->sortDesc()
-            ->values()
-            ->all();
+            ->orderBy('id')
+            ->select(['id', 'placed_at'])
+            ->chunkById(1000, function ($rows) use (&$years): void {
+                foreach ($rows as $row) {
+                    $year = app(AnalyticsService::class)->safeDhakaYear($row->placed_at ?? null);
+
+                    if ($year !== null) {
+                        $years[$year] = true;
+                    }
+                }
+            });
+
+        $list = array_keys($years);
+        rsort($list, SORT_NUMERIC);
 
         $current = (int) now('Asia/Dhaka')->year;
 
-        if ($years === []) {
+        if ($list === []) {
             return [$current];
         }
 
-        if (! in_array($current, $years, true)) {
-            array_unshift($years, $current);
+        if (! in_array($current, $list, true)) {
+            array_unshift($list, $current);
         }
 
-        return $years;
+        return $list;
     }
 
     /**

@@ -2,16 +2,15 @@
 
 namespace Tests\Feature;
 
-use App\Livewire\Admin\AdminAnalyticsOrdersWithCosts;
 use App\Models\Courier;
 use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\Admin\OrderCalculationAuditService;
+use App\Services\Admin\OrderCostSnapshotRepairService;
 use App\Services\Admin\ProductUnitCostService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -120,9 +119,8 @@ class ProductCostBackfillFromOrdersTest extends TestCase
     }
 
     #[Test]
-    public function audit_auto_fixes_by_backfilling_product_from_order_cogs(): void
+    public function backfill_service_fills_product_and_zero_line_from_prior_order_cogs(): void
     {
-        $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
 
         $product = Product::query()->create([
@@ -188,11 +186,11 @@ class ProductCostBackfillFromOrdersTest extends TestCase
             'line_total' => 800,
         ]);
 
-        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
-            ->call('openCalculationAuditModal')
-            ->call('startCalculationAudit')
-            ->assertSet('auditDone', true)
-            ->assertSet('auditManualNeeded', 0);
+        $result = app(ProductUnitCostService::class)
+            ->backfillMissingCostsForOrder($zeroLineOrder->fresh(['items.product']));
+
+        $this->assertSame(1, $result['products_updated']);
+        $this->assertSame(1, $result['lines_updated']);
 
         $product->refresh();
         $this->assertSame(220.0, (float) $product->purchase_price);
@@ -248,7 +246,7 @@ class ProductCostBackfillFromOrdersTest extends TestCase
     }
 
     #[Test]
-    public function audit_service_marks_product_backfill_as_auto_fixed(): void
+    public function backfill_missing_products_from_order_updates_catalog(): void
     {
         $courier = $this->steadfast();
 
@@ -287,10 +285,9 @@ class ProductCostBackfillFromOrdersTest extends TestCase
             'line_total' => 400,
         ]);
 
-        $result = app(OrderCalculationAuditService::class)->auditOrder($order->fresh());
+        $updated = app(ProductUnitCostService::class)->backfillMissingProductsFromOrder($order->fresh(['items.product']));
 
-        $this->assertTrue($result['auto_fixed']);
-        $this->assertSame([], $result['issues']);
+        $this->assertSame(1, $updated);
         $this->assertSame(75.0, (float) $product->fresh()->unit_cost);
     }
 
@@ -423,10 +420,10 @@ class ProductCostBackfillFromOrdersTest extends TestCase
             'line_total' => 450,
         ]);
 
-        $result = app(OrderCalculationAuditService::class)->auditOrder($order->fresh());
+        $result = app(OrderCostSnapshotRepairService::class)->repairOrder($order->fresh());
 
-        $this->assertTrue($result['auto_fixed']);
-        $this->assertSame([], $result['issues']);
+        $this->assertTrue($result['changed']);
+        $this->assertSame([], app(OrderCalculationAuditService::class)->auditOrder($order->fresh(['items.product', 'courier']))['issues']);
         $this->assertSame(95.0, (float) $order->fresh('items')->items->first()->unit_cost);
         $this->assertSame(95.0, (float) $product->fresh()->unit_cost);
     }

@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\OrderProduct;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class AnalyticsService
 {
@@ -19,35 +20,102 @@ class AnalyticsService
      */
     public function availableYears(): array
     {
-        $deliveryYears = Order::query()
-            ->where('status', 'delivered')
-            ->whereNotNull('actual_delivery_date')
-            ->get(['actual_delivery_date'])
-            ->map(fn (Order $order) => (int) $order->actual_delivery_date->timezone('Asia/Dhaka')->year);
+        $years = [];
 
-        $placedYears = Order::query()
-            ->whereNotNull('placed_at')
-            ->get(['placed_at'])
-            ->map(fn (Order $order) => (int) $order->placed_at->timezone('Asia/Dhaka')->year);
+        foreach ([
+            ['status' => 'delivered', 'column' => 'actual_delivery_date'],
+            ['status' => null, 'column' => 'placed_at'],
+        ] as $source) {
+            $query = DB::table('orders')->whereNotNull($source['column']);
 
-        $years = $deliveryYears
-            ->merge($placedYears)
-            ->unique()
-            ->sortDesc()
-            ->values()
-            ->all();
+            if ($source['status'] !== null) {
+                $query->where('status', $source['status']);
+            }
+
+            $query->orderBy('id')
+                ->select(['id', $source['column']])
+                ->chunkById(1000, function ($rows) use ($source, &$years): void {
+                    foreach ($rows as $row) {
+                        $year = $this->safeDhakaYear($row->{$source['column']} ?? null);
+
+                        if ($year !== null) {
+                            $years[$year] = true;
+                        }
+                    }
+                });
+        }
+
+        $list = array_keys($years);
+        rsort($list, SORT_NUMERIC);
 
         $current = (int) now('Asia/Dhaka')->year;
 
-        if ($years === []) {
+        if ($list === []) {
             return [$current];
         }
 
-        if (! in_array($current, $years, true)) {
-            array_unshift($years, $current);
+        if (! in_array($current, $list, true)) {
+            array_unshift($list, $current);
         }
 
-        return $years;
+        return $list;
+    }
+
+    /**
+     * Parse a stored datetime into a Dhaka calendar year, or null when unreadable.
+     * Bad legacy values (e.g. 0000-00-00) must not crash year analytics pages.
+     */
+    public function safeDhakaYear(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $string = $value instanceof Carbon
+            ? $value->format('Y-m-d H:i:s')
+            : trim((string) $value);
+
+        if ($string === '' || str_starts_with($string, '0000-00-00')) {
+            return null;
+        }
+
+        try {
+            $carbon = $value instanceof Carbon
+                ? $value->copy()
+                : Carbon::parse($string);
+
+            return (int) $carbon->timezone('Asia/Dhaka')->year;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Safe Dhaka month (1–12) from a stored datetime, or null when unreadable.
+     */
+    public function safeDhakaMonth(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $string = $value instanceof Carbon
+            ? $value->format('Y-m-d H:i:s')
+            : trim((string) $value);
+
+        if ($string === '' || str_starts_with($string, '0000-00-00')) {
+            return null;
+        }
+
+        try {
+            $carbon = $value instanceof Carbon
+                ? $value->copy()
+                : Carbon::parse($string);
+
+            return (int) $carbon->timezone('Asia/Dhaka')->month;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -86,7 +154,12 @@ class AnalyticsService
         }
 
         foreach ($rows as $order) {
-            $month = (int) $order->actual_delivery_date->timezone('Asia/Dhaka')->month;
+            $month = $this->safeDhakaMonth($order->getAttributes()['actual_delivery_date'] ?? $order->actual_delivery_date);
+
+            if ($month === null) {
+                continue;
+            }
+
             $byMonth[$month]['revenue'] += (float) ($order->collected_amount ?? 0);
             $byMonth[$month]['order_count']++;
         }
@@ -156,7 +229,12 @@ class AnalyticsService
             ->get(['id', 'total', 'placed_at', 'status', 'collected_amount']);
 
         foreach ($placed as $order) {
-            $month = (int) $order->placed_at->timezone('Asia/Dhaka')->month;
+            $month = $this->safeDhakaMonth($order->getAttributes()['placed_at'] ?? $order->placed_at);
+
+            if ($month === null) {
+                continue;
+            }
+
             $months[$month]['ordered_count']++;
             $months[$month]['ordered_value'] += (float) ($order->total ?? 0);
 
@@ -235,7 +313,14 @@ class AnalyticsService
                 continue;
             }
 
-            $month = (int) $order->actual_delivery_date->timezone('Asia/Dhaka')->month;
+            $month = $this->safeDhakaMonth(
+                $order->getAttributes()['actual_delivery_date'] ?? $order->actual_delivery_date
+            );
+
+            if ($month === null) {
+                continue;
+            }
+
             $category = $line->product?->category;
             $categoryId = $category?->id;
             $key = $categoryId !== null ? (string) $categoryId : 'none';
@@ -379,14 +464,29 @@ class AnalyticsService
         $orders = $this->deliveredOrdersForMonth($year, $month);
         $totals = $this->sumOrderEconomics($orders, $year, $month);
 
-        $orderRows = $orders->map(function (Order $order): array {
-            $line = $this->orderEconomics($order);
+        $orderRows = $orders->map(function (Order $order): ?array {
+            try {
+                $line = $this->orderEconomics($order);
+            } catch (\Throwable) {
+                return null;
+            }
+
+            $deliveredRaw = $order->getAttributes()['actual_delivery_date'] ?? null;
+            $deliveredLabel = null;
+
+            if ($deliveredRaw && $this->safeDhakaYear($deliveredRaw) !== null) {
+                try {
+                    $deliveredLabel = Carbon::parse($deliveredRaw)->timezone('Asia/Dhaka')->format('d M Y');
+                } catch (\Throwable) {
+                    $deliveredLabel = null;
+                }
+            }
 
             return [
                 'id' => $order->id,
                 'order_number' => $order->order_number,
                 'name' => $order->name,
-                'delivered_at' => $order->actual_delivery_date?->timezone('Asia/Dhaka')->format('d M Y'),
+                'delivered_at' => $deliveredLabel,
                 'revenue' => $line['revenue'],
                 'cogs' => $line['cogs'],
                 'packaging' => $line['packaging'],
@@ -395,7 +495,7 @@ class AnalyticsService
                 'direct' => $line['direct'],
                 'profit' => $line['profit'],
             ];
-        })->values();
+        })->filter()->values();
 
         $expenseRows = Expense::query()
             ->forMonth($year, $month)
@@ -536,22 +636,31 @@ class AnalyticsService
         $grossProfit = 0.0;
 
         foreach ($orders as $order) {
-            $line = $this->orderEconomics($order);
+            try {
+                $line = $this->orderEconomics($order);
+            } catch (\Throwable) {
+                continue;
+            }
+
             $revenue += $line['revenue'];
             $cogs += $line['cogs'];
             $packaging += $line['packaging'];
             $courier += $line['courier'];
             $cod += $line['cod'];
 
-            $money = $order->moneyTotals();
-            $bill += $money->billToCustomer;
-            $productPrice += $money->subtotal;
-            $customerDelivery += $money->deliveryCharge;
-            $otherCharges += $money->charges;
-            $discounts += $money->discounts;
-            $remittanceBase += $money->remittanceBase;
-            $courierReceivable += $money->courierReceivable;
-            $grossProfit += $money->grossProfit;
+            try {
+                $money = $order->moneyTotals();
+                $bill += $money->billToCustomer;
+                $productPrice += $money->subtotal;
+                $customerDelivery += $money->deliveryCharge;
+                $otherCharges += $money->charges;
+                $discounts += $money->discounts;
+                $remittanceBase += $money->remittanceBase;
+                $courierReceivable += $money->courierReceivable;
+                $grossProfit += $money->grossProfit;
+            } catch (\Throwable) {
+                // Contribution still counts; money-flow rows skip this order.
+            }
         }
 
         $direct = $cogs + $packaging + $courier + $cod;

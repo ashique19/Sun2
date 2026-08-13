@@ -67,6 +67,9 @@ class CourierWebhookSupport
     public function process(Order $order, ?int $courierId, array $payload, callable $callback): void
     {
         DB::transaction(function () use ($order, $courierId, $payload, $callback) {
+            // Serialize concurrent webhook/admin settles on the same order.
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+
             $courierData = CourierData::query()->create([
                 'order_id' => $order->id,
                 'courier_id' => $courierId,

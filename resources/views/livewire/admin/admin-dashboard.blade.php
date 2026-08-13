@@ -817,30 +817,39 @@
                 </p>
             </div>
             <div class="overflow-x-auto">
-                <table class="w-full min-w-[40rem] text-xs sm:text-sm">
+                <table class="w-full table-fixed min-w-[28rem] text-xs sm:text-sm">
+                    <colgroup>
+                        <col class="w-[22%] sm:w-[18%]">
+                        <col class="w-[19.5%] sm:w-[20.5%]">
+                        <col class="w-[19.5%] sm:w-[20.5%]">
+                        <col class="w-[19.5%] sm:w-[20.5%]">
+                        <col class="w-[19.5%] sm:w-[20.5%]">
+                    </colgroup>
                     <thead class="bg-[#FAF6EF] text-left text-[#6B6459]">
                         <tr>
-                            <th class="px-3 py-2 sm:px-4 font-medium" rowspan="2">Category</th>
-                            <th class="px-3 py-2 sm:px-4 font-medium text-center" colspan="2">{{ $ordersByCategory['this_month']['label'] }}</th>
-                            <th class="px-3 py-2 sm:px-4 font-medium text-center" colspan="2">{{ $ordersByCategory['last_month']['label'] }}</th>
+                            <th class="px-1.5 py-2 sm:px-2 font-medium" rowspan="2">Category</th>
+                            <th class="px-1 py-2 sm:px-2 font-medium text-center" colspan="2">{{ $ordersByCategory['this_month']['label'] }}</th>
+                            <th class="px-1 py-2 sm:px-2 font-medium text-center" colspan="2">{{ $ordersByCategory['last_month']['label'] }}</th>
                         </tr>
                         <tr>
-                            <th class="px-3 py-2 sm:px-4 font-medium text-right">Ordered</th>
-                            <th class="px-3 py-2 sm:px-4 font-medium text-right">Delivered</th>
-                            <th class="px-3 py-2 sm:px-4 font-medium text-right">Ordered</th>
-                            <th class="px-3 py-2 sm:px-4 font-medium text-right">Delivered</th>
+                            <th class="px-1 py-2 sm:px-2 font-medium text-right">Ordered</th>
+                            <th class="px-1 py-2 sm:px-2 font-medium text-right">Delivered</th>
+                            <th class="px-1 py-2 sm:px-2 font-medium text-right">Ordered</th>
+                            <th class="px-1 py-2 sm:px-2 font-medium text-right">Delivered</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-[#E7DFCF]">
                         @forelse ($ordersByCategory['rows'] as $row)
                             <tr class="hover:bg-[#FAF6EF]/50" wire:key="orders-by-category-{{ $row['category_id'] ?? 'none' }}">
-                                <td class="px-3 py-2 sm:px-4 font-medium text-[#1E1E1E]">{{ $row['name'] }}</td>
+                                <td class="px-1.5 py-2 sm:px-2 font-medium text-[#1E1E1E]">
+                                    <span class="block truncate" title="{{ $row['name'] }}">{{ $row['name'] }}</span>
+                                </td>
                                 @foreach (['this_month', 'last_month'] as $period)
-                                    <td class="px-3 py-2 sm:px-4 text-right tabular-nums">
+                                    <td class="px-1 py-2 sm:px-2 text-right tabular-nums">
                                         <span class="font-medium text-[#1E1E1E]">{{ number_format($row[$period]['order_qty']) }}</span>
                                         <span class="block text-[10px] text-[#8C8474]">&#2547;{{ number_format($row[$period]['order_value'], 0) }}</span>
                                     </td>
-                                    <td class="px-3 py-2 sm:px-4 text-right tabular-nums">
+                                    <td class="px-1 py-2 sm:px-2 text-right tabular-nums">
                                         <span class="font-medium text-[#1E1E1E]">{{ number_format($row[$period]['delivery_qty']) }}</span>
                                         <span class="block text-[10px] text-[#8C8474]">&#2547;{{ number_format($row[$period]['delivery_value'], 0) }}</span>
                                     </td>

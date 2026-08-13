@@ -97,7 +97,9 @@ class AdminDashboardCategoryOrdersTest extends TestCase
         Livewire::test(AdminDashboard::class)
             ->assertSee('Order and delivery by category')
             ->assertSee('This month')
-            ->assertSee('Last month');
+            ->assertSee('Last month')
+            ->assertSeeHtml('table-fixed')
+            ->assertSeeHtml('w-[22%]');
     }
 
     #[Test]

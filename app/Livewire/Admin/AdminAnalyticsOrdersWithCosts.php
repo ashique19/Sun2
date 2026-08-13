@@ -10,9 +10,9 @@ use App\Services\Admin\OrderCalculationAuditService;
 use App\Services\Admin\OrderSettlementCourierRepairService;
 use App\Services\Admin\ProductUnitCostService;
 use App\Support\AdminAccess;
+use App\Support\OrderEconomicsSql;
 use App\Support\StorefrontAssets;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -776,36 +776,12 @@ class AdminAnalyticsOrdersWithCosts extends Component
 
     private function cogsExpressionSql(): string
     {
-        $qty = $this->greatestSql('(order_products.quantity - COALESCE(order_products.returned_quantity, 0))', '0');
-
-        return "COALESCE((
-            SELECT SUM({$qty} * COALESCE(order_products.unit_cost, order_products.purchase_price, 0))
-            FROM order_products
-            WHERE order_products.order_id = orders.id
-        ), 0)";
+        return OrderEconomicsSql::cogsExpression();
     }
 
     private function codExpressionSql(): string
     {
-        $steadfastBase = $this->greatestSql(
-            '(COALESCE(orders.collected_amount, 0) - COALESCE(orders.delivery_charge, 0))',
-            '0',
-        );
-
-        return "CASE
-            WHEN COALESCE(orders.collected_amount, 0) <= 0 THEN 0
-            WHEN COALESCE((SELECT couriers.cod_percentage FROM couriers WHERE couriers.id = orders.courier_id), 1) <= 0 THEN 0
-            WHEN LOWER(COALESCE((SELECT couriers.slug FROM couriers WHERE couriers.id = orders.courier_id), '')) = 'steadfast'
-                THEN ROUND({$steadfastBase} * COALESCE((SELECT couriers.cod_percentage FROM couriers WHERE couriers.id = orders.courier_id), 1) / 100.0, 2)
-            ELSE ROUND(COALESCE(orders.collected_amount, 0) * COALESCE((SELECT couriers.cod_percentage FROM couriers WHERE couriers.id = orders.courier_id), 1) / 100.0, 2)
-        END";
-    }
-
-    private function greatestSql(string $left, string $right): string
-    {
-        return DB::connection()->getDriverName() === 'sqlite'
-            ? "max({$left}, {$right})"
-            : "GREATEST({$left}, {$right})";
+        return OrderEconomicsSql::codExpression();
     }
 
     /**

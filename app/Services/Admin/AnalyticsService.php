@@ -5,6 +5,7 @@ namespace App\Services\Admin;
 use App\Models\Expense;
 use App\Models\Order;
 use App\Support\DhakaSql;
+use App\Support\OrderEconomicsSql;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -376,8 +377,7 @@ class AnalyticsService
      */
     public function monthBreakdown(int $year, int $month): array
     {
-        $orders = $this->deliveredOrdersForMonth($year, $month);
-        $totals = $this->sumOrderEconomics($orders, $year, $month);
+        $totals = $this->monthEconomicsAggregate($year, $month);
 
         $profitLabel = $totals['profit'] >= 0 ? 'Profit' : 'Loss';
         $profitColor = $totals['profit'] >= 0 ? '#2F6F4E' : '#B42318';
@@ -386,7 +386,7 @@ class AnalyticsService
             'year' => $year,
             'month' => $month,
             'label' => Carbon::create($year, $month, 1)->format('F Y'),
-            'order_count' => $orders->count(),
+            'order_count' => $totals['order_count'],
             'revenue' => $totals['revenue'],
             'direct' => $totals['direct'],
             'direct_breakdown' => $totals['direct_breakdown'],
@@ -428,41 +428,8 @@ class AnalyticsService
             abort(404);
         }
 
-        $orders = $this->deliveredOrdersForMonth($year, $month);
-        $totals = $this->sumOrderEconomics($orders, $year, $month);
-
-        $orderRows = $orders->map(function (Order $order): ?array {
-            try {
-                $line = $this->orderEconomics($order);
-            } catch (\Throwable) {
-                return null;
-            }
-
-            $createdRaw = $order->getAttributes()['created_at'] ?? null;
-            $createdLabel = null;
-
-            if ($createdRaw && $this->safeDhakaYear($createdRaw) !== null) {
-                try {
-                    $createdLabel = Carbon::parse($createdRaw)->timezone('Asia/Dhaka')->format('d M Y');
-                } catch (\Throwable) {
-                    $createdLabel = null;
-                }
-            }
-
-            return [
-                'id' => $order->id,
-                'order_number' => $order->order_number,
-                'name' => $order->name,
-                'created_at' => $createdLabel,
-                'revenue' => $line['revenue'],
-                'cogs' => $line['cogs'],
-                'packaging' => $line['packaging'],
-                'courier' => $line['courier'],
-                'cod' => $line['cod'],
-                'direct' => $line['direct'],
-                'profit' => $line['profit'],
-            ];
-        })->filter()->values();
+        $totals = $this->monthEconomicsAggregate($year, $month);
+        $orderRows = $this->deliveredOrderDetailRows($year, $month);
 
         $expenseRows = Expense::query()
             ->forMonth($year, $month)
@@ -517,65 +484,74 @@ class AnalyticsService
     }
 
     /**
-     * @return Collection<int, Order>
+     * @return Collection<int, array<string, mixed>>
      */
-    private function deliveredOrdersForMonth(int $year, int $month): Collection
+    private function deliveredOrderDetailRows(int $year, int $month): Collection
     {
-        $start = Carbon::create($year, $month, 1, 0, 0, 0, 'Asia/Dhaka')->startOfDay();
-        $end = $start->copy()->endOfMonth();
+        [$start, $end] = $this->createdAtMonthBounds($year, $month);
+        $cogsExpr = OrderEconomicsSql::cogsExpression();
+        $codExpr = OrderEconomicsSql::codExpression();
+        $rows = collect();
 
-        return Order::query()
-            ->with([
-                'items:id,order_id,quantity,returned_quantity,purchase_price,unit_cost',
-                'courier:id,slug,cod_percentage',
-                'adjustments:id,order_id,type,label,amount',
-            ])
+        Order::query()
             ->where('status', 'delivered')
-            ->whereBetween('created_at', [
-                $start->format('Y-m-d H:i:s'),
-                $end->format('Y-m-d H:i:s'),
-            ])
-            ->orderBy('created_at')
+            ->whereBetween('created_at', [$start, $end])
+            ->where('created_at', 'not like', '0000-00-00%')
             ->orderBy('id')
-            ->get([
+            ->select([
                 'id',
                 'order_number',
                 'name',
-                'status',
-                'subtotal',
-                'delivery_charge',
-                'charge',
-                'discount',
-                'total',
-                'courier_charge',
-                'packaging_cost',
                 'collected_amount',
-                'paid_amount',
-                'due_amount',
-                'cod_amount',
-                'courier_id',
+                'packaging_cost',
+                'courier_charge',
                 'created_at',
-                'actual_delivery_date',
-            ]);
+            ])
+            ->selectRaw("({$cogsExpr}) as economics_cogs")
+            ->selectRaw("({$codExpr}) as economics_cod")
+            ->chunkById(200, function ($chunk) use (&$rows): void {
+                foreach ($chunk as $order) {
+                    $revenue = round((float) ($order->collected_amount ?? 0), 2);
+                    $cogs = round((float) ($order->economics_cogs ?? 0), 2);
+                    $packaging = round((float) ($order->packaging_cost ?? 0), 2);
+                    $courier = round((float) ($order->courier_charge ?? 0), 2);
+                    $cod = round((float) ($order->economics_cod ?? 0), 2);
+                    $direct = round($cogs + $packaging + $courier + $cod, 2);
+                    $profit = round($revenue - $direct, 2);
+
+                    $createdRaw = $order->getAttributes()['created_at'] ?? null;
+                    $createdLabel = null;
+
+                    if ($createdRaw && $this->safeDhakaYear($createdRaw) !== null) {
+                        try {
+                            $createdLabel = Carbon::parse($createdRaw)->timezone('Asia/Dhaka')->format('d M Y');
+                        } catch (\Throwable) {
+                            $createdLabel = null;
+                        }
+                    }
+
+                    $rows->push([
+                        'id' => $order->id,
+                        'order_number' => $order->order_number,
+                        'name' => $order->name,
+                        'created_at' => $createdLabel,
+                        'revenue' => $revenue,
+                        'cogs' => $cogs,
+                        'packaging' => $packaging,
+                        'courier' => $courier,
+                        'cod' => $cod,
+                        'direct' => $direct,
+                        'profit' => $profit,
+                    ]);
+                }
+            });
+
+        return $rows->values();
     }
 
     /**
-     * @return array{0: string, 1: string} Inclusive created_at bounds for a Dhaka calendar year.
-     */
-    private function createdAtYearBounds(int $year): array
-    {
-        $start = Carbon::create($year, 1, 1, 0, 0, 0, 'Asia/Dhaka')->startOfDay();
-        $end = $start->copy()->endOfYear();
-
-        return [
-            $start->format('Y-m-d H:i:s'),
-            $end->format('Y-m-d H:i:s'),
-        ];
-    }
-
-    /**
-     * @param  Collection<int, Order>  $orders
      * @return array{
+     *     order_count: int,
      *     revenue: float,
      *     direct: float,
      *     direct_breakdown: array{cogs: float, packaging: float, courier: float, cod: float},
@@ -599,82 +575,99 @@ class AnalyticsService
      *     }
      * }
      */
-    private function sumOrderEconomics(Collection $orders, int $year, int $month): array
+    private function monthEconomicsAggregate(int $year, int $month): array
     {
-        $revenue = 0.0;
-        $cogs = 0.0;
-        $packaging = 0.0;
-        $courier = 0.0;
-        $cod = 0.0;
+        [$start, $end] = $this->createdAtMonthBounds($year, $month);
+        $cogsExpr = OrderEconomicsSql::cogsExpression();
+        $codExpr = OrderEconomicsSql::codExpression();
+        $remittanceExpr = OrderEconomicsSql::remittanceBaseExpression();
 
-        $bill = 0.0;
-        $productPrice = 0.0;
-        $customerDelivery = 0.0;
-        $otherCharges = 0.0;
-        $discounts = 0.0;
-        $remittanceBase = 0.0;
-        $courierReceivable = 0.0;
-        $grossProfit = 0.0;
+        $row = Order::query()
+            ->where('status', 'delivered')
+            ->whereBetween('created_at', [$start, $end])
+            ->where('created_at', 'not like', '0000-00-00%')
+            ->selectRaw('COUNT(*) as order_count')
+            ->selectRaw('COALESCE(SUM(collected_amount), 0) as revenue')
+            ->selectRaw("COALESCE(SUM({$cogsExpr}), 0) as cogs")
+            ->selectRaw('COALESCE(SUM(packaging_cost), 0) as packaging')
+            ->selectRaw('COALESCE(SUM(courier_charge), 0) as courier')
+            ->selectRaw("COALESCE(SUM({$codExpr}), 0) as cod")
+            ->selectRaw('COALESCE(SUM(total), 0) as bill_to_customer')
+            ->selectRaw('COALESCE(SUM(subtotal), 0) as product_price')
+            ->selectRaw('COALESCE(SUM(delivery_charge), 0) as customer_delivery')
+            ->selectRaw('COALESCE(SUM(charge), 0) as other_charges')
+            ->selectRaw('COALESCE(SUM(discount), 0) as discounts')
+            ->selectRaw("COALESCE(SUM({$remittanceExpr}), 0) as remittance_base")
+            ->first();
 
-        foreach ($orders as $order) {
-            try {
-                $line = $this->orderEconomics($order);
-            } catch (\Throwable) {
-                continue;
-            }
-
-            $revenue += $line['revenue'];
-            $cogs += $line['cogs'];
-            $packaging += $line['packaging'];
-            $courier += $line['courier'];
-            $cod += $line['cod'];
-
-            try {
-                $money = $order->moneyTotals();
-                $bill += $money->billToCustomer;
-                $productPrice += $money->subtotal;
-                $customerDelivery += $money->deliveryCharge;
-                $otherCharges += $money->charges;
-                $discounts += $money->discounts;
-                $remittanceBase += $money->remittanceBase;
-                $courierReceivable += $money->courierReceivable;
-                $grossProfit += $money->grossProfit;
-            } catch (\Throwable) {
-                // Contribution still counts; money-flow rows skip this order.
-            }
-        }
-
-        $direct = $cogs + $packaging + $courier + $cod;
+        $revenue = round((float) ($row->revenue ?? 0), 2);
+        $cogs = round((float) ($row->cogs ?? 0), 2);
+        $packaging = round((float) ($row->packaging ?? 0), 2);
+        $courier = round((float) ($row->courier ?? 0), 2);
+        $cod = round((float) ($row->cod ?? 0), 2);
+        $direct = round($cogs + $packaging + $courier + $cod, 2);
         $indirect = $this->indirectForMonth($year, $month);
-        $profit = $revenue - $direct - $indirect;
+        $profit = round($revenue - $direct - $indirect, 2);
+        $remittanceBase = round((float) ($row->remittance_base ?? 0), 2);
+        $courierReceivable = round($remittanceBase - $courier - $cod, 2);
+        $grossProfit = round($courierReceivable - $cogs - $packaging, 2);
 
         return [
-            'revenue' => round($revenue, 2),
-            'direct' => round($direct, 2),
+            'order_count' => (int) ($row->order_count ?? 0),
+            'revenue' => $revenue,
+            'direct' => $direct,
             'direct_breakdown' => [
-                'cogs' => round($cogs, 2),
-                'packaging' => round($packaging, 2),
-                'courier' => round($courier, 2),
-                'cod' => round($cod, 2),
+                'cogs' => $cogs,
+                'packaging' => $packaging,
+                'courier' => $courier,
+                'cod' => $cod,
             ],
-            'indirect' => round($indirect, 2),
-            'profit' => round($profit, 2),
+            'indirect' => $indirect,
+            'profit' => $profit,
             'money' => [
-                'bill_to_customer' => round($bill, 2),
-                'product_price' => round($productPrice, 2),
-                'customer_delivery' => round($customerDelivery, 2),
-                'other_charges' => round($otherCharges, 2),
-                'discounts' => round($discounts, 2),
-                'remittance_base' => round($remittanceBase, 2),
-                'courier_charge' => round($courier, 2),
-                'cod_charge' => round($cod, 2),
-                'courier_receivable' => round($courierReceivable, 2),
-                'cogs' => round($cogs, 2),
-                'packaging' => round($packaging, 2),
-                'gross_profit' => round($grossProfit, 2),
-                'indirect' => round($indirect, 2),
+                'bill_to_customer' => round((float) ($row->bill_to_customer ?? 0), 2),
+                'product_price' => round((float) ($row->product_price ?? 0), 2),
+                'customer_delivery' => round((float) ($row->customer_delivery ?? 0), 2),
+                'other_charges' => round((float) ($row->other_charges ?? 0), 2),
+                'discounts' => round((float) ($row->discounts ?? 0), 2),
+                'remittance_base' => $remittanceBase,
+                'courier_charge' => $courier,
+                'cod_charge' => $cod,
+                'courier_receivable' => $courierReceivable,
+                'cogs' => $cogs,
+                'packaging' => $packaging,
+                'gross_profit' => $grossProfit,
+                'indirect' => $indirect,
                 'net_after_indirect' => round($grossProfit - $indirect, 2),
             ],
+        ];
+    }
+
+    /**
+     * @return array{0: string, 1: string} Inclusive created_at bounds for a Dhaka calendar year.
+     */
+    private function createdAtYearBounds(int $year): array
+    {
+        $start = Carbon::create($year, 1, 1, 0, 0, 0, 'Asia/Dhaka')->startOfDay();
+        $end = $start->copy()->endOfYear();
+
+        return [
+            $start->format('Y-m-d H:i:s'),
+            $end->format('Y-m-d H:i:s'),
+        ];
+    }
+
+    /**
+     * @return array{0: string, 1: string} Inclusive created_at bounds for a Dhaka calendar month.
+     */
+    private function createdAtMonthBounds(int $year, int $month): array
+    {
+        $start = Carbon::create($year, $month, 1, 0, 0, 0, 'Asia/Dhaka')->startOfDay();
+        $end = $start->copy()->endOfMonth();
+
+        return [
+            $start->format('Y-m-d H:i:s'),
+            $end->format('Y-m-d H:i:s'),
         ];
     }
 

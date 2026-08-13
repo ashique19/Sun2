@@ -113,9 +113,56 @@
                     <label class="block text-sm font-medium mb-1">Stock quantity</label>
                     <input type="number" wire:model.live="stock_quantity" class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
                 </div>
-                <div class="sm:col-span-2">
-                    <label class="block text-sm font-medium mb-1">Description (HTML allowed)</label>
-                    <textarea wire:model.live="description" rows="8" class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm font-mono text-xs"></textarea>
+                <div class="sm:col-span-2 space-y-3">
+                    <div class="flex flex-wrap items-end justify-between gap-3">
+                        <div>
+                            <h3 class="text-sm font-medium text-[#1E1E1E]">Descriptions</h3>
+                            <p class="mt-0.5 text-xs text-[#8C8474]">
+                                Storefront prefers Bangla when present. HTML allowed in both fields.
+                            </p>
+                        </div>
+                        <button type="button"
+                            wire:click="generateDescriptionsFromImage"
+                            wire:loading.attr="disabled"
+                            wire:target="generateDescriptionsFromImage"
+                            @disabled(! $geminiConfigured)
+                            class="rounded-lg border border-[#1F4E79] bg-white px-3 py-1.5 text-sm font-medium text-[#1F4E79] hover:bg-[#FAF6EF] disabled:cursor-not-allowed disabled:opacity-50"
+                            title="{{ $geminiConfigured ? 'Send the primary product image to Gemini' : 'Set GEMINI_API_KEY to enable' }}">
+                            <span wire:loading.remove wire:target="generateDescriptionsFromImage">
+                                Generate EN + BN from image
+                            </span>
+                            <span wire:loading wire:target="generateDescriptionsFromImage">
+                                Generating…
+                            </span>
+                        </button>
+                    </div>
+
+                    @if ($aiDescriptionError)
+                        <p class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700" data-ai-description-error>
+                            {{ $aiDescriptionError }}
+                        </p>
+                    @endif
+                    @if ($aiDescriptionMessage)
+                        <p class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800" data-ai-description-message>
+                            {{ $aiDescriptionMessage }}
+                        </p>
+                    @endif
+                    @unless ($geminiConfigured)
+                        <p class="text-xs text-[#8C8474]">Gemini is not configured (<code class="text-[11px]">GEMINI_API_KEY</code>).</p>
+                    @endunless
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1">English description</label>
+                        <textarea wire:model.live="description" rows="6"
+                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 font-mono text-xs"></textarea>
+                        @error('description') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Bangla description</label>
+                        <textarea wire:model.live="description_bn" rows="6"
+                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 font-mono text-xs"></textarea>
+                        @error('description_bn') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                    </div>
                 </div>
                 <label class="flex items-center gap-2 text-sm">
                     <input type="checkbox" wire:model.live="is_published" class="rounded border-[#E0D6C2] text-[#C9A227]">

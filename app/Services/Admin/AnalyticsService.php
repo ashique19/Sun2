@@ -136,19 +136,42 @@ class AnalyticsService
     public function yearOverview(int $year): array
     {
         [$start, $end] = $this->createdAtYearBounds($year);
-        $monthExpr = DhakaSql::month('created_at');
-        $cogsExpr = OrderEconomicsSql::cogsExpression();
-        $codExpr = OrderEconomicsSql::codExpression();
+        $monthExpr = DhakaSql::month('orders.created_at');
+
+        // Pre-aggregate COGS / join couriers so MySQL ONLY_FULL_GROUP_BY accepts month grouping
+        // (correlated subqueries referencing orders.id inside SUM() are rejected).
+        $qty = OrderEconomicsSql::greatest(
+            '(order_products.quantity - COALESCE(order_products.returned_quantity, 0))',
+            '0',
+        );
+        $cogsPerOrder = DB::table('order_products')
+            ->selectRaw('order_id')
+            ->selectRaw("COALESCE(SUM({$qty} * COALESCE(order_products.unit_cost, order_products.purchase_price, 0)), 0) as cogs")
+            ->groupBy('order_id');
+
+        $steadfastBase = OrderEconomicsSql::greatest(
+            '(COALESCE(orders.collected_amount, 0) - COALESCE(orders.delivery_charge, 0))',
+            '0',
+        );
+        $codExpr = "CASE
+            WHEN COALESCE(orders.collected_amount, 0) <= 0 THEN 0
+            WHEN COALESCE(couriers.cod_percentage, 1) <= 0 THEN 0
+            WHEN LOWER(COALESCE(couriers.slug, '')) = 'steadfast'
+                THEN ROUND({$steadfastBase} * COALESCE(couriers.cod_percentage, 1) / 100.0, 2)
+            ELSE ROUND(COALESCE(orders.collected_amount, 0) * COALESCE(couriers.cod_percentage, 1) / 100.0, 2)
+        END";
 
         $aggregated = Order::query()
-            ->where('status', 'delivered')
-            ->whereBetween('created_at', [$start, $end])
-            ->where('created_at', 'not like', '0000-00-00%')
+            ->leftJoinSub($cogsPerOrder, 'order_cogs', 'order_cogs.order_id', '=', 'orders.id')
+            ->leftJoin('couriers', 'couriers.id', '=', 'orders.courier_id')
+            ->where('orders.status', 'delivered')
+            ->whereBetween('orders.created_at', [$start, $end])
+            ->where('orders.created_at', 'not like', '0000-00-00%')
             ->selectRaw("{$monthExpr} as month")
-            ->selectRaw('COALESCE(SUM(collected_amount), 0) as revenue')
-            ->selectRaw("COALESCE(SUM({$cogsExpr}), 0) as cogs")
-            ->selectRaw('COALESCE(SUM(packaging_cost), 0) as packaging')
-            ->selectRaw('COALESCE(SUM(courier_charge), 0) as courier')
+            ->selectRaw('COALESCE(SUM(orders.collected_amount), 0) as revenue')
+            ->selectRaw('COALESCE(SUM(COALESCE(order_cogs.cogs, 0)), 0) as cogs')
+            ->selectRaw('COALESCE(SUM(orders.packaging_cost), 0) as packaging')
+            ->selectRaw('COALESCE(SUM(orders.courier_charge), 0) as courier')
             ->selectRaw("COALESCE(SUM({$codExpr}), 0) as cod")
             ->selectRaw('COUNT(*) as order_count')
             ->groupByRaw($monthExpr)

@@ -38,6 +38,14 @@
         <div class="flex flex-wrap items-center gap-2">
             <x-admin.product-neighbor-nav :product="$product" route-name="admin.products.show" />
             <x-admin.product-list-filters-toggle :filters="$listFilters" />
+            <a href="{{ route('product.show', $product) }}"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-storefront-product-link
+                class="rounded-lg border border-[#C9A227] px-4 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]"
+                title="Open this product on the storefront">
+                View on store ↗
+            </a>
             <a href="{{ route('admin.products.edit', $product) }}" wire:navigate
                 class="rounded-lg bg-[#C9A227] px-4 py-2 text-sm font-medium text-white hover:bg-[#b89220]">
                 Edit product

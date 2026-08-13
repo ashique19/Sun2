@@ -114,6 +114,7 @@ class AdminAnalyticsTest extends TestCase
             ->assertSee('Profit & loss')
             ->assertSee('Months in 2026')
             ->assertSee('Jul')
+            ->assertSeeHtml('data-month-pl')
             ->assertSee('Select a month')
             ->call('selectMonth', 7)
             ->assertSet('month', 7)
@@ -306,6 +307,10 @@ class AdminAnalyticsTest extends TestCase
         $this->assertSame(496.0, $breakdown['direct']);
         $this->assertSame(0.0, $breakdown['indirect']);
         $this->assertSame(584.0, $breakdown['profit']);
+
+        $overview = app(AnalyticsService::class)->yearOverview(2026);
+        $this->assertSame(584.0, $overview['months'][6]['profit']);
+        $this->assertSame(1080.0, $overview['months'][6]['revenue']);
 
         $money = $breakdown['money'];
         $this->assertSame(1080.0, $money['bill_to_customer']);

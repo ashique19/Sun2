@@ -106,9 +106,13 @@ class DhakaSqlAggregationTest extends TestCase
 
         $overview = app(AnalyticsService::class)->yearOverview(2026);
 
+        // No courier/pack/COGS rows → direct cost is default 1% COD on collected.
         $this->assertSame(1200.0, $overview['revenue']);
+        $this->assertSame(1188.0, $overview['profit']);
         $this->assertSame(2, $overview['order_count']);
         $this->assertSame(1200.0, $overview['months'][2]['revenue']);
+        $this->assertSame(1188.0, $overview['months'][2]['profit']);
+        $this->assertSame(12.0, $overview['months'][2]['direct']);
         $this->assertSame(2, $overview['months'][2]['order_count']);
     }
 }

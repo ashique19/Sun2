@@ -8,6 +8,7 @@ use App\Http\Controllers\RobotsController;
 use App\Http\Controllers\SitemapController;
 use App\Livewire\Admin\AdminAnalytics;
 use App\Livewire\Admin\AdminAnalyticsCategoryRevenue;
+use App\Livewire\Admin\AdminAnalyticsCompare;
 use App\Livewire\Admin\AdminAnalyticsDetail;
 use App\Livewire\Admin\AdminAnalyticsInvestorPitch;
 use App\Livewire\Admin\AdminAnalyticsOrderedDelivered;
@@ -259,6 +260,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/analytics/orders-with-costs', AdminAnalyticsOrdersWithCosts::class)->name('analytics.orders-with-costs');
         Route::get('/analytics/ordered-delivered', AdminAnalyticsOrderedDelivered::class)->name('analytics.ordered-delivered');
         Route::get('/analytics/category-revenue', AdminAnalyticsCategoryRevenue::class)->name('analytics.category-revenue');
+        Route::get('/analytics/compare', AdminAnalyticsCompare::class)->name('analytics.compare');
         Route::get('/analytics/investor-pitch', AdminAnalyticsInvestorPitch::class)->name('analytics.investor-pitch');
         Route::get('/analytics/{year}/{month}/{metric}', AdminAnalyticsDetail::class)
             ->whereNumber('year')

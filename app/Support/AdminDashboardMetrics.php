@@ -292,12 +292,13 @@ class AdminDashboardMetrics
             ->whereRaw("{$monthExpr} in (?, ?)", [$thisMonthKey, $lastMonthKey])
             ->selectRaw("{$monthExpr} as month_key")
             ->selectRaw('categories.id as category_id')
-            ->selectRaw("COALESCE(NULLIF(categories.name, ''), 'Uncategorized') as name")
+            // MAX() keeps MySQL ONLY_FULL_GROUP_BY happy (name is determined by category id).
+            ->selectRaw("MAX(COALESCE(NULLIF(categories.name, ''), 'Uncategorized')) as name")
             ->selectRaw('COUNT(DISTINCT orders.id) as order_qty')
             ->selectRaw('COALESCE(SUM(COALESCE(order_products.line_total, 0)), 0) as order_value')
             ->selectRaw("COUNT(DISTINCT CASE WHEN orders.status = 'delivered' THEN orders.id END) as delivery_qty")
             ->selectRaw("COALESCE(SUM(CASE WHEN orders.status = 'delivered' THEN COALESCE(order_products.line_total, 0) ELSE 0 END), 0) as delivery_value")
-            ->groupByRaw("{$monthExpr}, categories.id, COALESCE(NULLIF(categories.name, ''), 'Uncategorized')")
+            ->groupByRaw("{$monthExpr}, categories.id")
             ->get();
 
         /** @var array<string, array{category_id: int|null, name: string, this_month: array{order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}, last_month: array{order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}}> $rows */

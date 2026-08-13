@@ -3,7 +3,8 @@
 namespace App\Services\Admin;
 
 use App\Models\Order;
-use App\Models\OrderProduct;
+use App\Support\DhakaSql;
+use App\Support\OrderEconomicsSql;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -96,37 +97,7 @@ class InvestorPitchAnalyticsService
      */
     public function availableYears(): array
     {
-        $years = [];
-
-        DB::table('orders')
-            ->whereNotNull('created_at')
-            ->where('status', '!=', Order::STATUS_DRAFT)
-            ->orderBy('id')
-            ->select(['id', 'created_at'])
-            ->chunkById(1000, function ($rows) use (&$years): void {
-                foreach ($rows as $row) {
-                    $year = app(AnalyticsService::class)->safeDhakaYear($row->created_at ?? null);
-
-                    if ($year !== null) {
-                        $years[$year] = true;
-                    }
-                }
-            });
-
-        $list = array_keys($years);
-        rsort($list, SORT_NUMERIC);
-
-        $current = (int) now('Asia/Dhaka')->year;
-
-        if ($list === []) {
-            return [$current];
-        }
-
-        if (! in_array($current, $list, true)) {
-            array_unshift($list, $current);
-        }
-
-        return $list;
+        return app(AnalyticsService::class)->availableYears();
     }
 
     /**
@@ -147,16 +118,29 @@ class InvestorPitchAnalyticsService
      */
     public function windowMetrics(Carbon $start, Carbon $end): array
     {
-        $orders = $this->ordersInWindow($start, $end);
+        [$from, $to] = $this->windowBounds($start, $end);
 
-        $ordersCount = $orders->count();
-        $gmvPlaced = round((float) $orders->sum(fn (Order $o) => (float) $o->total), 2);
-        $delivered = $orders->where('status', 'delivered');
-        $deliveredCount = $delivered->count();
-        $gmvDelivered = round((float) $delivered->sum(fn (Order $o) => (float) $o->total), 2);
-        $collected = round((float) $delivered->sum(fn (Order $o) => (float) $o->collected_amount), 2);
-        $returned = $orders->where('status', 'returned')->count();
-        $dispatched = $orders->where('status', 'dispatched');
+        $row = DB::table('orders')
+            ->where('status', '!=', Order::STATUS_DRAFT)
+            ->whereNotNull('created_at')
+            ->whereBetween('created_at', [$from, $to])
+            ->selectRaw('COUNT(*) as orders')
+            ->selectRaw('COALESCE(SUM(total), 0) as gmv_placed')
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END), 0) as delivered")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'delivered' THEN total ELSE 0 END), 0) as gmv_delivered")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'delivered' THEN collected_amount ELSE 0 END), 0) as collected")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END), 0) as returned")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'dispatched' THEN 1 ELSE 0 END), 0) as dispatched")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'dispatched' THEN total ELSE 0 END), 0) as unsettled_gmv")
+            ->selectRaw('COUNT(DISTINCT NULLIF(TRIM(phone), \'\')) as unique_buyers')
+            ->first();
+
+        $ordersCount = (int) ($row->orders ?? 0);
+        $gmvPlaced = round((float) ($row->gmv_placed ?? 0), 2);
+        $deliveredCount = (int) ($row->delivered ?? 0);
+        $gmvDelivered = round((float) ($row->gmv_delivered ?? 0), 2);
+        $collected = round((float) ($row->collected ?? 0), 2);
+        $returned = (int) ($row->returned ?? 0);
 
         return [
             'orders' => $ordersCount,
@@ -171,10 +155,10 @@ class InvestorPitchAnalyticsService
             'return_pct' => $ordersCount > 0
                 ? round($returned * 100 / $ordersCount, 1)
                 : 0.0,
-            'dispatched' => $dispatched->count(),
-            'unsettled_gmv' => round((float) $dispatched->sum(fn (Order $o) => (float) $o->total), 2),
+            'dispatched' => (int) ($row->dispatched ?? 0),
+            'unsettled_gmv' => round((float) ($row->unsettled_gmv ?? 0), 2),
             'aov' => $ordersCount > 0 ? round($gmvPlaced / $ordersCount, 0) : 0.0,
-            'unique_buyers' => $orders->pluck('phone')->filter()->unique()->count(),
+            'unique_buyers' => (int) ($row->unique_buyers ?? 0),
         ];
     }
 
@@ -200,43 +184,40 @@ class InvestorPitchAnalyticsService
      */
     private function unitEconomics(Carbon $start, Carbon $end, array $traction): array
     {
-        $orders = $this->ordersInWindow($start, $end)->where('status', 'delivered');
-        $orderIds = $orders->pluck('id');
+        [$from, $to] = $this->windowBounds($start, $end);
 
-        $delivIncome = round((float) $orders->sum(fn (Order $o) => (float) $o->delivery_charge), 2);
-        $courierCost = round((float) $orders->sum(fn (Order $o) => (float) $o->courier_charge), 2);
-        $packaging = round((float) $orders->sum(fn (Order $o) => (float) $o->packaging_cost), 2);
+        $orderRow = DB::table('orders')
+            ->where('status', 'delivered')
+            ->whereNotNull('created_at')
+            ->whereBetween('created_at', [$from, $to])
+            ->selectRaw('COALESCE(SUM(delivery_charge), 0) as delivery_income')
+            ->selectRaw('COALESCE(SUM(courier_charge), 0) as courier_cost')
+            ->selectRaw('COALESCE(SUM(packaging_cost), 0) as packaging')
+            ->first();
 
-        $lines = $orderIds->isEmpty()
-            ? collect()
-            : OrderProduct::query()->whereIn('order_id', $orderIds)->get([
-                'quantity', 'returned_quantity', 'price', 'purchase_price',
-            ]);
+        $qty = OrderEconomicsSql::greatest('(op.quantity - COALESCE(op.returned_quantity, 0))', '0');
 
-        $merchSell = 0.0;
-        $sellKnown = 0.0;
-        $cogsKnown = 0.0;
-        $zeroLines = 0;
-        $lineCount = 0;
+        $lineTotals = DB::table('order_products as op')
+            ->join('orders', 'orders.id', '=', 'op.order_id')
+            ->where('orders.status', 'delivered')
+            ->whereNotNull('orders.created_at')
+            ->whereBetween('orders.created_at', [$from, $to])
+            ->selectRaw("COALESCE(SUM(op.price * {$qty}), 0) as merch_sell")
+            ->selectRaw("COALESCE(SUM(CASE WHEN COALESCE(op.purchase_price, 0) > 0 THEN op.price * {$qty} ELSE 0 END), 0) as sell_known")
+            ->selectRaw("COALESCE(SUM(CASE WHEN COALESCE(op.purchase_price, 0) > 0 THEN op.purchase_price * {$qty} ELSE 0 END), 0) as cogs_known")
+            ->selectRaw('COUNT(*) as line_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN COALESCE(op.purchase_price, 0) <= 0 THEN 1 ELSE 0 END), 0) as zero_lines')
+            ->first();
 
-        foreach ($lines as $line) {
-            $qty = max(0, (int) $line->quantity - (int) ($line->returned_quantity ?? 0));
-            $sell = (float) $line->price * $qty;
-            $merchSell += $sell;
-            $lineCount++;
-            $pp = (float) $line->purchase_price;
+        $merchSell = round((float) ($lineTotals->merch_sell ?? 0), 2);
+        $sellKnown = round((float) ($lineTotals->sell_known ?? 0), 2);
+        $cogsKnown = round((float) ($lineTotals->cogs_known ?? 0), 2);
+        $lineCount = (int) ($lineTotals->line_count ?? 0);
+        $zeroLines = (int) ($lineTotals->zero_lines ?? 0);
+        $delivIncome = round((float) ($orderTotals->delivery_income ?? 0), 2);
+        $courierCost = round((float) ($orderTotals->courier_cost ?? 0), 2);
+        $packaging = round((float) ($orderTotals->packaging ?? 0), 2);
 
-            if ($pp > 0) {
-                $sellKnown += $sell;
-                $cogsKnown += $pp * $qty;
-            } else {
-                $zeroLines++;
-            }
-        }
-
-        $merchSell = round($merchSell, 2);
-        $sellKnown = round($sellKnown, 2);
-        $cogsKnown = round($cogsKnown, 2);
         $gmPct = $sellKnown > 0
             ? round(($sellKnown - $cogsKnown) * 100 / $sellKnown, 1)
             : null;
@@ -276,22 +257,27 @@ class InvestorPitchAnalyticsService
      */
     private function channels(Carbon $start, Carbon $end): array
     {
-        $orders = $this->ordersInWindow($start, $end);
-        $total = max(1, $orders->count());
+        [$from, $to] = $this->windowBounds($start, $end);
 
-        return $orders
-            ->groupBy(fn (Order $o) => $o->placed_via ?: '(unknown)')
-            ->map(function (Collection $group, string $via) use ($total): array {
-                return [
-                    'via' => $via,
-                    'orders' => $group->count(),
-                    'gmv' => round((float) $group->sum(fn (Order $o) => (float) $o->total), 2),
-                    'share_pct' => round($group->count() * 100 / $total, 1),
-                ];
-            })
-            ->sortByDesc('orders')
-            ->values()
-            ->all();
+        $rows = DB::table('orders')
+            ->where('status', '!=', Order::STATUS_DRAFT)
+            ->whereNotNull('created_at')
+            ->whereBetween('created_at', [$from, $to])
+            ->selectRaw("COALESCE(NULLIF(TRIM(placed_via), ''), '(unknown)') as via")
+            ->selectRaw('COUNT(*) as orders')
+            ->selectRaw('COALESCE(SUM(total), 0) as gmv')
+            ->groupByRaw("COALESCE(NULLIF(TRIM(placed_via), ''), '(unknown)')")
+            ->orderByDesc('orders')
+            ->get();
+
+        $total = max(1, (int) $rows->sum('orders'));
+
+        return $rows->map(fn ($row): array => [
+            'via' => (string) $row->via,
+            'orders' => (int) $row->orders,
+            'gmv' => round((float) $row->gmv, 2),
+            'share_pct' => round(((int) $row->orders) * 100 / $total, 1),
+        ])->all();
     }
 
     /**
@@ -299,17 +285,25 @@ class InvestorPitchAnalyticsService
      */
     private function geos(Carbon $start, Carbon $end): array
     {
-        return $this->ordersInWindow($start, $end)
-            ->groupBy(fn (Order $o) => trim((string) $o->city) !== '' ? trim((string) $o->city) : '(blank)')
-            ->map(fn (Collection $group, string $city): array => [
-                'city' => $city,
-                'orders' => $group->count(),
-                'gmv' => round((float) $group->sum(fn (Order $o) => (float) $o->total), 2),
-            ])
-            ->sortByDesc('orders')
-            ->take(8)
-            ->values()
-            ->all();
+        [$from, $to] = $this->windowBounds($start, $end);
+
+        $rows = DB::table('orders')
+            ->where('status', '!=', Order::STATUS_DRAFT)
+            ->whereNotNull('created_at')
+            ->whereBetween('created_at', [$from, $to])
+            ->selectRaw("COALESCE(NULLIF(TRIM(city), ''), '(blank)') as city")
+            ->selectRaw('COUNT(*) as orders')
+            ->selectRaw('COALESCE(SUM(total), 0) as gmv')
+            ->groupByRaw("COALESCE(NULLIF(TRIM(city), ''), '(blank)')")
+            ->orderByDesc('orders')
+            ->limit(8)
+            ->get();
+
+        return $rows->map(fn ($row): array => [
+            'city' => (string) $row->city,
+            'orders' => (int) $row->orders,
+            'gmv' => round((float) $row->gmv, 2),
+        ])->all();
     }
 
     /**
@@ -317,25 +311,23 @@ class InvestorPitchAnalyticsService
      */
     private function categories(Carbon $start, Carbon $end): array
     {
-        $orderIds = $this->ordersInWindow($start, $end)
-            ->where('status', 'delivered')
-            ->pluck('id');
-
-        if ($orderIds->isEmpty()) {
-            return [];
-        }
+        [$from, $to] = $this->windowBounds($start, $end);
+        $qty = OrderEconomicsSql::greatest('(op.quantity - COALESCE(op.returned_quantity, 0))', '0');
 
         $rows = DB::table('order_products as op')
+            ->join('orders', 'orders.id', '=', 'op.order_id')
             ->leftJoin('products as p', 'p.id', '=', 'op.product_id')
             ->leftJoin('categories as c', 'c.id', '=', 'p.category_id')
-            ->whereIn('op.order_id', $orderIds)
+            ->where('orders.status', 'delivered')
+            ->whereNotNull('orders.created_at')
+            ->whereBetween('orders.created_at', [$from, $to])
             ->groupBy('c.id', 'c.name')
-            ->orderByDesc(DB::raw('SUM(op.price * (op.quantity - COALESCE(op.returned_quantity, 0)))'))
+            ->orderByDesc(DB::raw("SUM(op.price * {$qty})"))
             ->limit(8)
             ->get([
                 DB::raw('COALESCE(c.name, "(uncategorized)") as name'),
                 DB::raw('COUNT(DISTINCT op.order_id) as orders'),
-                DB::raw('SUM(op.price * (op.quantity - COALESCE(op.returned_quantity, 0))) as revenue'),
+                DB::raw("SUM(op.price * {$qty}) as revenue"),
             ]);
 
         return $rows->map(fn ($row): array => [
@@ -373,37 +365,42 @@ class InvestorPitchAnalyticsService
             ];
         }
 
-        foreach ($this->ordersInWindow($start, $end) as $order) {
-            $created = $order->created_at?->timezone('Asia/Dhaka');
+        $monthExpr = DhakaSql::month('created_at');
 
-            if ($created === null) {
+        foreach ($this->monthlyAggregateRows($start, $end) as $row) {
+            $month = (int) $row->month;
+
+            if ($month < 1 || $month > 12) {
                 continue;
             }
 
-            $month = (int) $created->month;
-            $months[$month]['orders']++;
-            $months[$month]['gmv'] += (float) $order->total;
-
-            if ($order->status === 'delivered') {
-                $months[$month]['delivered']++;
-                $months[$month]['collected'] += (float) $order->collected_amount;
-            }
-
-            if ($order->status === 'dispatched') {
-                $months[$month]['dispatched']++;
-            }
+            $months[$month]['orders'] = (int) $row->orders;
+            $months[$month]['gmv'] = (float) $row->gmv;
+            $months[$month]['delivered'] = (int) $row->delivered;
+            $months[$month]['collected'] = (float) $row->collected;
+            $months[$month]['dispatched'] = (int) $row->dispatched;
         }
 
-        foreach ($this->ordersInWindow($priorStart, $priorEnd) as $order) {
-            $created = $order->created_at?->timezone('Asia/Dhaka');
+        [$priorFrom, $priorTo] = $this->windowBounds($priorStart, $priorEnd);
+        $priorRows = DB::table('orders')
+            ->where('status', '!=', Order::STATUS_DRAFT)
+            ->whereNotNull('created_at')
+            ->whereBetween('created_at', [$priorFrom, $priorTo])
+            ->selectRaw("{$monthExpr} as month")
+            ->selectRaw('COUNT(*) as orders')
+            ->selectRaw('COALESCE(SUM(total), 0) as gmv')
+            ->groupByRaw($monthExpr)
+            ->get();
 
-            if ($created === null) {
+        foreach ($priorRows as $row) {
+            $month = (int) $row->month;
+
+            if ($month < 1 || $month > 12) {
                 continue;
             }
 
-            $month = (int) $created->month;
-            $months[$month]['prior_orders']++;
-            $months[$month]['prior_gmv'] += (float) $order->total;
+            $months[$month]['prior_orders'] = (int) $row->orders;
+            $months[$month]['prior_gmv'] = (float) $row->gmv;
         }
 
         // Hide future months in a partial current year (no activity expected).
@@ -427,22 +424,36 @@ class InvestorPitchAnalyticsService
     }
 
     /**
-     * @return Collection<int, Order>
+     * @return Collection<int, object>
      */
-    private function ordersInWindow(Carbon $start, Carbon $end): Collection
+    private function monthlyAggregateRows(Carbon $start, Carbon $end)
     {
-        return Order::query()
+        [$from, $to] = $this->windowBounds($start, $end);
+        $monthExpr = DhakaSql::month('created_at');
+
+        return DB::table('orders')
             ->where('status', '!=', Order::STATUS_DRAFT)
             ->whereNotNull('created_at')
-            ->whereBetween('created_at', [
-                $start->copy()->timezone('Asia/Dhaka')->format('Y-m-d H:i:s'),
-                $end->copy()->timezone('Asia/Dhaka')->format('Y-m-d H:i:s'),
-            ])
-            ->get([
-                'id', 'status', 'total', 'collected_amount', 'delivery_charge',
-                'courier_charge', 'packaging_cost', 'placed_at', 'created_at',
-                'placed_via', 'phone', 'city',
-            ]);
+            ->whereBetween('created_at', [$from, $to])
+            ->selectRaw("{$monthExpr} as month")
+            ->selectRaw('COUNT(*) as orders')
+            ->selectRaw('COALESCE(SUM(total), 0) as gmv')
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END), 0) as delivered")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'delivered' THEN collected_amount ELSE 0 END), 0) as collected")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'dispatched' THEN 1 ELSE 0 END), 0) as dispatched")
+            ->groupByRaw($monthExpr)
+            ->get();
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function windowBounds(Carbon $start, Carbon $end): array
+    {
+        return [
+            $start->copy()->timezone('Asia/Dhaka')->format('Y-m-d H:i:s'),
+            $end->copy()->timezone('Asia/Dhaka')->format('Y-m-d H:i:s'),
+        ];
     }
 
     private function pctChange(float $prior, float $current): ?float

@@ -13,9 +13,14 @@
                 <div class="flex flex-wrap items-center gap-3">
                     <x-admin.product-neighbor-nav :product="$product" route-name="admin.products.edit" />
                     <x-admin.product-list-filters-toggle :filters="$listFilters" />
-                    @if ($product->is_published)
-                        <a href="{{ route('product.show', $product) }}" target="_blank" class="text-sm text-[#C9A227] hover:underline">View on store ↗</a>
-                    @endif
+                    <a href="{{ route('product.show', $product) }}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-storefront-product-link
+                        class="rounded-lg border border-[#C9A227] px-3 py-1.5 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]"
+                        title="{{ $product->is_published ? 'Open this product on the storefront' : 'Storefront URL (unpublished products return 404)' }}">
+                        View on store ↗
+                    </a>
                 </div>
             @endif
         </div>

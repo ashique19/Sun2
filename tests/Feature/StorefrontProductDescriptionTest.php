@@ -28,11 +28,31 @@ class StorefrontProductDescriptionTest extends TestCase
 
         $html = ProductDescriptionHtml::forStorefront($product);
         $this->assertSame('<p>বাংলা বিবরণ</p>', $html);
+        $this->assertTrue(ProductDescriptionHtml::hasBothLanguages($product));
 
         Livewire::test(StorefrontProduct::class, ['product' => $product])
+            ->assertSeeHtml('data-description-lang-switch')
+            ->assertSeeHtml('data-description-lang-en')
             ->assertSeeHtml('<p>বাংলা বিবরণ</p>')
-            ->assertDontSee('English only')
+            ->assertSeeHtml('<p>English only</p>')
             ->assertDontSee('alert');
+    }
+
+    #[Test]
+    public function storefront_hides_language_switch_when_only_one_description_exists(): void
+    {
+        $product = Product::query()->create([
+            'name' => 'Copper Bangle',
+            'slug' => 'copper-bangle',
+            'price' => 600,
+            'is_published' => true,
+            'description' => '<p>English only body</p>',
+            'description_bn' => null,
+        ]);
+
+        Livewire::test(StorefrontProduct::class, ['product' => $product])
+            ->assertDontSeeHtml('data-description-lang-switch')
+            ->assertSeeHtml('<p>English only body</p>');
     }
 
     #[Test]

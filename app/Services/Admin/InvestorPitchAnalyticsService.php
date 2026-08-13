@@ -263,7 +263,8 @@ class InvestorPitchAnalyticsService
             ->where('status', '!=', Order::STATUS_DRAFT)
             ->whereNotNull('created_at')
             ->whereBetween('created_at', [$from, $to])
-            ->selectRaw("COALESCE(NULLIF(TRIM(placed_via), ''), '(unknown)') as via")
+            // MAX() keeps MySQL ONLY_FULL_GROUP_BY happy for the expression label.
+            ->selectRaw("MAX(COALESCE(NULLIF(TRIM(placed_via), ''), '(unknown)')) as via")
             ->selectRaw('COUNT(*) as orders')
             ->selectRaw('COALESCE(SUM(total), 0) as gmv')
             ->groupByRaw("COALESCE(NULLIF(TRIM(placed_via), ''), '(unknown)')")
@@ -291,7 +292,8 @@ class InvestorPitchAnalyticsService
             ->where('status', '!=', Order::STATUS_DRAFT)
             ->whereNotNull('created_at')
             ->whereBetween('created_at', [$from, $to])
-            ->selectRaw("COALESCE(NULLIF(TRIM(city), ''), '(blank)') as city")
+            // MAX() keeps MySQL ONLY_FULL_GROUP_BY happy for the expression label.
+            ->selectRaw("MAX(COALESCE(NULLIF(TRIM(city), ''), '(blank)')) as city")
             ->selectRaw('COUNT(*) as orders')
             ->selectRaw('COALESCE(SUM(total), 0) as gmv')
             ->groupByRaw("COALESCE(NULLIF(TRIM(city), ''), '(blank)')")
@@ -321,11 +323,11 @@ class InvestorPitchAnalyticsService
             ->where('orders.status', 'delivered')
             ->whereNotNull('orders.created_at')
             ->whereBetween('orders.created_at', [$from, $to])
-            ->groupBy('c.id', 'c.name')
+            ->groupBy('c.id')
             ->orderByDesc(DB::raw("SUM(op.price * {$qty})"))
             ->limit(8)
             ->get([
-                DB::raw('COALESCE(c.name, "(uncategorized)") as name'),
+                DB::raw('MAX(COALESCE(c.name, "(uncategorized)")) as name'),
                 DB::raw('COUNT(DISTINCT op.order_id) as orders'),
                 DB::raw("SUM(op.price * {$qty}) as revenue"),
             ]);

@@ -274,9 +274,10 @@ class AnalyticsService
             ->where('orders.created_at', 'not like', '0000-00-00%')
             ->selectRaw("{$monthExpr} as month")
             ->selectRaw('categories.id as category_id')
-            ->selectRaw("COALESCE(NULLIF(categories.name, ''), 'Uncategorized') as name")
+            // MAX() keeps MySQL ONLY_FULL_GROUP_BY happy (name is determined by category id).
+            ->selectRaw("MAX(COALESCE(NULLIF(categories.name, ''), 'Uncategorized')) as name")
             ->selectRaw('COALESCE(SUM(order_products.line_total), 0) as amount')
-            ->groupByRaw("{$monthExpr}, categories.id, COALESCE(NULLIF(categories.name, ''), 'Uncategorized')")
+            ->groupByRaw("{$monthExpr}, categories.id")
             ->get();
 
         /** @var array<string, array<int, float>> $matrix categoryKey => [month => amount] */

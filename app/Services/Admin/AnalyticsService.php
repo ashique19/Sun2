@@ -116,10 +116,29 @@ class AnalyticsService
      *     months: list<array{month: int, label: string, revenue: float, order_count: int}>
      * }
      */
+    /**
+     * @return array{
+     *     year: int,
+     *     revenue: float,
+     *     profit: float,
+     *     order_count: int,
+     *     months: list<array{
+     *         month: int,
+     *         label: string,
+     *         revenue: float,
+     *         direct: float,
+     *         indirect: float,
+     *         profit: float,
+     *         order_count: int
+     *     }>
+     * }
+     */
     public function yearOverview(int $year): array
     {
         [$start, $end] = $this->createdAtYearBounds($year);
         $monthExpr = DhakaSql::month('created_at');
+        $cogsExpr = OrderEconomicsSql::cogsExpression();
+        $codExpr = OrderEconomicsSql::codExpression();
 
         $aggregated = Order::query()
             ->where('status', 'delivered')
@@ -127,19 +146,51 @@ class AnalyticsService
             ->where('created_at', 'not like', '0000-00-00%')
             ->selectRaw("{$monthExpr} as month")
             ->selectRaw('COALESCE(SUM(collected_amount), 0) as revenue')
+            ->selectRaw("COALESCE(SUM({$cogsExpr}), 0) as cogs")
+            ->selectRaw('COALESCE(SUM(packaging_cost), 0) as packaging')
+            ->selectRaw('COALESCE(SUM(courier_charge), 0) as courier')
+            ->selectRaw("COALESCE(SUM({$codExpr}), 0) as cod")
             ->selectRaw('COUNT(*) as order_count')
             ->groupByRaw($monthExpr)
             ->get()
             ->keyBy(fn ($row) => (int) $row->month);
 
+        $expenseMonthExpr = DB::connection()->getDriverName() === 'sqlite'
+            ? "CAST(strftime('%m', spent_on) AS INTEGER)"
+            : 'MONTH(spent_on)';
+
+        $indirectByMonth = Expense::query()
+            ->whereBetween('spent_on', [
+                sprintf('%04d-01-01', $year),
+                sprintf('%04d-12-31', $year),
+            ])
+            ->selectRaw("{$expenseMonthExpr} as month")
+            ->selectRaw('COALESCE(SUM(amount), 0) as indirect')
+            ->groupByRaw($expenseMonthExpr)
+            ->pluck('indirect', 'month');
+
         $byMonth = [];
 
         for ($month = 1; $month <= 12; $month++) {
             $row = $aggregated->get($month);
+            $revenue = round((float) ($row->revenue ?? 0), 2);
+            $direct = round(
+                (float) ($row->cogs ?? 0)
+                + (float) ($row->packaging ?? 0)
+                + (float) ($row->courier ?? 0)
+                + (float) ($row->cod ?? 0),
+                2,
+            );
+            $indirect = round((float) ($indirectByMonth[$month] ?? 0), 2);
+            $profit = round($revenue - $direct - $indirect, 2);
+
             $byMonth[$month] = [
                 'month' => $month,
                 'label' => Carbon::create($year, $month, 1)->format('M'),
-                'revenue' => round((float) ($row->revenue ?? 0), 2),
+                'revenue' => $revenue,
+                'direct' => $direct,
+                'indirect' => $indirect,
+                'profit' => $profit,
                 'order_count' => (int) ($row->order_count ?? 0),
             ];
         }
@@ -149,6 +200,7 @@ class AnalyticsService
         return [
             'year' => $year,
             'revenue' => round(array_sum(array_column($months, 'revenue')), 2),
+            'profit' => round(array_sum(array_column($months, 'profit')), 2),
             'order_count' => (int) array_sum(array_column($months, 'order_count')),
             'months' => $months,
         ];

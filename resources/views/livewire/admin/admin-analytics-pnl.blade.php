@@ -128,7 +128,10 @@
             @foreach ($months as $row)
                 @php
                     $isSelected = (int) $month === (int) $row['month'];
-                    $hasData = $row['revenue'] > 0 || $row['order_count'] > 0;
+                    $hasData = $row['order_count'] > 0 || $row['indirect'] > 0 || abs($row['profit']) > 0.009;
+                    $profitTone = ! $hasData
+                        ? 'text-[#B0A898]'
+                        : ($row['profit'] < 0 ? 'text-rose-700' : 'text-[#2F6F4E]');
                 @endphp
                 <button type="button"
                     wire:click="selectMonth({{ $row['month'] }})"
@@ -147,8 +150,8 @@
                             <span class="text-[10px] font-medium text-[#C9A227]">Selected</span>
                         @endif
                     </div>
-                    <div class="mt-1 text-xs tabular-nums {{ $hasData ? 'text-[#6B6459]' : 'text-[#B0A898]' }}">
-                        &#2547; {{ number_format($row['revenue'], 0) }}
+                    <div class="mt-1 text-xs tabular-nums font-medium {{ $profitTone }}" data-month-pl>
+                        &#2547; {{ number_format($row['profit'], 0) }}
                     </div>
                     <div class="mt-0.5 text-[10px] {{ $hasData ? 'text-[#8C8474]' : 'text-[#C4BBA8]' }}">
                         {{ $row['order_count'] }} order{{ $row['order_count'] === 1 ? '' : 's' }}

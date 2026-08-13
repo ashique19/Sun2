@@ -71,7 +71,7 @@ class AdminProductAiDescriptionGenerateTest extends TestCase
         Livewire::test(AdminProductEdit::class, ['product' => $product])
             ->assertSee('Generate EN + BN from image')
             ->assertSee('Bangla description')
-            ->assertSeeHtml('wire:model.live="description_bn"');
+            ->assertSeeHtml('data-rich-text-editor="description_bn"');
     }
 
     #[Test]

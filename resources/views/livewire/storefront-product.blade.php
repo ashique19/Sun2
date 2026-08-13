@@ -6,9 +6,7 @@
             ? (\App\Support\StorefrontAssets::mediumUrl($active->path)
                 ?? \App\Support\StorefrontAssets::url($active->path))
             : null;
-        $descriptionHtml = trim((string) $product->description_bn) !== ''
-            ? $product->description_bn
-            : $product->description;
+        $descriptionHtml = \App\Support\ProductDescriptionHtml::forStorefront($product);
     @endphp
 
     <x-seo.json-ld :data="\App\Support\JsonLd::product($product)" />

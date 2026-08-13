@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Models\ProductReview;
 use App\Services\Storefront\CartService;
 use App\Services\Storefront\WishlistService;
+use App\Support\ProductDescriptionHtml;
 use App\Support\Seo;
 use App\Support\StorefrontAssets;
 use Livewire\Attributes\Layout;
@@ -136,7 +137,7 @@ class StorefrontProduct extends Component
                 'seoOgTitle' => $shareTitle,
                 'seoDescription' => Seo::description(
                     $this->product->meta_description
-                        ?: (trim((string) $this->product->description_bn) !== '' ? $this->product->description_bn : $this->product->description),
+                        ?: ProductDescriptionHtml::forStorefront($this->product),
                     $this->product->name.' — high-quality handmade jewellery from Sundoritoma. Home delivery all over Bangladesh.',
                 ),
                 'seoCanonical' => route('product.show', $this->product),

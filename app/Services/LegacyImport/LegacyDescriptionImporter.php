@@ -2,6 +2,7 @@
 
 namespace App\Services\LegacyImport;
 
+use App\Support\ProductDescriptionHtml;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -12,8 +13,6 @@ use Illuminate\Support\Facades\DB;
 class LegacyDescriptionImporter
 {
     public const BATCH_SIZE = 100;
-
-    private const ALLOWED_TAGS = '<p><br><br/><ul><ol><li><strong><b><em><i><u><a><h2><h3><h4><span><div>';
 
     /**
      * Legacy products that have English and/or Bangla detail HTML to copy.
@@ -238,20 +237,7 @@ class LegacyDescriptionImporter
 
     public function sanitizeHtml(string $html): string
     {
-        $html = trim($html);
-
-        if ($html === '') {
-            return '';
-        }
-
-        // Drop scripts/styles aggressively before allowlist strip.
-        $html = preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', '', $html) ?? $html;
-        $html = strip_tags($html, self::ALLOWED_TAGS);
-        // Remove on* handlers / javascript: URLs from remaining tags.
-        $html = preg_replace('/\son\w+\s*=\s*(".*?"|\'.*?\'|[^\s>]+)/i', '', $html) ?? $html;
-        $html = preg_replace('/\shref\s*=\s*([\'"])\s*javascript:[^\'"]*\1/i', ' href="#"', $html) ?? $html;
-
-        return trim($html);
+        return ProductDescriptionHtml::sanitize($html);
     }
 
     public function assertLegacyConnection(): void

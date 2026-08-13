@@ -9,6 +9,7 @@ use App\Services\Admin\AnalyticsService;
 use App\Services\Admin\OrderCalculationAuditService;
 use App\Services\Admin\OrderSettlementCourierRepairService;
 use App\Services\Admin\ProductUnitCostService;
+use App\Services\LegacyImport\LegacyDescriptionImporter;
 use App\Support\AdminAccess;
 use App\Support\OrderEconomicsSql;
 use App\Support\StorefrontAssets;
@@ -142,6 +143,31 @@ class AdminAnalyticsOrdersWithCosts extends Component
     public array $settlementRecentFixes = [];
 
     public ?string $settlementStatusLine = null;
+
+    public bool $descModalOpen = false;
+
+    public bool $descRunning = false;
+
+    public bool $descDone = false;
+
+    public bool $descForce = false;
+
+    public int $descAfterId = 0;
+
+    public int $descTotal = 0;
+
+    public int $descScanned = 0;
+
+    public int $descUpdated = 0;
+
+    public int $descSkipped = 0;
+
+    public int $descBatchNumber = 0;
+
+    /** @var list<string> */
+    public array $descRecentFixes = [];
+
+    public ?string $descStatusLine = null;
 
     public function mount(): void
     {
@@ -464,6 +490,123 @@ class AdminAnalyticsOrdersWithCosts extends Component
         return 'Ready to check column integrity for '.number_format($this->auditTotal)
             .' orders ('.$scope.') in batches of '.OrderCalculationAuditService::BATCH_SIZE
             .'. Report only — nothing is auto-changed.';
+    }
+
+    public function openLegacyDescriptionModal(LegacyDescriptionImporter $importer): void
+    {
+        $this->descModalOpen = true;
+        $this->descRunning = false;
+        $this->descDone = false;
+        $this->descAfterId = 0;
+        $this->descScanned = 0;
+        $this->descUpdated = 0;
+        $this->descSkipped = 0;
+        $this->descBatchNumber = 0;
+        $this->descRecentFixes = [];
+
+        try {
+            $importer->assertLegacyConnection();
+            $this->descTotal = $importer->eligibleLegacyCount();
+            $this->descStatusLine = $this->descTotal === 0
+                ? 'No legacy product descriptions found to copy.'
+                : 'Ready to copy descriptions for '.number_format($this->descTotal)
+                    .' legacy products in batches of '.LegacyDescriptionImporter::BATCH_SIZE
+                    .'. Empty sun2 fields are filled; enable overwrite to replace existing text.';
+        } catch (\Throwable $e) {
+            $this->descTotal = 0;
+            $this->descDone = true;
+            $this->descStatusLine = 'Legacy DB unavailable: '.$e->getMessage();
+        }
+    }
+
+    public function startLegacyDescriptionImport(LegacyDescriptionImporter $importer): void
+    {
+        if (! $this->descModalOpen || $this->descRunning) {
+            return;
+        }
+
+        if ($this->descTotal < 1) {
+            $this->descDone = true;
+            $this->descStatusLine = $this->descStatusLine ?: 'No legacy product descriptions found to copy.';
+
+            return;
+        }
+
+        $this->descRunning = true;
+        $this->descDone = false;
+        $this->descStatusLine = 'Starting…';
+        $this->continueLegacyDescriptionImport($importer);
+    }
+
+    public function continueLegacyDescriptionImport(LegacyDescriptionImporter $importer): void
+    {
+        if (! $this->descModalOpen || ! $this->descRunning || $this->descDone) {
+            return;
+        }
+
+        try {
+            $result = $importer->importNextBatch(
+                $this->descAfterId,
+                LegacyDescriptionImporter::BATCH_SIZE,
+                $this->descForce,
+            );
+        } catch (\Throwable $e) {
+            $this->descRunning = false;
+            $this->descDone = true;
+            $this->descStatusLine = 'Stopped — '.$e->getMessage();
+
+            return;
+        }
+
+        $this->descBatchNumber++;
+        $this->descAfterId = $result['next_after_id'];
+        $this->descScanned += $result['scanned'];
+        $this->descUpdated += $result['updated'];
+        $this->descSkipped += $result['skipped'];
+
+        foreach ($result['sample_names'] as $name) {
+            if (! in_array($name, $this->descRecentFixes, true)) {
+                $this->descRecentFixes[] = $name;
+            }
+        }
+        $this->descRecentFixes = array_slice($this->descRecentFixes, -12);
+
+        $pct = $this->descTotal > 0
+            ? min(100, (int) round(($this->descScanned / $this->descTotal) * 100))
+            : 100;
+
+        $this->descStatusLine = 'Batch '.$this->descBatchNumber
+            .' · scanned '.number_format($this->descScanned).' / '.number_format($this->descTotal)
+            .' ('.$pct.'%)'
+            .' · updated '.number_format($this->descUpdated)
+            .' · skipped '.number_format($this->descSkipped);
+
+        if ($result['done'] || $result['scanned'] === 0) {
+            $this->descRunning = false;
+            $this->descDone = true;
+            $this->descStatusLine = 'Done · scanned '.number_format($this->descScanned)
+                .' · updated '.number_format($this->descUpdated)
+                .' · skipped '.number_format($this->descSkipped)
+                .($this->descForce ? ' (overwrite on)' : '');
+        }
+    }
+
+    public function stopLegacyDescriptionImport(): void
+    {
+        if (! $this->descRunning) {
+            return;
+        }
+
+        $this->descRunning = false;
+        $this->descStatusLine = 'Paused at '.number_format($this->descScanned)
+            .' / '.number_format($this->descTotal)
+            .' · updated '.number_format($this->descUpdated).' so far. Resume to continue.';
+    }
+
+    public function closeLegacyDescriptionModal(): void
+    {
+        $this->descRunning = false;
+        $this->descModalOpen = false;
     }
 
     public function openSettlementRepairModal(OrderSettlementCourierRepairService $repair): void

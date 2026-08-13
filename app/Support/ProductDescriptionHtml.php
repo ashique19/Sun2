@@ -28,16 +28,31 @@ class ProductDescriptionHtml
         return trim($html);
     }
 
+    public static function english(Product $product): string
+    {
+        return self::sanitize($product->description);
+    }
+
+    public static function bangla(Product $product): string
+    {
+        return self::sanitize($product->description_bn);
+    }
+
     /**
-     * Prefer Bangla body copy when present (storefront default).
+     * Prefer Bangla body copy when present (storefront / SEO default).
      */
     public static function forStorefront(Product $product): string
     {
-        $bn = self::sanitize($product->description_bn);
+        $bn = self::bangla($product);
         if ($bn !== '') {
             return $bn;
         }
 
-        return self::sanitize($product->description);
+        return self::english($product);
+    }
+
+    public static function hasBothLanguages(Product $product): bool
+    {
+        return self::bangla($product) !== '' && self::english($product) !== '';
     }
 }

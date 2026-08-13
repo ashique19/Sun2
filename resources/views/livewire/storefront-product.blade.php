@@ -6,6 +6,10 @@
             ? (\App\Support\StorefrontAssets::mediumUrl($active->path)
                 ?? \App\Support\StorefrontAssets::url($active->path))
             : null;
+        $descriptionBn = \App\Support\ProductDescriptionHtml::bangla($product);
+        $descriptionEn = \App\Support\ProductDescriptionHtml::english($product);
+        $descriptionHasBoth = $descriptionBn !== '' && $descriptionEn !== '';
+        $descriptionDefaultLang = $descriptionBn !== '' ? 'bn' : 'en';
         $descriptionHtml = \App\Support\ProductDescriptionHtml::forStorefront($product);
     @endphp
 
@@ -115,8 +119,43 @@
                 @endif
 
                 @if ($descriptionHtml)
-                    <div class="product-description mt-6 text-[#6B6459]">
-                        {!! $descriptionHtml !!}
+                    <div class="mt-6"
+                        @if ($descriptionHasBoth)
+                            x-data="{ descLang: @js($descriptionDefaultLang) }"
+                            data-description-lang-switch
+                        @endif
+                    >
+                        @if ($descriptionHasBoth)
+                            <div class="mb-2 flex justify-end" role="group" aria-label="Description language">
+                                <div class="inline-flex overflow-hidden rounded border border-[#E0D6C2] bg-white text-[11px] font-semibold tracking-wide">
+                                    <button type="button"
+                                        @click="descLang = 'bn'"
+                                        :class="descLang === 'bn' ? 'bg-[#1E1E1E] text-white' : 'text-[#6B6459] hover:bg-[#FAF6EF]'"
+                                        class="px-2 py-0.5 transition"
+                                        :aria-pressed="descLang === 'bn' ? 'true' : 'false'">
+                                        Bn
+                                    </button>
+                                    <button type="button"
+                                        @click="descLang = 'en'"
+                                        :class="descLang === 'en' ? 'bg-[#1E1E1E] text-white' : 'text-[#6B6459] hover:bg-[#FAF6EF]'"
+                                        class="px-2 py-0.5 transition"
+                                        :aria-pressed="descLang === 'en' ? 'true' : 'false'"
+                                        data-description-lang-en>
+                                        En
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="product-description text-[#6B6459]" x-show="descLang === 'bn'" x-cloak data-description-bn>
+                                {!! $descriptionBn !!}
+                            </div>
+                            <div class="product-description text-[#6B6459]" x-show="descLang === 'en'" x-cloak data-description-en>
+                                {!! $descriptionEn !!}
+                            </div>
+                        @else
+                            <div class="product-description text-[#6B6459]">
+                                {!! $descriptionHtml !!}
+                            </div>
+                        @endif
                     </div>
                 @else
                     <p class="mt-6 text-[#6B6459] leading-relaxed">

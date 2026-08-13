@@ -513,8 +513,9 @@ class AdminAnalyticsOrdersWithCosts extends Component
                     .' legacy products in batches of '.LegacyDescriptionImporter::BATCH_SIZE
                     .'. Empty sun2 fields are filled; enable overwrite to replace existing text.';
         } catch (\Throwable $e) {
+            // Keep descDone false so the Start button stays visible for retry.
             $this->descTotal = 0;
-            $this->descDone = true;
+            $this->descDone = false;
             $this->descStatusLine = 'Legacy DB unavailable: '.$e->getMessage();
         }
     }
@@ -525,9 +526,22 @@ class AdminAnalyticsOrdersWithCosts extends Component
             return;
         }
 
+        try {
+            $importer->assertLegacyConnection();
+            if ($this->descTotal < 1) {
+                $this->descTotal = $importer->eligibleLegacyCount();
+            }
+        } catch (\Throwable $e) {
+            $this->descRunning = false;
+            $this->descDone = false;
+            $this->descStatusLine = 'Legacy DB unavailable: '.$e->getMessage();
+
+            return;
+        }
+
         if ($this->descTotal < 1) {
             $this->descDone = true;
-            $this->descStatusLine = $this->descStatusLine ?: 'No legacy product descriptions found to copy.';
+            $this->descStatusLine = 'No legacy product descriptions found to copy.';
 
             return;
         }

@@ -37,7 +37,7 @@ class OrderAdjustmentSync
      */
     public function replaceAdjustments(Order $order, array $lines, ?User $actor = null): void
     {
-        DB::transaction(function () use ($order, $lines, $actor) {
+        $this->runInTransactionIfNeeded(function () use ($order, $lines, $actor): void {
             $order->load(['items', 'adjustments']);
 
             // Snapshot before state for audit
@@ -78,6 +78,23 @@ class OrderAdjustmentSync
             // Recompute and persist order scalar caches
             $this->syncOrderScalars($order, $newAdjustments, $actor, $beforeSnapshot);
         });
+    }
+
+    /**
+     * Avoid nested savepoints when callers already own a DB::transaction.
+     *
+     * @template TReturn
+     *
+     * @param  callable(): TReturn  $callback
+     * @return TReturn
+     */
+    private function runInTransactionIfNeeded(callable $callback): mixed
+    {
+        if (DB::transactionLevel() > 0) {
+            return $callback();
+        }
+
+        return DB::transaction($callback);
     }
 
     /**

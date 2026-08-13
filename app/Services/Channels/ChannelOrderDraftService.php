@@ -116,73 +116,81 @@ class ChannelOrderDraftService
     public function ensureDraftForConversation(ChannelConversation $conversation, ?int $userId = null): Order
     {
         return DB::transaction(function () use ($conversation, $userId) {
-            $conversation->refresh();
-
-            if ($conversation->draft_order_id) {
-                $existing = Order::query()
-                    ->whereKey($conversation->draft_order_id)
-                    ->where('status', Order::STATUS_DRAFT)
-                    ->first();
-
-                if ($existing) {
-                    return $existing->loadMissing('items');
-                }
-            }
-
-            $parsed = [
-                'name' => filled($conversation->customer_name) ? $conversation->customer_name : null,
-                'phone' => filled($conversation->customer_phone) ? $conversation->customer_phone : null,
-                'address' => null,
-                'product_id' => null,
-                'product_name' => null,
-                'quantity' => 1,
-                'source' => 'staff',
-                'confidence' => 0,
-                'missing' => ['phone', 'address', 'product'],
-                'weak_points' => [],
-                'image_matches' => [],
-                'raw_text' => null,
-            ];
-
-            if (filled($parsed['name'])) {
-                $parsed['missing'] = array_values(array_diff($parsed['missing'], ['name']));
-            }
-            if (filled($parsed['phone']) && PhoneNumber::isValidBangladeshMobile((string) $parsed['phone'])) {
-                $parsed['missing'] = array_values(array_diff($parsed['missing'], ['phone']));
-            }
-
-            $orderData = $this->buildOrderAttributes($conversation, $parsed);
-            $orderData['admin_note'] = 'Draft started from Inbox by staff.';
-            $orderData['ai_parse_meta'] = array_merge($orderData['ai_parse_meta'] ?? [], [
-                'source' => 'staff',
-                'staff_locked_fields' => [],
-                'staff_mappings' => [],
-            ]);
-
-            $order = Order::query()->create(array_merge($orderData, [
-                'order_number' => 'PENDING',
-                'created_by' => $userId,
-                'updated_by' => $userId,
-            ]));
-            $order->update(['order_number' => (string) $order->id]);
-            $this->persistLines($order, $this->buildLines($parsed));
-
-            OrderStatusHistory::query()->create([
-                'order_id' => $order->id,
-                'status' => Order::STATUS_DRAFT,
-                'note' => 'Staff draft created from '.$conversation->channel.' inbox.',
-                'changed_by' => $userId,
-                'created_at' => now(),
-            ]);
-
-            $conversation->forceFill([
-                'draft_order_id' => $order->id,
-            ])->save();
-
-            Cache::forget(AdminOrderSegment::COUNTS_CACHE_KEY);
-
-            return $order->fresh(['items']);
+            return $this->createOrReturnDraft($conversation, $userId);
         });
+    }
+
+    /**
+     * Create or return the conversation's draft. Caller must own the transaction.
+     */
+    private function createOrReturnDraft(ChannelConversation $conversation, ?int $userId = null): Order
+    {
+        $conversation->refresh();
+
+        if ($conversation->draft_order_id) {
+            $existing = Order::query()
+                ->whereKey($conversation->draft_order_id)
+                ->where('status', Order::STATUS_DRAFT)
+                ->first();
+
+            if ($existing) {
+                return $existing->loadMissing('items');
+            }
+        }
+
+        $parsed = [
+            'name' => filled($conversation->customer_name) ? $conversation->customer_name : null,
+            'phone' => filled($conversation->customer_phone) ? $conversation->customer_phone : null,
+            'address' => null,
+            'product_id' => null,
+            'product_name' => null,
+            'quantity' => 1,
+            'source' => 'staff',
+            'confidence' => 0,
+            'missing' => ['phone', 'address', 'product'],
+            'weak_points' => [],
+            'image_matches' => [],
+            'raw_text' => null,
+        ];
+
+        if (filled($parsed['name'])) {
+            $parsed['missing'] = array_values(array_diff($parsed['missing'], ['name']));
+        }
+        if (filled($parsed['phone']) && PhoneNumber::isValidBangladeshMobile((string) $parsed['phone'])) {
+            $parsed['missing'] = array_values(array_diff($parsed['missing'], ['phone']));
+        }
+
+        $orderData = $this->buildOrderAttributes($conversation, $parsed);
+        $orderData['admin_note'] = 'Draft started from Inbox by staff.';
+        $orderData['ai_parse_meta'] = array_merge($orderData['ai_parse_meta'] ?? [], [
+            'source' => 'staff',
+            'staff_locked_fields' => [],
+            'staff_mappings' => [],
+        ]);
+
+        $order = Order::query()->create(array_merge($orderData, [
+            'order_number' => 'PENDING',
+            'created_by' => $userId,
+            'updated_by' => $userId,
+        ]));
+        $order->update(['order_number' => (string) $order->id]);
+        $this->persistLines($order, $this->buildLines($parsed));
+
+        OrderStatusHistory::query()->create([
+            'order_id' => $order->id,
+            'status' => Order::STATUS_DRAFT,
+            'note' => 'Staff draft created from '.$conversation->channel.' inbox.',
+            'changed_by' => $userId,
+            'created_at' => now(),
+        ]);
+
+        $conversation->forceFill([
+            'draft_order_id' => $order->id,
+        ])->save();
+
+        Cache::forget(AdminOrderSegment::COUNTS_CACHE_KEY);
+
+        return $order->fresh(['items']);
     }
 
     /**
@@ -204,7 +212,8 @@ class ChannelOrderDraftService
         }
 
         return DB::transaction(function () use ($conversation, $message, $field, $productId, $userId) {
-            $order = $this->ensureDraftForConversation($conversation, $userId);
+            // Use the non-wrapping helper so draft create + field map stay one txn.
+            $order = $this->createOrReturnDraft($conversation, $userId);
             $suggestion = $this->mapper->suggest($message, $field);
             $meta = is_array($order->ai_parse_meta) ? $order->ai_parse_meta : [];
             $locked = array_values(array_unique(array_merge(

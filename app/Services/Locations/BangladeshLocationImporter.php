@@ -10,6 +10,8 @@ use RuntimeException;
 
 class BangladeshLocationImporter
 {
+    public const AREA_CHUNK_SIZE = 100;
+
     /**
      * @return array{cities: int, areas: int}
      */
@@ -25,7 +27,7 @@ class BangladeshLocationImporter
             fn (array $division) => [$division['id'] => $division['en']],
         );
 
-        return DB::transaction(function () use ($districts, $units, $divisionNames, $output) {
+        $cityMap = DB::transaction(function () use ($districts, $divisionNames): array {
             $cityMap = [];
 
             foreach ($districts as $district) {
@@ -45,44 +47,54 @@ class BangladeshLocationImporter
                 $cityMap[$district['id']] = $city->id;
             }
 
-            $areaCount = 0;
+            return $cityMap;
+        });
 
-            foreach ($units as $unit) {
-                $cityId = $cityMap[$unit['districtId']] ?? null;
+        $areaCount = 0;
 
-                if (! $cityId) {
-                    continue;
+        foreach (collect($units)->chunk(self::AREA_CHUNK_SIZE) as $chunk) {
+            $areaCount += DB::transaction(function () use ($chunk, $cityMap): int {
+                $count = 0;
+
+                foreach ($chunk as $unit) {
+                    $cityId = $cityMap[$unit['districtId']] ?? null;
+
+                    if (! $cityId) {
+                        continue;
+                    }
+
+                    Area::query()->updateOrCreate(
+                        ['slug' => $unit['id']],
+                        [
+                            'city_id' => $cityId,
+                            'name' => $unit['en'],
+                            'police_station' => $unit['en'],
+                            'unit_type' => $unit['type'] ?? null,
+                            'delivery_charge_upto_5' => $this->deliveryChargeUpto5($unit),
+                            'delivery_charge_over_5' => $this->deliveryChargeOver5($unit),
+                            'is_active' => true,
+                        ],
+                    );
+
+                    $count++;
                 }
 
-                Area::query()->updateOrCreate(
-                    ['slug' => $unit['id']],
-                    [
-                        'city_id' => $cityId,
-                        'name' => $unit['en'],
-                        'police_station' => $unit['en'],
-                        'unit_type' => $unit['type'] ?? null,
-                        'delivery_charge_upto_5' => $this->deliveryChargeUpto5($unit),
-                        'delivery_charge_over_5' => $this->deliveryChargeOver5($unit),
-                        'is_active' => true,
-                    ],
-                );
+                return $count;
+            });
+        }
 
-                $areaCount++;
-            }
+        $cityCount = City::query()->count();
 
-            $cityCount = City::query()->count();
+        $output?->info(sprintf(
+            'Imported %d districts and %d police stations / upazilas.',
+            $cityCount,
+            $areaCount,
+        ));
 
-            $output?->info(sprintf(
-                'Imported %d districts and %d police stations / upazilas.',
-                $cityCount,
-                $areaCount,
-            ));
-
-            return [
-                'cities' => $cityCount,
-                'areas' => $areaCount,
-            ];
-        });
+        return [
+            'cities' => $cityCount,
+            'areas' => $areaCount,
+        ];
     }
 
     /**

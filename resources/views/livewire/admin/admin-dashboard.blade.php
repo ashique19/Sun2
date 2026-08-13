@@ -808,5 +808,52 @@
                 </table>
             </div>
         </div>
+
+        <div class="rounded-xl border border-[#EFE7D6] bg-white overflow-hidden">
+            <div class="border-b border-[#E7DFCF] px-3 py-3 sm:px-4">
+                <h3 class="text-sm font-semibold text-[#1E1E1E]">Order and delivery by category</h3>
+                <p class="mt-0.5 text-xs text-[#8C8474]">
+                    Same placement cohort as above — of orders placed this month / last month, how many later delivered, split by product category.
+                </p>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full min-w-[40rem] text-xs sm:text-sm">
+                    <thead class="bg-[#FAF6EF] text-left text-[#6B6459]">
+                        <tr>
+                            <th class="px-3 py-2 sm:px-4 font-medium" rowspan="2">Category</th>
+                            <th class="px-3 py-2 sm:px-4 font-medium text-center" colspan="2">{{ $ordersByCategory['this_month']['label'] }}</th>
+                            <th class="px-3 py-2 sm:px-4 font-medium text-center" colspan="2">{{ $ordersByCategory['last_month']['label'] }}</th>
+                        </tr>
+                        <tr>
+                            <th class="px-3 py-2 sm:px-4 font-medium text-right">Ordered</th>
+                            <th class="px-3 py-2 sm:px-4 font-medium text-right">Delivered</th>
+                            <th class="px-3 py-2 sm:px-4 font-medium text-right">Ordered</th>
+                            <th class="px-3 py-2 sm:px-4 font-medium text-right">Delivered</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-[#E7DFCF]">
+                        @forelse ($ordersByCategory['rows'] as $row)
+                            <tr class="hover:bg-[#FAF6EF]/50" wire:key="orders-by-category-{{ $row['category_id'] ?? 'none' }}">
+                                <td class="px-3 py-2 sm:px-4 font-medium text-[#1E1E1E]">{{ $row['name'] }}</td>
+                                @foreach (['this_month', 'last_month'] as $period)
+                                    <td class="px-3 py-2 sm:px-4 text-right tabular-nums">
+                                        <span class="font-medium text-[#1E1E1E]">{{ number_format($row[$period]['order_qty']) }}</span>
+                                        <span class="block text-[10px] text-[#8C8474]">&#2547;{{ number_format($row[$period]['order_value'], 0) }}</span>
+                                    </td>
+                                    <td class="px-3 py-2 sm:px-4 text-right tabular-nums">
+                                        <span class="font-medium text-[#1E1E1E]">{{ number_format($row[$period]['delivery_qty']) }}</span>
+                                        <span class="block text-[10px] text-[#8C8474]">&#2547;{{ number_format($row[$period]['delivery_value'], 0) }}</span>
+                                    </td>
+                                @endforeach
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="5" class="px-3 py-8 text-center text-[#8C8474]">No orders this month or last month.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 </div>

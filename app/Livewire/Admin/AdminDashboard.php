@@ -295,6 +295,11 @@ class AdminDashboard extends Component
                         'delivery_value' => 0,
                     ],
                 ],
+                'ordersByCategory' => [
+                    'this_month' => ['key' => '', 'label' => 'This month'],
+                    'last_month' => ['key' => '', 'label' => 'Last month'],
+                    'rows' => [],
+                ],
                 'attentionSummary' => [
                     'unresolved_count' => 0,
                     'unresolved_items' => collect(),
@@ -323,6 +328,7 @@ class AdminDashboard extends Component
             AdminDashboardMetrics::RANGE_PREVIOUS => $orderMonthTiles[1],
             default => $orderActivity['last7'],
         };
+        $ordersByCategory = AdminDashboardMetrics::orderAndDeliveryByCategory();
         $expenseAssistant = app(ExpenseAssistantService::class);
         $dueExpenseReminders = $expenseAssistant->dueReminders(auth()->user());
         $showEveningExpensePrompt = $expenseAssistant->shouldShowEveningPrompt(auth()->user());
@@ -392,6 +398,7 @@ class AdminDashboard extends Component
             'segmentValues' => $segmentValues,
             'orderMonthTiles' => $orderMonthTiles,
             'ordersDatePanel' => $ordersDatePanel,
+            'ordersByCategory' => $ordersByCategory,
             'attentionSummary' => $attentionSummary,
             'unconfirmedCourierCharges' => $unconfirmedCourierCharges,
             'courierChargeAreaLabels' => $courierChargeAreaLabels,

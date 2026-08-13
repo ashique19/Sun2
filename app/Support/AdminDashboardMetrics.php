@@ -5,10 +5,11 @@ namespace App\Support;
 use App\Models\Order;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class AdminDashboardMetrics
 {
-    public const DAILY_CACHE_KEY = 'admin.dashboard_daily_totals.v3';
+    public const DAILY_CACHE_KEY = 'admin.dashboard_daily_totals.v4';
 
     public const DAILY_CACHE_TTL = 60;
 
@@ -159,35 +160,32 @@ class AdminDashboardMetrics
         $last7Start = $today->copy()->subDays(6);
         $queryFrom = $previousMonthStart->lt($last7Start) ? $previousMonthStart : $last7Start;
 
-        /** @var array<string, array{order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}> $byDay */
-        $byDay = [];
+        $dayExpr = DhakaSql::date('placed_at');
+        $deliveredValue = DhakaSql::deliveredOrderValueExpression();
 
-        $orders = Order::query()
+        $aggregated = Order::query()
             ->whereNotNull('placed_at')
             ->where('placed_at', '>=', $queryFrom->copy()->timezone('UTC'))
             ->where('status', '!=', Order::STATUS_DRAFT)
-            ->get(['id', 'status', 'total', 'paid_amount', 'collected_amount', 'placed_at']);
+            ->selectRaw("{$dayExpr} as day")
+            ->selectRaw('COUNT(*) as order_qty')
+            ->selectRaw('COALESCE(SUM(total), 0) as order_value')
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END), 0) as delivery_qty")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'delivered' THEN ({$deliveredValue}) ELSE 0 END), 0) as delivery_value")
+            ->groupByRaw($dayExpr)
+            ->get();
 
-        foreach ($orders as $order) {
-            $date = $order->placed_at->timezone('Asia/Dhaka')->toDateString();
-            $byDay[$date] ??= [
-                'order_qty' => 0,
-                'order_value' => 0.0,
-                'delivery_qty' => 0,
-                'delivery_value' => 0.0,
+        /** @var array<string, array{order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}> $byDay */
+        $byDay = [];
+
+        foreach ($aggregated as $row) {
+            $date = (string) $row->day;
+            $byDay[$date] = [
+                'order_qty' => (int) $row->order_qty,
+                'order_value' => (float) $row->order_value,
+                'delivery_qty' => (int) $row->delivery_qty,
+                'delivery_value' => (float) $row->delivery_value,
             ];
-
-            // OQ: one per placed order (not line-item pieces).
-            $byDay[$date]['order_qty']++;
-            $byDay[$date]['order_value'] += (float) ($order->total ?? 0);
-
-            if ($order->status !== 'delivered') {
-                continue;
-            }
-
-            // DQ: still on the placement day when delivery happened later.
-            $byDay[$date]['delivery_qty']++;
-            $byDay[$date]['delivery_value'] += self::deliveredOrderValue($order);
         }
 
         $buildDays = function (Carbon $from, Carbon $to) use ($byDay): array {
@@ -282,28 +280,31 @@ class AdminDashboardMetrics
             'delivery_value' => 0.0,
         ];
 
+        $monthExpr = DhakaSql::yearMonth('orders.placed_at');
+
+        $aggregated = DB::table('orders')
+            ->leftJoin('order_products', 'order_products.order_id', '=', 'orders.id')
+            ->leftJoin('products', 'products.id', '=', 'order_products.product_id')
+            ->leftJoin('categories', 'categories.id', '=', 'products.category_id')
+            ->whereNotNull('orders.placed_at')
+            ->where('orders.placed_at', '>=', $previousMonthStart->copy()->timezone('UTC'))
+            ->where('orders.status', '!=', Order::STATUS_DRAFT)
+            ->whereRaw("{$monthExpr} in (?, ?)", [$thisMonthKey, $lastMonthKey])
+            ->selectRaw("{$monthExpr} as month_key")
+            ->selectRaw('categories.id as category_id')
+            ->selectRaw("COALESCE(NULLIF(categories.name, ''), 'Uncategorized') as name")
+            ->selectRaw('COUNT(DISTINCT orders.id) as order_qty')
+            ->selectRaw('COALESCE(SUM(COALESCE(order_products.line_total, 0)), 0) as order_value')
+            ->selectRaw("COUNT(DISTINCT CASE WHEN orders.status = 'delivered' THEN orders.id END) as delivery_qty")
+            ->selectRaw("COALESCE(SUM(CASE WHEN orders.status = 'delivered' THEN COALESCE(order_products.line_total, 0) ELSE 0 END), 0) as delivery_value")
+            ->groupByRaw("{$monthExpr}, categories.id, COALESCE(NULLIF(categories.name, ''), 'Uncategorized')")
+            ->get();
+
         /** @var array<string, array{category_id: int|null, name: string, this_month: array{order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}, last_month: array{order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}}> $rows */
         $rows = [];
 
-        $orders = Order::query()
-            ->with([
-                'items:id,order_id,product_id,line_total',
-                'items.product:id,category_id',
-                'items.product.category:id,name',
-            ])
-            ->whereNotNull('placed_at')
-            ->where('placed_at', '>=', $previousMonthStart->copy()->timezone('UTC'))
-            ->where('status', '!=', Order::STATUS_DRAFT)
-            ->get(['id', 'status', 'placed_at']);
-
-        foreach ($orders as $order) {
-            $placed = $order->placed_at?->timezone('Asia/Dhaka');
-
-            if ($placed === null) {
-                continue;
-            }
-
-            $monthKey = $placed->format('Y-m');
+        foreach ($aggregated as $row) {
+            $monthKey = (string) $row->month_key;
             $bucket = match ($monthKey) {
                 $thisMonthKey => 'this_month',
                 $lastMonthKey => 'last_month',
@@ -314,49 +315,21 @@ class AdminDashboardMetrics
                 continue;
             }
 
-            /** @var array<string, array{category_id: int|null, name: string, line_total: float}> $byCategory */
-            $byCategory = [];
+            $categoryId = $row->category_id !== null ? (int) $row->category_id : null;
+            $key = $categoryId !== null ? (string) $categoryId : 'none';
+            $name = (string) ($row->name ?: 'Uncategorized');
 
-            foreach ($order->items as $item) {
-                $category = $item->product?->category;
-                $categoryId = $category?->id;
-                $key = $categoryId !== null ? (string) $categoryId : 'none';
-                $byCategory[$key] ??= [
-                    'category_id' => $categoryId,
-                    'name' => $category?->name ?: 'Uncategorized',
-                    'line_total' => 0.0,
-                ];
-                $byCategory[$key]['line_total'] += (float) ($item->line_total ?? 0);
-            }
+            $rows[$key] ??= [
+                'category_id' => $categoryId,
+                'name' => $name,
+                'this_month' => $emptyTotals(),
+                'last_month' => $emptyTotals(),
+            ];
 
-            if ($byCategory === []) {
-                $byCategory['none'] = [
-                    'category_id' => null,
-                    'name' => 'Uncategorized',
-                    'line_total' => 0.0,
-                ];
-            }
-
-            $isDelivered = $order->status === 'delivered';
-
-            foreach ($byCategory as $key => $line) {
-                $rows[$key] ??= [
-                    'category_id' => $line['category_id'],
-                    'name' => $line['name'],
-                    'this_month' => $emptyTotals(),
-                    'last_month' => $emptyTotals(),
-                ];
-
-                $rows[$key][$bucket]['order_qty']++;
-                $rows[$key][$bucket]['order_value'] += $line['line_total'];
-
-                if (! $isDelivered) {
-                    continue;
-                }
-
-                $rows[$key][$bucket]['delivery_qty']++;
-                $rows[$key][$bucket]['delivery_value'] += $line['line_total'];
-            }
+            $rows[$key][$bucket]['order_qty'] += (int) $row->order_qty;
+            $rows[$key][$bucket]['order_value'] += (float) $row->order_value;
+            $rows[$key][$bucket]['delivery_qty'] += (int) $row->delivery_qty;
+            $rows[$key][$bucket]['delivery_value'] += (float) $row->delivery_value;
         }
 
         $sorted = array_values($rows);

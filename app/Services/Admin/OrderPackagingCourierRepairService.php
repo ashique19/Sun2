@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderPackagingCost;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class OrderPackagingCourierRepairService
 {
@@ -61,7 +62,7 @@ class OrderPackagingCourierRepairService
         $samples = [];
 
         foreach ($orders as $order) {
-            $result = $this->repairOrder($order);
+            $result = DB::transaction(fn (): array => $this->repairOrder($order));
 
             if ($result['changed']) {
                 $fixedOrders++;
@@ -93,41 +94,44 @@ class OrderPackagingCourierRepairService
      */
     public function repairOrder(Order $order): array
     {
-        $order = $order->fresh(['items.product.category', 'courier']);
-        $packagingFixed = false;
-        $courierFixed = false;
+        return DB::transaction(function () use ($order): array {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+            $order->load(['items.product.category', 'courier']);
+            $packagingFixed = false;
+            $courierFixed = false;
 
-        if (round((float) ($order->packaging_cost ?? 0), 2) < 0.01) {
-            $estimate = $this->packaging->estimateFor($order);
+            if (round((float) ($order->packaging_cost ?? 0), 2) < 0.01) {
+                $estimate = $this->packaging->estimateFor($order);
 
-            if ($estimate >= 0.01) {
-                $this->packaging->apply($order, $estimate);
-                $packagingFixed = true;
+                if ($estimate >= 0.01) {
+                    $this->packaging->apply($order, $estimate);
+                    $packagingFixed = true;
+                }
             }
-        }
 
-        if (round((float) ($order->courier_charge ?? 0), 2) < 0.01) {
-            $fee = $this->courierCharges->estimateMerchantDeliveryFee($order, $order->courier);
+            if (round((float) ($order->courier_charge ?? 0), 2) < 0.01) {
+                $fee = $this->courierCharges->estimateMerchantDeliveryFee($order, $order->courier);
 
-            if ($fee >= 0.01) {
-                $this->courierCharges->set(
-                    $order->fresh(),
-                    $fee,
-                    'manual',
-                    null,
-                    [
-                        'source' => 'packaging_courier_repair',
-                        'rule' => 'piece_based_rate_card',
-                    ],
-                );
-                $courierFixed = true;
+                if ($fee >= 0.01) {
+                    $this->courierCharges->set(
+                        $order->fresh(),
+                        $fee,
+                        'manual',
+                        null,
+                        [
+                            'source' => 'packaging_courier_repair',
+                            'rule' => 'piece_based_rate_card',
+                        ],
+                    );
+                    $courierFixed = true;
+                }
             }
-        }
 
-        return [
-            'changed' => $packagingFixed || $courierFixed,
-            'packaging_fixed' => $packagingFixed,
-            'courier_fixed' => $courierFixed,
-        ];
+            return [
+                'changed' => $packagingFixed || $courierFixed,
+                'packaging_fixed' => $packagingFixed,
+                'courier_fixed' => $courierFixed,
+            ];
+        });
     }
 }

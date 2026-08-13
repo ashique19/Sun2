@@ -5,6 +5,13 @@
             <p class="mt-1 text-xs text-[#8C8474]">Double-click price, regular price, cost, commission, max discount, or stock to edit inline.</p>
         </div>
         <div class="flex flex-wrap items-center gap-3">
+            <button type="button" wire:click="openBulkCategory" @disabled($selected === [])
+                class="rounded-full px-5 py-2 text-sm font-semibold transition border
+                    {{ $selected === []
+                        ? 'border-[#E0D6C2] text-[#B0A898] cursor-not-allowed bg-white'
+                        : 'border-[#C9A227] text-[#C9A227] bg-white hover:bg-[#FAF6EF]' }}">
+                Change category ({{ count($selected) }})
+            </button>
             <button type="button" wire:click="openBulkStock" @disabled($selected === [])
                 class="rounded-full px-5 py-2 text-sm font-semibold transition border
                     {{ $selected === []
@@ -23,6 +30,37 @@
             </a>
         </div>
     </div>
+
+    @if ($bulkCategoryOpen)
+        <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-4 flex flex-wrap items-end gap-3"
+            role="dialog"
+            aria-label="Change category for selected products">
+            <div class="min-w-[14rem]">
+                <label for="bulk-category-id" class="block text-xs font-medium text-[#6B6459] mb-1">
+                    New category for {{ count($selected) }} selected
+                </label>
+                <select id="bulk-category-id"
+                    wire:model="bulkCategoryId"
+                    class="w-full min-w-[14rem] rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm">
+                    <option value="">Select category…</option>
+                    @foreach ($categories as $categoryOption)
+                        <option value="{{ $categoryOption->id }}">{{ $categoryOption->name }}</option>
+                    @endforeach
+                </select>
+                @if ($errors->has('bulkCategoryId'))
+                    <p class="mt-1 text-[11px] text-rose-600">{{ $errors->first('bulkCategoryId') }}</p>
+                @endif
+            </div>
+            <button type="button" wire:click="applyBulkCategory"
+                class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">
+                Apply
+            </button>
+            <button type="button" wire:click="closeBulkCategory"
+                class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
+                Cancel
+            </button>
+        </div>
+    @endif
 
     @if ($bulkStockOpen)
         <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-4 flex flex-wrap items-end gap-3"

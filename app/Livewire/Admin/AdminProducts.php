@@ -45,6 +45,10 @@ class AdminProducts extends Component
 
     public string $bulkStockQuantity = '';
 
+    public bool $bulkCategoryOpen = false;
+
+    public string $bulkCategoryId = '';
+
     public ?int $editingProductId = null;
 
     public ?string $editingField = null;
@@ -116,6 +120,7 @@ class AdminProducts extends Component
     {
         $this->selected = [];
         $this->closeBulkStock();
+        $this->closeBulkCategory();
     }
 
     public function openBulkStock(): void
@@ -126,6 +131,7 @@ class AdminProducts extends Component
             return;
         }
 
+        $this->closeBulkCategory();
         $this->bulkStockOpen = true;
         $this->bulkStockQuantity = '';
         $this->resetValidation('bulkStockQuantity');
@@ -165,6 +171,57 @@ class AdminProducts extends Component
         $this->message = $updated === 1
             ? 'Stock set to '.$stock.' for 1 product.'
             : 'Stock set to '.$stock.' for '.$updated.' products.';
+    }
+
+    public function openBulkCategory(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->selected === []) {
+            return;
+        }
+
+        $this->closeBulkStock();
+        $this->bulkCategoryOpen = true;
+        $this->bulkCategoryId = '';
+        $this->resetValidation('bulkCategoryId');
+        $this->message = null;
+    }
+
+    public function closeBulkCategory(): void
+    {
+        $this->bulkCategoryOpen = false;
+        $this->bulkCategoryId = '';
+        $this->resetValidation('bulkCategoryId');
+    }
+
+    public function applyBulkCategory(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->selected === []) {
+            $this->closeBulkCategory();
+
+            return;
+        }
+
+        $this->validate([
+            'bulkCategoryId' => ['required', 'integer', 'exists:categories,id'],
+        ]);
+
+        $ids = array_values(array_unique(array_map('intval', $this->selected)));
+        $categoryId = (int) $this->bulkCategoryId;
+        $category = Category::query()->findOrFail($categoryId);
+
+        $updated = Product::query()
+            ->whereIn('id', $ids)
+            ->update(['category_id' => $categoryId]);
+
+        $this->selected = [];
+        $this->closeBulkCategory();
+        $this->message = $updated === 1
+            ? 'Category set to “'.$category->name.'” for 1 product.'
+            : 'Category set to “'.$category->name.'” for '.$updated.' products.';
     }
 
     public function makePost(): mixed

@@ -7,6 +7,7 @@
         'orders-costs' => ['route' => 'admin.analytics.orders-with-costs', 'label' => 'All orders with costs'],
         'ordered' => ['route' => 'admin.analytics.ordered-delivered', 'label' => 'Ordered vs delivered'],
         'category' => ['route' => 'admin.analytics.category-revenue', 'label' => 'By category'],
+        'compare' => ['route' => 'admin.analytics.compare', 'label' => 'Compare years'],
         'investor' => ['route' => 'admin.analytics.investor-pitch', 'label' => 'Investor pitch'],
     ];
 @endphp

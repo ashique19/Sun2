@@ -51,6 +51,12 @@ class AdminAnalytics extends Component
                     'stat' => 'By created month · '.$year,
                 ],
                 [
+                    'title' => 'Compare years',
+                    'blurb' => 'Line charts of each month across the last 10 years — P&L, orders, deliveries, category revenue.',
+                    'route' => 'admin.analytics.compare',
+                    'stat' => '10-year month comparison',
+                ],
+                [
                     'title' => 'Investor pitch',
                     'blurb' => 'Yearly traction, YoY growth, unit economics, and channel mix for fundraising.',
                     'route' => 'admin.analytics.investor-pitch',

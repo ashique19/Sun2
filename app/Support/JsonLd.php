@@ -64,7 +64,7 @@ class JsonLd
         }
 
         $description = Seo::description(
-            $product->meta_description ?: $product->description,
+            $product->meta_description ?: ProductDescriptionHtml::forStorefront($product),
             $product->name.' — high-quality handmade jewellery from Sundoritoma.',
         );
 

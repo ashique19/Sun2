@@ -1,6 +1,6 @@
 <div x-data="productImageUploader(@js($this->getId()))">
     @assets
-        @vite(['resources/js/admin-product-images.js'])
+        @vite(['resources/js/admin-product-images.js', 'resources/js/admin-rich-text-editor.js'])
     @endassets
 
     <div @if ($product) x-data="{ filtersOpen: false }" @endif>
@@ -118,7 +118,7 @@
                         <div>
                             <h3 class="text-sm font-medium text-[#1E1E1E]">Descriptions</h3>
                             <p class="mt-0.5 text-xs text-[#8C8474]">
-                                Storefront prefers Bangla when present. HTML allowed in both fields.
+                                Storefront prefers Bangla when present, rendered as formatted HTML.
                             </p>
                         </div>
                         <button type="button"
@@ -151,18 +151,8 @@
                         <p class="text-xs text-[#8C8474]">Gemini is not configured (<code class="text-[11px]">GEMINI_API_KEY</code>).</p>
                     @endunless
 
-                    <div>
-                        <label class="block text-sm font-medium mb-1">English description</label>
-                        <textarea wire:model.live="description" rows="6"
-                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 font-mono text-xs"></textarea>
-                        @error('description') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-1">Bangla description</label>
-                        <textarea wire:model.live="description_bn" rows="6"
-                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 font-mono text-xs"></textarea>
-                        @error('description_bn') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
-                    </div>
+                    <x-admin.rich-text-editor label="English description" property="description" />
+                    <x-admin.rich-text-editor label="Bangla description" property="description_bn" />
                 </div>
                 <label class="flex items-center gap-2 text-sm">
                     <input type="checkbox" wire:model.live="is_published" class="rounded border-[#E0D6C2] text-[#C9A227]">

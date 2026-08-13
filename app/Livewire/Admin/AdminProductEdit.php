@@ -15,6 +15,7 @@ use App\Services\Admin\ProductImageService;
 use App\Services\Admin\ProductPricedImageService;
 use App\Services\Admin\ProductUnitCostService;
 use App\Support\Fileinfo;
+use App\Support\ProductDescriptionHtml;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
@@ -690,10 +691,10 @@ class AdminProductEdit extends Component
             ? (int) round((float) $validated['compare_at_price'])
             : null;
         $validated['sku'] = $validated['sku'] !== '' ? $validated['sku'] : null;
-        $validated['description'] = $validated['description'] !== '' ? $validated['description'] : null;
-        $validated['description_bn'] = ($validated['description_bn'] ?? '') !== ''
-            ? $validated['description_bn']
-            : null;
+        $en = ProductDescriptionHtml::sanitize($validated['description'] ?? '');
+        $bn = ProductDescriptionHtml::sanitize($validated['description_bn'] ?? '');
+        $validated['description'] = $en !== '' ? $en : null;
+        $validated['description_bn'] = $bn !== '' ? $bn : null;
 
         if ($this->product) {
             $this->product->update($validated);

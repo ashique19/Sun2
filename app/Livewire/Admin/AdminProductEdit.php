@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Models\ProductCostHead;
 use App\Models\ProductImage;
 use App\Services\Admin\GeminiClient;
+use App\Services\Admin\ProductDescriptionGenerator;
 use App\Services\Admin\ProductImageService;
 use App\Services\Admin\ProductPricedImageService;
 use App\Services\Admin\ProductUnitCostService;
@@ -41,6 +42,14 @@ class AdminProductEdit extends Component
     public string $sku = '';
 
     public string $description = '';
+
+    public string $description_bn = '';
+
+    public bool $aiDescriptionGenerating = false;
+
+    public ?string $aiDescriptionError = null;
+
+    public ?string $aiDescriptionMessage = null;
 
     public string $price = '0';
 
@@ -130,6 +139,7 @@ class AdminProductEdit extends Component
         $this->slug = $product->slug;
         $this->sku = (string) ($product->sku ?? '');
         $this->description = (string) ($product->description ?? '');
+        $this->description_bn = (string) ($product->description_bn ?? '');
         $this->price = (string) (int) round((float) $product->price);
         $this->purchase_price = (string) (int) round((float) $product->purchase_price);
         $this->unit_cost_display = (string) (int) round($product->effectiveUnitCost());
@@ -257,6 +267,43 @@ class AdminProductEdit extends Component
         $pricedImages->clear($this->product);
         $this->product->refresh();
         $this->message = 'Priced image deleted.';
+    }
+
+    public function generateDescriptionsFromImage(ProductDescriptionGenerator $generator): void
+    {
+        $this->aiDescriptionError = null;
+        $this->aiDescriptionMessage = null;
+
+        if (! $this->product) {
+            $this->ensureProductSaved();
+        }
+
+        if (! $this->product) {
+            $this->aiDescriptionError = 'Save the product before generating descriptions.';
+
+            return;
+        }
+
+        $this->product->loadMissing(['images', 'category']);
+        $this->aiDescriptionGenerating = true;
+
+        try {
+            $result = $generator->generate($this->product);
+
+            if ($result['description'] !== '') {
+                $this->description = $result['description'];
+            }
+
+            if ($result['description_bn'] !== '') {
+                $this->description_bn = $result['description_bn'];
+            }
+
+            $this->aiDescriptionMessage = 'Descriptions generated from the primary product image. Review and save.';
+        } catch (Throwable $e) {
+            $this->aiDescriptionError = $e->getMessage();
+        } finally {
+            $this->aiDescriptionGenerating = false;
+        }
     }
 
     public function generateAiImage(GeminiClient $gemini, string $rawImageBase64 = '', string $rawImageMime = 'image/jpeg'): array
@@ -613,6 +660,7 @@ class AdminProductEdit extends Component
             'slug' => ['required', 'string', 'max:255', $slugUnique],
             'sku' => ['nullable', 'string', 'max:64'],
             'description' => ['nullable', 'string'],
+            'description_bn' => ['nullable', 'string'],
             'price' => ['required', 'numeric', 'min:0'],
             'purchase_price' => ['nullable', 'numeric', 'min:0'],
             'commission' => ['nullable', 'numeric', 'min:0'],
@@ -643,6 +691,9 @@ class AdminProductEdit extends Component
             : null;
         $validated['sku'] = $validated['sku'] !== '' ? $validated['sku'] : null;
         $validated['description'] = $validated['description'] !== '' ? $validated['description'] : null;
+        $validated['description_bn'] = ($validated['description_bn'] ?? '') !== ''
+            ? $validated['description_bn']
+            : null;
 
         if ($this->product) {
             $this->product->update($validated);

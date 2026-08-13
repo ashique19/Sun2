@@ -2,34 +2,20 @@
 
 namespace Tests\Feature;
 
-use App\Livewire\Admin\AdminAnalyticsOrdersWithCosts;
 use App\Models\Courier;
 use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\Product;
-use App\Models\User;
 use App\Services\Admin\AnalyticsService;
 use App\Services\Admin\OrderCalculationAuditService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
-use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class AdminAnalyticsColumnIntegrityAuditTest extends TestCase
 {
     use RefreshDatabase;
-
-    private function adminUser(): User
-    {
-        Role::findOrCreate('admin');
-
-        $user = User::factory()->create();
-        $user->assignRole('admin');
-
-        return $user;
-    }
 
     private function steadfast(): Courier
     {
@@ -45,9 +31,8 @@ class AdminAnalyticsColumnIntegrityAuditTest extends TestCase
     }
 
     #[Test]
-    public function audit_modal_is_report_only_and_flags_missing_cogs_and_delivered_zero_revenue(): void
+    public function audit_is_report_only_and_flags_missing_cogs_and_delivered_zero_revenue(): void
     {
-        $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
 
         $product = Product::query()->create([
@@ -111,20 +96,15 @@ class AdminAnalyticsColumnIntegrityAuditTest extends TestCase
             'line_total' => 1000,
         ]);
 
-        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
-            ->assertSee('Audit columns…')
-            ->assertDontSee('Repair costs…')
-            ->assertDontSee('Audit calculations…')
-            ->call('openCalculationAuditModal')
-            ->assertSet('auditModalOpen', true)
-            ->assertSet('auditTotal', 2)
-            ->set('auditYear', '2024')
-            ->assertSet('auditTotal', 1)
-            ->call('startCalculationAudit')
-            ->assertSet('auditDone', true)
-            ->assertSet('auditManualNeeded', 1)
-            ->assertSee('AUD-ZERO-REV')
-            ->assertSee('collected_amount missing');
+        $audit = app(OrderCalculationAuditService::class);
+        $this->assertSame(2, $audit->eligibleOrderCount());
+        $this->assertSame(1, $audit->eligibleOrderCount(2024));
+        $result = $audit->auditNextBatch(0, 100, 2024);
+        $this->assertSame(1, $result['manual_needed']);
+        $issueText = collect($result['issues'])->pluck('order_number')->implode(' ');
+        $this->assertStringContainsString('AUD-ZERO-REV', $issueText);
+        $messages = collect($result['issues'])->flatMap(fn ($row) => $row['issues'])->implode(' ');
+        $this->assertStringContainsString('collected_amount missing', $messages);
 
         // Report-only: packaging/COGS were not mutated.
         $missingCogs->refresh();

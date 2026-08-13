@@ -98,7 +98,9 @@ class AdminAnalyticsLegacyDescriptionModalTest extends TestCase
             ->call('openLegacyDescriptionModal')
             ->assertSet('descModalOpen', true)
             ->assertSet('descTotal', 3)
+            ->assertSet('descDone', false)
             ->assertSee('Batches of '.LegacyDescriptionImporter::BATCH_SIZE)
+            ->assertSee('Start')
             ->call('startLegacyDescriptionImport')
             ->assertSet('descDone', true)
             ->assertSet('descUpdated', 3)
@@ -145,6 +147,35 @@ class AdminAnalyticsLegacyDescriptionModalTest extends TestCase
         $this->assertSame(1, $third['scanned']);
         $this->assertTrue($third['done']);
         $this->assertSame(5, Product::query()->whereNotNull('description')->count());
+    }
+
+    #[Test]
+    public function modal_keeps_start_button_when_legacy_db_is_unavailable(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        config([
+            'database.connections.legacy' => [
+                'driver' => 'sqlite',
+                'database' => database_path('legacy-desc-missing-'.uniqid('', true).'.sqlite'),
+                'prefix' => '',
+                'foreign_key_constraints' => false,
+            ],
+        ]);
+        DB::purge('legacy');
+
+        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
+            ->call('openLegacyDescriptionModal')
+            ->assertSet('descModalOpen', true)
+            ->assertSet('descDone', false)
+            ->assertSet('descRunning', false)
+            ->assertSee('Legacy DB unavailable')
+            ->assertSee('Start')
+            ->assertDontSee('Run again')
+            ->call('startLegacyDescriptionImport')
+            ->assertSet('descDone', false)
+            ->assertSet('descRunning', false)
+            ->assertSee('Start');
     }
 
     #[Test]

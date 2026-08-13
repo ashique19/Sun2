@@ -346,28 +346,13 @@
                     @endif
 
                     <div class="flex flex-wrap gap-2 border-t border-[#EFE7D6] pt-3">
-                        @if (! $descRunning && ! $descDone)
-                            <button type="button"
-                                wire:click="startLegacyDescriptionImport"
-                                class="rounded-lg bg-[#1F4E79] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#183d5e]">
-                                Start
-                            </button>
-                        @endif
                         @if ($descRunning)
                             <button type="button"
                                 wire:click="stopLegacyDescriptionImport"
                                 class="rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#6B6459] hover:border-[#C9A227]">
                                 Pause
                             </button>
-                        @endif
-                        @if (! $descRunning && $descScanned > 0 && ! $descDone)
-                            <button type="button"
-                                wire:click="startLegacyDescriptionImport"
-                                class="rounded-lg bg-[#1F4E79] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#183d5e]">
-                                Resume / Next
-                            </button>
-                        @endif
-                        @if ($descDone)
+                        @elseif ($descDone)
                             <button type="button"
                                 wire:click="openLegacyDescriptionModal"
                                 class="rounded-lg border border-[#1F4E79] px-3 py-1.5 text-sm font-medium text-[#1F4E79] hover:bg-[#FAF6EF]">
@@ -377,6 +362,20 @@
                                 wire:click="closeLegacyDescriptionModal"
                                 class="rounded-lg bg-[#1F4E79] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#183d5e]">
                                 Close
+                            </button>
+                        @elseif ($descScanned > 0)
+                            <button type="button"
+                                wire:click="startLegacyDescriptionImport"
+                                class="rounded-lg bg-[#1F4E79] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#183d5e]"
+                                data-desc-start>
+                                Resume / Next
+                            </button>
+                        @else
+                            <button type="button"
+                                wire:click="startLegacyDescriptionImport"
+                                class="rounded-lg bg-[#1F4E79] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#183d5e]"
+                                data-desc-start>
+                                Start
                             </button>
                         @endif
                     </div>

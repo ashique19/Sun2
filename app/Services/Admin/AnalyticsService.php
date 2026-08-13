@@ -4,7 +4,7 @@ namespace App\Services\Admin;
 
 use App\Models\Expense;
 use App\Models\Order;
-use App\Models\OrderProduct;
+use App\Support\DhakaSql;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -20,25 +20,20 @@ class AnalyticsService
      */
     public function availableYears(): array
     {
-        $years = [];
+        $yearExpr = DhakaSql::year('created_at');
 
-        DB::table('orders')
+        $list = DB::table('orders')
             ->where('status', '!=', Order::STATUS_DRAFT)
             ->whereNotNull('created_at')
-            ->orderBy('id')
-            ->select(['id', 'created_at'])
-            ->chunkById(1000, function ($rows) use (&$years): void {
-                foreach ($rows as $row) {
-                    $year = $this->safeDhakaYear($row->created_at ?? null);
-
-                    if ($year !== null) {
-                        $years[$year] = true;
-                    }
-                }
-            });
-
-        $list = array_keys($years);
-        rsort($list, SORT_NUMERIC);
+            ->where('created_at', 'not like', '0000-00-00%')
+            ->selectRaw("DISTINCT {$yearExpr} as year")
+            ->pluck('year')
+            ->map(fn ($year) => (int) $year)
+            ->filter(fn (int $year) => $year > 0)
+            ->unique()
+            ->sortDesc()
+            ->values()
+            ->all();
 
         $current = (int) now('Asia/Dhaka')->year;
 
@@ -123,39 +118,32 @@ class AnalyticsService
     public function yearOverview(int $year): array
     {
         [$start, $end] = $this->createdAtYearBounds($year);
+        $monthExpr = DhakaSql::month('created_at');
 
-        $rows = Order::query()
+        $aggregated = Order::query()
             ->where('status', 'delivered')
             ->whereBetween('created_at', [$start, $end])
-            ->get(['id', 'collected_amount', 'created_at']);
+            ->where('created_at', 'not like', '0000-00-00%')
+            ->selectRaw("{$monthExpr} as month")
+            ->selectRaw('COALESCE(SUM(collected_amount), 0) as revenue')
+            ->selectRaw('COUNT(*) as order_count')
+            ->groupByRaw($monthExpr)
+            ->get()
+            ->keyBy(fn ($row) => (int) $row->month);
 
         $byMonth = [];
 
         for ($month = 1; $month <= 12; $month++) {
+            $row = $aggregated->get($month);
             $byMonth[$month] = [
                 'month' => $month,
                 'label' => Carbon::create($year, $month, 1)->format('M'),
-                'revenue' => 0.0,
-                'order_count' => 0,
+                'revenue' => round((float) ($row->revenue ?? 0), 2),
+                'order_count' => (int) ($row->order_count ?? 0),
             ];
         }
 
-        foreach ($rows as $order) {
-            $month = $this->safeDhakaMonth($order->getAttributes()['created_at'] ?? $order->created_at);
-
-            if ($month === null) {
-                continue;
-            }
-
-            $byMonth[$month]['revenue'] += (float) ($order->collected_amount ?? 0);
-            $byMonth[$month]['order_count']++;
-        }
-
-        $months = array_values(array_map(function (array $row): array {
-            $row['revenue'] = round($row['revenue'], 2);
-
-            return $row;
-        }, $byMonth));
+        $months = array_values($byMonth);
 
         return [
             'year' => $year,
@@ -204,30 +192,34 @@ class AnalyticsService
             ];
         }
 
-        $created = Order::query()
+        $monthExpr = DhakaSql::month('created_at');
+        $deliveredValue = 'CASE
+            WHEN COALESCE(collected_amount, 0) > 0 THEN collected_amount
+            ELSE COALESCE(total, 0)
+        END';
+
+        $aggregated = Order::query()
             ->where('status', '!=', Order::STATUS_DRAFT)
             ->whereBetween('created_at', [$start, $end])
-            ->get(['id', 'total', 'created_at', 'status', 'collected_amount']);
+            ->where('created_at', 'not like', '0000-00-00%')
+            ->selectRaw("{$monthExpr} as month")
+            ->selectRaw('COUNT(*) as ordered_count')
+            ->selectRaw('COALESCE(SUM(total), 0) as ordered_value')
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END), 0) as delivered_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'delivered' THEN ({$deliveredValue}) ELSE 0 END), 0) as delivered_value")
+            ->groupByRaw($monthExpr)
+            ->get()
+            ->keyBy(fn ($row) => (int) $row->month);
 
-        foreach ($created as $order) {
-            $month = $this->safeDhakaMonth($order->getAttributes()['created_at'] ?? $order->created_at);
-
-            if ($month === null) {
+        foreach ($aggregated as $month => $row) {
+            if ($month < 1 || $month > 12) {
                 continue;
             }
 
-            $months[$month]['ordered_count']++;
-            $months[$month]['ordered_value'] += (float) ($order->total ?? 0);
-
-            if ($order->status !== 'delivered') {
-                continue;
-            }
-
-            $months[$month]['delivered_count']++;
-            $collected = (float) ($order->collected_amount ?? 0);
-            $months[$month]['delivered_value'] += $collected > 0
-                ? $collected
-                : (float) ($order->total ?? 0);
+            $months[$month]['ordered_count'] = (int) $row->ordered_count;
+            $months[$month]['ordered_value'] = (float) $row->ordered_value;
+            $months[$month]['delivered_count'] = (int) $row->delivered_count;
+            $months[$month]['delivered_value'] = (float) $row->delivered_value;
         }
 
         $rows = array_values(array_map(function (array $row): array {
@@ -270,39 +262,38 @@ class AnalyticsService
             '#B8956A', '#8C8474',
         ];
 
-        $lines = OrderProduct::query()
-            ->with(['product:id,category_id', 'product.category:id,name', 'order:id,status,created_at'])
-            ->whereHas('order', function ($query) use ($start, $end) {
-                $query->where('status', 'delivered')
-                    ->whereBetween('created_at', [$start, $end]);
-            })
-            ->get(['id', 'order_id', 'product_id', 'line_total']);
+        $monthExpr = DhakaSql::month('orders.created_at');
+
+        $aggregated = DB::table('order_products')
+            ->join('orders', 'orders.id', '=', 'order_products.order_id')
+            ->leftJoin('products', 'products.id', '=', 'order_products.product_id')
+            ->leftJoin('categories', 'categories.id', '=', 'products.category_id')
+            ->where('orders.status', 'delivered')
+            ->whereBetween('orders.created_at', [$start, $end])
+            ->where('orders.created_at', 'not like', '0000-00-00%')
+            ->selectRaw("{$monthExpr} as month")
+            ->selectRaw('categories.id as category_id')
+            ->selectRaw("COALESCE(NULLIF(categories.name, ''), 'Uncategorized') as name")
+            ->selectRaw('COALESCE(SUM(order_products.line_total), 0) as amount')
+            ->groupByRaw("{$monthExpr}, categories.id, COALESCE(NULLIF(categories.name, ''), 'Uncategorized')")
+            ->get();
 
         /** @var array<string, array<int, float>> $matrix categoryKey => [month => amount] */
         $matrix = [];
         $names = [];
 
-        foreach ($lines as $line) {
-            $order = $line->order;
+        foreach ($aggregated as $row) {
+            $month = (int) $row->month;
 
-            if (! $order) {
+            if ($month < 1 || $month > 12) {
                 continue;
             }
 
-            $month = $this->safeDhakaMonth(
-                $order->getAttributes()['created_at'] ?? $order->created_at
-            );
-
-            if ($month === null) {
-                continue;
-            }
-
-            $category = $line->product?->category;
-            $categoryId = $category?->id;
+            $categoryId = $row->category_id !== null ? (int) $row->category_id : null;
             $key = $categoryId !== null ? (string) $categoryId : 'none';
-            $names[$key] = $category?->name ?: 'Uncategorized';
+            $names[$key] = (string) ($row->name ?: 'Uncategorized');
             $matrix[$key] ??= array_fill(1, 12, 0.0);
-            $matrix[$key][$month] += (float) ($line->line_total ?? 0);
+            $matrix[$key][$month] += (float) $row->amount;
         }
 
         uasort($matrix, function (array $a, array $b): int {

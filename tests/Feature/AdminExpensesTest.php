@@ -108,7 +108,8 @@ class AdminExpensesTest extends TestCase
             'total' => 1080,
             'courier_id' => $courier->id,
             'actual_delivery_date' => '2026-07-15 10:00:00',
-            'placed_at' => now()->subDays(3),
+            'placed_at' => '2026-07-12 10:00:00',
+            'created_at' => '2026-07-12 10:00:00',
         ]);
 
         OrderProduct::query()->create([

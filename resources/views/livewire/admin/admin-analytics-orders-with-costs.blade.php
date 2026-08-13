@@ -38,6 +38,12 @@
             Repair settlement…
         </button>
         <button type="button"
+            wire:click="openLegacyDescriptionModal"
+            class="rounded-lg border border-[#1F4E79] bg-white px-3 py-2 text-sm font-medium text-[#1F4E79] hover:bg-[#FAF6EF]"
+            title="Copy product descriptions from the legacy DB (100 per batch)">
+            Copy legacy descriptions…
+        </button>
+        <button type="button"
             wire:click="openCalculationAuditModal"
             class="rounded-lg border border-[#1E1E1E] bg-white px-3 py-2 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]"
             title="Scan orders for column integrity and data that can crash year analytics">
@@ -242,6 +248,142 @@
             </div>
         @endif
     </div>
+
+    @if ($descModalOpen)
+        @php
+            $descPct = $descTotal > 0
+                ? min(100, (int) round(($descScanned / $descTotal) * 100))
+                : ($descDone ? 100 : 0);
+        @endphp
+        <div class="fixed inset-0 z-[74] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+            wire:click.self="closeLegacyDescriptionModal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Copy legacy product descriptions">
+            @if ($descRunning)
+                <div wire:poll.400ms="continueLegacyDescriptionImport" class="hidden" aria-hidden="true"></div>
+            @endif
+            <div class="w-full max-w-lg overflow-hidden rounded-xl border border-[#EFE7D6] bg-white shadow-xl">
+                <div class="flex items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
+                    <div class="min-w-0">
+                        <h2 class="text-base font-semibold text-[#1E1E1E]">Copy legacy descriptions</h2>
+                        <p class="mt-0.5 text-xs text-[#8C8474]">
+                            Batches of {{ \App\Services\LegacyImport\LegacyDescriptionImporter::BATCH_SIZE }}.
+                            Copies legacy <code class="text-[11px]">product_detail</code> /
+                            <code class="text-[11px]">product_detail_bn</code> into sun2
+                            <code class="text-[11px]">description</code> /
+                            <code class="text-[11px]">description_bn</code> (matched by product id).
+                            Scripts and unsafe markup are stripped.
+                        </p>
+                    </div>
+                    <button type="button"
+                        wire:click="closeLegacyDescriptionModal"
+                        class="rounded-lg border border-[#E0D6C2] px-2.5 py-1 text-xs text-[#6B6459] hover:border-[#C9A227]"
+                        aria-label="Close legacy description import">
+                        Close
+                    </button>
+                </div>
+
+                <div class="space-y-4 px-4 py-4">
+                    @if (! $descRunning && ! $descDone)
+                        <label class="flex items-start gap-2 text-sm text-[#6B6459]">
+                            <input type="checkbox"
+                                wire:model.live="descForce"
+                                class="mt-0.5 rounded border-[#E0D6C2] text-[#1F4E79] focus:ring-[#1F4E79]"
+                                data-desc-force>
+                            <span>
+                                <span class="font-medium text-[#1E1E1E]">Overwrite existing</span>
+                                <span class="block text-xs text-[#8C8474]">
+                                    Replace non-empty sun2 descriptions. Off = fill empty fields only.
+                                </span>
+                            </span>
+                        </label>
+                    @elseif ($descForce)
+                        <p class="text-xs text-[#8C8474]">Overwrite existing: on</p>
+                    @endif
+
+                    <div>
+                        <div class="mb-1.5 flex items-center justify-between text-xs text-[#6B6459]">
+                            <span data-desc-progress-label>{{ $descStatusLine }}</span>
+                            <span class="tabular-nums font-medium text-[#1E1E1E]">{{ $descPct }}%</span>
+                        </div>
+                        <div class="h-2 overflow-hidden rounded-full bg-[#EFE7D6]" role="progressbar"
+                            aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $descPct }}">
+                            <div class="h-full rounded-full bg-[#1F4E79] transition-[width] duration-300"
+                                style="width: {{ $descPct }}%"></div>
+                        </div>
+                    </div>
+
+                    <dl class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
+                            <dt class="text-[11px] text-[#8C8474]">Scanned</dt>
+                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-desc-scanned>
+                                {{ number_format($descScanned) }}
+                                <span class="font-normal text-[#8C8474]">/ {{ number_format($descTotal) }}</span>
+                            </dd>
+                        </div>
+                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
+                            <dt class="text-[11px] text-[#8C8474]">Updated</dt>
+                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-desc-updated>
+                                {{ number_format($descUpdated) }}
+                            </dd>
+                        </div>
+                        <div class="rounded-lg bg-[#FAF6EF] px-3 py-2">
+                            <dt class="text-[11px] text-[#8C8474]">Skipped</dt>
+                            <dd class="mt-0.5 tabular-nums font-semibold text-[#1E1E1E]" data-desc-skipped>
+                                {{ number_format($descSkipped) }}
+                            </dd>
+                        </div>
+                    </dl>
+
+                    @if ($descRecentFixes !== [])
+                        <div>
+                            <p class="text-[11px] font-medium text-[#6B6459]">Recent updates</p>
+                            <p class="mt-1 text-xs text-[#8C8474]" data-desc-recent>
+                                {{ implode(' · ', $descRecentFixes) }}
+                            </p>
+                        </div>
+                    @endif
+
+                    <div class="flex flex-wrap gap-2 border-t border-[#EFE7D6] pt-3">
+                        @if (! $descRunning && ! $descDone)
+                            <button type="button"
+                                wire:click="startLegacyDescriptionImport"
+                                class="rounded-lg bg-[#1F4E79] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#183d5e]">
+                                Start
+                            </button>
+                        @endif
+                        @if ($descRunning)
+                            <button type="button"
+                                wire:click="stopLegacyDescriptionImport"
+                                class="rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#6B6459] hover:border-[#C9A227]">
+                                Pause
+                            </button>
+                        @endif
+                        @if (! $descRunning && $descScanned > 0 && ! $descDone)
+                            <button type="button"
+                                wire:click="startLegacyDescriptionImport"
+                                class="rounded-lg bg-[#1F4E79] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#183d5e]">
+                                Resume / Next
+                            </button>
+                        @endif
+                        @if ($descDone)
+                            <button type="button"
+                                wire:click="openLegacyDescriptionModal"
+                                class="rounded-lg border border-[#1F4E79] px-3 py-1.5 text-sm font-medium text-[#1F4E79] hover:bg-[#FAF6EF]">
+                                Run again
+                            </button>
+                            <button type="button"
+                                wire:click="closeLegacyDescriptionModal"
+                                class="rounded-lg bg-[#1F4E79] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#183d5e]">
+                                Close
+                            </button>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 
     @if ($settlementModalOpen)
         @php

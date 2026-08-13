@@ -36,7 +36,7 @@ class OrderDeliveryReturnService
         $this->assertDispatched($order);
 
         return DB::transaction(function () use ($order, $collectedAmount, $changedBy) {
-            $order->refresh();
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
             $collected = $collectedAmount ?? (float) $order->due_amount;
 
             $this->deliverySettlement->recordCollection(
@@ -101,7 +101,8 @@ class OrderDeliveryReturnService
         }
 
         return DB::transaction(function () use ($order, $status, $note, $changedBy, $applyCourierFeeDebit, $extraAttributes) {
-            $order->refresh()->load('items', 'courier');
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+            $order->load('items', 'courier');
 
             $this->applyCourierReturnedLines($order);
             $order->refresh()->load('courier');
@@ -170,6 +171,7 @@ class OrderDeliveryReturnService
         }
 
         return DB::transaction(function () use ($order, $returnedQtyByItemId, $collectedTk, $changedBy) {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
             $order->load('items', 'courier');
 
             $anyReturned = false;

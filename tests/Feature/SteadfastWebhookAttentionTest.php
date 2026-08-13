@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\AdminAttentionItem;
 use App\Models\Courier;
 use App\Models\Order;
+use App\Models\PaymentTransaction;
+use App\Services\Orders\OrderDeliverySettlement;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -161,6 +163,38 @@ class SteadfastWebhookAttentionTest extends TestCase
 
         $this->assertSame('delivered', $order->fresh()->status);
         $this->assertSame(0, AdminAttentionItem::query()->count());
+        $this->assertSame(1, PaymentTransaction::query()->where('order_id', $order->id)->count());
+        $this->assertSame(
+            OrderDeliverySettlement::settlementExternalId((int) $order->id),
+            PaymentTransaction::query()->where('order_id', $order->id)->value('external_id'),
+        );
+    }
+
+    #[Test]
+    public function duplicate_delivered_webhook_records_cod_once(): void
+    {
+        $order = $this->order([
+            'order_number' => 'ORD-DUP',
+            'courier_tracker' => 'SFR_DUP',
+        ]);
+
+        $payload = [
+            'notification_type' => 'delivery_status',
+            'invoice' => $order->order_number,
+            'tracking_id' => $order->courier_tracker,
+            'status' => 'delivered',
+            'cod_amount' => 1200,
+            'updated_at' => now()->toDateTimeString(),
+            'tracking_message' => 'Delivered successfully',
+        ];
+
+        $this->postWebhook($payload);
+        $this->postWebhook($payload);
+
+        $this->assertSame('delivered', $order->fresh()->status);
+        $this->assertSame(1, PaymentTransaction::query()->where('order_id', $order->id)->where('method', 'cod')->count());
+        $this->assertSame(1200.0, (float) PaymentTransaction::query()->where('order_id', $order->id)->value('amount'));
+        $this->assertSame(0.0, (float) $order->fresh()->due_amount);
     }
 
     #[Test]

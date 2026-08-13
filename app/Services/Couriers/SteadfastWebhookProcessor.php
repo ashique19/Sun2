@@ -49,6 +49,9 @@ class SteadfastWebhookProcessor
         $courierId = Courier::query()->where('slug', 'steadfast')->value('id');
 
         DB::transaction(function () use ($order, $payload, $notificationType, $courierId) {
+            // Serialize concurrent webhook/admin settles on the same order.
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+
             $courierData = CourierData::query()->create([
                 'order_id' => $order->id,
                 'courier_id' => $courierId,

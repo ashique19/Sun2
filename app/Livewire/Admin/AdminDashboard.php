@@ -12,6 +12,7 @@ use App\Services\Admin\AdminAttentionService;
 use App\Services\Admin\CourierBalanceService;
 use App\Services\Admin\ExpenseAssistantService;
 use App\Services\Admin\OrderDeliveryReturnService;
+use App\Services\Admin\OrderPackagingCourierConfirmService;
 use App\Services\Admin\ReturnHubArrivalService;
 use App\Services\Admin\SteadfastWebhookInboxService;
 use App\Services\Orders\OrderCourierChargeSync;
@@ -237,6 +238,7 @@ class AdminDashboard extends Component
         int $orderId,
         OrderCourierChargeSync $courierChargeSync,
         OrderPackagingCost $packagingCost,
+        OrderPackagingCourierConfirmService $confirmService,
     ): void {
         AdminAccess::ensureStaffAdmin();
 
@@ -263,11 +265,10 @@ class AdminDashboard extends Component
             'pendingPackagingCosts.'.$orderId => 'packaging cost',
         ]);
 
-        $packagingCost->apply($order, (float) $packagingRaw);
-
-        $courierChargeSync->confirm(
-            order: $order->fresh(),
-            amount: (float) $chargeRaw,
+        $confirmService->confirm(
+            order: $order,
+            packagingAmount: (float) $packagingRaw,
+            courierAmount: (float) $chargeRaw,
             actor: auth()->user(),
         );
 

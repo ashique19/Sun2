@@ -7,6 +7,7 @@ use App\Models\OrderProduct;
 use App\Models\Product;
 use App\Services\Orders\OrderEmptyProductDefaults;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class OrderCostSnapshotRepairService
 {
@@ -67,7 +68,7 @@ class OrderCostSnapshotRepairService
         $samples = [];
 
         foreach ($orders as $order) {
-            $result = $this->repairOrder($order);
+            $result = DB::transaction(fn (): array => $this->repairOrder($order));
 
             if ($result['changed']) {
                 $fixedOrders++;
@@ -99,31 +100,34 @@ class OrderCostSnapshotRepairService
      */
     public function repairOrder(Order $order): array
     {
-        $order = $order->fresh(['items.product']);
-        $status = strtolower((string) $order->status);
-        $backfilled = 0;
-        $cleared = 0;
-        $productsUpdated = 0;
+        return DB::transaction(function () use ($order): array {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+            $order->load(['items.product']);
+            $status = strtolower((string) $order->status);
+            $backfilled = 0;
+            $cleared = 0;
+            $productsUpdated = 0;
 
-        if (in_array($status, ['cancelled', 'returned'], true)) {
-            $cleared = $this->clearCostsWhenReturnStillShowsCogs($order);
-        } elseif ($this->emptyProductDefaults->hasNoProductQuantity($order)) {
-            $backfilled = $this->ensureEmptyOrderCogs($order) ? 1 : 0;
-        } else {
-            // Fill missing catalog costs + ৳0 lines (by product_id or line name), then
-            // refresh any remaining linked lines from the live catalog.
-            $costBackfill = $this->productCosts->backfillMissingCostsForOrder($order);
-            $productsUpdated = $costBackfill['products_updated'];
-            $order = $order->fresh(['items.product']);
-            $backfilled = $costBackfill['lines_updated']
-                + $this->backfillMissingLineCostsFromProducts($order);
-        }
+            if (in_array($status, ['cancelled', 'returned'], true)) {
+                $cleared = $this->clearCostsWhenReturnStillShowsCogs($order);
+            } elseif ($this->emptyProductDefaults->hasNoProductQuantity($order)) {
+                $backfilled = $this->ensureEmptyOrderCogs($order) ? 1 : 0;
+            } else {
+                // Fill missing catalog costs + ৳0 lines (by product_id or line name), then
+                // refresh any remaining linked lines from the live catalog.
+                $costBackfill = $this->productCosts->backfillMissingCostsForOrder($order);
+                $productsUpdated = $costBackfill['products_updated'];
+                $order = $order->fresh(['items.product']);
+                $backfilled = $costBackfill['lines_updated']
+                    + $this->backfillMissingLineCostsFromProducts($order);
+            }
 
-        return [
-            'changed' => ($backfilled + $cleared + $productsUpdated) > 0,
-            'backfilled_lines' => $backfilled,
-            'cleared_return_lines' => $cleared,
-        ];
+            return [
+                'changed' => ($backfilled + $cleared + $productsUpdated) > 0,
+                'backfilled_lines' => $backfilled,
+                'cleared_return_lines' => $cleared,
+            ];
+        });
     }
 
     public function hasNoProductQuantity(Order $order): bool

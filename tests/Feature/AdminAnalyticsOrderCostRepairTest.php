@@ -47,7 +47,9 @@ class AdminAnalyticsOrderCostRepairTest extends TestCase
 
         Livewire::test(AdminAnalyticsOrdersWithCosts::class)
             ->assertDontSee('Repair costs…')
-            ->assertSee('Audit columns…');
+            ->assertDontSee('Repair settlement…')
+            ->assertDontSee('Copy legacy descriptions…')
+            ->assertDontSee('Audit columns…');
     }
 
     #[Test]

@@ -2,33 +2,19 @@
 
 namespace Tests\Feature;
 
-use App\Livewire\Admin\AdminAnalyticsOrdersWithCosts;
 use App\Models\Courier;
 use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\PaymentTransaction;
-use App\Models\User;
 use App\Services\Admin\OrderSettlementCourierRepairService;
 use App\Services\Orders\OrderCourierChargeSync;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
-use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class AdminAnalyticsSettlementCourierRepairTest extends TestCase
 {
     use RefreshDatabase;
-
-    private function adminUser(): User
-    {
-        Role::findOrCreate('admin');
-
-        $user = User::factory()->create();
-        $user->assignRole('admin');
-
-        return $user;
-    }
 
     private function steadfast(): Courier
     {
@@ -44,9 +30,8 @@ class AdminAnalyticsSettlementCourierRepairTest extends TestCase
     }
 
     #[Test]
-    public function modal_repairs_zero_courier_and_settlement_in_batches(): void
+    public function service_repairs_zero_courier_and_settlement_in_batches(): void
     {
-        $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
 
         $zeroCourier = Order::query()->create([
@@ -103,15 +88,11 @@ class AdminAnalyticsSettlementCourierRepairTest extends TestCase
             'line_total' => 400,
         ]);
 
-        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
-            ->assertSee('Repair settlement…')
-            ->call('openSettlementRepairModal')
-            ->assertSet('settlementModalOpen', true)
-            ->assertSet('settlementTotal', 2)
-            ->call('startSettlementRepair')
-            ->assertSet('settlementDone', true)
-            ->assertSet('settlementCourierFixed', 2)
-            ->assertSet('settlementSettlementFixed', 1);
+        $repair = app(OrderSettlementCourierRepairService::class);
+        $this->assertSame(2, $repair->eligibleOrderCount());
+        $result = $repair->repairNextBatch(0, 100);
+        $this->assertSame(2, $result['courier_fixed']);
+        $this->assertSame(1, $result['settlement_fixed']);
 
         $zeroCourier->refresh();
         $this->assertSame(60.0, (float) $zeroCourier->courier_charge);

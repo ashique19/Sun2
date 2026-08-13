@@ -99,7 +99,7 @@ class AdminAnalyticsPackagingCourierRepairTest extends TestCase
 
         Livewire::test(AdminAnalyticsOrdersWithCosts::class)
             ->assertDontSee('Repair packaging / courier…')
-            ->assertSee('Audit columns…');
+            ->assertDontSee('Audit columns…');
 
         $result = app(OrderPackagingCourierRepairService::class)->repairNextBatch(0, 100);
         $this->assertSame(2, $result['scanned']);

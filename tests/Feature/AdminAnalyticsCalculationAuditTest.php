@@ -2,33 +2,19 @@
 
 namespace Tests\Feature;
 
-use App\Livewire\Admin\AdminAnalyticsOrdersWithCosts;
 use App\Models\Courier;
 use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\Product;
-use App\Models\User;
 use App\Services\Admin\OrderCalculationAuditService;
 use App\Services\Orders\OrderEmptyProductDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
-use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class AdminAnalyticsCalculationAuditTest extends TestCase
 {
     use RefreshDatabase;
-
-    private function adminUser(): User
-    {
-        Role::findOrCreate('admin');
-
-        $user = User::factory()->create();
-        $user->assignRole('admin');
-
-        return $user;
-    }
 
     private function steadfast(): Courier
     {
@@ -46,7 +32,6 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
     #[Test]
     public function audit_reports_zero_packaging_but_ignores_non_zero_mismatch(): void
     {
-        $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
 
         $zeroPack = Order::query()->create([
@@ -97,17 +82,15 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
             'line_total' => 500,
         ]);
 
-        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
-            ->assertSee('Audit columns…')
-            ->call('openCalculationAuditModal')
-            ->assertSet('auditModalOpen', true)
-            ->assertSet('auditTotal', 2)
-            ->call('startCalculationAudit')
-            ->assertSet('auditDone', true)
-            ->assertSet('auditManualNeeded', 1)
-            ->assertSee('AUD-ZERO-PACK')
-            ->assertSee('Packaging is ৳0')
-            ->assertDontSee('differs from rate card');
+        $audit = app(OrderCalculationAuditService::class);
+        $this->assertSame(2, $audit->eligibleOrderCount());
+        $result = $audit->auditNextBatch(0, 100);
+        $this->assertSame(1, $result['manual_needed']);
+        $issueText = collect($result['issues'])->pluck('order_number')->implode(' ');
+        $this->assertStringContainsString('AUD-ZERO-PACK', $issueText);
+        $messages = collect($result['issues'])->flatMap(fn ($row) => $row['issues'])->implode(' ');
+        $this->assertStringContainsString('Packaging is ৳0', $messages);
+        $this->assertStringNotContainsString('differs from rate card', $messages);
 
         // Report-only: zero packaging is not auto-filled.
         $zeroPack->refresh();
@@ -119,7 +102,6 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
     #[Test]
     public function audit_flags_missing_product_cogs_without_mutating(): void
     {
-        $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
 
         $product = Product::query()->create([
@@ -156,13 +138,12 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
             'line_total' => 500,
         ]);
 
-        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
-            ->call('openCalculationAuditModal')
-            ->call('startCalculationAudit')
-            ->assertSet('auditDone', true)
-            ->assertSet('auditManualNeeded', 1)
-            ->assertSee('AUD-NO-COGS')
-            ->assertSee('no unit cost');
+        $result = app(OrderCalculationAuditService::class)->auditNextBatch(0, 100);
+        $this->assertSame(1, $result['manual_needed']);
+        $issueText = collect($result['issues'])->pluck('order_number')->implode(' ');
+        $this->assertStringContainsString('AUD-NO-COGS', $issueText);
+        $messages = collect($result['issues'])->flatMap(fn ($row) => $row['issues'])->implode(' ');
+        $this->assertStringContainsString('no unit cost', $messages);
 
         $this->assertSame(0.0, (float) $product->fresh()->unit_cost);
     }
@@ -216,7 +197,6 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
     #[Test]
     public function audit_flags_empty_order_missing_default_cogs(): void
     {
-        $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
 
         $order = Order::query()->create([
@@ -234,12 +214,10 @@ class AdminAnalyticsCalculationAuditTest extends TestCase
             'placed_at' => '2024-06-01 10:00:00',
         ]);
 
-        Livewire::test(AdminAnalyticsOrdersWithCosts::class)
-            ->call('openCalculationAuditModal')
-            ->call('startCalculationAudit')
-            ->assertSet('auditDone', true)
-            ->assertSet('auditManualNeeded', 1)
-            ->assertSee('AUD-EMPTY');
+        $result = app(OrderCalculationAuditService::class)->auditNextBatch(0, 100);
+        $this->assertSame(1, $result['manual_needed']);
+        $issueText = collect($result['issues'])->pluck('order_number')->implode(' ');
+        $this->assertStringContainsString('AUD-EMPTY', $issueText);
 
         $order->refresh()->load('items');
         $this->assertSame(0.0, (float) $order->packaging_cost);

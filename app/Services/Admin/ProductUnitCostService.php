@@ -89,7 +89,7 @@ class ProductUnitCostService
         }
 
         return DB::transaction(function () use ($material, $quantity, $totalCost) {
-            $material->refresh();
+            $material = Material::query()->whereKey($material->id)->lockForUpdate()->firstOrFail();
             $oldQty = max(0.0, (float) $material->stock_quantity);
             $oldCost = (float) $material->unit_cost;
             $newQty = $oldQty + $quantity;
@@ -136,7 +136,11 @@ class ProductUnitCostService
      */
     public function syncSnapshotsToOrderProducts(Product $product, ?int $onlyOrderId = null): int
     {
-        $query = OrderProduct::query()
+        $purchase = round((float) $product->purchase_price, 2);
+        $unitCost = $this->effectiveUnitCost($product);
+        $count = 0;
+
+        OrderProduct::query()
             ->where('order_products.product_id', $product->id)
             ->whereHas('order', function ($orderQuery) use ($onlyOrderId): void {
                 $orderQuery->whereNotIn('status', ['cancelled', 'returned']);
@@ -144,20 +148,24 @@ class ProductUnitCostService
                 if ($onlyOrderId !== null) {
                     $orderQuery->whereKey($onlyOrderId);
                 }
-            });
+            })
+            ->orderBy('order_products.id')
+            ->chunkById(500, function ($lines) use ($purchase, $unitCost, &$count): void {
+                $ids = $lines->modelKeys();
 
-        $ids = (clone $query)->orderBy('order_products.id')->pluck('order_products.id');
+                if ($ids === []) {
+                    return;
+                }
 
-        if ($ids->isEmpty()) {
-            return 0;
-        }
+                OrderProduct::query()->whereIn('id', $ids)->update([
+                    'purchase_price' => $purchase,
+                    'unit_cost' => $unitCost,
+                ]);
 
-        OrderProduct::query()->whereIn('id', $ids)->update([
-            'purchase_price' => round((float) $product->purchase_price, 2),
-            'unit_cost' => $this->effectiveUnitCost($product),
-        ]);
+                $count += count($ids);
+            }, column: 'order_products.id', alias: 'id');
 
-        return $ids->count();
+        return $count;
     }
 
     /**

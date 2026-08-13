@@ -96,7 +96,15 @@ class OrderPlacer
             app(OrderPaymentSync::class)->sync($order->fresh());
 
             foreach (collect($coupons)->unique('id') as $coupon) {
-                $coupon->increment('used_count');
+                $locked = Coupon::query()->whereKey($coupon->id)->lockForUpdate()->firstOrFail();
+
+                if (! $locked->hasUsesRemaining()) {
+                    throw new \RuntimeException(
+                        "Coupon '{$locked->code}' has reached its usage limit."
+                    );
+                }
+
+                $locked->increment('used_count');
             }
 
             $cart->clear();

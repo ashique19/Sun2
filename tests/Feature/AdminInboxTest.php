@@ -178,17 +178,41 @@ class AdminInboxTest extends TestCase
         $this->actingAs($this->adminUser());
         $this->conversation();
 
-        Livewire::test(AdminInbox::class)
+        $closed = Livewire::test(AdminInbox::class)
             ->assertSet('mobileFiltersOpen', false)
-            ->call('toggleMobileFilters')
-            ->assertSet('mobileFiltersOpen', true)
-            ->set('unread', '1')
-            ->assertSet('mobileFiltersOpen', true);
+            ->assertSeeHtml('data-inbox-filters')
+            ->assertSeeHtml('aria-expanded="false"');
 
-        Livewire::withQueryParams(['unread' => '1'])
+        $this->assertMatchesRegularExpression(
+            '/data-inbox-filters[^>]*\bhidden xl:flex\b/',
+            $closed->html(),
+        );
+        $this->assertDoesNotMatchRegularExpression(
+            '/data-inbox-filters[^>]*\bgrid xl:flex\b/',
+            $closed->html(),
+        );
+
+        $closed->call('toggleMobileFilters')
+            ->assertSet('mobileFiltersOpen', true)
+            ->assertSeeHtml('aria-expanded="true"')
+            ->call('toggleMobileFilters')
+            ->assertSet('mobileFiltersOpen', false)
+            ->assertSeeHtml('aria-expanded="false"')
+            ->call('toggleMobileFilters')
+            ->set('unread', '1')
+            ->assertSet('mobileFiltersOpen', true)
+            ->assertSeeHtml('aria-expanded="true"');
+
+        $openHtml = Livewire::withQueryParams(['unread' => '1'])
             ->test(AdminInbox::class)
             ->assertSet('mobileFiltersOpen', true)
-            ->assertSet('unread', '1');
+            ->assertSet('unread', '1')
+            ->html();
+
+        $this->assertMatchesRegularExpression(
+            '/data-inbox-filters[^>]*\bgrid xl:flex\b/',
+            $openHtml,
+        );
     }
 
     #[Test]

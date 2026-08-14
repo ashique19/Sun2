@@ -28,11 +28,11 @@ class ProductPricedImageTest extends TestCase
         return $user;
     }
 
-    private function productWithPrimaryImage(string $name = 'Necklace Set'): Product
+    private function productWithPrimaryImage(string $name = 'Necklace Set', int $size = 640): Product
     {
         $product = Product::query()->create([
             'name' => $name,
-            'slug' => str($name)->slug()->toString(),
+            'slug' => str($name)->slug()->append('-')->append((string) str()->random(6))->toString(),
             'price' => 650,
             'compare_at_price' => 850,
             'is_published' => true,
@@ -46,7 +46,7 @@ class ProductPricedImageTest extends TestCase
 
         $filename = 'primary.jpg';
         $absolute = $absoluteDir.DIRECTORY_SEPARATOR.$filename;
-        $image = imagecreatetruecolor(640, 640);
+        $image = imagecreatetruecolor($size, $size);
         $green = imagecolorallocate($image, 34, 120, 70);
         imagefill($image, 0, 0, $green);
         imagejpeg($image, $absolute, 90);
@@ -117,6 +117,7 @@ class ProductPricedImageTest extends TestCase
         $product->refresh();
         $this->assertNotNull($product->priced_image_path);
         $this->assertFileExists(public_path(ltrim($product->priced_image_path, '/')));
+        $this->assertSame('center', $product->priced_image_layout['position']);
 
         Livewire::test(AdminProducts::class)
             ->assertSeeHtml('alt="Priced image for List Product"')
@@ -396,5 +397,162 @@ class ProductPricedImageTest extends TestCase
             ->assertSeeHtml('aria-label="Priced image controls"')
             ->assertSeeHtml('role="group" aria-label="Text position"')
             ->assertSee('Close');
+    }
+
+    #[Test]
+    public function auto_fill_layout_is_centered_at_twenty_percent_of_primary_image(): void
+    {
+        $product = $this->productWithPrimaryImage('Auto Fill Size');
+        $service = app(ProductPricedImageService::class);
+        $source = public_path(ltrim($product->primaryImagePath(), '/'));
+
+        $layout = $service->autoFillLayout($source, $product);
+        $panel = $service->measurePanel($product, $layout['font']);
+        $target = (int) round(640 * ProductPricedImageService::AUTO_SIZE_RATIO);
+
+        $this->assertSame('center', $layout['position']);
+        $this->assertGreaterThanOrEqual($target, $panel['height']);
+        $this->assertLessThanOrEqual($target + 24, $panel['height']);
+    }
+
+    #[Test]
+    public function auto_fill_font_scales_with_primary_image_size(): void
+    {
+        $small = $this->productWithPrimaryImage('Auto Small', 400);
+        $large = $this->productWithPrimaryImage('Auto Large', 1200);
+        $service = app(ProductPricedImageService::class);
+
+        $smallLayout = $service->autoFillLayout(public_path(ltrim($small->primaryImagePath(), '/')), $small);
+        $largeLayout = $service->autoFillLayout(public_path(ltrim($large->primaryImagePath(), '/')), $large);
+
+        $this->assertGreaterThan($smallLayout['font'], $largeLayout['font']);
+        $this->assertSame('center', $largeLayout['position']);
+    }
+
+    #[Test]
+    public function generate_without_layout_uses_auto_fill_then_rebuild_keeps_saved_layout(): void
+    {
+        $product = $this->productWithPrimaryImage('First Time Auto');
+        $service = app(ProductPricedImageService::class);
+
+        $service->generate($product);
+        $product->refresh();
+
+        $this->assertSame('center', $product->priced_image_layout['position']);
+        $firstFont = $product->priced_image_layout['font'];
+        $this->assertGreaterThanOrEqual(ProductPricedImageService::FONT_MIN, $firstFont);
+
+        $product->update([
+            'priced_image_layout' => [
+                'position' => 'top-left',
+                'font' => 48,
+            ],
+        ]);
+
+        $service->generate($product->fresh());
+        $product->refresh();
+
+        $this->assertSame('top-left', $product->priced_image_layout['position']);
+        $this->assertSame(48, $product->priced_image_layout['font']);
+    }
+
+    #[Test]
+    public function auto_fill_overlay_frosts_the_center_of_the_image(): void
+    {
+        $product = $this->productWithPrimaryImage('Frost Center');
+        $service = app(ProductPricedImageService::class);
+        $path = $service->generate($product);
+
+        $image = imagecreatefromjpeg(public_path(ltrim($path, '/')));
+        $this->assertNotFalse($image);
+
+        $center = imagecolorat($image, 320, 320);
+        $corner = imagecolorat($image, 8, 8);
+        imagedestroy($image);
+
+        $centerR = ($center >> 16) & 0xFF;
+        $cornerR = ($corner >> 16) & 0xFF;
+        $cornerG = ($corner >> 8) & 0xFF;
+
+        $this->assertGreaterThan(80, $cornerG, 'Corner should remain the original green photo.');
+        $this->assertGreaterThan($cornerR + 40, $centerR, 'Center overlay should be a frosted lighter panel.');
+    }
+
+    #[Test]
+    public function products_list_exposes_put_price_batch_modal(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->productWithPrimaryImage('Needs Price');
+
+        Livewire::test(AdminProducts::class)
+            ->assertSeeHtml('wire:click="openPutPriceModal"')
+            ->assertDontSeeHtml('aria-label="Put price on images"')
+            ->call('openPutPriceModal')
+            ->assertSet('putPriceModalOpen', true)
+            ->assertSet('putPriceRemaining', 1)
+            ->assertCount('putPriceBatch', 1)
+            ->assertSeeHtml('aria-label="Put price on images"')
+            ->assertSee('Needs Price')
+            ->assertSee('Put price & next');
+    }
+
+    #[Test]
+    public function put_price_batch_saves_ten_then_loads_the_next_batch_until_finished(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $already = $this->productWithPrimaryImage('Already Priced');
+        app(ProductPricedImageService::class)->generate($already, [
+            'position' => 'top-right',
+            'font' => 40,
+        ]);
+
+        Product::query()->create([
+            'name' => 'No Photo',
+            'slug' => 'no-photo-put-price',
+            'price' => 400,
+            'is_published' => true,
+        ]);
+
+        $pending = [];
+        for ($i = 1; $i <= 12; $i++) {
+            $pending[] = $this->productWithPrimaryImage('Batch Item '.$i);
+        }
+
+        $component = Livewire::test(AdminProducts::class)
+            ->call('openPutPriceModal')
+            ->assertSet('putPriceModalOpen', true)
+            ->assertSet('putPriceRemaining', 12)
+            ->assertCount('putPriceBatch', 10);
+
+        $batchIds = collect($component->get('putPriceBatch'))->pluck('id')->all();
+        $this->assertNotContains($already->id, $batchIds);
+
+        $component->call('applyPutPriceBatch')
+            ->assertSet('putPriceRemaining', 2)
+            ->assertCount('putPriceBatch', 2)
+            ->assertSee('Saved 10. 2 still need a priced image.');
+
+        $pricedCount = Product::query()
+            ->whereIn('id', collect($pending)->pluck('id'))
+            ->whereNotNull('priced_image_path')
+            ->count();
+        $this->assertSame(10, $pricedCount);
+
+        $component->call('applyPutPriceBatch')
+            ->assertSet('putPriceRemaining', 0)
+            ->assertSet('putPriceBatch', [])
+            ->assertSee('All products with photos now have one.');
+
+        foreach ($pending as $product) {
+            $product->refresh();
+            $this->assertNotNull($product->priced_image_path);
+            $this->assertSame('center', $product->priced_image_layout['position']);
+            $this->assertFileExists(public_path(ltrim($product->priced_image_path, '/')));
+        }
+
+        $already->refresh();
+        $this->assertSame('top-right', $already->priced_image_layout['position']);
+        $this->assertNull(Product::query()->where('slug', 'no-photo-put-price')->value('priced_image_path'));
     }
 }

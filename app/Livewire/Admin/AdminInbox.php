@@ -1158,7 +1158,7 @@ class AdminInbox extends Component
     {
         AdminAccess::ensureStaffAdmin();
 
-        $result = $sync->sync();
+        $result = $sync->poll();
         $this->recordSyncResult($result, announceSuccess: false);
 
         // Local read-state only before render. Defer Graph mark_seen so a slow
@@ -1199,7 +1199,7 @@ class AdminInbox extends Component
             return max(10, (int) config('channels.inbox.graph_poll_seconds_realtime', 60));
         }
 
-        return max(5, (int) config('channels.inbox.graph_poll_seconds', 10));
+        return max(5, (int) config('channels.inbox.graph_poll_seconds', 45));
     }
 
     public function clearFilters(): void

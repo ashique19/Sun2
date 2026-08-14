@@ -75,10 +75,15 @@ return [
         ),
 
         // Graph Conversations API poll while /admin/inbox is open.
-        'graph_poll_seconds' => (int) env('CHANNEL_INBOX_GRAPH_POLL_SECONDS', 10),
+        'graph_poll_seconds' => (int) env('CHANNEL_INBOX_GRAPH_POLL_SECONDS', 45),
 
         // Slower Graph backfill when Echo realtime is enabled.
         'graph_poll_seconds_realtime' => (int) env('CHANNEL_INBOX_GRAPH_POLL_SECONDS_REALTIME', 60),
+
+        // Thin poll: newest updated threads, then messages only if newer than last sync.
+        'graph_poll_conversation_limit' => (int) env('CHANNEL_INBOX_GRAPH_POLL_CONVERSATIONS', 15),
+
+        'graph_poll_messages_per_thread' => (int) env('CHANNEL_INBOX_GRAPH_POLL_MESSAGES', 8),
 
         // Composer chips — label shown in UI, body inserted into the reply box.
         'quick_replies' => [

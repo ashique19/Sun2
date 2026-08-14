@@ -13,6 +13,10 @@ use Throwable;
 
 class MessengerConversationSyncService
 {
+    public const LAST_SYNC_CACHE_KEY = 'messenger.graph_last_synced_at';
+
+    public const POLL_OVERLAP_SECONDS = 30;
+
     public function __construct(
         private FacebookPageTokenService $tokens,
         private ChannelConversationService $conversations,
@@ -34,6 +38,35 @@ class MessengerConversationSyncService
      */
     public function sync(int $conversationLimit = 50, int $messagesPerThread = 30): array
     {
+        return $this->withSyncLock(fn () => $this->runSync($conversationLimit, $messagesPerThread));
+    }
+
+    /**
+     * Cheap catch-up while Inbox is open: list recently updated threads, then
+     * fetch messages only for conversations newer than the last successful sync.
+     *
+     * @return array{
+     *     ok: bool,
+     *     message: string,
+     *     conversations: int,
+     *     messages: int,
+     *     graph_threads: int
+     * }
+     */
+    public function poll(): array
+    {
+        $conversationLimit = max(1, min(25, (int) config('channels.inbox.graph_poll_conversation_limit', 15)));
+        $messagesPerThread = max(1, min(15, (int) config('channels.inbox.graph_poll_messages_per_thread', 8)));
+
+        return $this->withSyncLock(fn () => $this->runPoll($conversationLimit, $messagesPerThread));
+    }
+
+    /**
+     * @param  callable(): array{ok: bool, message: string, conversations: int, messages: int, graph_threads: int}  $callback
+     * @return array{ok: bool, message: string, conversations: int, messages: int, graph_threads: int}
+     */
+    private function withSyncLock(callable $callback): array
+    {
         $lock = Cache::lock('messenger-conversation-sync', 180);
 
         if (! $lock->get()) {
@@ -47,7 +80,7 @@ class MessengerConversationSyncService
         }
 
         try {
-            return $this->runSync($conversationLimit, $messagesPerThread);
+            return $callback();
         } finally {
             $lock->release();
         }
@@ -80,6 +113,7 @@ class MessengerConversationSyncService
 
         $conversationLimit = max(1, min(100, $conversationLimit));
         $messagesPerThread = max(1, min(50, $messagesPerThread));
+        $startedAt = now();
 
         try {
             $fetched = $this->fetchConversationThreads(
@@ -119,6 +153,8 @@ class MessengerConversationSyncService
                 $hint = ' Graph returned 0 threads. Confirm the Meta app is Live with pages_messaging Advanced Access, the Page token is valid, and customers have messaged this Page. In Development mode Meta only exposes chats with Admins/Developers/Testers.';
             }
 
+            $this->rememberSyncWatermark($startedAt);
+
             return [
                 'ok' => true,
                 'message' => 'Synced '.$conversationCount.' conversation(s) and '.$messageCount.' message(s) from Facebook ('
@@ -129,6 +165,105 @@ class MessengerConversationSyncService
             ];
         } catch (Throwable $e) {
             Log::warning('Messenger conversation sync failed.', ['message' => $e->getMessage()]);
+
+            return [
+                'ok' => false,
+                'message' => 'Sync failed: '.$e->getMessage(),
+                'conversations' => 0,
+                'messages' => 0,
+                'graph_threads' => 0,
+            ];
+        }
+    }
+
+    /**
+     * @return array{ok: bool, message: string, conversations: int, messages: int, graph_threads: int}
+     */
+    private function runPoll(int $conversationLimit, int $messagesPerThread): array
+    {
+        $token = $this->tokens->token();
+        $pageId = $this->tokens->pageId();
+        $version = $this->tokens->graphVersion();
+
+        if ($token === '' || $pageId === '') {
+            return [
+                'ok' => false,
+                'message' => 'Facebook Page access token or Page ID is not configured.',
+                'conversations' => 0,
+                'messages' => 0,
+                'graph_threads' => 0,
+            ];
+        }
+
+        $startedAt = now();
+        $watermark = $this->syncWatermark();
+
+        try {
+            $headers = $this->fetchConversationHeaders(
+                $token,
+                $version,
+                $pageId,
+                $conversationLimit,
+                $watermark,
+            );
+
+            if (! $headers['ok']) {
+                return [
+                    'ok' => false,
+                    'message' => $headers['message'],
+                    'conversations' => 0,
+                    'messages' => 0,
+                    'graph_threads' => 0,
+                ];
+            }
+
+            $freshIds = $headers['ids'];
+
+            if ($freshIds === []) {
+                $this->rememberSyncWatermark($startedAt);
+
+                return [
+                    'ok' => true,
+                    'message' => 'No Messenger conversations newer than the last sync.',
+                    'conversations' => 0,
+                    'messages' => 0,
+                    'graph_threads' => 0,
+                ];
+            }
+
+            $threads = $this->fetchThreadsByIds($token, $version, $freshIds, $messagesPerThread);
+
+            if (! $threads['ok']) {
+                return [
+                    'ok' => false,
+                    'message' => $threads['message'],
+                    'conversations' => 0,
+                    'messages' => 0,
+                    'graph_threads' => 0,
+                ];
+            }
+
+            $conversationCount = 0;
+            $messageCount = 0;
+
+            foreach ($threads['threads'] as $thread) {
+                $result = $this->ingestThread($thread, $pageId);
+                $conversationCount += $result['conversation'] ? 1 : 0;
+                $messageCount += $result['messages'];
+            }
+
+            $this->rememberSyncWatermark($startedAt);
+
+            return [
+                'ok' => true,
+                'message' => 'Synced '.$conversationCount.' conversation(s) and '.$messageCount.' message(s) from Facebook ('
+                    .count($threads['threads']).' Graph threads).',
+                'conversations' => $conversationCount,
+                'messages' => $messageCount,
+                'graph_threads' => count($threads['threads']),
+            ];
+        } catch (Throwable $e) {
+            Log::warning('Messenger conversation poll failed.', ['message' => $e->getMessage()]);
 
             return [
                 'ok' => false,
@@ -214,6 +349,185 @@ class MessengerConversationSyncService
             'message' => '',
             'threads' => array_slice($threads, 0, $conversationLimit),
         ];
+    }
+
+    /**
+     * @return array{ok: bool, message: string, ids: list<string>}
+     */
+    private function fetchConversationHeaders(
+        string $token,
+        string $version,
+        string $pageId,
+        int $conversationLimit,
+        ?Carbon $watermark,
+    ): array {
+        $pageSize = min(25, $conversationLimit);
+        $ids = [];
+        $nextUrl = null;
+        $maxPages = (int) ceil($conversationLimit / max(1, $pageSize)) + 1;
+        $hitWatermark = false;
+
+        for ($page = 0; $page < $maxPages && count($ids) < $conversationLimit && ! $hitWatermark; $page++) {
+            if ($nextUrl !== null) {
+                $response = Http::timeout(20)
+                    ->withToken($token)
+                    ->acceptJson()
+                    ->get($nextUrl);
+            } else {
+                $response = Http::timeout(20)
+                    ->withToken($token)
+                    ->acceptJson()
+                    ->get('https://graph.facebook.com/'.$version.'/'.$pageId.'/conversations', [
+                        'platform' => 'messenger',
+                        'limit' => $pageSize,
+                        'fields' => 'id,updated_time',
+                    ]);
+            }
+
+            if (! $response->successful()) {
+                $error = (string) data_get($response->json(), 'error.message', $response->body());
+
+                return [
+                    'ok' => false,
+                    'message' => 'Facebook Conversations API failed: '.$error,
+                    'ids' => [],
+                ];
+            }
+
+            $batch = $response->json('data');
+            if (! is_array($batch) || $batch === []) {
+                break;
+            }
+
+            foreach ($batch as $thread) {
+                if (! is_array($thread)) {
+                    continue;
+                }
+
+                $id = isset($thread['id']) ? (string) $thread['id'] : '';
+                if ($id === '') {
+                    continue;
+                }
+
+                $updatedAt = $this->parseGraphTime($thread['updated_time'] ?? null);
+
+                if ($watermark && $updatedAt && $updatedAt->lt($watermark)) {
+                    $hitWatermark = true;
+                    break;
+                }
+
+                $ids[] = $id;
+
+                if (count($ids) >= $conversationLimit) {
+                    break;
+                }
+            }
+
+            if ($hitWatermark || count($ids) >= $conversationLimit) {
+                break;
+            }
+
+            $next = data_get($response->json(), 'paging.next');
+            if (! is_string($next) || $next === '') {
+                break;
+            }
+
+            $nextUrl = $next;
+        }
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'ids' => $ids,
+        ];
+    }
+
+    /**
+     * @param  list<string>  $ids
+     * @return array{ok: bool, message: string, threads: list<array<string, mixed>>}
+     */
+    private function fetchThreadsByIds(
+        string $token,
+        string $version,
+        array $ids,
+        int $messagesPerThread,
+    ): array {
+        $fields = 'id,updated_time,participants{id,name},messages.limit('
+            .$messagesPerThread
+            .'){id,message,from,created_time,attachments}';
+
+        $response = Http::timeout(20)
+            ->withToken($token)
+            ->acceptJson()
+            ->get('https://graph.facebook.com/'.$version.'/', [
+                'ids' => implode(',', $ids),
+                'fields' => $fields,
+            ]);
+
+        if (! $response->successful()) {
+            $error = (string) data_get($response->json(), 'error.message', $response->body());
+
+            return [
+                'ok' => false,
+                'message' => 'Facebook Conversations API failed: '.$error,
+                'threads' => [],
+            ];
+        }
+
+        $payload = $response->json();
+        if (! is_array($payload)) {
+            return [
+                'ok' => false,
+                'message' => 'Facebook Conversations API failed: empty thread payload.',
+                'threads' => [],
+            ];
+        }
+
+        $threads = [];
+        foreach ($ids as $id) {
+            $thread = $payload[$id] ?? null;
+            if (is_array($thread) && ! isset($thread['error'])) {
+                $threads[] = $thread;
+            }
+        }
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'threads' => $threads,
+        ];
+    }
+
+    private function syncWatermark(): ?Carbon
+    {
+        $stored = Cache::get(self::LAST_SYNC_CACHE_KEY);
+        if (! is_string($stored) || $stored === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($stored)->subSeconds(self::POLL_OVERLAP_SECONDS);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private function rememberSyncWatermark(Carbon $syncedAt): void
+    {
+        Cache::put(self::LAST_SYNC_CACHE_KEY, $syncedAt->toIso8601String(), now()->addDays(7));
+    }
+
+    private function parseGraphTime(mixed $value): ?Carbon
+    {
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value);
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**

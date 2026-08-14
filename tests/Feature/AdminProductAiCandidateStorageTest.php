@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\User;
 use App\Services\Admin\GeminiClient;
+use App\Services\Admin\ProductImageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Livewire\Livewire;
@@ -73,11 +74,19 @@ class AdminProductAiCandidateStorageTest extends TestCase
 
         $binPath = storage_path('app/private/ai-candidates/'.$admin->id.'/'.$candidate['id'].'.bin');
         $this->assertFileExists($binPath);
-        $this->assertSame(base64_decode($this->tinyPngBase64(), true), File::get($binPath));
+        $stored = File::get($binPath);
+        $this->assertNotFalse($stored);
+        $this->assertTrue(str_starts_with($stored, "\xFF\xD8"), 'Normalized candidate should be a JPEG');
+        $this->assertSame('image/jpeg', $candidate['mime']);
+        $this->assertLessThanOrEqual(ProductImageService::MAX_JPEG_BYTES, strlen($stored));
+
+        $info = getimagesizefromstring($stored);
+        $this->assertNotFalse($info);
+        $this->assertLessThanOrEqual(ProductImageService::EDGE_LG, max($info[0], $info[1]));
 
         $this->get(route('admin.products.ai-candidate', $candidate['id']))
             ->assertOk()
-            ->assertHeader('Content-Type', 'image/png');
+            ->assertHeader('Content-Type', 'image/jpeg');
     }
 
     #[Test]
@@ -136,6 +145,35 @@ class AdminProductAiCandidateStorageTest extends TestCase
         $this->assertArrayNotHasKey('base64', $candidate);
         $this->assertSame(2, $candidate['version']);
         $this->assertSame('image/jpeg', $candidate['mime']);
-        $this->assertSame(base64_decode($this->tinyPngBase64(), true), File::get($dir.'/'.$id.'.bin'));
+        $stored = File::get($dir.'/'.$id.'.bin');
+        $this->assertTrue(str_starts_with((string) $stored, "\xFF\xD8"));
+    }
+
+    #[Test]
+    public function normalize_to_gallery_jpeg_caps_edge_and_file_size(): void
+    {
+        $service = app(ProductImageService::class);
+        $canvas = imagecreatetruecolor(2400, 1800);
+        $this->assertNotFalse($canvas);
+        $green = imagecolorallocate($canvas, 20, 180, 40);
+        imagefilledrectangle($canvas, 0, 0, 2399, 1799, $green);
+
+        ob_start();
+        imagejpeg($canvas, null, 95);
+        $binary = (string) ob_get_clean();
+        imagedestroy($canvas);
+
+        $this->assertGreaterThan(ProductImageService::EDGE_LG, 2400);
+
+        $normalized = $service->normalizeToGalleryJpeg($binary);
+        $this->assertTrue(str_starts_with($normalized, "\xFF\xD8"));
+        $this->assertLessThanOrEqual(ProductImageService::MAX_JPEG_BYTES, strlen($normalized));
+
+        $info = getimagesizefromstring($normalized);
+        $this->assertNotFalse($info);
+        $this->assertLessThanOrEqual(ProductImageService::EDGE_LG, $info[0]);
+        $this->assertLessThanOrEqual(ProductImageService::EDGE_LG, $info[1]);
+        $this->assertSame(1600, $info[0]);
+        $this->assertSame(1200, $info[1]);
     }
 }

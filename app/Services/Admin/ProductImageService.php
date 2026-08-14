@@ -28,6 +28,9 @@ class ProductImageService
     /** JPEG quality: small files without obvious quality loss for jewelry photos. */
     public const JPEG_QUALITY = 82;
 
+    /** Hard cap for a single normalized master JPEG (AI candidates / uploads). */
+    public const MAX_JPEG_BYTES = 2 * 1024 * 1024;
+
     /**
      * @var array<string, int>
      */
@@ -37,6 +40,89 @@ class ProductImageService
         'sm' => self::EDGE_SM,
         'xs' => self::EDGE_XS,
     ];
+
+    /**
+     * Fit within max edge (never upscale) and encode a clean JPEG under maxBytes.
+     * Matches the product gallery editor caps (1600×1600, ≤2MB).
+     */
+    public function normalizeToGalleryJpeg(
+        string $binary,
+        int $maxEdge = self::EDGE_LG,
+        int $maxBytes = self::MAX_JPEG_BYTES,
+    ): string {
+        if ($binary === '') {
+            throw new RuntimeException('Image data is empty.');
+        }
+
+        $maxEdge = max(1, min($maxEdge, self::EDGE_LG));
+        $maxBytes = max(32 * 1024, $maxBytes);
+
+        $loaded = @imagecreatefromstring($binary);
+
+        if ($loaded === false) {
+            throw new RuntimeException('Could not read image data.');
+        }
+
+        $width = imagesx($loaded);
+        $height = imagesy($loaded);
+
+        if ($width < 1 || $height < 1) {
+            imagedestroy($loaded);
+            throw new RuntimeException('Invalid image dimensions.');
+        }
+
+        $scale = min(1.0, $maxEdge / max($width, $height));
+        $dstW = max(1, (int) round($width * $scale));
+        $dstH = max(1, (int) round($height * $scale));
+        $canvas = $this->resampleToCanvas($loaded, $width, $height, $dstW, $dstH);
+        imagedestroy($loaded);
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'normjpg_');
+
+        if ($tempPath === false) {
+            imagedestroy($canvas);
+            throw new RuntimeException('Could not create a temporary file.');
+        }
+
+        $jpegPath = $tempPath.'.jpg';
+        @unlink($tempPath);
+
+        try {
+            $quality = self::JPEG_QUALITY;
+            $encoded = null;
+
+            for ($attempt = 0; $attempt < 8; $attempt++) {
+                CleanJpegWriter::write($canvas, $jpegPath, $quality);
+                $encoded = (string) file_get_contents($jpegPath);
+
+                if ($encoded !== '' && strlen($encoded) <= $maxBytes) {
+                    break;
+                }
+
+                $quality = max(40, $quality - 10);
+
+                if ($attempt >= 3) {
+                    $dstW = max(640, (int) round($dstW * 0.8));
+                    $dstH = max(640, (int) round($dstH * 0.8));
+                    $shrunk = $this->resampleToCanvas($canvas, imagesx($canvas), imagesy($canvas), $dstW, $dstH);
+                    imagedestroy($canvas);
+                    $canvas = $shrunk;
+                }
+            }
+
+            if ($encoded === null || $encoded === '' || strlen($encoded) > $maxBytes) {
+                throw new RuntimeException('Image is still larger than '.$maxBytes.' bytes after compression.');
+            }
+
+            return $encoded;
+        } finally {
+            imagedestroy($canvas);
+
+            if (is_file($jpegPath)) {
+                @unlink($jpegPath);
+            }
+        }
+    }
 
     public function store(Product $product, UploadedFile $file, ?string $alt = null): ProductImage
     {

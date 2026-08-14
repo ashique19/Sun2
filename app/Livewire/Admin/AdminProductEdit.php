@@ -378,7 +378,7 @@ class AdminProductEdit extends Component
 
             $this->aiCandidates[] = [
                 'id' => $candidateId,
-                'mime' => $mime,
+                'mime' => 'image/jpeg',
                 'name' => 'ai-generated-'.(count($this->aiCandidates) + 1).'.jpg',
                 'version' => 1,
             ];
@@ -419,7 +419,7 @@ class AdminProductEdit extends Component
 
             $mime = $mime !== '' ? $mime : 'image/jpeg';
             $this->persistAiCandidateBinary($id, $binary, $mime);
-            $this->aiCandidates[$index]['mime'] = $mime;
+            $this->aiCandidates[$index]['mime'] = 'image/jpeg';
             $this->aiCandidates[$index]['name'] = preg_replace('/\.\w+$/', '.jpg', (string) $candidate['name']) ?: 'ai-edited.jpg';
             $this->aiCandidates[$index]['version'] = ((int) ($candidate['version'] ?? 1)) + 1;
 
@@ -522,10 +522,13 @@ class AdminProductEdit extends Component
 
     private function persistAiCandidateBinary(string $id, string $binary, string $mime): void
     {
+        $normalized = app(ProductImageService::class)->normalizeToGalleryJpeg($binary);
+
         File::ensureDirectoryExists($this->aiCandidateDirectory());
-        file_put_contents($this->aiCandidateBinPath($id), $binary);
+        file_put_contents($this->aiCandidateBinPath($id), $normalized);
         file_put_contents($this->aiCandidateMetaPath($id), json_encode([
-            'mime' => $mime !== '' ? $mime : 'image/jpeg',
+            'mime' => 'image/jpeg',
+            'source_mime' => $mime !== '' ? $mime : 'image/jpeg',
             'updated_at' => now()->toIso8601String(),
         ], JSON_THROW_ON_ERROR));
     }

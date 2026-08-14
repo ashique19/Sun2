@@ -1032,7 +1032,6 @@ class AdminInbox extends Component
         $this->pendingReplyImage = $this->replyImage;
         $this->pendingReplyToMessageId = $this->replyToMessageId;
         $this->outboundSending = true;
-        $this->statusMessage = 'Sending…';
         $this->resetComposer();
         $this->dispatchPendingOutboundFlush();
     }
@@ -1171,6 +1170,11 @@ class AdminInbox extends Component
     public function dismissSyncToast(): void
     {
         $this->syncToast = null;
+    }
+
+    public function dismissStatusMessage(): void
+    {
+        $this->statusMessage = null;
     }
 
     /**

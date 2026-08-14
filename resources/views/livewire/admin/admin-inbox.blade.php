@@ -51,6 +51,20 @@
         </div>
     @endif
 
+    @if ($statusMessage)
+        <div
+            wire:key="status-toast-{{ md5($statusMessage) }}"
+            x-data="{ show: true }"
+            x-show="show"
+            x-transition.opacity.duration.200ms
+            x-init="setTimeout(() => { show = false; $wire.dismissStatusMessage() }, 2500)"
+            class="pointer-events-none fixed bottom-16 left-1/2 z-[70] w-[min(24rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-center text-sm text-emerald-900 shadow-lg"
+            role="status"
+        >
+            {{ $statusMessage }}
+        </div>
+    @endif
+
     <div class="px-4 pt-3 xl:px-0 xl:pt-0">
         {{-- Keep visible on mobile even with a thread open — expired tokens must stay reachable. --}}
         <livewire:admin.admin-facebook-token-gate />
@@ -205,12 +219,6 @@
             'mx-4 mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900 xl:mx-0 xl:mt-0 xl:px-4 xl:py-3',
             'hidden xl:block' => $mobileThreadOpen,
         ])>{{ $error }}</div>
-    @endif
-    @if ($statusMessage)
-        <div @class([
-            'mx-4 mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900 xl:mx-0 xl:mt-0 xl:px-4 xl:py-3',
-            'hidden xl:block' => $mobileThreadOpen,
-        ])>{{ $statusMessage }}</div>
     @endif
 
     @if ($conversations->isEmpty() || $diagnostics['severity'] !== 'ok')
@@ -810,9 +818,6 @@
                 <div class="shrink-0 border-t border-[#E7DFCF] bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 xl:px-4 xl:py-3">
                     @if ($error)
                         <p class="mb-2 text-xs text-rose-600">{{ $error }}</p>
-                    @endif
-                    @if ($statusMessage)
-                        <p class="mb-2 text-xs {{ $outboundSending ? 'text-[#8C8474]' : 'text-emerald-700' }}">{{ $statusMessage }}</p>
                     @endif
 
                     @if ($replyToMessage)

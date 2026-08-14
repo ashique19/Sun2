@@ -221,12 +221,21 @@ class AdminInboxTest extends TestCase
         $replies->shouldReceive('lastMarkSeenError')->zeroOrMoreTimes()->andReturn(null);
         $this->app->instance(ChannelReplyService::class, $replies);
 
-        Livewire::test(AdminInbox::class)
+        $component = Livewire::test(AdminInbox::class)
             ->set('selectedConversationId', $conversation->id)
             ->set('replyText', 'Thanks!')
             ->call('sendReply')
             ->assertSet('replyText', '')
-            ->assertSet('statusMessage', 'Reply sent.');
+            ->assertSet('statusMessage', 'Reply sent.')
+            ->assertSeeHtml('role="status"')
+            ->assertSee('Reply sent.');
+
+        $this->assertSame(1, substr_count($component->html(), 'Reply sent.'));
+
+        $component
+            ->call('dismissStatusMessage')
+            ->assertSet('statusMessage', null)
+            ->assertDontSee('Reply sent.');
     }
 
     #[Test]

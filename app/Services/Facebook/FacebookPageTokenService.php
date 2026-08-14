@@ -72,7 +72,8 @@ class FacebookPageTokenService
      *     page_name: ?string,
      *     checked_at: string,
      *     expires_at: ?string,
-     *     never_expires: ?bool
+     *     never_expires: ?bool,
+     *     expires_label: ?string
      * }
      */
     public function status(bool $fresh = false): array
@@ -146,12 +147,6 @@ class FacebookPageTokenService
 
         $status = $this->status(true);
         $message = $normalized['message'] ?? 'Page access token saved and verified.';
-
-        if (! empty($status['never_expires'])) {
-            $message .= ' Token does not expire.';
-        } elseif (! empty($status['expires_at'])) {
-            $message .= ' Token expires '.$status['expires_at'].'.';
-        }
 
         return [
             'ok' => true,
@@ -472,7 +467,8 @@ class FacebookPageTokenService
      *     page_name: ?string,
      *     checked_at: string,
      *     expires_at: ?string,
-     *     never_expires: ?bool
+     *     never_expires: ?bool,
+     *     expires_label: ?string
      * }
      */
     private function probe(?string $token = null): array
@@ -481,16 +477,14 @@ class FacebookPageTokenService
         $checkedAt = now()->toIso8601String();
 
         if ($token === '') {
-            return [
+            return $this->withExpiry([
                 'valid' => false,
                 'configured' => false,
                 'message' => 'Facebook Page access token is not configured.',
                 'page_id' => null,
                 'page_name' => null,
                 'checked_at' => $checkedAt,
-                'expires_at' => null,
-                'never_expires' => null,
-            ];
+            ]);
         }
 
         $version = $this->graphVersion();
@@ -507,16 +501,14 @@ class FacebookPageTokenService
             if (! $response->successful()) {
                 $message = (string) data_get($response->json(), 'error.message', 'Token validation failed.');
 
-                return [
+                return $this->withExpiry([
                     'valid' => false,
                     'configured' => true,
                     'message' => $message,
                     'page_id' => null,
                     'page_name' => null,
                     'checked_at' => $checkedAt,
-                    'expires_at' => null,
-                    'never_expires' => null,
-                ];
+                ], $this->inspectExpiry($token));
             }
 
             $pageId = data_get($response->json(), 'id');
@@ -525,16 +517,14 @@ class FacebookPageTokenService
             $pageName = is_string($pageName) ? $pageName : null;
 
             if ($expectedPageId !== '' && $pageId !== null && $pageId !== $expectedPageId) {
-                return [
+                return $this->withExpiry([
                     'valid' => false,
                     'configured' => true,
                     'message' => 'Token is valid but belongs to Page ID '.$pageId.' (expected '.$expectedPageId.').',
                     'page_id' => $pageId,
                     'page_name' => $pageName,
                     'checked_at' => $checkedAt,
-                    'expires_at' => null,
-                    'never_expires' => null,
-                ];
+                ], $this->inspectExpiry($token));
             }
 
             $expiry = $this->inspectExpiry($token);
@@ -542,34 +532,109 @@ class FacebookPageTokenService
                 ? 'Connected as '.$pageName.($pageId ? ' ('.$pageId.')' : '')
                 : 'Page access token is valid.';
 
-            if ($expiry['never_expires'] === true) {
-                $message .= ' · never expires';
-            } elseif (is_string($expiry['expires_at'])) {
-                $message .= ' · expires '.$expiry['expires_at'];
-            }
-
-            return [
+            return $this->withExpiry([
                 'valid' => true,
                 'configured' => true,
                 'message' => $message,
                 'page_id' => $pageId,
                 'page_name' => $pageName,
                 'checked_at' => $checkedAt,
-                'expires_at' => $expiry['expires_at'],
-                'never_expires' => $expiry['never_expires'],
-            ];
+            ], $expiry);
         } catch (Throwable $e) {
-            return [
+            return $this->withExpiry([
                 'valid' => false,
                 'configured' => true,
                 'message' => 'Could not reach Facebook Graph API: '.$e->getMessage(),
                 'page_id' => null,
                 'page_name' => null,
                 'checked_at' => $checkedAt,
-                'expires_at' => null,
-                'never_expires' => null,
-            ];
+            ]);
         }
+    }
+
+    /**
+     * @param  array{
+     *     valid: bool,
+     *     configured: bool,
+     *     message: string,
+     *     page_id: ?string,
+     *     page_name: ?string,
+     *     checked_at: string
+     * }  $status
+     * @param  array{expires_at: ?string, never_expires: ?bool}|null  $expiry
+     * @return array{
+     *     valid: bool,
+     *     configured: bool,
+     *     message: string,
+     *     page_id: ?string,
+     *     page_name: ?string,
+     *     checked_at: string,
+     *     expires_at: ?string,
+     *     never_expires: ?bool,
+     *     expires_label: ?string
+     * }
+     */
+    private function withExpiry(array $status, ?array $expiry = null): array
+    {
+        $expiresAt = is_string($expiry['expires_at'] ?? null) ? $expiry['expires_at'] : null;
+        $neverExpires = is_bool($expiry['never_expires'] ?? null) ? $expiry['never_expires'] : null;
+
+        $status['expires_at'] = $expiresAt;
+        $status['never_expires'] = $neverExpires;
+        $status['expires_label'] = $this->expiresLabel($expiresAt, $neverExpires);
+
+        return $status;
+    }
+
+    private function expiresLabel(?string $expiresAt, ?bool $neverExpires): ?string
+    {
+        if ($neverExpires === true) {
+            return 'Never expires';
+        }
+
+        if (! is_string($expiresAt) || trim($expiresAt) === '') {
+            return null;
+        }
+
+        try {
+            $when = Carbon::parse($expiresAt)->timezone('Asia/Dhaka');
+        } catch (Throwable) {
+            return null;
+        }
+
+        $absolute = $when->format('d M Y, h:i A');
+        $relative = $this->relativeExpiry($when);
+
+        if ($when->getTimestamp() < now()->getTimestamp()) {
+            return 'Expired '.$absolute.' ('.$relative.')';
+        }
+
+        return 'Expires '.$absolute.' ('.$relative.')';
+    }
+
+    private function relativeExpiry(Carbon $when): string
+    {
+        $seconds = $when->getTimestamp() - now()->getTimestamp();
+        $past = $seconds < 0;
+        $seconds = abs($seconds);
+
+        if ($seconds < 60) {
+            return $past ? 'just now' : 'in under a minute';
+        }
+
+        $days = intdiv($seconds, 86400);
+        $hours = intdiv($seconds, 3600);
+        $minutes = intdiv($seconds, 60);
+
+        if ($days >= 1) {
+            $unit = $days === 1 ? '1 day' : $days.' days';
+        } elseif ($hours >= 1) {
+            $unit = $hours === 1 ? '1 hour' : $hours.' hours';
+        } else {
+            $unit = $minutes === 1 ? '1 minute' : $minutes.' minutes';
+        }
+
+        return $past ? $unit.' ago' : 'in '.$unit;
     }
 
     /**
@@ -588,12 +653,11 @@ class FacebookPageTokenService
             $debug = $this->debugToken($token, $appId, $appSecret);
             $expiresAt = (int) ($debug['expires_at'] ?? 0);
 
-            if (! ($debug['is_valid'] ?? false)) {
-                return ['expires_at' => null, 'never_expires' => null];
-            }
-
             if ($expiresAt === 0) {
-                return ['expires_at' => null, 'never_expires' => true];
+                return [
+                    'expires_at' => null,
+                    'never_expires' => (bool) ($debug['is_valid'] ?? false),
+                ];
             }
 
             return [

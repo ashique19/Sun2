@@ -26,7 +26,8 @@ class AdminFacebookTokenGate extends Component
      *     page_name: ?string,
      *     checked_at: string,
      *     expires_at: ?string,
-     *     never_expires: ?bool
+     *     never_expires: ?bool,
+     *     expires_label: ?string
      * }|null
      */
     public ?array $status = null;

@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Facebook\FacebookPageTokenService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
@@ -67,6 +68,53 @@ class FacebookPageTokenGateTest extends TestCase
             ->test(AdminFacebookTokenGate::class)
             ->assertSee('Session has expired')
             ->assertSee('Save token');
+    }
+
+    #[Test]
+    public function expired_token_shows_when_it_expired(): void
+    {
+        $this->travelTo(Carbon::parse('2026-08-14 07:00:00', 'UTC'));
+
+        config([
+            'facebook.app_id' => 'app-123',
+            'facebook.messenger.app_secret' => 'secret-456',
+            'facebook.messenger.page_access_token' => 'expired-token',
+            'facebook.messenger.page_id' => 'page-1',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake(function (Request $request) {
+            $url = $request->url();
+
+            if (str_contains($url, '/debug_token')) {
+                return Http::response([
+                    'data' => [
+                        'app_id' => 'app-123',
+                        'type' => 'PAGE',
+                        'is_valid' => false,
+                        'expires_at' => now()->subDays(2)->timestamp,
+                    ],
+                ], 200);
+            }
+
+            if (str_contains($url, '/me')) {
+                return Http::response([
+                    'error' => [
+                        'message' => 'Error validating access token: Session has expired.',
+                        'type' => 'OAuthException',
+                        'code' => 190,
+                    ],
+                ], 400);
+            }
+
+            return Http::response(['error' => ['message' => 'Unexpected URL: '.$url]], 500);
+        });
+
+        Livewire::actingAs($this->adminUser())
+            ->test(AdminFacebookTokenGate::class)
+            ->assertSee('Session has expired')
+            ->assertSee('Expired 12 Aug 2026, 01:00 PM')
+            ->assertSee('2 days ago');
     }
 
     #[Test]
@@ -175,7 +223,8 @@ class FacebookPageTokenGateTest extends TestCase
             ->set('tokenInput', 'short-lived-user-token')
             ->call('saveToken')
             ->assertSet('feedbackOk', true)
-            ->assertSee('never-expiring');
+            ->assertSee('never-expiring')
+            ->assertSee('Never expires');
 
         $this->assertSame('never-expiring-page-token', Setting::getValue(FacebookPageTokenService::SETTING_KEY));
         $this->assertSame('never-expiring-page-token', app(FacebookPageTokenService::class)->token());
@@ -236,7 +285,8 @@ class FacebookPageTokenGateTest extends TestCase
             ->test(AdminFacebookTokenGate::class)
             ->set('tokenInput', 'stable-page-token')
             ->call('saveToken')
-            ->assertSet('feedbackOk', true);
+            ->assertSet('feedbackOk', true)
+            ->assertSee('Never expires');
 
         $this->assertSame('stable-page-token', Setting::getValue(FacebookPageTokenService::SETTING_KEY));
 
@@ -271,6 +321,8 @@ class FacebookPageTokenGateTest extends TestCase
     #[Test]
     public function exchanging_an_expiring_page_token_saves_the_long_lived_token(): void
     {
+        $this->travelTo(Carbon::parse('2026-08-14 07:00:00', 'UTC'));
+
         config([
             'facebook.app_id' => 'app-123',
             'facebook.messenger.app_secret' => 'secret-456',
@@ -283,12 +335,17 @@ class FacebookPageTokenGateTest extends TestCase
             $url = $request->url();
 
             if (str_contains($url, '/debug_token')) {
+                $input = (string) ($request['input_token'] ?? '');
+                $expiresAt = $input === 'long-lived-page-token'
+                    ? now()->addSeconds(5184000)->timestamp
+                    : now()->addHour()->timestamp;
+
                 return Http::response([
                     'data' => [
                         'app_id' => 'app-123',
                         'type' => 'PAGE',
                         'is_valid' => true,
-                        'expires_at' => now()->addHour()->timestamp,
+                        'expires_at' => $expiresAt,
                     ],
                 ], 200);
             }
@@ -318,7 +375,9 @@ class FacebookPageTokenGateTest extends TestCase
             ->set('tokenInput', 'short-lived-page-token')
             ->call('saveToken')
             ->assertSet('feedbackOk', true)
-            ->assertSee('long-lived Page token');
+            ->assertSee('long-lived Page token')
+            ->assertSee('Expires 13 Oct 2026, 01:00 PM')
+            ->assertSee('in 60 days');
 
         $this->assertSame('long-lived-page-token', Setting::getValue(FacebookPageTokenService::SETTING_KEY));
         $this->assertSame('long-lived-page-token', app(FacebookPageTokenService::class)->token());

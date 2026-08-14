@@ -58,7 +58,7 @@
             x-show="show"
             x-transition.opacity.duration.200ms
             x-init="setTimeout(() => { show = false; $wire.dismissStatusMessage() }, 2500)"
-            class="pointer-events-none fixed bottom-4 left-1/2 z-[70] w-[min(24rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-center text-sm text-emerald-900 shadow-lg"
+            class="pointer-events-none fixed bottom-16 left-1/2 z-[70] w-[min(24rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-center text-sm text-emerald-900 shadow-lg"
             role="status"
         >
             {{ $statusMessage }}

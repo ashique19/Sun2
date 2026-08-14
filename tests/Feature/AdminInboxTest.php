@@ -168,7 +168,7 @@ class AdminInboxTest extends TestCase
         Livewire::test(AdminInbox::class)
             ->assertSeeHtml('inboxPane: \'list\'')
             ->assertSeeHtml('history.pushState')
-            ->assertSeeHtml('wire:click="selectConversation('.$conversation->id.')"');
+            ->assertSeeHtml('$wire.selectConversation('.$conversation->id.')');
     }
 
     #[Test]

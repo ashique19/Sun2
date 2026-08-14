@@ -357,18 +357,19 @@
                     @endphp
                     <button type="button"
                         wire:key="inbox-conversation-{{ $conversation->id }}"
-                        wire:click="selectConversation({{ $conversation->id }})"
                         wire:loading.class="opacity-60"
                         wire:target="selectConversation({{ $conversation->id }})"
-                        @pointerdown="
+                        @click="
                             // Push the list URL once before Livewire replaceState-s the thread.
-                            // Android/browser Back then returns to the list, not a prior thread.
+                            // Android/browser Back then returns to the list, not a prior thread
+                            // (and not the page before Inbox).
                             if (! $wire.mobileThreadOpen) {
                                 const url = new URL(window.location.href);
                                 if (! url.searchParams.has('conversation')) {
                                     history.pushState({ ...(history.state || {}), inboxPane: 'list' }, '', url);
                                 }
                             }
+                            $wire.selectConversation({{ $conversation->id }});
                         "
                         @class([
                             'block w-full px-4 py-3 text-left transition',

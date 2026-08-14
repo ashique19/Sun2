@@ -26,6 +26,38 @@
                 $wire.refreshFromRealtime(event.conversation_id ?? null);
             });
         }
+
+        // Conversation URL uses replaceState (not push) so switching threads does not
+        // stack prior conversations. List → thread pushes one list snapshot first.
+        // Sync Livewire when Android/browser Back/Forward changes the URL.
+        window.__inboxPrepareThreadHistory = (mobileThreadOpen) => {
+            if (mobileThreadOpen) {
+                return;
+            }
+
+            const url = new URL(window.location.href);
+            if (url.searchParams.has('conversation')) {
+                return;
+            }
+
+            history.pushState(Object.assign({}, history.state || {}, { inboxPane: 'list' }), '', url);
+        };
+
+        const syncConversationFromUrl = () => {
+            const raw = new URL(window.location.href).searchParams.get('conversation');
+            const fromUrl = raw !== null && raw !== '' ? Number(raw) : null;
+            const normalizedUrl = Number.isFinite(fromUrl) ? fromUrl : null;
+            const current = $wire.selectedConversationId;
+            const normalizedCurrent = current === null || current === undefined || current === ''
+                ? null
+                : Number(current);
+
+            if (normalizedCurrent !== normalizedUrl) {
+                $wire.set('selectedConversationId', normalizedUrl);
+            }
+        };
+
+        window.addEventListener('popstate', syncConversationFromUrl);
     </script>
     @endscript
 
@@ -338,9 +370,9 @@
                     @endphp
                     <button type="button"
                         wire:key="inbox-conversation-{{ $conversation->id }}"
-                        wire:click="selectConversation({{ $conversation->id }})"
                         wire:loading.class="opacity-60"
                         wire:target="selectConversation({{ $conversation->id }})"
+                        @click="window.__inboxPrepareThreadHistory($wire.mobileThreadOpen); $wire.selectConversation({{ $conversation->id }})"
                         @class([
                             'block w-full px-4 py-3 text-left transition',
                             $selected ? 'bg-[#FAF6EF]' : 'active:bg-[#FAF6EF] hover:bg-[#FAF6EF]/60',

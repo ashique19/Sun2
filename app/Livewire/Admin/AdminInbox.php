@@ -49,7 +49,7 @@ class AdminInbox extends Component
     #[Url]
     public string $linked = '';
 
-    #[Url(as: 'conversation', history: true)]
+    #[Url(as: 'conversation', history: false)]
     public ?int $selectedConversationId = null;
 
     public string $replyText = '';
@@ -217,7 +217,8 @@ class AdminInbox extends Component
 
     /**
      * Keep the mobile thread pane in sync when the browser Back/Forward
-     * restores or clears ?conversation= (#[Url(history: true)]).
+     * restores or clears ?conversation= (URL is replaceState; list→thread
+     * pushes one history entry from the conversation list click handler).
      * Also marks website read + Messenger seen when a conversation opens via URL history.
      */
     public function updatedSelectedConversationId(?int $conversationId): void
@@ -257,8 +258,8 @@ class AdminInbox extends Component
     public function closeMobileThread(): void
     {
         // Always return to the conversation list. Do not use history.back() —
-        // the stack may hold a previous thread, filters, or a page outside Inbox.
-        // Browser Back still works via #[Url(history: true)] + updatedSelectedConversationId.
+        // the stack may hold a previous page outside Inbox. Conversation switches
+        // use replaceState, so Android/browser Back from a thread hits the list snapshot.
         $this->clearConversationFromUrl();
     }
 

@@ -147,16 +147,30 @@ class AdminInboxTest extends TestCase
     }
 
     #[Test]
-    public function conversation_url_uses_push_history_so_browser_back_returns_to_list(): void
+    public function conversation_url_uses_replace_history_so_thread_switches_do_not_stack(): void
     {
-        // Browser Back/Forward use history: true; the in-app back button clears selection.
+        // replaceState on conversation changes; list→thread pushes one list snapshot in the UI.
+        // That way Android/browser Back from a thread returns to the list, not a prior thread.
         $attribute = (new \ReflectionProperty(AdminInbox::class, 'selectedConversationId'))
             ->getAttributes(Url::class)[0] ?? null;
 
         $this->assertNotNull($attribute);
         $instance = $attribute->newInstance();
-        $this->assertTrue($instance->history);
+        $this->assertFalse($instance->history);
         $this->assertSame('conversation', $instance->as);
+    }
+
+    #[Test]
+    public function conversation_list_pushes_list_history_snapshot_before_opening_a_thread(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        Livewire::test(AdminInbox::class)
+            ->assertSeeHtml('__inboxPrepareThreadHistory')
+            ->assertSeeHtml('inboxPane')
+            ->assertSeeHtml('history.pushState')
+            ->assertSeeHtml('$wire.selectConversation('.$conversation->id.')');
     }
 
     #[Test]

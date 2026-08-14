@@ -15,6 +15,8 @@ class AdminFacebookTokenGate extends Component
 
     public bool $feedbackOk = false;
 
+    public bool $showReplace = false;
+
     /**
      * @var array{
      *     valid: bool,
@@ -22,7 +24,10 @@ class AdminFacebookTokenGate extends Component
      *     message: string,
      *     page_id: ?string,
      *     page_name: ?string,
-     *     checked_at: string
+     *     checked_at: string,
+     *     expires_at: ?string,
+     *     never_expires: ?bool,
+     *     expires_label: ?string
      * }|null
      */
     public ?array $status = null;
@@ -52,6 +57,7 @@ class AdminFacebookTokenGate extends Component
 
         if ($result['ok']) {
             $this->tokenInput = '';
+            $this->showReplace = false;
         }
     }
 

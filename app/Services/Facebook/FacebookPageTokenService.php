@@ -13,6 +13,10 @@ class FacebookPageTokenService
 {
     public const SETTING_KEY = 'facebook.page_access_token';
 
+    public const USER_SETTING_KEY = 'facebook.user_access_token';
+
+    public const EXPIRES_SETTING_KEY = 'facebook.page_access_token_expires_at';
+
     public const CACHE_KEY = 'facebook.page_token.status';
 
     /**
@@ -68,7 +72,8 @@ class FacebookPageTokenService
      *     page_name: ?string,
      *     checked_at: string,
      *     expires_at: ?string,
-     *     never_expires: ?bool
+     *     never_expires: ?bool,
+     *     expires_label: ?string
      * }
      */
     public function status(bool $fresh = false): array
@@ -90,9 +95,11 @@ class FacebookPageTokenService
     /**
      * Validate and persist a Page access token.
      *
-     * When FACEBOOK_APP_ID + FACEBOOK_APP_SECRET are set, a User access token is
-     * exchanged for a long-lived User token, then a never-expiring Page token is
-     * derived for FACEBOOK_PAGE_ID. Pasted Page tokens are saved as-is after probe.
+     * When FACEBOOK_APP_ID + FACEBOOK_APP_SECRET are set, the pasted token is sent
+     * to Graph oauth/access_token (grant_type=fb_exchange_token). The returned
+     * long-lived token is stored. User tokens are then converted into a Page token
+     * for FACEBOOK_PAGE_ID (typically never expires). The long-lived User token is
+     * kept so we can refresh before ~60 days.
      *
      * @return array{ok: bool, message: string, status: array<string, mixed>}
      */
@@ -131,19 +138,15 @@ class FacebookPageTokenService
             ];
         }
 
-        Setting::putValue(self::SETTING_KEY, $pageToken, 'facebook');
-        config(['facebook.messenger.page_access_token' => $pageToken]);
-        $this->syncEnvFile($pageToken);
+        $this->persistPageToken(
+            $pageToken,
+            $normalized['user_token'] ?? null,
+            $normalized['expires_in'] ?? null,
+        );
         $this->invalidateStatusCache();
 
         $status = $this->status(true);
         $message = $normalized['message'] ?? 'Page access token saved and verified.';
-
-        if (! empty($status['never_expires'])) {
-            $message .= ' Token does not expire.';
-        } elseif (! empty($status['expires_at'])) {
-            $message .= ' Token expires '.$status['expires_at'].'.';
-        }
 
         return [
             'ok' => true,
@@ -165,7 +168,69 @@ class FacebookPageTokenService
     }
 
     /**
-     * @return array{token: string, message: string}
+     * Re-exchange a stored long-lived User token (or the current Page token) and
+     * persist the result. Safe to run from the scheduler.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function refreshStoredToken(): array
+    {
+        $appId = $this->appId();
+        $appSecret = $this->appSecret();
+
+        if ($appId === '' || $appSecret === '') {
+            return [
+                'ok' => false,
+                'message' => 'FACEBOOK_APP_ID and FACEBOOK_APP_SECRET are required to refresh tokens.',
+            ];
+        }
+
+        $source = trim((string) Setting::getValue(self::USER_SETTING_KEY, ''));
+        if ($source === '') {
+            $source = $this->token();
+        }
+
+        if ($source === '') {
+            return [
+                'ok' => false,
+                'message' => 'No Facebook token is stored to refresh.',
+            ];
+        }
+
+        try {
+            $normalized = $this->normalizeToPageToken($source);
+        } catch (Throwable $e) {
+            Log::warning('Facebook token refresh failed.', ['message' => $e->getMessage()]);
+
+            return [
+                'ok' => false,
+                'message' => $e->getMessage(),
+            ];
+        }
+
+        $probe = $this->probe($normalized['token']);
+        if (! $probe['valid']) {
+            return [
+                'ok' => false,
+                'message' => $probe['message'],
+            ];
+        }
+
+        $this->persistPageToken(
+            $normalized['token'],
+            $normalized['user_token'] ?? null,
+            $normalized['expires_in'] ?? null,
+        );
+        $this->invalidateStatusCache();
+
+        return [
+            'ok' => true,
+            'message' => $normalized['message'],
+        ];
+    }
+
+    /**
+     * @return array{token: string, message: string, user_token: ?string, expires_in: ?int}
      */
     private function normalizeToPageToken(string $token): array
     {
@@ -176,7 +241,9 @@ class FacebookPageTokenService
         if ($appId === '' || $appSecret === '') {
             return [
                 'token' => $token,
-                'message' => 'Page access token saved and verified. Set FACEBOOK_APP_ID and FACEBOOK_APP_SECRET to auto-exchange User tokens into never-expiring Page tokens.',
+                'message' => 'Page access token saved and verified. Set FACEBOOK_APP_ID and FACEBOOK_APP_SECRET to auto-exchange tokens into long-lived Page tokens.',
+                'user_token' => null,
+                'expires_in' => null,
             ];
         }
 
@@ -191,40 +258,67 @@ class FacebookPageTokenService
         }
 
         $type = strtoupper((string) ($debug['type'] ?? ''));
+        $expiresAt = (int) ($debug['expires_at'] ?? 0);
+
+        // Never-expiring Page tokens must not be exchanged — fb_exchange_token
+        // would replace them with a ~60-day token.
+        if ($type === 'PAGE' && $expiresAt === 0) {
+            return [
+                'token' => $token,
+                'user_token' => null,
+                'expires_in' => null,
+                'message' => 'Never-expiring Page access token saved and verified.',
+            ];
+        }
+
+        $working = $token;
+        $expiresIn = null;
+        $exchanged = false;
+
+        try {
+            $exchange = $this->exchangeForLongLivedToken($token, $appId, $appSecret);
+            $working = $exchange['token'];
+            $expiresIn = $exchange['expires_in'];
+            $exchanged = true;
+        } catch (Throwable $e) {
+            Log::info('Facebook long-lived token exchange skipped.', ['message' => $e->getMessage()]);
+        }
 
         if ($type === 'USER') {
             if ($pageId === '') {
                 throw new \RuntimeException('FACEBOOK_PAGE_ID is required to convert a User token into a Page token.');
             }
 
-            $longLivedUserToken = $this->exchangeForLongLivedUserToken($token, $appId, $appSecret);
-            $pageToken = $this->pageAccessTokenFromUserToken($longLivedUserToken, $pageId);
+            $pageToken = $this->pageAccessTokenFromUserToken($working, $pageId);
 
             return [
                 'token' => $pageToken,
-                'message' => 'Exchanged User token for a never-expiring Page access token and saved it.',
+                'user_token' => $working,
+                'expires_in' => $expiresIn,
+                'message' => $exchanged
+                    ? 'Exchanged for a long-lived User token, saved a never-expiring Page token, and stored the User token for automatic refresh.'
+                    : 'Saved a never-expiring Page token from the User token and kept the User token for automatic refresh.',
             ];
         }
 
         if ($type === 'PAGE') {
-            $expiresAt = (int) ($debug['expires_at'] ?? 0);
-
-            if ($expiresAt === 0) {
-                return [
-                    'token' => $token,
-                    'message' => 'Never-expiring Page access token saved and verified.',
-                ];
-            }
-
             return [
-                'token' => $token,
-                'message' => 'Page access token saved and verified. This Page token still expires — paste a User token (with Page permissions) or a Business System User Page token to get a never-expiring one.',
+                'token' => $working,
+                'user_token' => null,
+                'expires_in' => $expiresIn ?? ($expiresAt > 0 ? max(0, $expiresAt - time()) : null),
+                'message' => $exchanged
+                    ? 'Exchanged for a long-lived Page token and saved it on the server (~60 days). Paste a User token next time for a never-expiring Page token plus auto-refresh.'
+                    : 'Page access token saved and verified. This Page token still expires — paste a User token (with Page permissions) to exchange it and enable auto-refresh.',
             ];
         }
 
         return [
-            'token' => $token,
-            'message' => 'Page access token saved and verified.',
+            'token' => $working,
+            'user_token' => null,
+            'expires_in' => $expiresIn,
+            'message' => $exchanged
+                ? 'Exchanged for a long-lived token and saved it on the server.'
+                : 'Page access token saved and verified.',
         ];
     }
 
@@ -279,7 +373,10 @@ class FacebookPageTokenService
         ];
     }
 
-    private function exchangeForLongLivedUserToken(string $shortLivedUserToken, string $appId, string $appSecret): string
+    /**
+     * @return array{token: string, expires_in: ?int}
+     */
+    private function exchangeForLongLivedToken(string $currentToken, string $appId, string $appSecret): array
     {
         $version = $this->graphVersion();
 
@@ -289,21 +386,47 @@ class FacebookPageTokenService
                 'grant_type' => 'fb_exchange_token',
                 'client_id' => $appId,
                 'client_secret' => $appSecret,
-                'fb_exchange_token' => $shortLivedUserToken,
+                'fb_exchange_token' => $currentToken,
             ]);
 
         if (! $response->successful()) {
-            $message = (string) data_get($response->json(), 'error.message', 'Could not exchange token for a long-lived User token.');
+            $message = (string) data_get($response->json(), 'error.message', 'Could not exchange token for a long-lived access token.');
 
             throw new \RuntimeException($message);
         }
 
         $accessToken = $response->json('access_token');
         if (! is_string($accessToken) || trim($accessToken) === '') {
-            throw new \RuntimeException('Facebook did not return a long-lived User access token.');
+            throw new \RuntimeException('Facebook did not return a long-lived access token.');
         }
 
-        return trim($accessToken);
+        $expiresIn = $response->json('expires_in');
+
+        return [
+            'token' => trim($accessToken),
+            'expires_in' => is_numeric($expiresIn) ? (int) $expiresIn : null,
+        ];
+    }
+
+    private function persistPageToken(string $pageToken, ?string $userToken, ?int $expiresIn): void
+    {
+        Setting::putValue(self::SETTING_KEY, $pageToken, 'facebook');
+        config(['facebook.messenger.page_access_token' => $pageToken]);
+        $this->syncEnvFile($pageToken);
+
+        if (is_string($userToken) && trim($userToken) !== '') {
+            Setting::putValue(self::USER_SETTING_KEY, trim($userToken), 'facebook');
+        }
+
+        if ($expiresIn !== null && $expiresIn > 0) {
+            Setting::putValue(
+                self::EXPIRES_SETTING_KEY,
+                now()->addSeconds($expiresIn)->toIso8601String(),
+                'facebook',
+            );
+        } else {
+            Setting::putValue(self::EXPIRES_SETTING_KEY, null, 'facebook');
+        }
     }
 
     private function pageAccessTokenFromUserToken(string $userToken, string $pageId): string
@@ -344,7 +467,8 @@ class FacebookPageTokenService
      *     page_name: ?string,
      *     checked_at: string,
      *     expires_at: ?string,
-     *     never_expires: ?bool
+     *     never_expires: ?bool,
+     *     expires_label: ?string
      * }
      */
     private function probe(?string $token = null): array
@@ -353,16 +477,14 @@ class FacebookPageTokenService
         $checkedAt = now()->toIso8601String();
 
         if ($token === '') {
-            return [
+            return $this->withExpiry([
                 'valid' => false,
                 'configured' => false,
                 'message' => 'Facebook Page access token is not configured.',
                 'page_id' => null,
                 'page_name' => null,
                 'checked_at' => $checkedAt,
-                'expires_at' => null,
-                'never_expires' => null,
-            ];
+            ]);
         }
 
         $version = $this->graphVersion();
@@ -379,16 +501,14 @@ class FacebookPageTokenService
             if (! $response->successful()) {
                 $message = (string) data_get($response->json(), 'error.message', 'Token validation failed.');
 
-                return [
+                return $this->withExpiry([
                     'valid' => false,
                     'configured' => true,
                     'message' => $message,
                     'page_id' => null,
                     'page_name' => null,
                     'checked_at' => $checkedAt,
-                    'expires_at' => null,
-                    'never_expires' => null,
-                ];
+                ], $this->inspectExpiry($token));
             }
 
             $pageId = data_get($response->json(), 'id');
@@ -397,16 +517,14 @@ class FacebookPageTokenService
             $pageName = is_string($pageName) ? $pageName : null;
 
             if ($expectedPageId !== '' && $pageId !== null && $pageId !== $expectedPageId) {
-                return [
+                return $this->withExpiry([
                     'valid' => false,
                     'configured' => true,
                     'message' => 'Token is valid but belongs to Page ID '.$pageId.' (expected '.$expectedPageId.').',
                     'page_id' => $pageId,
                     'page_name' => $pageName,
                     'checked_at' => $checkedAt,
-                    'expires_at' => null,
-                    'never_expires' => null,
-                ];
+                ], $this->inspectExpiry($token));
             }
 
             $expiry = $this->inspectExpiry($token);
@@ -414,34 +532,109 @@ class FacebookPageTokenService
                 ? 'Connected as '.$pageName.($pageId ? ' ('.$pageId.')' : '')
                 : 'Page access token is valid.';
 
-            if ($expiry['never_expires'] === true) {
-                $message .= ' · never expires';
-            } elseif (is_string($expiry['expires_at'])) {
-                $message .= ' · expires '.$expiry['expires_at'];
-            }
-
-            return [
+            return $this->withExpiry([
                 'valid' => true,
                 'configured' => true,
                 'message' => $message,
                 'page_id' => $pageId,
                 'page_name' => $pageName,
                 'checked_at' => $checkedAt,
-                'expires_at' => $expiry['expires_at'],
-                'never_expires' => $expiry['never_expires'],
-            ];
+            ], $expiry);
         } catch (Throwable $e) {
-            return [
+            return $this->withExpiry([
                 'valid' => false,
                 'configured' => true,
                 'message' => 'Could not reach Facebook Graph API: '.$e->getMessage(),
                 'page_id' => null,
                 'page_name' => null,
                 'checked_at' => $checkedAt,
-                'expires_at' => null,
-                'never_expires' => null,
-            ];
+            ]);
         }
+    }
+
+    /**
+     * @param  array{
+     *     valid: bool,
+     *     configured: bool,
+     *     message: string,
+     *     page_id: ?string,
+     *     page_name: ?string,
+     *     checked_at: string
+     * }  $status
+     * @param  array{expires_at: ?string, never_expires: ?bool}|null  $expiry
+     * @return array{
+     *     valid: bool,
+     *     configured: bool,
+     *     message: string,
+     *     page_id: ?string,
+     *     page_name: ?string,
+     *     checked_at: string,
+     *     expires_at: ?string,
+     *     never_expires: ?bool,
+     *     expires_label: ?string
+     * }
+     */
+    private function withExpiry(array $status, ?array $expiry = null): array
+    {
+        $expiresAt = is_string($expiry['expires_at'] ?? null) ? $expiry['expires_at'] : null;
+        $neverExpires = is_bool($expiry['never_expires'] ?? null) ? $expiry['never_expires'] : null;
+
+        $status['expires_at'] = $expiresAt;
+        $status['never_expires'] = $neverExpires;
+        $status['expires_label'] = $this->expiresLabel($expiresAt, $neverExpires);
+
+        return $status;
+    }
+
+    private function expiresLabel(?string $expiresAt, ?bool $neverExpires): ?string
+    {
+        if ($neverExpires === true) {
+            return 'Never expires';
+        }
+
+        if (! is_string($expiresAt) || trim($expiresAt) === '') {
+            return null;
+        }
+
+        try {
+            $when = Carbon::parse($expiresAt)->timezone('Asia/Dhaka');
+        } catch (Throwable) {
+            return null;
+        }
+
+        $absolute = $when->format('d M Y, h:i A');
+        $relative = $this->relativeExpiry($when);
+
+        if ($when->getTimestamp() < now()->getTimestamp()) {
+            return 'Expired '.$absolute.' ('.$relative.')';
+        }
+
+        return 'Expires '.$absolute.' ('.$relative.')';
+    }
+
+    private function relativeExpiry(Carbon $when): string
+    {
+        $seconds = $when->getTimestamp() - now()->getTimestamp();
+        $past = $seconds < 0;
+        $seconds = abs($seconds);
+
+        if ($seconds < 60) {
+            return $past ? 'just now' : 'in under a minute';
+        }
+
+        $days = intdiv($seconds, 86400);
+        $hours = intdiv($seconds, 3600);
+        $minutes = intdiv($seconds, 60);
+
+        if ($days >= 1) {
+            $unit = $days === 1 ? '1 day' : $days.' days';
+        } elseif ($hours >= 1) {
+            $unit = $hours === 1 ? '1 hour' : $hours.' hours';
+        } else {
+            $unit = $minutes === 1 ? '1 minute' : $minutes.' minutes';
+        }
+
+        return $past ? $unit.' ago' : 'in '.$unit;
     }
 
     /**
@@ -460,12 +653,11 @@ class FacebookPageTokenService
             $debug = $this->debugToken($token, $appId, $appSecret);
             $expiresAt = (int) ($debug['expires_at'] ?? 0);
 
-            if (! ($debug['is_valid'] ?? false)) {
-                return ['expires_at' => null, 'never_expires' => null];
-            }
-
             if ($expiresAt === 0) {
-                return ['expires_at' => null, 'never_expires' => true];
+                return [
+                    'expires_at' => null,
+                    'never_expires' => (bool) ($debug['is_valid'] ?? false),
+                ];
             }
 
             return [
@@ -479,6 +671,10 @@ class FacebookPageTokenService
 
     private function syncEnvFile(string $token): void
     {
+        if (app()->environment('testing')) {
+            return;
+        }
+
         $path = base_path('.env');
 
         if (! is_file($path) || ! is_writable($path)) {

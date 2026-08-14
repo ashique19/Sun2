@@ -125,14 +125,18 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
             ->call('selectConversation', $conversation->id)
             ->assertDontSee('Match product')
             ->assertDontSee('Open full size')
-            ->assertSee('Send price')
-            ->assertSee('Send priced')
-            ->assertSee('Add to order')
+            ->assertSee('Price')
+            ->assertSee('P.img')
+            ->assertSee('A.Img')
+            ->assertSee('Link')
+            ->assertSee('+Order')
             ->assertSee($product->name)
             ->assertSeeHtml('href="'.route('admin.products.show', $product).'"')
             ->assertSeeHtml('aria-label="Open product details for '.$product->name.'"')
             ->assertSeeHtml('wire:click="sendMatchedProductPriceReply('.$inbound->id.')"')
             ->assertSeeHtml('wire:click="sendPricedImageFromMatch('.$inbound->id.')"')
+            ->assertSeeHtml('wire:click="sendMatchedProductAlbumImages('.$inbound->id.')"')
+            ->assertSeeHtml('wire:click="sendMatchedProductLink('.$inbound->id.')"')
             ->assertSeeHtml('wire:click="addMatchedProductToOrder('.$inbound->id.')"')
             ->assertSeeHtml('wire:click.stop="openTagProductOnImage('.$inbound->id.')"');
 
@@ -203,7 +207,7 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
-            ->assertSee('Send price')
+            ->assertSee('Price')
             ->call('sendMatchedProductPriceReply', $inbound->id)
             ->assertHasNoErrors()
             ->assertSet('statusMessage', 'Price reply sent.');
@@ -343,7 +347,7 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
-            ->assertSee('Send priced')
+            ->assertSee('P.img')
             ->call('sendPricedImageFromMatch', $inbound->id)
             ->assertHasNoErrors()
             ->assertSet('statusMessage', 'Priced image sent.');
@@ -357,6 +361,142 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
         $this->assertNotNull($outbound);
         $this->assertSame($inbound->id, $outbound->reply_to_message_id);
         $this->assertNotNull($outbound->media_url);
+
+        @unlink($customerAbsolute);
+    }
+
+    #[Test]
+    public function send_matched_product_album_images_sends_catalog_images_and_skips_priced(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'PAGE42',
+            'facebook.graph_version' => 'v25.0',
+            'app.url' => 'https://example.test',
+            'channels.ai_draft.image_min_bytes' => 100,
+        ]);
+
+        [$product, $customerAbsolute, $customerUrl] = $this->productAndMatchingCustomerJpeg();
+
+        $relativeDir = 'img/products/'.$product->id;
+        $absoluteDir = public_path($relativeDir);
+        $secondAbsolute = $absoluteDir.DIRECTORY_SEPARATOR.'catalog-2.jpg';
+        $image = imagecreatetruecolor(180, 180);
+        $fill = imagecolorallocate($image, 40, 160, 90);
+        imagefill($image, 0, 0, $fill);
+        imagejpeg($image, $secondAbsolute, 92);
+        imagedestroy($image);
+
+        ProductImage::query()->create([
+            'product_id' => $product->id,
+            'path' => '/'.$relativeDir.'/catalog-2.jpg',
+            'alt' => $product->name.' side',
+            'is_primary' => false,
+            'sort_order' => 1,
+            'perceptual_hash' => app(ProductImageHashService::class)->hashFile($secondAbsolute),
+        ]);
+
+        app(ProductPricedImageService::class)->generate($product->fresh());
+        $product->refresh();
+        $this->assertNotEmpty($product->priced_image_path);
+
+        $albumMessageIds = 0;
+        Http::fake(function ($request) use ($customerAbsolute, $customerUrl, &$albumMessageIds) {
+            if ($request->url() === $customerUrl) {
+                return Http::response(file_get_contents($customerAbsolute), 200, [
+                    'Content-Type' => 'image/jpeg',
+                ]);
+            }
+
+            $albumMessageIds++;
+
+            return Http::response(['message_id' => 'm_album_'.$albumMessageIds], 200);
+        });
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $inbound = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_album_send',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => $customerUrl,
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSee('A.Img')
+            ->call('sendMatchedProductAlbumImages', $inbound->id)
+            ->assertHasNoErrors()
+            ->assertSet('statusMessage', 'Sent 2 product images.');
+
+        $outbounds = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->orderBy('id')
+            ->get();
+
+        $this->assertCount(2, $outbounds);
+        $this->assertSame($inbound->id, $outbounds[0]->reply_to_message_id);
+        $this->assertNull($outbounds[1]->reply_to_message_id);
+        $this->assertNotNull($outbounds[0]->media_url);
+        $this->assertNotNull($outbounds[1]->media_url);
+
+        @unlink($customerAbsolute);
+    }
+
+    #[Test]
+    public function send_matched_product_link_sends_storefront_url(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.graph_version' => 'v25.0',
+            'app.url' => 'https://example.test',
+            'channels.ai_draft.image_min_bytes' => 100,
+        ]);
+
+        [$product, $customerAbsolute, $customerUrl] = $this->productAndMatchingCustomerJpeg();
+
+        Http::fake([
+            $customerUrl => Http::response(file_get_contents($customerAbsolute), 200, [
+                'Content-Type' => 'image/jpeg',
+            ]),
+            'https://graph.facebook.com/*' => Http::response(['message_id' => 'm_link'], 200),
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $inbound = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_link_send',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => $customerUrl,
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        $expectedLink = route('product.show', $product);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSee('Link')
+            ->call('sendMatchedProductLink', $inbound->id)
+            ->assertHasNoErrors()
+            ->assertSet('statusMessage', 'Product link sent.');
+
+        $outbound = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($outbound);
+        $this->assertSame($inbound->id, $outbound->reply_to_message_id);
+        $this->assertSame($expectedLink, $outbound->body);
+        $this->assertNull($outbound->media_url);
 
         @unlink($customerAbsolute);
     }
@@ -445,8 +585,8 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
 
         $component = Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
-            ->assertSee('Send priced')
-            ->assertSee('Add to order');
+            ->assertSee('P.img')
+            ->assertSee('+Order');
 
         $state = $component->get('inboundImageMatchState')[(string) $inbound->id] ?? [];
         $this->assertSame($product->id, $state['product_id'] ?? null);

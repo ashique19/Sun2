@@ -170,9 +170,14 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->assertSee('Tagged Ring')
             ->assertSeeHtml('href="'.route('admin.products.show', $product).'"')
             ->assertSeeHtml('target="_blank"')
-            ->assertSee('Send price')
-            ->assertSee('Send priced')
+            ->assertSee('Price')
+            ->assertSee('P.img')
+            ->assertSee('A.Img')
+            ->assertSee('Link')
+            ->assertSee('+Order')
             ->assertSeeHtml('wire:click="sendMatchedProductPriceReply('.$message->id.')"')
+            ->assertSeeHtml('wire:click="sendMatchedProductAlbumImages('.$message->id.')"')
+            ->assertSeeHtml('wire:click="sendMatchedProductLink('.$message->id.')"')
             ->assertSeeHtml('wire:click="addMatchedProductToOrder('.$message->id.')"')
             ->assertDontSeeHtml('@click.stop="openMenu()"')
             ->call('addMatchedProductToOrder', $message->id)
@@ -181,6 +186,64 @@ class AdminInboxProductImageMatchTest extends TestCase
         $this->assertSame($product->id, $message->fresh()->matched_product_id);
         $order = Order::query()->find($conversation->fresh()->draft_order_id);
         $this->assertSame($product->id, $order?->items()->first()?->product_id);
+    }
+
+    #[Test]
+    public function adding_matched_products_from_conversation_appends_draft_line_items(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $first = Product::query()->create([
+            'name' => 'First Matched Ring',
+            'slug' => 'first-matched-ring-'.uniqid(),
+            'sku' => 'FMR'.random_int(100, 999),
+            'price' => 1100,
+            'purchase_price' => 500,
+            'stock_quantity' => 3,
+            'is_published' => true,
+            'display_order' => 0,
+        ]);
+        $second = Product::query()->create([
+            'name' => 'Second Matched Necklace',
+            'slug' => 'second-matched-necklace-'.uniqid(),
+            'sku' => 'SMN'.random_int(100, 999),
+            'price' => 2200,
+            'purchase_price' => 900,
+            'stock_quantity' => 2,
+            'is_published' => true,
+            'display_order' => 0,
+        ]);
+
+        $firstMessage = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.test/first.jpg',
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now()->subMinutes(2),
+        ]);
+        $secondMessage = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.test/second.jpg',
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('openTagProductOnImage', $firstMessage->id)
+            ->call('tagMatchedProduct', $first->id)
+            ->call('addMatchedProductToOrder', $firstMessage->id)
+            ->call('openTagProductOnImage', $secondMessage->id)
+            ->call('tagMatchedProduct', $second->id)
+            ->call('addMatchedProductToOrder', $secondMessage->id)
+            ->assertHasNoErrors();
+
+        $order = Order::query()->find($conversation->fresh()->draft_order_id);
+        $this->assertNotNull($order);
+        $productIds = $order->items()->orderBy('id')->pluck('product_id')->all();
+        $this->assertSame([$first->id, $second->id], $productIds);
     }
 
     #[Test]

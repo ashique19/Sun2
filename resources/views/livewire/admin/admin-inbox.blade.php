@@ -710,9 +710,9 @@
                                                     wire:loading.attr="disabled"
                                                     wire:target="sendMatchedProductPriceReply({{ $messageRow->id }})"
                                                     @click.stop
-                                                    title="Send price as a text reply"
+                                                    title="Send price as text"
                                                     class="text-[10px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
-                                                    Send price
+                                                    Price
                                                 </button>
                                                 <button type="button"
                                                     wire:click="sendPricedImageFromMatch({{ $messageRow->id }})"
@@ -721,13 +721,32 @@
                                                     @click.stop
                                                     title="Send priced product image"
                                                     class="text-[10px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
-                                                    Send priced
+                                                    P.img
+                                                </button>
+                                                <button type="button"
+                                                    wire:click="sendMatchedProductAlbumImages({{ $messageRow->id }})"
+                                                    wire:loading.attr="disabled"
+                                                    wire:target="sendMatchedProductAlbumImages({{ $messageRow->id }})"
+                                                    @click.stop
+                                                    title="Send all non-priced product images"
+                                                    class="text-[10px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
+                                                    A.Img
+                                                </button>
+                                                <button type="button"
+                                                    wire:click="sendMatchedProductLink({{ $messageRow->id }})"
+                                                    wire:loading.attr="disabled"
+                                                    wire:target="sendMatchedProductLink({{ $messageRow->id }})"
+                                                    @click.stop
+                                                    title="Send store product link"
+                                                    class="text-[10px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
+                                                    Link
                                                 </button>
                                                 <button type="button"
                                                     wire:click="addMatchedProductToOrder({{ $messageRow->id }})"
                                                     @click.stop
+                                                    title="Add product to draft order"
                                                     class="text-[10px] font-semibold text-[#C9A227] hover:underline">
-                                                    Add to order
+                                                    +Order
                                                 </button>
                                                 <button type="button"
                                                     wire:click="clearMatchedProduct({{ $messageRow->id }})"

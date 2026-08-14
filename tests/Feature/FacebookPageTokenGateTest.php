@@ -179,6 +179,8 @@ class FacebookPageTokenGateTest extends TestCase
 
         $this->assertSame('never-expiring-page-token', Setting::getValue(FacebookPageTokenService::SETTING_KEY));
         $this->assertSame('never-expiring-page-token', app(FacebookPageTokenService::class)->token());
+        $this->assertSame('long-lived-user-token', Setting::getValue(FacebookPageTokenService::USER_SETTING_KEY));
+        $this->assertNotNull(Setting::getValue(FacebookPageTokenService::EXPIRES_SETTING_KEY));
 
         Http::assertSent(function ($request) {
             return str_contains($request->url(), '/oauth/access_token')
@@ -198,20 +200,37 @@ class FacebookPageTokenGateTest extends TestCase
             'facebook.graph_version' => 'v25.0',
         ]);
 
-        Http::fake([
-            'https://graph.facebook.com/v25.0/debug_token*' => Http::response([
-                'data' => [
-                    'app_id' => 'app-123',
-                    'type' => 'PAGE',
-                    'is_valid' => true,
-                    'expires_at' => 0,
-                ],
-            ], 200),
-            'https://graph.facebook.com/v25.0/me*' => Http::response([
-                'id' => 'page-1',
-                'name' => 'Sundoritoma',
-            ], 200),
-        ]);
+        Http::fake(function (Request $request) {
+            $url = $request->url();
+
+            if (str_contains($url, '/oauth/access_token')) {
+                return Http::response([
+                    'access_token' => 'should-not-be-saved',
+                    'token_type' => 'bearer',
+                    'expires_in' => 5184000,
+                ], 200);
+            }
+
+            if (str_contains($url, '/debug_token')) {
+                return Http::response([
+                    'data' => [
+                        'app_id' => 'app-123',
+                        'type' => 'PAGE',
+                        'is_valid' => true,
+                        'expires_at' => 0,
+                    ],
+                ], 200);
+            }
+
+            if (str_contains($url, '/me')) {
+                return Http::response([
+                    'id' => 'page-1',
+                    'name' => 'Sundoritoma',
+                ], 200);
+            }
+
+            return Http::response(['error' => ['message' => 'Unexpected URL: '.$url]], 500);
+        });
 
         Livewire::actingAs($this->adminUser())
             ->test(AdminFacebookTokenGate::class)
@@ -220,6 +239,8 @@ class FacebookPageTokenGateTest extends TestCase
             ->assertSet('feedbackOk', true);
 
         $this->assertSame('stable-page-token', Setting::getValue(FacebookPageTokenService::SETTING_KEY));
+
+        Http::assertNotSent(fn (Request $request) => str_contains($request->url(), '/oauth/access_token'));
     }
 
     #[Test]
@@ -243,7 +264,147 @@ class FacebookPageTokenGateTest extends TestCase
             ->assertDontSee('Facebook Page token needs attention')
             ->assertDontSee('Paste User or Page access token')
             ->assertDontSee('Update token')
-            ->assertDontSee('Save token');
+            ->assertDontSee('Save token')
+            ->assertSee('Replace token');
+    }
+
+    #[Test]
+    public function exchanging_an_expiring_page_token_saves_the_long_lived_token(): void
+    {
+        config([
+            'facebook.app_id' => 'app-123',
+            'facebook.messenger.app_secret' => 'secret-456',
+            'facebook.messenger.page_access_token' => '',
+            'facebook.messenger.page_id' => 'page-1',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake(function (Request $request) {
+            $url = $request->url();
+
+            if (str_contains($url, '/debug_token')) {
+                return Http::response([
+                    'data' => [
+                        'app_id' => 'app-123',
+                        'type' => 'PAGE',
+                        'is_valid' => true,
+                        'expires_at' => now()->addHour()->timestamp,
+                    ],
+                ], 200);
+            }
+
+            if (str_contains($url, '/oauth/access_token')) {
+                return Http::response([
+                    'access_token' => 'long-lived-page-token',
+                    'token_type' => 'bearer',
+                    'expires_in' => 5184000,
+                ], 200);
+            }
+
+            if (str_contains($url, '/me')) {
+                $token = (string) ($request['access_token'] ?? '');
+
+                return Http::response([
+                    'id' => 'page-1',
+                    'name' => 'Sundoritoma',
+                ], $token === 'long-lived-page-token' ? 200 : 400);
+            }
+
+            return Http::response(['error' => ['message' => 'Unexpected URL: '.$url]], 500);
+        });
+
+        Livewire::actingAs($this->adminUser())
+            ->test(AdminFacebookTokenGate::class)
+            ->set('tokenInput', 'short-lived-page-token')
+            ->call('saveToken')
+            ->assertSet('feedbackOk', true)
+            ->assertSee('long-lived Page token');
+
+        $this->assertSame('long-lived-page-token', Setting::getValue(FacebookPageTokenService::SETTING_KEY));
+        $this->assertSame('long-lived-page-token', app(FacebookPageTokenService::class)->token());
+        $this->assertNotNull(Setting::getValue(FacebookPageTokenService::EXPIRES_SETTING_KEY));
+
+        Http::assertSent(function ($request) {
+            return str_contains($request->url(), '/oauth/access_token')
+                && $request['grant_type'] === 'fb_exchange_token'
+                && $request['client_id'] === 'app-123'
+                && $request['client_secret'] === 'secret-456'
+                && $request['fb_exchange_token'] === 'short-lived-page-token';
+        });
+    }
+
+    #[Test]
+    public function refresh_command_reexchanges_stored_user_token(): void
+    {
+        config([
+            'facebook.app_id' => 'app-123',
+            'facebook.messenger.app_secret' => 'secret-456',
+            'facebook.messenger.page_access_token' => 'old-page-token',
+            'facebook.messenger.page_id' => 'page-1',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Setting::putValue(FacebookPageTokenService::SETTING_KEY, 'old-page-token', 'facebook');
+        Setting::putValue(FacebookPageTokenService::USER_SETTING_KEY, 'stored-user-token', 'facebook');
+
+        Http::fake(function (Request $request) {
+            $url = $request->url();
+
+            if (str_contains($url, '/debug_token')) {
+                return Http::response([
+                    'data' => [
+                        'app_id' => 'app-123',
+                        'type' => 'USER',
+                        'is_valid' => true,
+                        'expires_at' => now()->addDays(50)->timestamp,
+                    ],
+                ], 200);
+            }
+
+            if (str_contains($url, '/oauth/access_token')) {
+                return Http::response([
+                    'access_token' => 'refreshed-user-token',
+                    'token_type' => 'bearer',
+                    'expires_in' => 5184000,
+                ], 200);
+            }
+
+            if (str_contains($url, '/page-1')) {
+                return Http::response([
+                    'access_token' => 'refreshed-page-token',
+                    'name' => 'Sundoritoma',
+                    'id' => 'page-1',
+                ], 200);
+            }
+
+            if (str_contains($url, '/me')) {
+                return Http::response([
+                    'id' => 'page-1',
+                    'name' => 'Sundoritoma',
+                ], 200);
+            }
+
+            return Http::response(['error' => ['message' => 'Unexpected URL: '.$url]], 500);
+        });
+
+        $this->artisan('facebook:refresh-page-token')
+            ->assertSuccessful();
+
+        $this->assertSame('refreshed-page-token', Setting::getValue(FacebookPageTokenService::SETTING_KEY));
+        $this->assertSame('refreshed-user-token', Setting::getValue(FacebookPageTokenService::USER_SETTING_KEY));
+    }
+
+    #[Test]
+    public function refresh_command_fails_without_app_credentials(): void
+    {
+        config([
+            'facebook.app_id' => '',
+            'facebook.messenger.app_secret' => '',
+            'facebook.messenger.page_access_token' => 'page-token',
+        ]);
+
+        $this->artisan('facebook:refresh-page-token')
+            ->assertFailed();
     }
 
     #[Test]

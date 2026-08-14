@@ -178,17 +178,33 @@ class AdminInboxTest extends TestCase
         $this->actingAs($this->adminUser());
         $this->conversation();
 
-        Livewire::test(AdminInbox::class)
+        $closed = Livewire::test(AdminInbox::class)
             ->assertSet('mobileFiltersOpen', false)
-            ->call('toggleMobileFilters')
+            ->assertSeeHtml('data-inbox-filters')
+            ->assertSeeHtml('inbox-mobile-filters')
+            ->assertSeeHtml('filtersOpen')
+            ->assertSeeHtml('aria-expanded="false"')
+            ->assertDontSeeHtml('class="inbox-mobile-filters is-open"');
+
+        $closed->call('toggleMobileFilters')
             ->assertSet('mobileFiltersOpen', true)
+            ->assertSeeHtml('class="inbox-mobile-filters is-open"')
+            ->assertSeeHtml('aria-expanded="true"')
+            ->call('toggleMobileFilters')
+            ->assertSet('mobileFiltersOpen', false)
+            ->assertDontSeeHtml('class="inbox-mobile-filters is-open"')
+            ->assertSeeHtml('aria-expanded="false"')
+            ->call('toggleMobileFilters')
             ->set('unread', '1')
-            ->assertSet('mobileFiltersOpen', true);
+            ->assertSet('mobileFiltersOpen', true)
+            ->assertSeeHtml('class="inbox-mobile-filters is-open"');
 
         Livewire::withQueryParams(['unread' => '1'])
             ->test(AdminInbox::class)
             ->assertSet('mobileFiltersOpen', true)
-            ->assertSet('unread', '1');
+            ->assertSet('unread', '1')
+            ->assertSeeHtml('class="inbox-mobile-filters is-open"')
+            ->assertSeeHtml('filtersOpen: true');
     }
 
     #[Test]

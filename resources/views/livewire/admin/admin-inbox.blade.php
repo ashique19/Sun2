@@ -69,10 +69,13 @@
     <div id="inbox-fb-token-banner" class="px-4 pt-3 empty:hidden empty:p-0 xl:px-0 xl:pt-0"></div>
 
     {{-- Header: on small screens, Inbox title + icon actions share one row. --}}
-    <div @class([
-        'flex flex-col gap-2 px-4 pt-2 xl:gap-3 xl:px-0 xl:pt-0',
-        'hidden xl:flex' => $mobileThreadOpen,
-    ])>
+    <div
+        x-data="{ filtersOpen: @js($mobileFiltersOpen) }"
+        @class([
+            'flex flex-col gap-2 px-4 pt-2 xl:gap-3 xl:px-0 xl:pt-0',
+            'hidden xl:flex' => $mobileThreadOpen,
+        ])
+    >
         <div class="flex items-center justify-between gap-3 xl:items-end">
             <div class="min-w-0">
                 <h1 class="font-serif text-2xl font-semibold xl:text-3xl">Inbox</h1>
@@ -168,11 +171,12 @@
                     <livewire:admin.admin-facebook-token-gate />
 
                     <button type="button"
-                        wire:click="toggleMobileFilters"
+                        x-on:click="filtersOpen = ! filtersOpen; $wire.set('mobileFiltersOpen', filtersOpen)"
                         aria-expanded="{{ $mobileFiltersOpen ? 'true' : 'false' }}"
+                        x-bind:aria-expanded="filtersOpen.toString()"
                         aria-label="Filters"
                         title="Filters"
-                        class="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                        class="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] xl:hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
                             <path fill-rule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 0 1 .628.74v2.288a2.25 2.25 0 0 1-.659 1.59l-4.682 4.683a2.25 2.25 0 0 0-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 0 1 8 18.25v-5.757a2.25 2.25 0 0 0-.659-1.591L2.659 6.22A2.25 2.25 0 0 1 2 4.629V2.34a.75.75 0 0 1 .628-.74Z" clip-rule="evenodd" />
                         </svg>
@@ -186,10 +190,11 @@
             </div>
         </div>
 
-        <div @class([
-            'grid w-full grid-cols-2 gap-2 rounded-xl border border-[#EFE7D6] bg-white p-3 xl:flex xl:w-auto xl:flex-wrap xl:items-center xl:justify-end xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0',
-            'max-xl:hidden' => ! $mobileFiltersOpen,
-        ])>
+        <div
+            data-inbox-filters
+            @class(['inbox-mobile-filters', 'is-open' => $mobileFiltersOpen])
+            x-bind:class="{ 'is-open': filtersOpen }"
+        >
             <select wire:model.live="channel" class="rounded-lg border border-[#E0D6C2] px-2.5 py-2 xl:px-3">
                 <option value="">All channels</option>
                 <option value="messenger">Messenger</option>

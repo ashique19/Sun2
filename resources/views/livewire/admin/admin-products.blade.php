@@ -344,7 +344,7 @@
                     role="dialog"
                     aria-modal="true"
                     aria-label="Put price on images">
-                    <div class="flex max-h-[min(90dvh,42rem)] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+                    <div class="flex max-h-[min(90dvh,40rem)] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-xl"
                         wire:click.stop>
                         <div class="flex shrink-0 items-center justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
                             <div>
@@ -359,7 +359,7 @@
                             </button>
                         </div>
 
-                        <div class="min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-3">
+                        <div class="max-h-[min(22rem,calc(90dvh-11rem))] overflow-y-auto px-4 py-3 space-y-3">
                             @if ($putPriceMessage)
                                 <div class="rounded-lg bg-emerald-50 text-emerald-700 text-sm px-4 py-3">{{ $putPriceMessage }}</div>
                             @endif
@@ -377,15 +377,15 @@
                                 <p class="text-sm text-[#6B6459]">
                                     Showing {{ count($putPriceBatch) }} of {{ $putPriceRemaining }} without a priced image.
                                 </p>
-                                <ul class="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                                <ul class="grid grid-cols-5 gap-2">
                                     @foreach ($putPriceBatch as $row)
                                         <li wire:key="put-price-{{ $row['id'] }}" class="min-w-0">
                                             @if ($row['thumb'])
                                                 <img src="{{ \App\Support\StorefrontAssets::url($row['thumb']) }}"
                                                     alt=""
-                                                    class="h-24 w-full rounded object-cover border border-[#E7DFCF] bg-[#FAF6EF]">
+                                                    class="aspect-square w-full rounded object-cover border border-[#E7DFCF] bg-[#FAF6EF]">
                                             @else
-                                                <div class="h-24 w-full rounded border border-[#E7DFCF] bg-[#FAF6EF]"></div>
+                                                <div class="aspect-square w-full rounded border border-[#E7DFCF] bg-[#FAF6EF]"></div>
                                             @endif
                                             <p class="mt-1 truncate text-xs font-medium text-[#1E1E1E]" title="{{ $row['name'] }}">{{ $row['name'] }}</p>
                                             <p class="text-[11px] tabular-nums text-[#8C8474]">Tk {{ $row['price'] }}</p>

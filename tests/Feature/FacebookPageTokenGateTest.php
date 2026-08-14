@@ -218,13 +218,15 @@ class FacebookPageTokenGateTest extends TestCase
             return Http::response(['error' => ['message' => 'Unexpected URL: '.$url]], 500);
         });
 
-        Livewire::actingAs($this->adminUser())
+        $component = Livewire::actingAs($this->adminUser())
             ->test(AdminFacebookTokenGate::class)
             ->set('tokenInput', 'short-lived-user-token')
             ->call('saveToken')
             ->assertSet('feedbackOk', true)
-            ->assertSee('never-expiring')
+            ->assertDontSee('Connected as')
             ->assertSee('Never expires');
+
+        $this->assertStringContainsString('never-expiring', $component->get('feedback'));
 
         $this->assertSame('never-expiring-page-token', Setting::getValue(FacebookPageTokenService::SETTING_KEY));
         $this->assertSame('never-expiring-page-token', app(FacebookPageTokenService::class)->token());
@@ -286,7 +288,8 @@ class FacebookPageTokenGateTest extends TestCase
             ->set('tokenInput', 'stable-page-token')
             ->call('saveToken')
             ->assertSet('feedbackOk', true)
-            ->assertSee('Never expires');
+            ->assertSee('Never expires')
+            ->assertDontSee('Connected as');
 
         $this->assertSame('stable-page-token', Setting::getValue(FacebookPageTokenService::SETTING_KEY));
 
@@ -315,7 +318,13 @@ class FacebookPageTokenGateTest extends TestCase
             ->assertDontSee('Paste User or Page access token')
             ->assertDontSee('Update token')
             ->assertDontSee('Save token')
-            ->assertSee('Replace token');
+            ->assertDontSee('Replace token')
+            ->assertDontSee('Connected as')
+            ->assertSee('Facebook token')
+            ->set('showReplace', true)
+            ->assertSee('Paste current User or Page access token')
+            ->assertDontSee('Replace token')
+            ->assertDontSee('Connected as');
     }
 
     #[Test]
@@ -370,14 +379,16 @@ class FacebookPageTokenGateTest extends TestCase
             return Http::response(['error' => ['message' => 'Unexpected URL: '.$url]], 500);
         });
 
-        Livewire::actingAs($this->adminUser())
+        $component = Livewire::actingAs($this->adminUser())
             ->test(AdminFacebookTokenGate::class)
             ->set('tokenInput', 'short-lived-page-token')
             ->call('saveToken')
             ->assertSet('feedbackOk', true)
-            ->assertSee('long-lived Page token')
             ->assertSee('Expires 13 Oct 2026, 01:00 PM')
-            ->assertSee('in 60 days');
+            ->assertSee('in 60 days')
+            ->assertDontSee('Connected as');
+
+        $this->assertStringContainsString('long-lived Page token', $component->get('feedback'));
 
         $this->assertSame('long-lived-page-token', Setting::getValue(FacebookPageTokenService::SETTING_KEY));
         $this->assertSame('long-lived-page-token', app(FacebookPageTokenService::class)->token());

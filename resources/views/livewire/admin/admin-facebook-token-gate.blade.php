@@ -53,19 +53,21 @@
             @endif
         </div>
     @elseif ($status && $status['valid'])
-        <div class="mb-2 flex flex-col items-end sm:mb-3" wire:key="fb-token-gate-valid">
-            <button type="button"
-                wire:click="$toggle('showReplace')"
-                class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                aria-expanded="{{ $showReplace ? 'true' : 'false' }}"
-                aria-label="Facebook token"
-                title="{{ $status['expires_label'] ?: 'Facebook token OK' }}">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4" aria-hidden="true">
-                    <path d="M22 12.07C22 6.48 17.52 2 11.93 2S1.86 6.48 1.86 12.07c0 5.02 3.66 9.18 8.44 9.93v-7.02H7.9v-2.91h2.4V9.84c0-2.37 1.4-3.69 3.56-3.69 1.03 0 2.12.18 2.12.18v2.34h-1.2c-1.18 0-1.54.73-1.54 1.48v1.78h2.63l-.42 2.91h-2.21V22c4.78-.75 8.44-4.91 8.44-9.93Z" />
-                </svg>
-            </button>
+        <div class="mb-2 sm:mb-3" wire:key="fb-token-gate-valid">
+            <div class="flex justify-end">
+                <button type="button"
+                    wire:click="$toggle('showReplace')"
+                    class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    aria-expanded="{{ $showReplace ? 'true' : 'false' }}"
+                    aria-label="Facebook token"
+                    title="{{ $status['expires_label'] ?: 'Facebook token OK' }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                        <path d="M22 12.07C22 6.48 17.52 2 11.93 2S1.86 6.48 1.86 12.07c0 5.02 3.66 9.18 8.44 9.93v-7.02H7.9v-2.91h2.4V9.84c0-2.37 1.4-3.69 3.56-3.69 1.03 0 2.12.18 2.12.18v2.34h-1.2c-1.18 0-1.54.73-1.54 1.48v1.78h2.63l-.42 2.91h-2.21V22c4.78-.75 8.44-4.91 8.44-9.93Z" />
+                    </svg>
+                </button>
+            </div>
             @if ($showReplace)
-                <div class="mt-2 w-full rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                <div class="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
                     <div class="flex flex-col gap-2 sm:flex-row sm:items-start">
                         <input type="password"
                             wire:model="tokenInput"
@@ -75,7 +77,7 @@
                         <button type="button"
                             wire:click="saveToken"
                             wire:loading.attr="disabled"
-                            class="rounded-lg bg-emerald-800 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-60">
+                            class="shrink-0 rounded-lg bg-emerald-800 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-60">
                             Exchange &amp; save
                         </button>
                     </div>

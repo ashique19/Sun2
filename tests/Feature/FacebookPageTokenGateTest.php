@@ -323,6 +323,7 @@ class FacebookPageTokenGateTest extends TestCase
             ->assertSee('Facebook token')
             ->set('showReplace', true)
             ->assertSee('Paste current User or Page access token')
+            ->assertSee('Exchange & save')
             ->assertDontSee('Replace token')
             ->assertDontSee('Connected as');
     }

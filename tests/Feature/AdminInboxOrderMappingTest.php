@@ -112,6 +112,65 @@ class AdminInboxOrderMappingTest extends TestCase
     }
 
     #[Test]
+    public function mapping_uses_selected_text_instead_of_the_whole_message(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $message = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => "নাম:রূনলে ম্রো\nঠিকানা:বান্দরবান।\nমোবাইল :01810992298",
+            'sent_at' => now(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('openMessageMapMenu', $message->id, 'রূনলে ম্রো')
+            ->assertSet('mappingSelectedText', 'রূনলে ম্রো')
+            ->call('beginMapField', 'name')
+            ->assertSet('statusMessage', 'Added to order name.')
+            ->call('openMessageMapMenu', $message->id, 'বান্দরবান।')
+            ->call('beginMapField', 'address')
+            ->assertSet('statusMessage', 'Added to order address.')
+            ->call('openMessageMapMenu', $message->id, '01810992298')
+            ->call('beginMapField', 'phone')
+            ->assertSet('statusMessage', 'Added to order phone.');
+
+        $order = Order::query()->find($conversation->fresh()->draft_order_id);
+        $this->assertSame('রূনলে ম্রো', $order->name);
+        $this->assertSame('বান্দরবান।', $order->address);
+        $this->assertSame('01810992298', $order->phone);
+        $this->assertNotSame($message->body, $order->name);
+        $this->assertNotSame($message->body, $order->address);
+    }
+
+    #[Test]
+    public function mapping_without_selection_still_uses_the_full_message_for_address(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $body = "নাম:রূনলে ম্রো\nঠিকানা:বান্দরবান।\nমোবাইল :01810992298";
+        $message = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => $body,
+            'sent_at' => now(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('openMessageMapMenu', $message->id)
+            ->assertSet('mappingSelectedText', null)
+            ->call('beginMapField', 'address')
+            ->assertSet('statusMessage', 'Added to order address.');
+
+        $order = Order::query()->find($conversation->fresh()->draft_order_id);
+        $this->assertSame($body, $order->address);
+    }
+
+    #[Test]
     public function mapping_a_message_to_product_attaches_catalog_line(): void
     {
         $this->actingAs($this->adminUser());

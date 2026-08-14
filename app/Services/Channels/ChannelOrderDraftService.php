@@ -197,6 +197,7 @@ class ChannelOrderDraftService
      * Map a conversation message onto a draft order field (phone/name/address/product).
      *
      * @param  ?int  $productId  Required when field=product and multiple catalog matches exist.
+     * @param  ?string  $textOverride  Optional browser selection; when set, used instead of the full message body.
      */
     public function applyMessageToField(
         ChannelConversation $conversation,
@@ -204,6 +205,7 @@ class ChannelOrderDraftService
         string $field,
         ?int $productId = null,
         ?int $userId = null,
+        ?string $textOverride = null,
     ): Order {
         $field = $this->mapper->normalizeField($field);
 
@@ -211,10 +213,15 @@ class ChannelOrderDraftService
             throw new InvalidArgumentException('Message does not belong to this conversation.');
         }
 
-        return DB::transaction(function () use ($conversation, $message, $field, $productId, $userId) {
+        $textOverride = $textOverride !== null ? trim($textOverride) : null;
+        if ($textOverride === '') {
+            $textOverride = null;
+        }
+
+        return DB::transaction(function () use ($conversation, $message, $field, $productId, $userId, $textOverride) {
             // Use the non-wrapping helper so draft create + field map stay one txn.
             $order = $this->createOrReturnDraft($conversation, $userId);
-            $suggestion = $this->mapper->suggest($message, $field);
+            $suggestion = $this->mapper->suggest($message, $field, $textOverride);
             $meta = is_array($order->ai_parse_meta) ? $order->ai_parse_meta : [];
             $locked = array_values(array_unique(array_merge(
                 array_values($meta['staff_locked_fields'] ?? []),
@@ -227,21 +234,39 @@ class ChannelOrderDraftService
             if ($field === ChannelMessageOrderMapper::FIELD_PHONE) {
                 $phone = $suggestion['value'];
                 if (! $phone || ! PhoneNumber::isValidBangladeshMobile($phone)) {
-                    throw new InvalidArgumentException('No valid Bangladesh mobile found in that message.');
+                    throw new InvalidArgumentException(
+                        $textOverride !== null
+                            ? 'No valid Bangladesh mobile found in the selected text.'
+                            : 'No valid Bangladesh mobile found in that message.'
+                    );
                 }
                 $updates['phone'] = mb_substr(PhoneNumber::display($phone), 0, 32);
                 $conversation->forceFill(['customer_phone' => $updates['phone']])->save();
             } elseif ($field === ChannelMessageOrderMapper::FIELD_NAME) {
-                $name = trim((string) ($suggestion['value'] ?? $message->body ?? ''));
+                $name = trim((string) ($suggestion['value'] ?? ''));
+                if ($name === '' && $textOverride === null) {
+                    $name = trim((string) ($message->body ?? ''));
+                }
                 if ($name === '') {
-                    throw new InvalidArgumentException('Message has no text to use as a name.');
+                    throw new InvalidArgumentException(
+                        $textOverride !== null
+                            ? 'Selected text is empty — nothing to use as a name.'
+                            : 'Message has no text to use as a name.'
+                    );
                 }
                 $updates['name'] = mb_substr($name, 0, 255);
                 $conversation->forceFill(['customer_name' => $updates['name']])->save();
             } elseif ($field === ChannelMessageOrderMapper::FIELD_ADDRESS) {
-                $address = trim((string) ($suggestion['value'] ?? $message->body ?? ''));
+                $address = trim((string) ($suggestion['value'] ?? ''));
+                if ($address === '' && $textOverride === null) {
+                    $address = trim((string) ($message->body ?? ''));
+                }
                 if ($address === '') {
-                    throw new InvalidArgumentException('Message has no text to use as an address.');
+                    throw new InvalidArgumentException(
+                        $textOverride !== null
+                            ? 'Selected text is empty — nothing to use as an address.'
+                            : 'Message has no text to use as an address.'
+                    );
                 }
                 $updates['address'] = mb_substr($address, 0, 255);
                 if ($suggestion['area_id']) {

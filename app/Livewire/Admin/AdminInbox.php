@@ -108,6 +108,9 @@ class AdminInbox extends Component
     /** Message currently targeted by the “Add to order fields” menu. */
     public ?int $mappingMessageId = null;
 
+    /** Browser text selection captured when opening the map menu (optional). */
+    public ?string $mappingSelectedText = null;
+
     /** Active mapping field: phone|name|address|product|null */
     public ?string $mappingField = null;
 
@@ -294,7 +297,7 @@ class AdminInbox extends Component
         }
     }
 
-    public function openMessageMapMenu(int $messageId): void
+    public function openMessageMapMenu(int $messageId, ?string $selectedText = null): void
     {
         if (! $this->selectedConversationId) {
             return;
@@ -309,7 +312,10 @@ class AdminInbox extends Component
             return;
         }
 
+        $selectedText = trim((string) $selectedText);
+
         $this->mappingMessageId = $messageId;
+        $this->mappingSelectedText = $selectedText !== '' ? $selectedText : null;
         $this->mappingField = null;
         $this->mappingMode = 'order';
         $this->mappingProductSearch = '';
@@ -321,6 +327,7 @@ class AdminInbox extends Component
     public function closeMessageMapMenu(): void
     {
         $this->mappingMessageId = null;
+        $this->mappingSelectedText = null;
         $this->mappingField = null;
         $this->mappingMode = 'order';
         $this->mappingProductSearch = '';
@@ -387,7 +394,7 @@ class AdminInbox extends Component
 
         $this->mappingField = $field;
         $this->clearMappingImageMatchState();
-        $suggestion = $mapper->suggest($message, $field);
+        $suggestion = $mapper->suggest($message, $field, $this->mappingSelectedText);
 
         if ($field === ChannelMessageOrderMapper::FIELD_PRODUCT) {
             $this->mappingProductSearch = (string) ($suggestion['value'] ?? '');
@@ -436,7 +443,14 @@ class AdminInbox extends Component
 
         try {
             $field = $mapper->normalizeField($field);
-            $drafts->applyMessageToField($conversation, $message, $field, $productId, auth()->id());
+            $drafts->applyMessageToField(
+                $conversation,
+                $message,
+                $field,
+                $productId,
+                auth()->id(),
+                $this->mappingSelectedText,
+            );
         } catch (InvalidArgumentException $e) {
             $this->error = $e->getMessage();
 

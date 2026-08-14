@@ -503,6 +503,7 @@
                         </div>
                         <p class="mt-1.5 text-[10px] text-[#8C8474]">
                             Right-click or long-press a message → Add to order fields.
+                            Select text first to map only that snippet (name, address, phone).
                         </p>
                     </div>
                 @endif
@@ -550,13 +551,41 @@
                                     longPressTimer: null,
                                     touchStartX: 0,
                                     touchStartY: 0,
+                                    selectedText: '',
+                                    rememberSelection() {
+                                        const sel = window.getSelection();
+                                        if (! sel || sel.rangeCount === 0) {
+                                            return;
+                                        }
+                                        const text = (sel.toString() || '').trim();
+                                        if (text === '') {
+                                            return;
+                                        }
+                                        const anchor = sel.anchorNode;
+                                        if (anchor && this.$el.contains(anchor)) {
+                                            this.selectedText = text;
+                                        }
+                                    },
+                                    selectionForMap() {
+                                        const sel = window.getSelection();
+                                        if (sel && ! sel.isCollapsed && sel.anchorNode && this.$el.contains(sel.anchorNode)) {
+                                            const live = (sel.toString() || '').trim();
+                                            if (live !== '') {
+                                                this.selectedText = live;
+
+                                                return live;
+                                            }
+                                        }
+
+                                        return this.selectedText || '';
+                                    },
                                     openMenu() {
                                         if (! this.orderMapEnabled) {
                                             return;
                                         }
                                         this.cancelLongPress();
                                         this.menu = true;
-                                        $wire.openMessageMapMenu({{ $messageRow->id }});
+                                        $wire.openMessageMapMenu({{ $messageRow->id }}, this.selectionForMap());
                                     },
                                     closeMenu() { this.menu = false; },
                                     startLongPress(event) {
@@ -597,6 +626,8 @@
                                             || (mappingId === {{ $messageRow->id }} && (field === null || field === '' || field === undefined));
                                     },
                                 }"
+                                @mouseup="rememberSelection()"
+                                @keyup="rememberSelection()"
                                 @contextmenu.prevent="openMenu()"
                                 @touchstart.passive="startLongPress($event)"
                                 @touchend.passive="cancelLongPress()"

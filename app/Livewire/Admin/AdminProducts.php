@@ -23,6 +23,8 @@ class AdminProducts extends Component
 
     private const INLINE_FIELDS = ['price', 'compare_at_price', 'purchase_price', 'commission', 'max_discount', 'stock_quantity'];
 
+    private const PUT_PRICE_BATCH_SIZE = 10;
+
     #[Url]
     public string $search = '';
 
@@ -56,6 +58,21 @@ class AdminProducts extends Component
     public string $editingValue = '';
 
     public ?string $message = null;
+
+    public bool $putPriceModalOpen = false;
+
+    /** @var list<array{id: int, name: string, price: string, thumb: ?string}> */
+    public array $putPriceBatch = [];
+
+    public int $putPriceRemaining = 0;
+
+    public ?string $putPriceMessage = null;
+
+    /** @var list<string> */
+    public array $putPriceErrors = [];
+
+    /** @var list<int> */
+    public array $putPriceSkippedIds = [];
 
     public function updatedSearch(): void
     {
@@ -318,6 +335,87 @@ class AdminProducts extends Component
         } catch (\Throwable $e) {
             $this->addError('pricedImage', $e->getMessage());
         }
+    }
+
+    public function openPutPriceModal(): void
+    {
+        $this->putPriceModalOpen = true;
+        $this->putPriceMessage = null;
+        $this->putPriceErrors = [];
+        $this->putPriceSkippedIds = [];
+        $this->refreshPutPriceBatch();
+        $this->js('document.body.classList.add("overflow-hidden")');
+    }
+
+    public function closePutPriceModal(): void
+    {
+        $this->putPriceModalOpen = false;
+        $this->putPriceBatch = [];
+        $this->putPriceRemaining = 0;
+        $this->putPriceMessage = null;
+        $this->putPriceErrors = [];
+        $this->putPriceSkippedIds = [];
+        $this->js('document.body.classList.remove("overflow-hidden")');
+    }
+
+    public function applyPutPriceBatch(ProductPricedImageService $pricedImages): void
+    {
+        $this->putPriceErrors = [];
+        $saved = 0;
+
+        foreach ($this->putPriceBatch as $row) {
+            $product = Product::query()->find($row['id']);
+
+            if (! $product || filled($product->priced_image_path)) {
+                continue;
+            }
+
+            try {
+                $pricedImages->generate($product);
+                $saved++;
+            } catch (\Throwable $e) {
+                $this->putPriceSkippedIds[] = $product->id;
+                $this->putPriceErrors[] = $product->name.': '.$e->getMessage();
+            }
+        }
+
+        $this->refreshPutPriceBatch();
+
+        if ($this->putPriceRemaining === 0 && $this->putPriceBatch === []) {
+            $this->putPriceMessage = $saved === 1
+                ? 'Saved 1 priced image. All products with photos now have one.'
+                : 'Saved '.$saved.' priced images. All products with photos now have one.';
+        } else {
+            $this->putPriceMessage = 'Saved '.$saved.'. '.$this->putPriceRemaining.' still need a priced image.';
+        }
+    }
+
+    private function refreshPutPriceBatch(): void
+    {
+        $query = Product::query()
+            ->where(function ($q) {
+                $q->whereNull('priced_image_path')
+                    ->orWhere('priced_image_path', '');
+            })
+            ->whereHas('images')
+            ->when($this->putPriceSkippedIds !== [], function ($q) {
+                $q->whereNotIn('id', $this->putPriceSkippedIds);
+            });
+
+        $this->putPriceRemaining = (clone $query)->count();
+
+        $this->putPriceBatch = $query
+            ->with(['images' => fn ($q) => $q->orderBy('sort_order')->limit(1)])
+            ->orderByDesc('id')
+            ->limit(self::PUT_PRICE_BATCH_SIZE)
+            ->get()
+            ->map(fn (Product $product) => [
+                'id' => $product->id,
+                'name' => $product->name,
+                'price' => number_format((float) $product->price, 0),
+                'thumb' => $product->images->first()?->path,
+            ])
+            ->all();
     }
 
     public function render()

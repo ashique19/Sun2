@@ -24,6 +24,10 @@
                     {{ $selected === [] ? 'bg-[#D8CDB6] cursor-not-allowed' : 'bg-[#C9A227] hover:bg-[#b8931f]' }}">
                 Make post ({{ count($selected) }})
             </button>
+            <button type="button" wire:click="openPutPriceModal"
+                class="rounded-full border border-[#C9A227] px-5 py-2 text-sm font-semibold text-[#C9A227] bg-white hover:bg-[#FAF6EF]">
+                Put price
+            </button>
             <a href="{{ route('admin.products.create') }}" wire:navigate
                 class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">
                 Create Product
@@ -330,4 +334,86 @@
             <div class="px-4 py-3 border-t border-[#E7DFCF]">{{ $products->links() }}</div>
         @endif
     </div>
+
+    @teleport('body')
+        <div wire:key="put-price-modal-host">
+            @if ($putPriceModalOpen)
+                <div class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+                    wire:click.self="closePutPriceModal"
+                    wire:key="put-price-modal"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Put price on images">
+                    <div class="flex max-h-[min(90dvh,40rem)] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+                        wire:click.stop>
+                        <div class="flex shrink-0 items-center justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
+                            <div>
+                                <h2 class="font-semibold text-lg">Put price</h2>
+                                <p class="mt-0.5 text-xs text-[#8C8474]">
+                                    Centered, semi-blur overlay at 20% of the primary image. Rebuild later to tweak.
+                                </p>
+                            </div>
+                            <button type="button" wire:click="closePutPriceModal"
+                                class="shrink-0 rounded-full border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
+                                Close
+                            </button>
+                        </div>
+
+                        <div class="max-h-[min(22rem,calc(90dvh-11rem))] overflow-y-auto px-4 py-3 space-y-3">
+                            @if ($putPriceMessage)
+                                <div class="rounded-lg bg-emerald-50 text-emerald-700 text-sm px-4 py-3">{{ $putPriceMessage }}</div>
+                            @endif
+                            @if ($putPriceErrors !== [])
+                                <div class="rounded-lg bg-rose-50 text-rose-700 text-sm px-4 py-3 space-y-1">
+                                    @foreach ($putPriceErrors as $error)
+                                        <p>{{ $error }}</p>
+                                    @endforeach
+                                </div>
+                            @endif
+
+                            @if ($putPriceBatch === [])
+                                <p class="text-sm text-[#6B6459]">Every product with a photo already has a priced image.</p>
+                            @else
+                                <p class="text-sm text-[#6B6459]">
+                                    Showing {{ count($putPriceBatch) }} of {{ $putPriceRemaining }} without a priced image.
+                                </p>
+                                <ul class="grid grid-cols-5 gap-2">
+                                    @foreach ($putPriceBatch as $row)
+                                        <li wire:key="put-price-{{ $row['id'] }}" class="min-w-0">
+                                            @if ($row['thumb'])
+                                                <img src="{{ \App\Support\StorefrontAssets::url($row['thumb']) }}"
+                                                    alt=""
+                                                    class="aspect-square w-full rounded object-cover border border-[#E7DFCF] bg-[#FAF6EF]">
+                                            @else
+                                                <div class="aspect-square w-full rounded border border-[#E7DFCF] bg-[#FAF6EF]"></div>
+                                            @endif
+                                            <p class="mt-1 truncate text-xs font-medium text-[#1E1E1E]" title="{{ $row['name'] }}">{{ $row['name'] }}</p>
+                                            <p class="text-[11px] tabular-nums text-[#8C8474]">Tk {{ $row['price'] }}</p>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            @endif
+                        </div>
+
+                        <div class="flex shrink-0 items-center justify-end gap-2 border-t border-[#EFE7D6] px-4 py-3">
+                            <button type="button" wire:click="closePutPriceModal"
+                                class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
+                                {{ $putPriceBatch === [] ? 'Done' : 'Cancel' }}
+                            </button>
+                            @if ($putPriceBatch !== [])
+                                <button type="button"
+                                    wire:click="applyPutPriceBatch"
+                                    wire:loading.attr="disabled"
+                                    wire:target="applyPutPriceBatch"
+                                    class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
+                                    <span wire:loading.remove wire:target="applyPutPriceBatch">Put price & next</span>
+                                    <span wire:loading wire:target="applyPutPriceBatch">Saving…</span>
+                                </button>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            @endif
+        </div>
+    @endteleport
 </div>

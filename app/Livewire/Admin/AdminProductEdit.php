@@ -984,6 +984,9 @@ class AdminProductEdit extends Component
             ?? app(ProductPricedImageService::class)->normalizeLayout($this->product?->priced_image_layout ?? []);
 
         $this->pricedImagePosition = (string) $layout['position'];
-        $this->pricedImageFont = (int) $layout['font'];
+        $this->pricedImageFont = min(
+            ProductPricedImageService::FONT_MAX,
+            max(ProductPricedImageService::FONT_MIN, (int) $layout['font']),
+        );
     }
 }

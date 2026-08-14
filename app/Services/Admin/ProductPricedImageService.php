@@ -24,6 +24,10 @@ class ProductPricedImageService
 
     public const FONT_DEFAULT = 56;
 
+    public const AUTO_FONT_MAX = 240;
+
+    public const AUTO_SIZE_RATIO = 0.20;
+
     public function generate(Product $product, ?array $layout = null): string
     {
         $sourcePath = $product->primaryImagePath();
@@ -40,7 +44,7 @@ class ProductPricedImageService
 
         File::ensureDirectoryExists($this->directory($product->id));
 
-        $layout = $this->normalizeLayout($layout ?? $product->priced_image_layout ?? []);
+        $layout = $this->resolveLayout($product, $source, $layout);
         $filename = now()->format('YmdHis').'_'.Str::lower(Str::random(6)).'.jpg';
         $destination = $this->directory($product->id).DIRECTORY_SEPARATOR.$filename;
 
@@ -69,6 +73,53 @@ class ProductPricedImageService
         if ($oldPath) {
             $this->deleteLocalFile($oldPath);
         }
+    }
+
+    /**
+     * Centered overlay sized to ~20% of the primary image's shorter side.
+     *
+     * @return array{position: string, font: int}
+     */
+    public function autoFillLayout(string $sourcePath, Product $product): array
+    {
+        $info = @getimagesize($sourcePath);
+        $width = (int) ($info[0] ?? 800);
+        $height = (int) ($info[1] ?? 800);
+        $target = max(self::FONT_MIN, (int) round(min($width, $height) * self::AUTO_SIZE_RATIO));
+
+        $lo = self::FONT_MIN;
+        $hi = self::AUTO_FONT_MAX;
+        $font = self::AUTO_FONT_MAX;
+
+        while ($lo <= $hi) {
+            $mid = intdiv($lo + $hi, 2);
+            $panelHeight = $this->overlayMetrics($product, $mid)['panelHeight'];
+
+            if ($panelHeight >= $target) {
+                $font = $mid;
+                $hi = $mid - 1;
+            } else {
+                $lo = $mid + 1;
+            }
+        }
+
+        return [
+            'position' => 'center',
+            'font' => min(self::AUTO_FONT_MAX, max(self::FONT_MIN, $font)),
+        ];
+    }
+
+    /**
+     * @return array{width: int, height: int}
+     */
+    public function measurePanel(Product $product, int $fontSize): array
+    {
+        $metrics = $this->overlayMetrics($product, $fontSize);
+
+        return [
+            'width' => $metrics['panelWidth'],
+            'height' => $metrics['panelHeight'],
+        ];
     }
 
     /**
@@ -111,7 +162,7 @@ class ProductPricedImageService
 
         return [
             'position' => $position,
-            'font' => min(self::FONT_MAX, max(self::FONT_MIN, $font)),
+            'font' => min(self::AUTO_FONT_MAX, max(self::FONT_MIN, $font)),
         ];
     }
 
@@ -149,6 +200,25 @@ class ProductPricedImageService
         }
 
         throw new RuntimeException('Priced image font file is missing.');
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $layout
+     * @return array{position: string, font: int}
+     */
+    private function resolveLayout(Product $product, string $source, ?array $layout): array
+    {
+        if ($layout !== null) {
+            return $this->normalizeLayout($layout);
+        }
+
+        $saved = $product->priced_image_layout;
+
+        if (is_array($saved) && $saved !== []) {
+            return $this->normalizeLayout($saved);
+        }
+
+        return $this->autoFillLayout($source, $product);
     }
 
     /**
@@ -215,38 +285,20 @@ class ProductPricedImageService
 
         $fontSize = $layout['font'];
         $fontFile = $this->fontPath();
-        $padding = max(14, (int) round($fontSize * 0.35));
-        $lineGap = max(8, (int) round($fontSize * 0.25));
+        $metrics = $this->overlayMetrics($product, $fontSize);
+        $padding = $metrics['padding'];
+        $lineGap = $metrics['lineGap'];
+        $lineHeights = $metrics['lineHeights'];
+        $lines = $metrics['lines'];
+        $panelWidth = $metrics['panelWidth'];
+        $panelHeight = $metrics['panelHeight'];
         $margin = max(16, (int) round(min($width, $height) * 0.03));
         $panelWhite = imagecolorallocatealpha($canvas, 255, 255, 255, 45);
         $black = imagecolorallocate($canvas, 0, 0, 0);
 
-        $lines = [];
-        if ($product->compare_at_price !== null && (float) $product->compare_at_price > (float) $product->price) {
-            $lines[] = ['text' => 'Tk '.number_format((float) $product->compare_at_price, 0), 'strike' => true];
-        }
-        $lines[] = ['text' => 'Tk '.number_format((float) $product->price, 0), 'strike' => false];
-
-        $maxWidth = 0;
-        $lineHeights = [];
-        foreach ($lines as $line) {
-            $box = imagettfbbox($fontSize, 0, $fontFile, $line['text']);
-            if ($box === false) {
-                imagedestroy($canvas);
-                throw new RuntimeException('Could not measure priced image text.');
-            }
-            $textWidth = (int) abs($box[2] - $box[0]);
-            $textHeight = (int) abs($box[7] - $box[1]);
-            $maxWidth = max($maxWidth, $textWidth);
-            $lineHeights[] = $textHeight;
-        }
-
-        $textBlockHeight = array_sum($lineHeights) + ((count($lines) - 1) * $lineGap);
-        $panelWidth = $maxWidth + ($padding * 2);
-        $panelHeight = $textBlockHeight + ($padding * 2);
-
         [$x, $y] = $this->panelOrigin($layout['position'], $width, $height, $panelWidth, $panelHeight, $margin);
 
+        $this->frostPanel($canvas, $x, $y, $panelWidth, $panelHeight);
         imagefilledrectangle($canvas, $x, $y, $x + $panelWidth, $y + $panelHeight, $panelWhite);
 
         $cursorY = $y + $padding;
@@ -277,6 +329,85 @@ class ProductPricedImageService
 
         CleanJpegWriter::write($canvas, $destination, 90);
         imagedestroy($canvas);
+    }
+
+    /**
+     * @return array{
+     *     lines: list<array{text: string, strike: bool}>,
+     *     lineHeights: list<int>,
+     *     padding: int,
+     *     lineGap: int,
+     *     panelWidth: int,
+     *     panelHeight: int
+     * }
+     */
+    private function overlayMetrics(Product $product, int $fontSize): array
+    {
+        $fontFile = $this->fontPath();
+        $padding = max(14, (int) round($fontSize * 0.35));
+        $lineGap = max(8, (int) round($fontSize * 0.25));
+
+        $lines = [];
+        if ($product->compare_at_price !== null && (float) $product->compare_at_price > (float) $product->price) {
+            $lines[] = ['text' => 'Tk '.number_format((float) $product->compare_at_price, 0), 'strike' => true];
+        }
+        $lines[] = ['text' => 'Tk '.number_format((float) $product->price, 0), 'strike' => false];
+
+        $maxWidth = 0;
+        $lineHeights = [];
+        foreach ($lines as $line) {
+            $box = imagettfbbox($fontSize, 0, $fontFile, $line['text']);
+            if ($box === false) {
+                throw new RuntimeException('Could not measure priced image text.');
+            }
+            $textWidth = (int) abs($box[2] - $box[0]);
+            $textHeight = (int) abs($box[7] - $box[1]);
+            $maxWidth = max($maxWidth, $textWidth);
+            $lineHeights[] = $textHeight;
+        }
+
+        $textBlockHeight = array_sum($lineHeights) + ((count($lines) - 1) * $lineGap);
+
+        return [
+            'lines' => $lines,
+            'lineHeights' => $lineHeights,
+            'padding' => $padding,
+            'lineGap' => $lineGap,
+            'panelWidth' => $maxWidth + ($padding * 2),
+            'panelHeight' => $textBlockHeight + ($padding * 2),
+        ];
+    }
+
+    private function frostPanel(\GdImage $canvas, int $x, int $y, int $panelWidth, int $panelHeight): void
+    {
+        $canvasW = imagesx($canvas);
+        $canvasH = imagesy($canvas);
+        $x = max(0, $x);
+        $y = max(0, $y);
+        $panelWidth = min($panelWidth, $canvasW - $x);
+        $panelHeight = min($panelHeight, $canvasH - $y);
+
+        if ($panelWidth < 2 || $panelHeight < 2) {
+            return;
+        }
+
+        $region = imagecrop($canvas, [
+            'x' => $x,
+            'y' => $y,
+            'width' => $panelWidth,
+            'height' => $panelHeight,
+        ]);
+
+        if ($region === false) {
+            return;
+        }
+
+        for ($i = 0; $i < 12; $i++) {
+            imagefilter($region, IMG_FILTER_GAUSSIAN_BLUR);
+        }
+
+        imagecopy($canvas, $region, $x, $y, 0, 0, $panelWidth, $panelHeight);
+        imagedestroy($region);
     }
 
     /**

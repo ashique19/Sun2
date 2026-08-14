@@ -61,6 +61,12 @@ class AdminProducts extends Component
 
     public bool $putPriceModalOpen = false;
 
+    /** When true, process selected products and replace existing priced images. */
+    public bool $putPriceReplaceExisting = false;
+
+    /** @var list<int> Product IDs still waiting in selected/replace mode. */
+    public array $putPricePendingIds = [];
+
     /** @var list<array{id: int, name: string, price: string, thumb: ?string}> */
     public array $putPriceBatch = [];
 
@@ -349,6 +355,15 @@ class AdminProducts extends Component
         $this->putPriceSkippedIds = [];
         $this->putPriceTotalSaved = 0;
         $this->putPriceRunning = false;
+        $this->putPriceReplaceExisting = $this->selected !== [];
+        $this->putPricePendingIds = $this->putPriceReplaceExisting
+            ? Product::query()
+                ->whereIn('id', array_values(array_unique(array_map('intval', $this->selected))))
+                ->whereHas('images')
+                ->orderByDesc('id')
+                ->pluck('id')
+                ->all()
+            : [];
         $this->refreshPutPriceBatch();
         $this->js('document.body.classList.add("overflow-hidden")');
     }
@@ -360,6 +375,8 @@ class AdminProducts extends Component
         $this->putPriceRemaining = 0;
         $this->putPriceTotalSaved = 0;
         $this->putPriceRunning = false;
+        $this->putPriceReplaceExisting = false;
+        $this->putPricePendingIds = [];
         $this->putPriceMessage = null;
         $this->putPriceErrors = [];
         $this->putPriceSkippedIds = [];
@@ -377,16 +394,33 @@ class AdminProducts extends Component
         $this->putPriceRunning = true;
         $this->putPriceErrors = [];
         $saved = 0;
+        $batchIds = [];
 
         foreach ($this->putPriceBatch as $row) {
+            $batchIds[] = $row['id'];
             $product = Product::query()->find($row['id']);
 
-            if (! $product || filled($product->priced_image_path)) {
+            if (! $product) {
+                continue;
+            }
+
+            // Missing-only mode: skip products that already have a priced image.
+            if (! $this->putPriceReplaceExisting && filled($product->priced_image_path)) {
                 continue;
             }
 
             try {
-                $pricedImages->generate($product);
+                $sourcePath = $product->primaryImagePath();
+
+                if (! $sourcePath) {
+                    throw new \RuntimeException('A primary product image is required first.');
+                }
+
+                $layout = $pricedImages->autoFillLayout(
+                    public_path(ltrim($sourcePath, '/')),
+                    $product,
+                );
+                $pricedImages->generate($product, $layout);
                 $saved++;
             } catch (\Throwable $e) {
                 $this->putPriceSkippedIds[] = $product->id;
@@ -394,20 +428,21 @@ class AdminProducts extends Component
             }
         }
 
+        if ($this->putPriceReplaceExisting) {
+            $this->putPricePendingIds = array_values(array_diff($this->putPricePendingIds, $batchIds));
+        }
+
         $this->putPriceTotalSaved += $saved;
         $this->refreshPutPriceBatch();
 
         if ($this->putPriceBatch === []) {
             $this->putPriceRunning = false;
-            $this->putPriceMessage = $this->putPriceTotalSaved === 1
-                ? 'Saved 1 priced image. All products with photos now have one.'
-                : 'Saved '.$this->putPriceTotalSaved.' priced images. All products with photos now have one.';
+            $this->putPriceMessage = $this->putPriceCompletionMessage();
 
             return;
         }
 
-        $this->putPriceMessage = 'Saved '.$this->putPriceTotalSaved.'. '
-            .$this->putPriceRemaining.' still need a priced image…';
+        $this->putPriceMessage = $this->putPriceProgressMessage();
 
         // Keep going through the next 10 without another click.
         if (app()->runningUnitTests()) {
@@ -419,8 +454,38 @@ class AdminProducts extends Component
         $this->js('setTimeout(() => $wire.applyPutPriceBatch(), 50)');
     }
 
+    private function putPriceCompletionMessage(): string
+    {
+        if ($this->putPriceReplaceExisting) {
+            return $this->putPriceTotalSaved === 1
+                ? 'Saved 1 priced image for the selection.'
+                : 'Saved '.$this->putPriceTotalSaved.' priced images for the selection.';
+        }
+
+        return $this->putPriceTotalSaved === 1
+            ? 'Saved 1 priced image. All products with photos now have one.'
+            : 'Saved '.$this->putPriceTotalSaved.' priced images. All products with photos now have one.';
+    }
+
+    private function putPriceProgressMessage(): string
+    {
+        if ($this->putPriceReplaceExisting) {
+            return 'Saved '.$this->putPriceTotalSaved.'. '
+                .$this->putPriceRemaining.' selected left…';
+        }
+
+        return 'Saved '.$this->putPriceTotalSaved.'. '
+            .$this->putPriceRemaining.' still need a priced image…';
+    }
+
     private function refreshPutPriceBatch(): void
     {
+        if ($this->putPriceReplaceExisting) {
+            $this->refreshSelectedPutPriceBatch();
+
+            return;
+        }
+
         $query = Product::query()
             ->where(function ($q) {
                 $q->whereNull('priced_image_path')
@@ -438,13 +503,49 @@ class AdminProducts extends Component
             ->orderByDesc('id')
             ->limit(self::PUT_PRICE_BATCH_SIZE)
             ->get()
-            ->map(fn (Product $product) => [
-                'id' => $product->id,
-                'name' => $product->name,
-                'price' => number_format((float) $product->price, 0),
-                'thumb' => $product->images->first()?->path,
-            ])
+            ->map(fn (Product $product) => $this->putPriceBatchRow($product))
             ->all();
+    }
+
+    private function refreshSelectedPutPriceBatch(): void
+    {
+        $pendingIds = array_values(array_diff($this->putPricePendingIds, $this->putPriceSkippedIds));
+        $this->putPricePendingIds = $pendingIds;
+        $this->putPriceRemaining = count($pendingIds);
+
+        $batchIds = array_slice($pendingIds, 0, self::PUT_PRICE_BATCH_SIZE);
+
+        if ($batchIds === []) {
+            $this->putPriceBatch = [];
+
+            return;
+        }
+
+        $products = Product::query()
+            ->whereIn('id', $batchIds)
+            ->with(['images' => fn ($q) => $q->orderBy('sort_order')->limit(1)])
+            ->get()
+            ->keyBy('id');
+
+        $this->putPriceBatch = collect($batchIds)
+            ->map(fn (int $id) => $products->get($id))
+            ->filter()
+            ->map(fn (Product $product) => $this->putPriceBatchRow($product))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array{id: int, name: string, price: string, thumb: ?string}
+     */
+    private function putPriceBatchRow(Product $product): array
+    {
+        return [
+            'id' => $product->id,
+            'name' => $product->name,
+            'price' => number_format((float) $product->price, 0),
+            'thumb' => $product->images->first()?->path,
+        ];
     }
 
     public function render()

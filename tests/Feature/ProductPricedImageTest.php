@@ -552,4 +552,88 @@ class ProductPricedImageTest extends TestCase
         $this->assertSame('top-right', $already->priced_image_layout['position']);
         $this->assertNull(Product::query()->where('slug', 'no-photo-put-price')->value('priced_image_path'));
     }
+
+    #[Test]
+    public function put_price_with_selection_replaces_existing_priced_images_only_for_selected(): void
+    {
+        $this->actingAs($this->adminUser());
+        $service = app(ProductPricedImageService::class);
+
+        $selected = $this->productWithPrimaryImage('Selected Rebuild');
+        $service->generate($selected, [
+            'position' => 'top-right',
+            'font' => 40,
+        ]);
+        $selected->refresh();
+        $oldPath = $selected->priced_image_path;
+        $this->assertNotNull($oldPath);
+
+        $otherMissing = $this->productWithPrimaryImage('Other Missing');
+        $otherPriced = $this->productWithPrimaryImage('Other Already Priced');
+        $service->generate($otherPriced, [
+            'position' => 'bottom-left',
+            'font' => 48,
+        ]);
+        $otherPriced->refresh();
+        $otherPricedPath = $otherPriced->priced_image_path;
+
+        Livewire::test(AdminProducts::class)
+            ->set('selected', [$selected->id])
+            ->call('openPutPriceModal')
+            ->assertSet('putPriceReplaceExisting', true)
+            ->assertSet('putPriceRemaining', 1)
+            ->assertCount('putPriceBatch', 1)
+            ->assertSee('replaces existing priced images')
+            ->call('applyPutPriceBatch')
+            ->assertSet('putPriceRemaining', 0)
+            ->assertSet('putPriceBatch', [])
+            ->assertSet('putPriceTotalSaved', 1)
+            ->assertSee('Saved 1 priced image for the selection.');
+
+        $selected->refresh();
+        $this->assertNotNull($selected->priced_image_path);
+        $this->assertNotSame($oldPath, $selected->priced_image_path);
+        $this->assertSame('center', $selected->priced_image_layout['position']);
+        $this->assertFileExists(public_path(ltrim($selected->priced_image_path, '/')));
+        $this->assertFileDoesNotExist(public_path(ltrim($oldPath, '/')));
+
+        $otherMissing->refresh();
+        $this->assertNull($otherMissing->priced_image_path);
+
+        $otherPriced->refresh();
+        $this->assertSame($otherPricedPath, $otherPriced->priced_image_path);
+        $this->assertSame('bottom-left', $otherPriced->priced_image_layout['position']);
+    }
+
+    #[Test]
+    public function put_price_without_selection_still_skips_products_that_already_have_priced_images(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $already = $this->productWithPrimaryImage('Keep Existing');
+        app(ProductPricedImageService::class)->generate($already, [
+            'position' => 'top-left',
+            'font' => 36,
+        ]);
+        $already->refresh();
+        $path = $already->priced_image_path;
+
+        $missing = $this->productWithPrimaryImage('Fill Missing');
+
+        Livewire::test(AdminProducts::class)
+            ->assertSet('selected', [])
+            ->call('openPutPriceModal')
+            ->assertSet('putPriceReplaceExisting', false)
+            ->assertSet('putPriceRemaining', 1)
+            ->assertSee('without a priced image')
+            ->call('applyPutPriceBatch')
+            ->assertSet('putPriceTotalSaved', 1);
+
+        $missing->refresh();
+        $this->assertNotNull($missing->priced_image_path);
+
+        $already->refresh();
+        $this->assertSame($path, $already->priced_image_path);
+        $this->assertSame('top-left', $already->priced_image_layout['position']);
+    }
 }

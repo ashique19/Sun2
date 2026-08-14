@@ -32,6 +32,10 @@ class ChannelMessageOrderMapper
     /**
      * Suggest a value (and optional product match) for mapping a message onto a draft field.
      *
+     * When $textOverride is a non-empty string (e.g. a browser text selection), it is used
+     * instead of the full message body. Name/address use that exact text; phone still extracts
+     * a Bangladesh mobile from it.
+     *
      * @return array{
      *     field: string,
      *     value: ?string,
@@ -44,10 +48,12 @@ class ChannelMessageOrderMapper
      *     products: list<array{id: int, name: string, price: float}>
      * }
      */
-    public function suggest(ChannelMessage $message, string $field): array
+    public function suggest(ChannelMessage $message, string $field, ?string $textOverride = null): array
     {
         $field = $this->normalizeField($field);
-        $text = trim((string) ($message->body ?? ''));
+        $override = $textOverride !== null ? trim($textOverride) : '';
+        $hasOverride = $override !== '';
+        $text = $hasOverride ? $override : trim((string) ($message->body ?? ''));
 
         $base = [
             'field' => $field,
@@ -63,7 +69,7 @@ class ChannelMessageOrderMapper
 
         return match ($field) {
             self::FIELD_PHONE => $this->suggestPhone($text, $base),
-            self::FIELD_NAME => $this->suggestName($text, $base),
+            self::FIELD_NAME => $this->suggestName($text, $base, $hasOverride),
             self::FIELD_ADDRESS => $this->suggestAddress($text, $base),
             self::FIELD_PRODUCT => $this->suggestProduct($text, $base),
         };
@@ -89,8 +95,17 @@ class ChannelMessageOrderMapper
      * @param  array{field: string, value: ?string, product_id: ?int, product_name: ?string, city: ?string, area: ?string, city_id: ?int, area_id: ?int, products: list<array{id: int, name: string, price: float}>}  $base
      * @return array{field: string, value: ?string, product_id: ?int, product_name: ?string, city: ?string, area: ?string, city_id: ?int, area_id: ?int, products: list<array{id: int, name: string, price: float}>}
      */
-    private function suggestName(string $text, array $base): array
+    private function suggestName(string $text, array $base, bool $exact = false): array
     {
+        if ($exact) {
+            $value = trim($text);
+            if ($value !== '') {
+                $base['value'] = mb_substr($value, 0, 255);
+            }
+
+            return $base;
+        }
+
         $line = $this->firstMeaningfulLine($text);
         if ($line !== null) {
             $base['value'] = mb_substr($line, 0, 255);

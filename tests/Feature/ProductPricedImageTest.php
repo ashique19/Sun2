@@ -493,7 +493,7 @@ class ProductPricedImageTest extends TestCase
             ->assertCount('putPriceBatch', 1)
             ->assertSeeHtml('aria-label="Put price on images"')
             ->assertSee('Needs Price')
-            ->assertSee('Put price & next');
+            ->assertSeeHtml('Put price & next');
     }
 
     #[Test]

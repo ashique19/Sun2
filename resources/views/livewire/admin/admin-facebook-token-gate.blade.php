@@ -68,19 +68,17 @@
             </div>
             @if ($showReplace)
                 <div class="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start">
-                        <input type="password"
-                            wire:model="tokenInput"
-                            autocomplete="off"
-                            placeholder="Paste current User or Page access token"
-                            class="min-w-0 flex-1 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm text-[#1E1E1E] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-400">
-                        <button type="button"
-                            wire:click="saveToken"
-                            wire:loading.attr="disabled"
-                            class="shrink-0 rounded-lg bg-emerald-800 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-60">
-                            Exchange &amp; save
-                        </button>
-                    </div>
+                    <input type="password"
+                        wire:model="tokenInput"
+                        autocomplete="off"
+                        placeholder="Paste current User or Page access token"
+                        class="w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm text-[#1E1E1E] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-400">
+                    <button type="button"
+                        wire:click="saveToken"
+                        wire:loading.attr="disabled"
+                        class="mt-2 rounded-lg bg-emerald-800 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-60">
+                        Exchange &amp; save
+                    </button>
                     @if ($feedback)
                         <p class="mt-2 text-xs {{ $feedbackOk ? 'text-emerald-700' : 'text-rose-700' }}">{{ $feedback }}</p>
                     @endif

@@ -181,38 +181,30 @@ class AdminInboxTest extends TestCase
         $closed = Livewire::test(AdminInbox::class)
             ->assertSet('mobileFiltersOpen', false)
             ->assertSeeHtml('data-inbox-filters')
-            ->assertSeeHtml('aria-expanded="false"');
-
-        $this->assertMatchesRegularExpression(
-            '/data-inbox-filters[^>]*\bhidden xl:flex\b/',
-            $closed->html(),
-        );
-        $this->assertDoesNotMatchRegularExpression(
-            '/data-inbox-filters[^>]*\bgrid xl:flex\b/',
-            $closed->html(),
-        );
+            ->assertSeeHtml('inbox-mobile-filters')
+            ->assertSeeHtml('filtersOpen')
+            ->assertSeeHtml('aria-expanded="false"')
+            ->assertDontSeeHtml('class="inbox-mobile-filters is-open"');
 
         $closed->call('toggleMobileFilters')
             ->assertSet('mobileFiltersOpen', true)
+            ->assertSeeHtml('class="inbox-mobile-filters is-open"')
             ->assertSeeHtml('aria-expanded="true"')
             ->call('toggleMobileFilters')
             ->assertSet('mobileFiltersOpen', false)
+            ->assertDontSeeHtml('class="inbox-mobile-filters is-open"')
             ->assertSeeHtml('aria-expanded="false"')
             ->call('toggleMobileFilters')
             ->set('unread', '1')
             ->assertSet('mobileFiltersOpen', true)
-            ->assertSeeHtml('aria-expanded="true"');
+            ->assertSeeHtml('class="inbox-mobile-filters is-open"');
 
-        $openHtml = Livewire::withQueryParams(['unread' => '1'])
+        Livewire::withQueryParams(['unread' => '1'])
             ->test(AdminInbox::class)
             ->assertSet('mobileFiltersOpen', true)
             ->assertSet('unread', '1')
-            ->html();
-
-        $this->assertMatchesRegularExpression(
-            '/data-inbox-filters[^>]*\bgrid xl:flex\b/',
-            $openHtml,
-        );
+            ->assertSeeHtml('class="inbox-mobile-filters is-open"')
+            ->assertSeeHtml('filtersOpen: true');
     }
 
     #[Test]

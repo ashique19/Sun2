@@ -278,6 +278,7 @@ return [
 
     'payload' => [
         // AI product image generate sends a compressed JPEG as base64 in the request.
+        // Generated candidates are stored on disk (not in the Livewire snapshot).
         'max_size' => 2 * 1024 * 1024, // 2MB
         'max_nesting_depth' => 10,   // Maximum depth of dot-notation property paths
         'max_calls' => 50,           // Maximum method calls per request

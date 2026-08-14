@@ -1472,9 +1472,10 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
+            const version = candidate.version || 1;
             this.aiAllowOutsideClose = false;
             this.aiEditorId = id;
-            this.aiEditorSrc = `data:${candidate.mime};base64,${candidate.base64}`;
+            this.aiEditorSrc = `/admin/products/ai-candidates/${encodeURIComponent(id)}?v=${version}`;
             this.aiEditorOpen = true;
 
             this.$nextTick(() => {
@@ -1554,8 +1555,8 @@ const registerProductImageAlpineData = () => {
             }
 
             const canvas = this.aiCropper.getCroppedCanvas({
-                maxWidth: 2400,
-                maxHeight: 2400,
+                maxWidth: 1600,
+                maxHeight: 1600,
                 fillColor: '#ffffff',
             });
 
@@ -1563,24 +1564,8 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
-            const blob = await new Promise((resolve) => {
-                canvas.toBlob(resolve, 'image/jpeg', 0.92);
-            });
-
-            if (!blob) {
-                return;
-            }
-
-            const base64 = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    const result = String(reader.result || '');
-                    const parts = result.split(',');
-                    resolve(parts[1] || '');
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
+            // Compress before Livewire round-trip (payload.max_size); binary is stored server-side.
+            const base64 = await this.canvasToSaveJpeg(canvas);
 
             await this.$wire.updateAiCandidate(this.aiEditorId, 'image/jpeg', base64);
             this.closeAiEditor();

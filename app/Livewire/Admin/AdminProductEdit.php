@@ -18,6 +18,7 @@ use App\Support\Fileinfo;
 use App\Support\ProductDescriptionHtml;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -106,7 +107,7 @@ class AdminProductEdit extends Component
 
     public string $aiPrompt = '';
 
-    /** @var list<array{id: string, mime: string, base64: string, name: string}> */
+    /** @var list<array{id: string, mime: string, name: string, version: int}> */
     public array $aiCandidates = [];
 
     public ?string $aiGenerateError = null;
@@ -189,6 +190,7 @@ class AdminProductEdit extends Component
         $this->showAiGenerateModal = false;
         $this->aiGenerateError = null;
         $this->aiGenerating = false;
+        $this->forgetAiCandidateBinaries(array_column($this->aiCandidates, 'id'));
         $this->aiCandidates = [];
         $this->resetValidation(['aiRawImage', 'aiPrompt']);
     }
@@ -365,12 +367,20 @@ class AdminProductEdit extends Component
             ], 'You enhance product photos for a Bangladeshi jewelry e-commerce catalog. Preserve the product identity from the reference photo. Return one polished product image.');
 
             $candidateId = (string) Str::uuid();
+            $binary = base64_decode((string) $result['base64'], true);
+
+            if ($binary === false || $binary === '') {
+                throw new RuntimeException('Gemini returned an empty image.');
+            }
+
+            $mime = (string) ($result['mime'] ?? 'image/jpeg');
+            $this->persistAiCandidateBinary($candidateId, $binary, $mime);
 
             $this->aiCandidates[] = [
                 'id' => $candidateId,
-                'mime' => $result['mime'],
-                'base64' => $result['base64'],
+                'mime' => $mime,
                 'name' => 'ai-generated-'.(count($this->aiCandidates) + 1).'.jpg',
+                'version' => 1,
             ];
 
             AiImagePrompt::remember(trim($this->aiPrompt), Auth::id());
@@ -387,21 +397,41 @@ class AdminProductEdit extends Component
 
     public function updateAiCandidate(string $id, string $mime, string $base64): void
     {
+        $this->aiGenerateError = null;
+        $binary = base64_decode($base64, true);
+
+        if ($binary === false || $binary === '') {
+            $this->aiGenerateError = 'Edited image data is invalid.';
+
+            return;
+        }
+
+        if (strlen($binary) > 8 * 1024 * 1024) {
+            $this->aiGenerateError = 'Edited image must be 8 MB or smaller.';
+
+            return;
+        }
+
         foreach ($this->aiCandidates as $index => $candidate) {
             if (($candidate['id'] ?? null) !== $id) {
                 continue;
             }
 
-            $this->aiCandidates[$index]['mime'] = $mime !== '' ? $mime : 'image/jpeg';
-            $this->aiCandidates[$index]['base64'] = $base64;
+            $mime = $mime !== '' ? $mime : 'image/jpeg';
+            $this->persistAiCandidateBinary($id, $binary, $mime);
+            $this->aiCandidates[$index]['mime'] = $mime;
             $this->aiCandidates[$index]['name'] = preg_replace('/\.\w+$/', '.jpg', (string) $candidate['name']) ?: 'ai-edited.jpg';
+            $this->aiCandidates[$index]['version'] = ((int) ($candidate['version'] ?? 1)) + 1;
 
             return;
         }
+
+        $this->aiGenerateError = 'Generated image not found in this session.';
     }
 
     public function removeAiCandidate(string $id): void
     {
+        $this->forgetAiCandidateBinaries([$id]);
         $this->aiCandidates = array_values(array_filter(
             $this->aiCandidates,
             fn (array $candidate) => ($candidate['id'] ?? null) !== $id,
@@ -424,9 +454,9 @@ class AdminProductEdit extends Component
             return;
         }
 
-        $binary = base64_decode((string) $candidate['base64'], true);
+        $binary = $this->readAiCandidateBinary($id);
 
-        if ($binary === false || $binary === '') {
+        if ($binary === null || $binary === '') {
             $this->aiGenerateError = 'Generated image data is invalid.';
 
             return;
@@ -470,6 +500,64 @@ class AdminProductEdit extends Component
                 @unlink($pathWithExt);
             }
         }
+    }
+
+    /**
+     * @param  list<string|null>  $ids
+     */
+    private function forgetAiCandidateBinaries(array $ids): void
+    {
+        foreach ($ids as $id) {
+            if (! is_string($id) || $id === '') {
+                continue;
+            }
+
+            foreach ([$this->aiCandidateBinPath($id), $this->aiCandidateMetaPath($id)] as $path) {
+                if (is_file($path)) {
+                    @unlink($path);
+                }
+            }
+        }
+    }
+
+    private function persistAiCandidateBinary(string $id, string $binary, string $mime): void
+    {
+        File::ensureDirectoryExists($this->aiCandidateDirectory());
+        file_put_contents($this->aiCandidateBinPath($id), $binary);
+        file_put_contents($this->aiCandidateMetaPath($id), json_encode([
+            'mime' => $mime !== '' ? $mime : 'image/jpeg',
+            'updated_at' => now()->toIso8601String(),
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    private function readAiCandidateBinary(string $id): ?string
+    {
+        $path = $this->aiCandidateBinPath($id);
+
+        if (! is_file($path)) {
+            return null;
+        }
+
+        $binary = file_get_contents($path);
+
+        return $binary === false ? null : $binary;
+    }
+
+    private function aiCandidateDirectory(): string
+    {
+        $userId = Auth::id() ?: 0;
+
+        return storage_path('app/private/ai-candidates/'.$userId);
+    }
+
+    private function aiCandidateBinPath(string $id): string
+    {
+        return $this->aiCandidateDirectory().DIRECTORY_SEPARATOR.$id.'.bin';
+    }
+
+    private function aiCandidateMetaPath(string $id): string
+    {
+        return $this->aiCandidateDirectory().DIRECTORY_SEPARATOR.$id.'.json';
     }
 
     public function save(): void

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminAiCandidateFileController;
 use App\Http\Controllers\Admin\AdminProductImageFileController;
 use App\Http\Controllers\ChannelMessageMediaController;
 use App\Http\Controllers\MessengerConversationSyncController;
@@ -221,6 +222,9 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
             return redirect()->route('admin.products.show', $product);
         })->whereNumber('product')->name('products.performance');
         Route::get('/products/{product:id}/edit', AdminProductEdit::class)->name('products.edit');
+        Route::get('/products/ai-candidates/{candidate}', AdminAiCandidateFileController::class)
+            ->where('candidate', '[A-Za-z0-9-]{8,64}')
+            ->name('products.ai-candidate');
         Route::get('/products/{product:id}/images/{image}/raw', AdminProductImageFileController::class)
             ->whereNumber('image')
             ->name('products.images.raw');

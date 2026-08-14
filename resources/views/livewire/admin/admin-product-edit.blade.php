@@ -873,7 +873,7 @@
                                         @foreach ($aiCandidates as $candidate)
                                             <li wire:key="ai-candidate-{{ $candidate['id'] }}" class="rounded-xl border border-[#EFE7D6] p-3 space-y-3">
                                                 <div class="relative aspect-square overflow-hidden rounded-lg bg-[#FAF6EF]">
-                                                    <img src="data:{{ $candidate['mime'] }};base64,{{ $candidate['base64'] }}"
+                                                    <img src="{{ route('admin.products.ai-candidate', $candidate['id']) }}?v={{ $candidate['version'] ?? 1 }}"
                                                         alt="{{ $candidate['name'] }}"
                                                         class="h-full w-full object-cover">
                                                 </div>

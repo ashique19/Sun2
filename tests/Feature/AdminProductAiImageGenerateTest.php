@@ -9,6 +9,7 @@ use App\Models\ProductImage;
 use App\Models\User;
 use App\Services\Admin\GeminiClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 use Mockery;
@@ -162,13 +163,18 @@ class AdminProductAiImageGenerateTest extends TestCase
         $this->actingAs($this->adminUser());
         $product = $this->product();
         $id = 'candidate-1';
+        $adminId = (int) auth()->id();
+        $dir = storage_path('app/private/ai-candidates/'.$adminId);
+        File::ensureDirectoryExists($dir);
+        File::put($dir.'/'.$id.'.bin', base64_decode($this->tinyPngBase64(), true));
+        File::put($dir.'/'.$id.'.json', json_encode(['mime' => 'image/png']));
 
         Livewire::test(AdminProductEdit::class, ['product' => $product])
             ->set('aiCandidates', [[
                 'id' => $id,
                 'mime' => 'image/png',
-                'base64' => $this->tinyPngBase64(),
                 'name' => 'ai-1.png',
+                'version' => 1,
             ]])
             ->call('promoteAiCandidate', $id)
             ->assertCount('aiCandidates', 0)
@@ -182,19 +188,27 @@ class AdminProductAiImageGenerateTest extends TestCase
     {
         $this->actingAs($this->adminUser());
         $product = $this->product();
+        $id = 'x';
+        $adminId = (int) auth()->id();
+        $dir = storage_path('app/private/ai-candidates/'.$adminId);
+        File::ensureDirectoryExists($dir);
+        File::put($dir.'/'.$id.'.bin', 'bytes');
+        File::put($dir.'/'.$id.'.json', json_encode(['mime' => 'image/png']));
 
         Livewire::test(AdminProductEdit::class, ['product' => $product])
             ->set('showAiGenerateModal', true)
             ->set('aiPrompt', 'keep me?')
             ->set('aiCandidates', [[
-                'id' => 'x',
+                'id' => $id,
                 'mime' => 'image/png',
-                'base64' => $this->tinyPngBase64(),
                 'name' => 'ai.png',
+                'version' => 1,
             ]])
             ->call('closeAiGenerateModal')
             ->assertSet('showAiGenerateModal', false)
             ->assertCount('aiCandidates', 0);
+
+        $this->assertFileDoesNotExist($dir.'/'.$id.'.bin');
     }
 
     #[Test]

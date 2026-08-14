@@ -58,14 +58,38 @@ class AdminInboxTest extends TestCase
     #[Test]
     public function selecting_a_conversation_opens_the_mobile_thread_pane(): void
     {
+        config([
+            'facebook.messenger.page_access_token' => 'good-token',
+            'facebook.messenger.page_id' => 'page-1',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/me*' => Http::response([
+                'id' => 'page-1',
+                'name' => 'Sundoritoma',
+            ], 200),
+        ]);
+
         $this->actingAs($this->adminUser());
         $conversation = $this->conversation();
 
-        Livewire::test(AdminInbox::class)
+        $html = Livewire::test(AdminInbox::class)
             ->assertSet('mobileThreadOpen', false)
             ->assertSeeHtml('aria-label="Filters"')
             ->assertSeeHtml('aria-label="Sync Messenger"')
             ->assertSeeHtml('aria-label="Quick replies"')
+            ->assertSeeHtml('id="inbox-fb-token-banner"')
+            ->assertSeeHtml('aria-label="Facebook token"')
+            ->html();
+
+        $facebookPos = strpos($html, 'aria-label="Facebook token"');
+        $filtersPos = strpos($html, 'aria-label="Filters"');
+        $this->assertNotFalse($facebookPos);
+        $this->assertNotFalse($filtersPos);
+        $this->assertLessThan($filtersPos, $facebookPos, 'Facebook token icon should sit beside (before) the Filters icon.');
+
+        Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->assertSet('mobileThreadOpen', true)
             ->assertSeeHtml('aria-label="Back to conversations"')

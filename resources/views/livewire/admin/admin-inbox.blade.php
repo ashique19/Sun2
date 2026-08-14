@@ -65,10 +65,8 @@
         </div>
     @endif
 
-    <div class="px-4 pt-3 xl:px-0 xl:pt-0">
-        {{-- Keep visible on mobile even with a thread open — expired tokens must stay reachable. --}}
-        <livewire:admin.admin-facebook-token-gate />
-    </div>
+    {{-- Invalid Facebook token banner host (component teleports here). Valid token is an icon beside Filters. --}}
+    <div id="inbox-fb-token-banner" class="px-4 pt-3 empty:hidden empty:p-0 xl:px-0 xl:pt-0"></div>
 
     {{-- Header: on small screens, Inbox title + icon actions share one row. --}}
     <div @class([
@@ -166,12 +164,15 @@
                         <span class="hidden xl:inline">Quick replies</span>
                     </a>
 
+                    {{-- Valid token: icon beside Filters. Invalid: teleports to #inbox-fb-token-banner. --}}
+                    <livewire:admin.admin-facebook-token-gate />
+
                     <button type="button"
                         wire:click="toggleMobileFilters"
                         aria-expanded="{{ $mobileFiltersOpen ? 'true' : 'false' }}"
                         aria-label="Filters"
                         title="Filters"
-                        class="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] xl:hidden">
+                        class="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
                             <path fill-rule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 0 1 .628.74v2.288a2.25 2.25 0 0 1-.659 1.59l-4.682 4.683a2.25 2.25 0 0 0-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 0 1 8 18.25v-5.757a2.25 2.25 0 0 0-.659-1.591L2.659 6.22A2.25 2.25 0 0 1 2 4.629V2.34a.75.75 0 0 1 .628-.74Z" clip-rule="evenodd" />
                         </svg>
@@ -187,7 +188,7 @@
 
         <div @class([
             'grid w-full grid-cols-2 gap-2 rounded-xl border border-[#EFE7D6] bg-white p-3 xl:flex xl:w-auto xl:flex-wrap xl:items-center xl:justify-end xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0',
-            'hidden' => ! $mobileFiltersOpen,
+            'max-xl:hidden' => ! $mobileFiltersOpen,
         ])>
             <select wire:model.live="channel" class="rounded-lg border border-[#E0D6C2] px-2.5 py-2 xl:px-3">
                 <option value="">All channels</option>

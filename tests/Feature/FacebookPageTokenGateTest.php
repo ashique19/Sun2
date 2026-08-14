@@ -321,9 +321,13 @@ class FacebookPageTokenGateTest extends TestCase
             ->assertDontSee('Replace token')
             ->assertDontSee('Connected as')
             ->assertSee('Facebook token')
+            ->assertSeeHtml('aria-label="Facebook token"')
+            ->assertSeeHtml('h-10 w-10')
+            ->assertDontSeeHtml('flex justify-end')
             ->set('showReplace', true)
             ->assertSee('Paste current User or Page access token')
             ->assertSee('Exchange & save')
+            ->assertSeeHtml('absolute right-0 top-full')
             ->assertDontSee('Replace token')
             ->assertDontSee('Connected as');
     }

@@ -493,11 +493,11 @@ class ProductPricedImageTest extends TestCase
             ->assertCount('putPriceBatch', 1)
             ->assertSeeHtml('aria-label="Put price on images"')
             ->assertSee('Needs Price')
-            ->assertSeeHtml('Put price & next');
+            ->assertSee('Put price & next');
     }
 
     #[Test]
-    public function put_price_batch_saves_ten_then_loads_the_next_batch_until_finished(): void
+    public function put_price_batch_auto_progresses_through_all_batches_until_finished(): void
     {
         $this->actingAs($this->adminUser());
 
@@ -529,20 +529,17 @@ class ProductPricedImageTest extends TestCase
         $this->assertNotContains($already->id, $batchIds);
 
         $component->call('applyPutPriceBatch')
-            ->assertSet('putPriceRemaining', 2)
-            ->assertCount('putPriceBatch', 2)
-            ->assertSee('Saved 10. 2 still need a priced image.');
+            ->assertSet('putPriceRemaining', 0)
+            ->assertSet('putPriceBatch', [])
+            ->assertSet('putPriceTotalSaved', 12)
+            ->assertSet('putPriceRunning', false)
+            ->assertSee('Saved 12 priced images. All products with photos now have one.');
 
         $pricedCount = Product::query()
             ->whereIn('id', collect($pending)->pluck('id'))
             ->whereNotNull('priced_image_path')
             ->count();
-        $this->assertSame(10, $pricedCount);
-
-        $component->call('applyPutPriceBatch')
-            ->assertSet('putPriceRemaining', 0)
-            ->assertSet('putPriceBatch', [])
-            ->assertSee('All products with photos now have one.');
+        $this->assertSame(12, $pricedCount);
 
         foreach ($pending as $product) {
             $product->refresh();

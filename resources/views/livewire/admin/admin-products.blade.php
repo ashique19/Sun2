@@ -405,8 +405,11 @@
                                     wire:click="applyPutPriceBatch"
                                     wire:loading.attr="disabled"
                                     wire:target="applyPutPriceBatch"
+                                    @disabled($putPriceRunning)
                                     class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
-                                    <span wire:loading.remove wire:target="applyPutPriceBatch">Put price & next</span>
+                                    <span wire:loading.remove wire:target="applyPutPriceBatch">
+                                        {{ $putPriceRunning ? 'Saving next…' : 'Put price & next' }}
+                                    </span>
                                     <span wire:loading wire:target="applyPutPriceBatch">Saving…</span>
                                 </button>
                             @endif

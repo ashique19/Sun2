@@ -66,6 +66,10 @@ class AdminProducts extends Component
 
     public int $putPriceRemaining = 0;
 
+    public int $putPriceTotalSaved = 0;
+
+    public bool $putPriceRunning = false;
+
     public ?string $putPriceMessage = null;
 
     /** @var list<string> */
@@ -343,6 +347,8 @@ class AdminProducts extends Component
         $this->putPriceMessage = null;
         $this->putPriceErrors = [];
         $this->putPriceSkippedIds = [];
+        $this->putPriceTotalSaved = 0;
+        $this->putPriceRunning = false;
         $this->refreshPutPriceBatch();
         $this->js('document.body.classList.add("overflow-hidden")');
     }
@@ -352,6 +358,8 @@ class AdminProducts extends Component
         $this->putPriceModalOpen = false;
         $this->putPriceBatch = [];
         $this->putPriceRemaining = 0;
+        $this->putPriceTotalSaved = 0;
+        $this->putPriceRunning = false;
         $this->putPriceMessage = null;
         $this->putPriceErrors = [];
         $this->putPriceSkippedIds = [];
@@ -360,6 +368,13 @@ class AdminProducts extends Component
 
     public function applyPutPriceBatch(ProductPricedImageService $pricedImages): void
     {
+        if (! $this->putPriceModalOpen || $this->putPriceBatch === []) {
+            $this->putPriceRunning = false;
+
+            return;
+        }
+
+        $this->putPriceRunning = true;
         $this->putPriceErrors = [];
         $saved = 0;
 
@@ -379,15 +394,29 @@ class AdminProducts extends Component
             }
         }
 
+        $this->putPriceTotalSaved += $saved;
         $this->refreshPutPriceBatch();
 
-        if ($this->putPriceRemaining === 0 && $this->putPriceBatch === []) {
-            $this->putPriceMessage = $saved === 1
+        if ($this->putPriceBatch === []) {
+            $this->putPriceRunning = false;
+            $this->putPriceMessage = $this->putPriceTotalSaved === 1
                 ? 'Saved 1 priced image. All products with photos now have one.'
-                : 'Saved '.$saved.' priced images. All products with photos now have one.';
-        } else {
-            $this->putPriceMessage = 'Saved '.$saved.'. '.$this->putPriceRemaining.' still need a priced image.';
+                : 'Saved '.$this->putPriceTotalSaved.' priced images. All products with photos now have one.';
+
+            return;
         }
+
+        $this->putPriceMessage = 'Saved '.$this->putPriceTotalSaved.'. '
+            .$this->putPriceRemaining.' still need a priced image…';
+
+        // Keep going through the next 10 without another click.
+        if (app()->runningUnitTests()) {
+            $this->applyPutPriceBatch($pricedImages);
+
+            return;
+        }
+
+        $this->js('setTimeout(() => $wire.applyPutPriceBatch(), 50)');
     }
 
     private function refreshPutPriceBatch(): void

@@ -119,7 +119,8 @@ class AdminInboxTest extends TestCase
         Livewire::test(AdminInbox::class)
             ->assertSet('selectedConversationId', null)
             ->assertSet('mobileThreadOpen', false)
-            ->assertSee('Conversations');
+            ->assertSee('Conversations')
+            ->assertSeeHtml('hidden shrink-0 border-b border-[#E7DFCF] px-4 py-3 text-sm font-medium xl:block');
 
         // Deep link still opens the thread.
         Livewire::withQueryParams(['conversation' => $conversation->id])

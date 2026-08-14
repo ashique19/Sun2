@@ -317,7 +317,7 @@
             'h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] xl:h-[min(75vh,52rem)] xl:max-h-[min(75vh,52rem)]',
             $mobileThreadOpen ? 'hidden xl:flex' : 'flex',
         ])>
-            <div class="shrink-0 border-b border-[#E7DFCF] px-4 py-3 text-sm font-medium">
+            <div class="hidden shrink-0 border-b border-[#E7DFCF] px-4 py-3 text-sm font-medium xl:block">
                 Conversations
                 <span class="ml-1 text-xs font-normal text-[#8C8474]">
                     ({{ $conversations->count() }} shown

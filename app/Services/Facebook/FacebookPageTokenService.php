@@ -671,6 +671,10 @@ class FacebookPageTokenService
 
     private function syncEnvFile(string $token): void
     {
+        if (app()->environment('testing')) {
+            return;
+        }
+
         $path = base_path('.env');
 
         if (! is_file($path) || ! is_writable($path)) {

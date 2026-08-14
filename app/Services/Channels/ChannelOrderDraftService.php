@@ -261,13 +261,24 @@ class ChannelOrderDraftService
                     ? Product::query()->find($resolvedProductId)
                     : null;
 
-                $order->items()->delete();
                 if ($product) {
-                    $this->persistLines($order, $this->buildLines([
-                        'product_id' => $product->id,
-                        'product_name' => $product->name,
-                        'quantity' => 1,
-                    ]));
+                    // Drop empty draft scaffolding lines so +Order can append real products.
+                    $order->items()->whereNull('product_id')->delete();
+
+                    $existing = $order->items()->where('product_id', $product->id)->first();
+                    if ($existing) {
+                        $quantity = (int) $existing->quantity + 1;
+                        $existing->forceFill([
+                            'quantity' => $quantity,
+                            'line_total' => (float) $existing->price * $quantity,
+                        ])->save();
+                    } else {
+                        $this->persistLines($order, $this->buildLines([
+                            'product_id' => $product->id,
+                            'product_name' => $product->name,
+                            'quantity' => 1,
+                        ]));
+                    }
                 } else {
                     $label = trim((string) ($suggestion['value'] ?? $message->body ?? '')) ?: 'Unmatched product';
                     $this->persistLines($order, $this->buildLines([

@@ -888,6 +888,140 @@ class AdminInbox extends Component
         $this->statusMessage = 'Price reply sent.';
     }
 
+    /**
+     * Send every catalog (non-priced) image for the tagged product.
+     */
+    public function sendMatchedProductAlbumImages(int $messageId, ChannelReplyService $replies): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
+
+        $message = $this->inboundImageMessage($messageId);
+        $productId = $this->matchedProductIdForMessage($messageId, $message);
+
+        if (! $message || $productId <= 0) {
+            $this->error = 'No product tagged on this image.';
+
+            return;
+        }
+
+        $product = Product::query()->with(['images' => fn ($q) => $q->orderBy('sort_order')->orderBy('id')])->find($productId);
+        if (! $product) {
+            $this->error = 'Tagged product not found.';
+
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find((int) $message->channel_conversation_id);
+        if (! $conversation) {
+            $this->error = 'Conversation not found.';
+
+            return;
+        }
+
+        $this->ensureConversationSelected((int) $conversation->id);
+
+        $images = $product->images
+            ->filter(function ($image) use ($product): bool {
+                $path = is_string($image->path) ? trim($image->path) : '';
+                if ($path === '') {
+                    return false;
+                }
+
+                $priced = is_string($product->priced_image_path) ? trim($product->priced_image_path) : '';
+
+                return $priced === '' || ltrim($path, '/') !== ltrim($priced, '/');
+            })
+            ->values();
+
+        if ($images->isEmpty()) {
+            $this->error = 'This product has no catalog images to send.';
+
+            return;
+        }
+
+        $sent = 0;
+        foreach ($images as $image) {
+            try {
+                $upload = $this->uploadedFileFromPublicPath((string) $image->path);
+            } catch (Throwable $e) {
+                $this->error = $e->getMessage();
+
+                return;
+            }
+
+            $result = $replies->sendImage(
+                $conversation,
+                $upload,
+                '',
+                false,
+                $sent === 0 ? $message : null,
+            );
+
+            if (! ($result['ok'] ?? false)) {
+                $this->error = $result['error'] ?? 'Failed to send product image.';
+
+                return;
+            }
+
+            $sent++;
+        }
+
+        $this->markConversationRead($conversation, $replies);
+        $this->statusMessage = $sent === 1
+            ? 'Sent 1 product image.'
+            : 'Sent '.$sent.' product images.';
+    }
+
+    /**
+     * Send the storefront URL for the tagged product.
+     */
+    public function sendMatchedProductLink(int $messageId, ChannelReplyService $replies): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
+
+        $message = $this->inboundImageMessage($messageId);
+        $productId = $this->matchedProductIdForMessage($messageId, $message);
+
+        if (! $message || $productId <= 0) {
+            $this->error = 'No product tagged on this image.';
+
+            return;
+        }
+
+        $product = Product::query()->whereKey($productId)->first();
+        if (! $product) {
+            $this->error = 'Tagged product not found.';
+
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find((int) $message->channel_conversation_id);
+        if (! $conversation) {
+            $this->error = 'Conversation not found.';
+
+            return;
+        }
+
+        $this->ensureConversationSelected((int) $conversation->id);
+
+        $result = $replies->sendText($conversation, route('product.show', $product), false, $message);
+
+        if (! ($result['ok'] ?? false)) {
+            $this->error = $result['error'] ?? 'Failed to send product link.';
+
+            return;
+        }
+
+        $this->markConversationRead($conversation, $replies);
+        $this->statusMessage = 'Product link sent.';
+    }
+
     public function updatedPricedSendSearch(): void
     {
         $this->refreshPricedSendResults();
@@ -1602,12 +1736,12 @@ class AdminInbox extends Component
         $absolute = public_path(ltrim($relativePath, '/'));
 
         if (! is_file($absolute) || ! is_readable($absolute)) {
-            throw new RuntimeException('Priced image file is missing on disk.');
+            throw new RuntimeException('Image file is missing on disk.');
         }
 
         $mime = mime_content_type($absolute) ?: 'image/jpeg';
         if (! str_starts_with($mime, 'image/')) {
-            throw new RuntimeException('Priced image file is not a valid image.');
+            throw new RuntimeException('File is not a valid image.');
         }
 
         return new UploadedFile(

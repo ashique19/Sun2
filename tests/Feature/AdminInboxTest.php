@@ -8,6 +8,7 @@ use App\Models\ChannelMessage;
 use App\Models\User;
 use App\Services\Channels\ChannelReplyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Livewire\Attributes\Url;
@@ -1046,28 +1047,43 @@ class AdminInboxTest extends TestCase
             'gemini.api_key' => null,
         ]);
 
-        Http::fake([
-            'https://graph.facebook.com/v25.0/PAGE42/conversations*' => Http::response([
-                'data' => [[
-                    'id' => 't_poll_1',
-                    'updated_time' => now()->toIso8601String(),
-                    'participants' => [
-                        'data' => [
-                            ['id' => 'PAGE42', 'name' => 'Sun Page'],
-                            ['id' => 'PSID_POLL_1', 'name' => 'Polled Customer'],
+        Http::fake(function (Request $request) {
+            $url = $request->url();
+
+            if (str_contains($url, '/conversations')) {
+                return Http::response([
+                    'data' => [[
+                        'id' => 't_poll_1',
+                        'updated_time' => now()->toIso8601String(),
+                    ]],
+                ], 200);
+            }
+
+            if (str_contains($url, 'ids=') || str_contains($url, 't_poll_1')) {
+                return Http::response([
+                    't_poll_1' => [
+                        'id' => 't_poll_1',
+                        'updated_time' => now()->toIso8601String(),
+                        'participants' => [
+                            'data' => [
+                                ['id' => 'PAGE42', 'name' => 'Sun Page'],
+                                ['id' => 'PSID_POLL_1', 'name' => 'Polled Customer'],
+                            ],
+                        ],
+                        'messages' => [
+                            'data' => [[
+                                'id' => 'm_poll_1',
+                                'message' => 'Polled hello',
+                                'from' => ['id' => 'PSID_POLL_1', 'name' => 'Polled Customer'],
+                                'created_time' => now()->subMinute()->toIso8601String(),
+                            ]],
                         ],
                     ],
-                    'messages' => [
-                        'data' => [[
-                            'id' => 'm_poll_1',
-                            'message' => 'Polled hello',
-                            'from' => ['id' => 'PSID_POLL_1', 'name' => 'Polled Customer'],
-                            'created_time' => now()->subMinute()->toIso8601String(),
-                        ]],
-                    ],
-                ]],
-            ], 200),
-        ]);
+                ], 200);
+            }
+
+            return Http::response(['error' => ['message' => 'Unexpected '.$url]], 404);
+        });
 
         $this->actingAs($this->adminUser());
 
@@ -1078,7 +1094,7 @@ class AdminInboxTest extends TestCase
             ->assertNotSet('lastSyncedAt', null)
             ->assertSet('syncToast', null)
             ->assertSee('Polled hello')
-            ->assertSeeHtml('wire:poll.10s.visible="pollSyncFromFacebook"')
+            ->assertSeeHtml('wire:poll.45s.visible="pollSyncFromFacebook"')
             ->assertSeeHtml('fixed bottom-0 left-0')
             ->assertSee('Auto sync in')
             ->assertDontSee('Last synced');
@@ -1157,39 +1173,59 @@ class AdminInboxTest extends TestCase
             'sent_at' => now()->subHour(),
         ]);
 
-        Http::fake([
-            'https://graph.facebook.com/v25.0/PAGE42/conversations*' => Http::response([
-                'data' => [[
-                    'id' => 't_open_1',
-                    'updated_time' => now()->toIso8601String(),
-                    'participants' => [
-                        'data' => [
-                            ['id' => 'PAGE42', 'name' => 'Sun Page'],
-                            ['id' => 'PSID_OPEN_1', 'name' => 'Open Thread Customer'],
+        Http::fake(function (Request $request) {
+            $url = $request->url();
+
+            if (str_contains($url, 'take_thread_control')) {
+                return Http::response(['success' => true], 200);
+            }
+
+            if (str_contains($url, '/PAGE42/messages') || str_contains($url, '/me/messages')) {
+                return Http::response(['recipient_id' => 'PSID_OPEN_1'], 200);
+            }
+
+            if (str_contains($url, '/conversations')) {
+                return Http::response([
+                    'data' => [[
+                        'id' => 't_open_1',
+                        'updated_time' => now()->toIso8601String(),
+                    ]],
+                ], 200);
+            }
+
+            if (str_contains($url, 'ids=') || str_contains($url, 't_open_1')) {
+                return Http::response([
+                    't_open_1' => [
+                        'id' => 't_open_1',
+                        'updated_time' => now()->toIso8601String(),
+                        'participants' => [
+                            'data' => [
+                                ['id' => 'PAGE42', 'name' => 'Sun Page'],
+                                ['id' => 'PSID_OPEN_1', 'name' => 'Open Thread Customer'],
+                            ],
+                        ],
+                        'messages' => [
+                            'data' => [
+                                [
+                                    'id' => 'm_open_new',
+                                    'message' => 'New while thread open',
+                                    'from' => ['id' => 'PSID_OPEN_1', 'name' => 'Open Thread Customer'],
+                                    'created_time' => now()->subSecond()->toIso8601String(),
+                                ],
+                                [
+                                    'id' => 'm_open_old',
+                                    'message' => 'Earlier message',
+                                    'from' => ['id' => 'PSID_OPEN_1', 'name' => 'Open Thread Customer'],
+                                    'created_time' => now()->subHour()->toIso8601String(),
+                                ],
+                            ],
                         ],
                     ],
-                    'messages' => [
-                        'data' => [
-                            [
-                                'id' => 'm_open_new',
-                                'message' => 'New while thread open',
-                                'from' => ['id' => 'PSID_OPEN_1', 'name' => 'Open Thread Customer'],
-                                'created_time' => now()->subSecond()->toIso8601String(),
-                            ],
-                            [
-                                'id' => 'm_open_old',
-                                'message' => 'Earlier message',
-                                'from' => ['id' => 'PSID_OPEN_1', 'name' => 'Open Thread Customer'],
-                                'created_time' => now()->subHour()->toIso8601String(),
-                            ],
-                        ],
-                    ],
-                ]],
-            ], 200),
-            'https://graph.facebook.com/v25.0/PAGE42/take_thread_control*' => Http::response(['success' => true], 200),
-            'https://graph.facebook.com/v25.0/PAGE42/messages*' => Http::response(['recipient_id' => 'PSID_OPEN_1'], 200),
-            'https://graph.facebook.com/v25.0/me/messages*' => Http::response(['recipient_id' => 'PSID_OPEN_1'], 200),
-        ]);
+                ], 200);
+            }
+
+            return Http::response(['error' => ['message' => 'Unexpected '.$url]], 404);
+        });
 
         Livewire::withQueryParams(['conversation' => $conversation->id])
             ->test(AdminInbox::class)
@@ -1197,7 +1233,7 @@ class AdminInboxTest extends TestCase
             ->assertSet('mobileThreadOpen', true)
             ->assertSee('Earlier message')
             ->assertSeeHtml('aria-label="Sync from Facebook"')
-            ->assertSeeHtml('wire:poll.10s.visible="pollSyncFromFacebook"')
+            ->assertSeeHtml('wire:poll.45s.visible="pollSyncFromFacebook"')
             ->assertSeeHtml('fixed bottom-0 left-0')
             ->assertSeeHtml('wire:key="thread-'.$conversation->id.'"')
             ->call('pollSyncFromFacebook')

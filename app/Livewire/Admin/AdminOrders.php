@@ -1034,7 +1034,9 @@ class AdminOrders extends Component
             'adjustments:id,order_id,type,label,amount,sort_order',
         ];
 
-        if ($this->segment === 'dispatched') {
+        $showCourierTracking = AdminOrderSegment::showsCourierTracking($this->segment);
+
+        if ($showCourierTracking) {
             $with[] = 'courierLogs';
         }
 
@@ -1066,9 +1068,11 @@ class AdminOrders extends Component
 
         $trackingByOrder = [];
 
-        if ($this->segment === 'dispatched') {
+        if ($showCourierTracking) {
             foreach ($orders as $order) {
-                $live = $this->courierLiveStatuses[$order->id] ?? null;
+                $live = $this->segment === 'dispatched'
+                    ? ($this->courierLiveStatuses[$order->id] ?? null)
+                    : null;
                 $trackingByOrder[$order->id] = [
                     'status' => $tracking->displayStatus($order, is_string($live) ? $live : null),
                     'events' => $tracking->eventsFromLoadedLogs($order),
@@ -1081,6 +1085,7 @@ class AdminOrders extends Component
             'segment' => $this->segment,
             'segmentLabel' => AdminOrderSegment::label($this->segment),
             'segments' => AdminOrderSegment::SEGMENTS,
+            'showCourierTracking' => $showCourierTracking,
             'isPageFullySelected' => $isPageFullySelected,
             'selectedIds' => $selectedIds,
             'selectedCount' => $selectedCount,

@@ -2,8 +2,11 @@
 
 namespace App\Livewire\Admin;
 
+use App\Models\AiPromptGroup;
 use App\Models\Category;
 use App\Models\Product;
+use App\Services\Admin\GeminiClient;
+use App\Services\Admin\ProductAiImageGenerator;
 use App\Services\Admin\ProductImageService;
 use App\Services\Admin\ProductPricedImageService;
 use App\Services\Admin\ProductUnitCostService;
@@ -83,6 +86,17 @@ class AdminProducts extends Component
 
     /** @var list<int> */
     public array $putPriceSkippedIds = [];
+
+    public bool $bulkAiModalOpen = false;
+
+    public bool $bulkAiRunning = false;
+
+    public ?int $bulkAiPromptGroupId = null;
+
+    public ?string $bulkAiMessage = null;
+
+    /** @var list<array{id: int, name: string, thumb: ?string, status: string, message: ?string, steps_saved: int}> */
+    public array $bulkAiRows = [];
 
     public function updatedSearch(): void
     {
@@ -548,6 +562,214 @@ class AdminProducts extends Component
         ];
     }
 
+    public function openBulkAiGenerateModal(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->selected === []) {
+            $this->message = 'Select at least one product first.';
+
+            return;
+        }
+
+        $this->closeBulkStock();
+        $this->closeBulkCategory();
+        $this->bulkAiModalOpen = true;
+        $this->bulkAiRunning = false;
+        $this->bulkAiPromptGroupId = null;
+        $this->bulkAiMessage = null;
+        $this->bulkAiRows = [];
+        $this->resetValidation('bulkAiPromptGroupId');
+        $this->message = null;
+    }
+
+    public function closeBulkAiGenerateModal(): void
+    {
+        if ($this->bulkAiRunning) {
+            return;
+        }
+
+        $this->bulkAiModalOpen = false;
+        $this->bulkAiRunning = false;
+        $this->bulkAiPromptGroupId = null;
+        $this->bulkAiMessage = null;
+        $this->bulkAiRows = [];
+        $this->resetValidation('bulkAiPromptGroupId');
+    }
+
+    public function startBulkAiGenerate(GeminiClient $gemini, ProductAiImageGenerator $generator): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->bulkAiModalOpen || $this->bulkAiRunning) {
+            return;
+        }
+
+        if (! $gemini->isConfigured()) {
+            $this->bulkAiMessage = 'Gemini API key is not configured (GEMINI_API_KEY).';
+
+            return;
+        }
+
+        $this->validate([
+            'bulkAiPromptGroupId' => ['required', 'integer', 'exists:ai_prompt_groups,id'],
+        ], [], [
+            'bulkAiPromptGroupId' => 'AI prompt sequence',
+        ]);
+
+        $group = AiPromptGroup::query()
+            ->with(['prompts' => fn ($q) => $q->orderBy('sort_order')->orderBy('id')])
+            ->findOrFail((int) $this->bulkAiPromptGroupId);
+
+        $steps = $generator->normalizeSteps($group->stepTexts());
+
+        if ($steps === []) {
+            $this->addError('bulkAiPromptGroupId', 'This sequence has no usable prompt steps.');
+
+            return;
+        }
+
+        $ids = array_values(array_unique(array_map('intval', $this->selected)));
+
+        if ($ids === []) {
+            $this->bulkAiMessage = 'Select at least one product first.';
+
+            return;
+        }
+
+        $products = Product::query()
+            ->with(['images' => fn ($q) => $q->where('is_admin_only', false)->orderByDesc('is_primary')->orderBy('sort_order')->limit(1)])
+            ->whereIn('id', $ids)
+            ->get()
+            ->keyBy('id');
+
+        $this->bulkAiRows = [];
+
+        foreach ($ids as $id) {
+            $product = $products->get($id);
+
+            if (! $product) {
+                continue;
+            }
+
+            $this->bulkAiRows[] = [
+                'id' => $product->id,
+                'name' => $product->name,
+                'thumb' => $product->images->first()?->path,
+                'status' => 'pending',
+                'message' => null,
+                'steps_saved' => 0,
+            ];
+        }
+
+        if ($this->bulkAiRows === []) {
+            $this->bulkAiMessage = 'No selected products found.';
+
+            return;
+        }
+
+        $this->bulkAiRunning = true;
+        $this->bulkAiMessage = 'Running “'.$group->name.'” on '.count($this->bulkAiRows).' product(s)…';
+
+        if (app()->runningUnitTests()) {
+            $this->processNextBulkAiGenerate($generator);
+
+            return;
+        }
+
+        $this->js('setTimeout(() => $wire.processNextBulkAiGenerate(), 50)');
+    }
+
+    public function processNextBulkAiGenerate(ProductAiImageGenerator $generator): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->bulkAiModalOpen || ! $this->bulkAiRunning) {
+            return;
+        }
+
+        $group = AiPromptGroup::query()
+            ->with(['prompts' => fn ($q) => $q->orderBy('sort_order')->orderBy('id')])
+            ->find((int) $this->bulkAiPromptGroupId);
+
+        if (! $group) {
+            $this->bulkAiRunning = false;
+            $this->bulkAiMessage = 'The selected AI prompt sequence was removed.';
+
+            return;
+        }
+
+        $steps = $generator->normalizeSteps($group->stepTexts());
+        $nextIndex = null;
+
+        foreach ($this->bulkAiRows as $index => $row) {
+            if (($row['status'] ?? '') === 'pending') {
+                $nextIndex = $index;
+                break;
+            }
+        }
+
+        if ($nextIndex === null) {
+            $this->bulkAiRunning = false;
+            $success = collect($this->bulkAiRows)->where('status', 'success')->count();
+            $failed = collect($this->bulkAiRows)->where('status', 'failed')->count();
+            $this->bulkAiMessage = "Finished. {$success} succeeded, {$failed} failed.";
+            $this->message = $this->bulkAiMessage;
+
+            return;
+        }
+
+        $productId = (int) $this->bulkAiRows[$nextIndex]['id'];
+        $generating = $this->bulkAiRows[$nextIndex];
+        $generating['status'] = 'generating';
+        $generating['message'] = 'Generating…';
+        $this->bulkAiRows[$nextIndex] = $generating;
+
+        try {
+            $product = Product::query()->with('images')->findOrFail($productId);
+            $result = $generator->generateSequence($product, $steps);
+
+            if (($result['ok'] ?? false) !== true) {
+                throw new \RuntimeException((string) ($result['error'] ?? 'AI generation failed.'));
+            }
+
+            $stepsSaved = (int) ($result['steps'] ?? 0);
+            $done = $this->bulkAiRows[$nextIndex];
+            $done['status'] = 'success';
+            $done['steps_saved'] = $stepsSaved;
+            $done['message'] = $stepsSaved === 1
+                ? 'Saved 1 admin-only image'
+                : "Saved {$stepsSaved} admin-only images";
+            $this->bulkAiRows[$nextIndex] = $done;
+            $this->selected = array_values(array_diff($this->selected, [$productId]));
+        } catch (\Throwable $e) {
+            $failed = $this->bulkAiRows[$nextIndex];
+            $failed['status'] = 'failed';
+            $failed['message'] = $e->getMessage();
+            $this->bulkAiRows[$nextIndex] = $failed;
+        }
+
+        $hasPending = collect($this->bulkAiRows)->contains(fn (array $row) => ($row['status'] ?? '') === 'pending');
+
+        if ($hasPending) {
+            if (app()->runningUnitTests()) {
+                $this->processNextBulkAiGenerate($generator);
+
+                return;
+            }
+
+            $this->js('setTimeout(() => $wire.processNextBulkAiGenerate(), 50)');
+
+            return;
+        }
+
+        $this->bulkAiRunning = false;
+        $success = collect($this->bulkAiRows)->where('status', 'success')->count();
+        $failed = collect($this->bulkAiRows)->where('status', 'failed')->count();
+        $this->bulkAiMessage = "Finished. {$success} succeeded, {$failed} failed.";
+        $this->message = $this->bulkAiMessage;
+    }
+
     public function render()
     {
         $filters = $this->listFilters();
@@ -560,9 +782,20 @@ class AdminProducts extends Component
             ->orderByDesc('id')
             ->paginate(50);
 
+        $aiPromptGroups = $this->bulkAiModalOpen
+            ? AiPromptGroup::query()
+                ->withCount('prompts')
+                ->with(['prompts' => fn ($q) => $q->orderBy('sort_order')->orderBy('id')])
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get()
+            : collect();
+
         return view('livewire.admin.admin-products', [
             'products' => $products,
             'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
+            'aiPromptGroups' => $aiPromptGroups,
+            'geminiConfigured' => app(GeminiClient::class)->isConfigured(),
         ]);
     }
 

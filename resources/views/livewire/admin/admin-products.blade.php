@@ -531,40 +531,84 @@
                         @else
                             <ul class="space-y-2">
                                 @foreach ($bulkAiRows as $row)
-                                    <li wire:key="bulk-ai-{{ $row['id'] }}"
-                                        class="flex items-start gap-3 rounded-lg border border-[#EFE7D6] px-3 py-2.5">
-                                        @if ($row['thumb'])
-                                            <img src="{{ \App\Support\StorefrontAssets::url($row['thumb']) }}"
-                                                alt=""
-                                                class="h-12 w-12 shrink-0 rounded object-cover border border-[#E7DFCF] bg-[#FAF6EF]">
-                                        @else
-                                            <div class="h-12 w-12 shrink-0 rounded border border-[#E7DFCF] bg-[#FAF6EF]"></div>
-                                        @endif
-                                        <div class="min-w-0 flex-1">
-                                            <p class="truncate text-sm font-medium text-[#1E1E1E]" title="{{ $row['name'] }}">{{ $row['name'] }}</p>
-                                            @if ($row['message'])
-                                                <p @class([
-                                                    'mt-0.5 text-xs',
-                                                    'text-rose-600' => $row['status'] === 'failed',
-                                                    'text-[#6B6459]' => $row['status'] !== 'failed',
-                                                ])>{{ $row['message'] }}</p>
-                                            @endif
+                                    <li wire:key="bulk-ai-{{ $row['id'] }}-{{ $row['status'] }}-{{ $row['step_current'] ?? 0 }}"
+                                        class="rounded-lg border border-[#EFE7D6] px-3 py-2.5 space-y-2">
+                                        <div class="flex items-start gap-3">
+                                            <a href="{{ route('admin.products.edit', $row['id']) }}"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="shrink-0"
+                                                title="Open product">
+                                                @if ($row['thumb'])
+                                                    <img src="{{ \App\Support\StorefrontAssets::url($row['thumb']) }}"
+                                                        alt=""
+                                                        class="h-12 w-12 rounded object-cover border border-[#E7DFCF] bg-[#FAF6EF]">
+                                                @else
+                                                    <div class="h-12 w-12 rounded border border-[#E7DFCF] bg-[#FAF6EF]"></div>
+                                                @endif
+                                            </a>
+                                            <div class="min-w-0 flex-1">
+                                                <a href="{{ route('admin.products.edit', $row['id']) }}"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="block truncate text-sm font-medium text-[#C9A227] hover:underline"
+                                                    title="{{ $row['name'] }}">
+                                                    {{ $row['name'] }}
+                                                </a>
+                                                @if ($row['message'])
+                                                    <p @class([
+                                                        'mt-0.5 text-xs',
+                                                        'text-rose-600' => $row['status'] === 'failed',
+                                                        'text-[#6B6459]' => $row['status'] !== 'failed',
+                                                    ])>{{ $row['message'] }}</p>
+                                                @endif
+                                            </div>
+                                            <span @class([
+                                                'shrink-0 text-[11px] font-semibold uppercase tracking-wide',
+                                                'text-[#8C8474]' => $row['status'] === 'pending',
+                                                'text-amber-700' => $row['status'] === 'generating',
+                                                'text-emerald-700' => $row['status'] === 'success',
+                                                'text-rose-600' => $row['status'] === 'failed',
+                                            ])>
+                                                @switch($row['status'])
+                                                    @case('pending') Queued @break
+                                                    @case('generating') Running @break
+                                                    @case('success') Done @break
+                                                    @case('failed') Failed @break
+                                                    @default {{ $row['status'] }}
+                                                @endswitch
+                                            </span>
                                         </div>
-                                        <span @class([
-                                            'shrink-0 text-[11px] font-semibold uppercase tracking-wide',
-                                            'text-[#8C8474]' => $row['status'] === 'pending',
-                                            'text-amber-700' => $row['status'] === 'generating',
-                                            'text-emerald-700' => $row['status'] === 'success',
-                                            'text-rose-600' => $row['status'] === 'failed',
-                                        ])>
-                                            @switch($row['status'])
-                                                @case('pending') Waiting @break
-                                                @case('generating') Running @break
-                                                @case('success') Done @break
-                                                @case('failed') Failed @break
-                                                @default {{ $row['status'] }}
-                                            @endswitch
-                                        </span>
+                                        @if (in_array($row['status'], ['generating', 'success', 'failed'], true) && (int) ($row['step_total'] ?? 0) > 0)
+                                            <div class="space-y-1">
+                                                <div class="flex items-center justify-between gap-2 text-[11px] tabular-nums text-[#8C8474]">
+                                                    <span>
+                                                        @if ($row['status'] === 'generating')
+                                                            Step {{ min((int) ($row['step_current'] ?? 0) + 1, (int) $row['step_total']) }}/{{ $row['step_total'] }}
+                                                        @elseif ($row['status'] === 'success')
+                                                            {{ $row['steps_saved'] }}/{{ $row['step_total'] }} saved
+                                                        @else
+                                                            {{ $row['steps_saved'] }}/{{ $row['step_total'] }}
+                                                        @endif
+                                                    </span>
+                                                    <span>{{ (int) ($row['progress'] ?? 0) }}%</span>
+                                                </div>
+                                                <div class="h-1.5 overflow-hidden rounded-full bg-[#EFE7D6]" role="progressbar"
+                                                    aria-valuenow="{{ (int) ($row['progress'] ?? 0) }}" aria-valuemin="0" aria-valuemax="100"
+                                                    aria-label="AI progress for {{ $row['name'] }}">
+                                                    <div @class([
+                                                        'h-full rounded-full transition-[width] duration-300',
+                                                        'bg-[#C9A227]' => $row['status'] === 'generating',
+                                                        'bg-emerald-500' => $row['status'] === 'success',
+                                                        'bg-rose-400' => $row['status'] === 'failed',
+                                                    ]) style="width: {{ max(0, min(100, (int) ($row['progress'] ?? 0))) }}%"></div>
+                                                </div>
+                                            </div>
+                                        @elseif ($row['status'] === 'pending')
+                                            <div class="h-1.5 overflow-hidden rounded-full bg-[#EFE7D6]">
+                                                <div class="h-full w-0 rounded-full bg-[#C9A227]"></div>
+                                            </div>
+                                        @endif
                                     </li>
                                 @endforeach
                             </ul>

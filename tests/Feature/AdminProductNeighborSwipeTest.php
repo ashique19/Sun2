@@ -70,6 +70,8 @@ class AdminProductNeighborSwipeTest extends TestCase
             ->assertSeeHtml('data-next-url="'.e(route('admin.products.show', $last)).'"')
             ->assertSeeHtml('max-width: 767px')
             ->assertSeeHtml("getAttribute('data-previous-url')")
+            ->assertSeeHtml('modalBlocksSwipe()')
+            ->assertSeeHtml('[role=dialog][aria-modal=true]')
             ->html();
 
         // Alpine must stay in attributes — broken quoting used to dump JS into visible text.

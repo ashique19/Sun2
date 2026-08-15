@@ -40,6 +40,10 @@
                 return;
             }
 
+            if (this.modalBlocksSwipe()) {
+                return;
+            }
+
             const touch = event.changedTouches && event.changedTouches[0];
             if (! touch) {
                 return;
@@ -54,6 +58,13 @@
             }
 
             if (! window.matchMedia('(max-width: 767px)').matches) {
+                this.startX = null;
+                this.startY = null;
+
+                return;
+            }
+
+            if (this.modalBlocksSwipe()) {
                 this.startX = null;
                 this.startY = null;
 
@@ -78,7 +89,7 @@
             }
 
             const target = event.target;
-            if (target instanceof Element && target.closest('input, textarea, select, [contenteditable], .no-product-swipe-nav')) {
+            if (target instanceof Element && target.closest('input, textarea, select, [contenteditable], .no-product-swipe-nav, [role=dialog], [aria-modal=true]')) {
                 return;
             }
 
@@ -92,6 +103,13 @@
             } else {
                 window.location.assign(url);
             }
+        },
+        modalBlocksSwipe() {
+            return Boolean(
+                document.querySelector('[role=dialog][aria-modal=true]')
+                || document.querySelector('[role=dialog].fixed')
+                || document.body.classList.contains('overflow-hidden')
+            );
         },
     }"
     @@touchstart.window.passive="onStart($event)"

@@ -109,7 +109,7 @@ class AdminProductEdit extends Component
 
     public string $aiPrompt = '';
 
-    /** @var list<array{id: string, mime: string, name: string, version: int, product_image_id?: int|null}> */
+    /** @var list<array{id: string, mime: string, name: string, version: int, product_image_id?: int|null, sequence_id?: string|null, step_index?: int|null, step_total?: int|null, step_prompt?: string|null, source_image_id?: int|null}> */
     public array $aiCandidates = [];
 
     public ?string $aiGenerateError = null;
@@ -192,7 +192,14 @@ class AdminProductEdit extends Component
         $this->showAiGenerateModal = false;
         $this->aiGenerateError = null;
         $this->aiGenerating = false;
-        $this->forgetAiCandidateBinaries(array_column($this->aiCandidates, 'id'));
+        $ids = array_column($this->aiCandidates, 'id');
+        foreach ($this->aiCandidates as $candidate) {
+            $sequenceId = (string) ($candidate['sequence_id'] ?? '');
+            if ($sequenceId !== '') {
+                $ids[] = $sequenceId.'-source';
+            }
+        }
+        $this->forgetAiCandidateBinaries($ids);
         $this->aiCandidates = [];
         $this->resetValidation(['aiRawImage', 'aiPrompt']);
     }
@@ -379,18 +386,15 @@ class AdminProductEdit extends Component
             $currentBase64 = $rawImageBase64;
             $currentMime = $mime === 'image/jpg' ? 'image/jpeg' : $mime;
             $stepCount = count($normalizedSteps);
-            $systemPrompt = 'You edit product photos for a Bangladeshi jewelry e-commerce catalog. '
-                .'You receive the current product photo and ONE editing instruction. '
-                .'Apply only that instruction to the provided photo. '
-                .'Preserve the same product identity, jewellery piece, shape, and materials unless the instruction explicitly changes them. '
-                .'Do not invent a different product, replace the jewellery with a new design, or ignore the reference photo. '
-                .'Return one edited image.';
+            $sequenceId = (string) Str::uuid();
+            $systemPrompt = $this->aiEditSystemPrompt();
+            $createdIds = [];
+
+            $this->persistAiCandidateBinary($sequenceId.'-source', base64_decode($currentBase64, true) ?: '', $currentMime);
 
             foreach ($normalizedSteps as $index => $step) {
                 $stepNumber = $index + 1;
-                $instruction = $stepCount === 1
-                    ? $step
-                    : "Step {$stepNumber} of {$stepCount} — continue editing THIS same product photo (do not start a new product): {$step}";
+                $instruction = $this->aiStepInstruction($step, $stepNumber, $stepCount);
 
                 $result = $gemini->generateImage([
                     ['text' => $instruction],
@@ -408,44 +412,45 @@ class AdminProductEdit extends Component
                     throw new RuntimeException("Gemini returned an empty image on step {$stepNumber}.");
                 }
 
-                $normalized = app(ProductImageService::class)->normalizeToGalleryJpeg($binary);
+                $candidateId = (string) Str::uuid();
+                $this->persistAiCandidateBinary($candidateId, $binary, (string) ($result['mime'] ?? 'image/jpeg'));
+
+                $productImage = $this->storeCandidateAsProductImage($candidateId, adminOnly: true, altSuffix: "AI step {$stepNumber}");
+
+                $this->aiCandidates[] = [
+                    'id' => $candidateId,
+                    'mime' => 'image/jpeg',
+                    'name' => $stepCount > 1
+                        ? "ai-step-{$stepNumber}-of-{$stepCount}.jpg"
+                        : 'ai-generated-'.(count($this->aiCandidates) + 1).'.jpg',
+                    'version' => 1,
+                    'product_image_id' => $productImage?->id,
+                    'sequence_id' => $sequenceId,
+                    'step_index' => $index,
+                    'step_total' => $stepCount,
+                    'step_prompt' => $step,
+                    'source_image_id' => $sourceImageId,
+                ];
+                $createdIds[] = $candidateId;
+
+                AiImagePrompt::remember($step, Auth::id());
+
+                $normalized = $this->readAiCandidateBinary($candidateId) ?? '';
                 $currentBase64 = base64_encode($normalized);
                 $currentMime = 'image/jpeg';
-            }
-
-            $candidateId = (string) Str::uuid();
-            $finalBinary = base64_decode($currentBase64, true);
-
-            if ($finalBinary === false || $finalBinary === '') {
-                throw new RuntimeException('Gemini returned an empty image.');
-            }
-
-            $this->persistAiCandidateBinary($candidateId, $finalBinary, 'image/jpeg');
-
-            $productImage = $this->storeCandidateAsProductImage($candidateId, adminOnly: true);
-
-            $this->aiCandidates[] = [
-                'id' => $candidateId,
-                'mime' => 'image/jpeg',
-                'name' => 'ai-generated-'.(count($this->aiCandidates) + 1).'.jpg',
-                'version' => 1,
-                'product_image_id' => $productImage?->id,
-            ];
-
-            foreach ($normalizedSteps as $step) {
-                AiImagePrompt::remember($step, Auth::id());
             }
 
             $this->refreshImages();
             $this->syncImageAlts();
             $this->message = $stepCount > 1
-                ? "AI sequence ({$stepCount} steps) saved (admin only — not shown on the storefront)."
+                ? "AI sequence saved {$stepCount} admin-only images (one per step)."
                 : 'AI image saved (admin only — not shown on the storefront).';
 
             return [
                 'ok' => true,
-                'id' => $candidateId,
-                'product_image_id' => $productImage?->id,
+                'id' => $createdIds[array_key_last($createdIds)] ?? null,
+                'ids' => $createdIds,
+                'product_image_id' => collect($this->aiCandidates)->last()['product_image_id'] ?? null,
                 'steps' => $stepCount,
             ];
         } catch (Throwable $e) {
@@ -455,6 +460,173 @@ class AdminProductEdit extends Component
         } finally {
             $this->aiGenerating = false;
         }
+    }
+
+    /**
+     * Retry a single sequence step using the previous step (or original source) as input.
+     *
+     * @return array{ok: bool, id?: string, product_image_id?: int, error?: string}
+     */
+    public function retryAiCandidateStep(
+        GeminiClient $gemini,
+        string $candidateId,
+        string $rawImageBase64 = '',
+        string $rawImageMime = 'image/jpeg',
+        ?int $sourceImageId = null,
+    ): array {
+        $this->aiGenerateError = null;
+
+        $index = collect($this->aiCandidates)->search(fn (array $row) => ($row['id'] ?? null) === $candidateId);
+
+        if ($index === false) {
+            $this->aiGenerateError = 'Generated image not found in this session.';
+
+            return ['ok' => false, 'error' => $this->aiGenerateError];
+        }
+
+        /** @var array{id: string, step_index?: int|null, step_total?: int|null, step_prompt?: string|null, sequence_id?: string|null, source_image_id?: int|null, product_image_id?: int|null, version?: int} $candidate */
+        $candidate = $this->aiCandidates[$index];
+        $stepPrompt = trim((string) ($candidate['step_prompt'] ?? $this->aiPrompt));
+
+        if (strlen($stepPrompt) < 3) {
+            $this->aiGenerateError = 'This step has no instruction to retry.';
+
+            return ['ok' => false, 'error' => $this->aiGenerateError];
+        }
+
+        $stepIndex = (int) ($candidate['step_index'] ?? 0);
+        $stepTotal = max(1, (int) ($candidate['step_total'] ?? 1));
+        $sequenceId = (string) ($candidate['sequence_id'] ?? '');
+
+        try {
+            [$inputBase64, $inputMime] = $this->resolveRetryInputImage(
+                $candidate,
+                $rawImageBase64,
+                $rawImageMime,
+                $sourceImageId ?? (isset($candidate['source_image_id']) ? (int) $candidate['source_image_id'] : null),
+            );
+        } catch (InvalidArgumentException $e) {
+            $this->aiGenerateError = $e->getMessage();
+
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+
+        $this->aiGenerating = true;
+
+        try {
+            if (! $gemini->isConfigured()) {
+                throw new RuntimeException('Gemini API key is not configured (GEMINI_API_KEY).');
+            }
+
+            $instruction = $this->aiStepInstruction($stepPrompt, $stepIndex + 1, $stepTotal);
+            $result = $gemini->generateImage([
+                ['text' => $instruction],
+                [
+                    'inline_data' => [
+                        'mime_type' => $inputMime === 'image/jpg' ? 'image/jpeg' : $inputMime,
+                        'data' => $inputBase64,
+                    ],
+                ],
+            ], $this->aiEditSystemPrompt());
+
+            $binary = base64_decode((string) $result['base64'], true);
+
+            if ($binary === false || $binary === '') {
+                throw new RuntimeException('Gemini returned an empty image.');
+            }
+
+            $this->persistAiCandidateBinary($candidateId, $binary, (string) ($result['mime'] ?? 'image/jpeg'));
+            $this->aiCandidates[$index]['mime'] = 'image/jpeg';
+            $this->aiCandidates[$index]['version'] = ((int) ($candidate['version'] ?? 1)) + 1;
+            $this->aiCandidates[$index]['step_prompt'] = $stepPrompt;
+
+            $productImageId = (int) ($candidate['product_image_id'] ?? 0);
+
+            if ($productImageId > 0) {
+                $this->replaceLinkedProductImage($productImageId, $candidateId);
+            } else {
+                $productImage = $this->storeCandidateAsProductImage(
+                    $candidateId,
+                    adminOnly: true,
+                    altSuffix: 'AI step '.($stepIndex + 1),
+                );
+                $this->aiCandidates[$index]['product_image_id'] = $productImage?->id;
+            }
+
+            AiImagePrompt::remember($stepPrompt, Auth::id());
+            $this->refreshImages();
+            $this->syncImageAlts();
+            $this->message = 'Step '.($stepIndex + 1).' regenerated (admin only).';
+
+            return [
+                'ok' => true,
+                'id' => $candidateId,
+                'product_image_id' => $this->aiCandidates[$index]['product_image_id'] ?? null,
+            ];
+        } catch (Throwable $e) {
+            $this->aiGenerateError = $e->getMessage();
+
+            return ['ok' => false, 'error' => $e->getMessage()];
+        } finally {
+            $this->aiGenerating = false;
+        }
+    }
+
+    private function aiEditSystemPrompt(): string
+    {
+        return 'You edit product photos for a Bangladeshi jewelry e-commerce catalog. '
+            .'You receive the current product photo and ONE editing instruction. '
+            .'Apply only that instruction to the provided photo. '
+            .'Preserve the same product identity, jewellery piece, shape, and materials unless the instruction explicitly changes them. '
+            .'Do not invent a different product, replace the jewellery with a new design, or ignore the reference photo. '
+            .'Return one edited image.';
+    }
+
+    private function aiStepInstruction(string $step, int $stepNumber, int $stepCount): string
+    {
+        if ($stepCount <= 1) {
+            return $step;
+        }
+
+        return "Step {$stepNumber} of {$stepCount} — continue editing THIS same product photo (do not start a new product): {$step}";
+    }
+
+    /**
+     * @param  array{sequence_id?: string|null, step_index?: int|null, source_image_id?: int|null}  $candidate
+     * @return array{0: string, 1: string}
+     */
+    private function resolveRetryInputImage(
+        array $candidate,
+        string $rawImageBase64,
+        string $rawImageMime,
+        ?int $sourceImageId,
+    ): array {
+        $stepIndex = (int) ($candidate['step_index'] ?? 0);
+        $sequenceId = (string) ($candidate['sequence_id'] ?? '');
+
+        if ($stepIndex > 0 && $sequenceId !== '') {
+            $previous = collect($this->aiCandidates)
+                ->first(fn (array $row) => ($row['sequence_id'] ?? null) === $sequenceId
+                    && (int) ($row['step_index'] ?? -1) === ($stepIndex - 1));
+
+            if (is_array($previous)) {
+                $binary = $this->readAiCandidateBinary((string) $previous['id']);
+
+                if ($binary !== null && $binary !== '') {
+                    return [base64_encode($binary), 'image/jpeg'];
+                }
+            }
+        }
+
+        if ($sequenceId !== '') {
+            $sourceBinary = $this->readAiCandidateBinary($sequenceId.'-source');
+
+            if ($sourceBinary !== null && $sourceBinary !== '') {
+                return [base64_encode($sourceBinary), 'image/jpeg'];
+            }
+        }
+
+        return $this->resolveAiSourceImage($rawImageBase64, $rawImageMime, $sourceImageId);
     }
 
     /**
@@ -653,7 +825,7 @@ class AdminProductEdit extends Component
         $this->message = 'AI image added to product gallery.';
     }
 
-    private function storeCandidateAsProductImage(string $id, bool $adminOnly): ?ProductImage
+    private function storeCandidateAsProductImage(string $id, bool $adminOnly, ?string $altSuffix = null): ?ProductImage
     {
         $candidate = collect($this->aiCandidates)->firstWhere('id', $id);
         $binary = $this->readAiCandidateBinary($id);
@@ -689,10 +861,15 @@ class AdminProductEdit extends Component
                 true,
             );
 
+            $alt = $this->product->name;
+            if ($adminOnly) {
+                $alt .= $altSuffix ? ' ('.$altSuffix.')' : ' (AI)';
+            }
+
             return app(ProductImageService::class)->store(
                 $this->product,
                 $upload,
-                $adminOnly ? ($this->product->name.' (AI)') : $this->product->name,
+                $alt,
                 $adminOnly,
             );
         } finally {
@@ -1271,10 +1448,6 @@ class AdminProductEdit extends Component
     {
         $this->rememberAdminProductListFilters();
 
-        $recentPrompts = AiImagePrompt::query()
-            ->recent(12)
-            ->get(['id', 'prompt', 'last_used_at', 'use_count']);
-
         $promptGroups = AiPromptGroup::query()
             ->with(['prompts' => fn ($q) => $q->orderBy('sort_order')->orderBy('id')])
             ->orderBy('sort_order')
@@ -1284,7 +1457,6 @@ class AdminProductEdit extends Component
         return view('livewire.admin.admin-product-edit', [
             'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
             'materialsForBom' => Material::query()->orderBy('name')->get(['id', 'name', 'unit', 'unit_cost']),
-            'recentAiPrompts' => $recentPrompts,
             'aiPromptGroups' => $promptGroups,
             'geminiConfigured' => app(GeminiClient::class)->isConfigured(),
             'hasBomMaterials' => (bool) $this->product?->materials?->isNotEmpty(),

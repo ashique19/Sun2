@@ -48,7 +48,7 @@ class AdminProductAiPromptSequenceTest extends TestCase
     }
 
     #[Test]
-    public function generate_runs_steps_sequentially_feeding_previous_output(): void
+    public function generate_saves_an_image_for_each_sequence_step(): void
     {
         config(['gemini.api_key' => 'test-key']);
 
@@ -74,27 +74,67 @@ class AdminProductAiPromptSequenceTest extends TestCase
             UploadedFile::fake()->image('source.jpg', 320, 240),
         );
 
-        Livewire::test(AdminProductEdit::class, ['product' => $product->fresh(['images'])])
+        $component = Livewire::test(AdminProductEdit::class, ['product' => $product->fresh(['images'])])
             ->call('generateAiImage', '', 'image/jpeg', $source->id, [
                 'Extract the jewellery',
                 'Change colour to rose gold',
             ])
             ->assertSet('aiGenerateError', null)
-            ->assertCount('aiCandidates', 1);
+            ->assertCount('aiCandidates', 2);
 
+        $candidates = $component->get('aiCandidates');
+        $this->assertSame(0, $candidates[0]['step_index']);
+        $this->assertSame(1, $candidates[1]['step_index']);
+        $this->assertSame($candidates[0]['sequence_id'], $candidates[1]['sequence_id']);
+        $this->assertSame('Extract the jewellery', $candidates[0]['step_prompt']);
+        $this->assertSame(2, ProductImage::query()->where('product_id', $product->id)->where('is_admin_only', true)->count());
         $this->assertCount(2, $seen);
         $this->assertStringContainsString('Step 1 of 2', $seen[0]);
-        $this->assertStringContainsString('Extract the jewellery', $seen[0]);
         $this->assertStringContainsString('Step 2 of 2', $seen[1]);
-        $this->assertStringContainsString('Change colour to rose gold', $seen[1]);
-        $this->assertStringContainsString('same product photo', $seen[1]);
-        $this->assertSame(1, ProductImage::query()->where('product_id', $product->id)->where('is_admin_only', true)->count());
-        $this->assertDatabaseHas('ai_image_prompts', ['prompt' => 'Extract the jewellery']);
-        $this->assertDatabaseHas('ai_image_prompts', ['prompt' => 'Change colour to rose gold']);
     }
 
     #[Test]
-    public function use_prompt_group_loads_sequence_into_editor(): void
+    public function retry_regenerates_a_single_step_from_previous_output(): void
+    {
+        config(['gemini.api_key' => 'test-key']);
+
+        $gemini = Mockery::mock(GeminiClient::class);
+        $gemini->shouldReceive('isConfigured')->andReturn(true);
+        $gemini->shouldReceive('generateImage')
+            ->times(3)
+            ->andReturn([
+                'mime' => 'image/png',
+                'base64' => $this->tinyPngBase64(),
+            ]);
+        $this->app->instance(GeminiClient::class, $gemini);
+
+        $this->actingAs($this->adminUser());
+        $product = $this->product();
+        $source = app(ProductImageService::class)->store(
+            $product,
+            UploadedFile::fake()->image('source.jpg', 320, 240),
+        );
+
+        $component = Livewire::test(AdminProductEdit::class, ['product' => $product->fresh(['images'])])
+            ->call('generateAiImage', '', 'image/jpeg', $source->id, [
+                'Extract the jewellery',
+                'Change colour to rose gold',
+            ])
+            ->assertCount('aiCandidates', 2);
+
+        $stepTwoId = $component->get('aiCandidates')[1]['id'];
+        $versionBefore = $component->get('aiCandidates')[1]['version'];
+
+        $component->call('retryAiCandidateStep', $stepTwoId)
+            ->assertSet('aiGenerateError', null)
+            ->assertCount('aiCandidates', 2);
+
+        $this->assertSame($versionBefore + 1, $component->get('aiCandidates')[1]['version']);
+        $this->assertSame(2, ProductImage::query()->where('product_id', $product->id)->where('is_admin_only', true)->count());
+    }
+
+    #[Test]
+    public function use_prompt_group_loads_sequence_and_modal_links_recent_prompts_page(): void
     {
         $this->actingAs($this->adminUser());
         $product = $this->product();
@@ -113,10 +153,10 @@ class AdminProductAiPromptSequenceTest extends TestCase
         Livewire::test(AdminProductEdit::class, ['product' => $product])
             ->call('openAiGenerateModal')
             ->assertSee('Catalogue polish')
-            ->assertSee('Extract jewellery')
             ->assertSeeHtml('usePromptGroup('.$group->id.')')
-            ->assertSeeHtml('Instruction sequence')
-            ->assertSeeHtml('addAiStep()')
+            ->assertSeeHtml(route('admin.ai-prompts.recent'))
+            ->assertSee('Recent single prompts')
+            ->assertDontSeeHtml('wire:click="useRecentPrompt(')
             ->call('usePromptGroup', $group->id)
             ->assertDispatched('ai-prompt-steps-set')
             ->assertSet('aiPrompt', "Extract jewellery\nRotate 90 degrees");

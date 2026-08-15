@@ -930,21 +930,12 @@
                             </p>
                         @endif
 
-                        @if ($recentAiPrompts->isNotEmpty())
-                            <div>
-                                <p class="text-xs font-medium text-[#6B6459] mb-2">Recent single prompts</p>
-                                <div class="flex flex-wrap gap-2">
-                                    @foreach ($recentAiPrompts as $recent)
-                                        <button type="button"
-                                            wire:click="useRecentPrompt(@js($recent->prompt))"
-                                            class="max-w-full truncate rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-3 py-1 text-xs text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]"
-                                            title="{{ $recent->prompt }}">
-                                            {{ \Illuminate\Support\Str::limit($recent->prompt, 48) }}
-                                        </button>
-                                    @endforeach
-                                </div>
-                            </div>
-                        @endif
+                        <div>
+                            <a href="{{ route('admin.ai-prompts.recent') }}" wire:navigate
+                                class="text-xs font-medium text-[#C9A227] hover:underline">
+                                Recent single prompts →
+                            </a>
+                        </div>
 
                         <div class="space-y-3">
                             <div class="flex flex-wrap items-center gap-3">
@@ -954,7 +945,7 @@
                                     class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
                                     <span x-text="generating ? 'Generating…' : (normalizedAiSteps().length > 1 ? `Generate ${normalizedAiSteps().length} steps` : 'Generate')"></span>
                                 </button>
-                                <p class="text-xs text-[#8C8474]">Multi-step runs edit the same product photo in sequence, then saves one admin-only image.</p>
+                                <p class="text-xs text-[#8C8474]">Each step is saved as its own admin-only image. Use retry on a step if that result looks wrong.</p>
                             </div>
 
                             <div x-show="generating || generateProgress > 0 || generateError" x-cloak class="max-w-md space-y-1">
@@ -980,14 +971,32 @@
                                     <h3 class="text-sm font-medium mb-3">Generated this session ({{ count($aiCandidates) }})</h3>
                                     <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                         @foreach ($aiCandidates as $candidate)
-                                            <li wire:key="ai-candidate-{{ $candidate['id'] }}" class="rounded-xl border border-[#EFE7D6] p-3 space-y-3">
+                                            <li wire:key="ai-candidate-{{ $candidate['id'] }}-{{ $candidate['version'] ?? 1 }}" class="rounded-xl border border-[#EFE7D6] p-3 space-y-3">
                                                 <div class="relative aspect-square overflow-hidden rounded-lg bg-[#FAF6EF]">
                                                     <img src="{{ route('admin.products.ai-candidate', $candidate['id']) }}?v={{ $candidate['version'] ?? 1 }}"
                                                         alt="{{ $candidate['name'] }}"
                                                         class="h-full w-full object-cover">
                                                     <span class="absolute top-2 left-2 rounded bg-[#1E1E1E]/90 px-2 py-0.5 text-[10px] font-semibold text-white">Admin only</span>
+                                                    @if (($candidate['step_total'] ?? 1) > 1)
+                                                        <span class="absolute bottom-2 left-2 rounded bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-[#1E1E1E] ring-1 ring-[#E0D6C2]">
+                                                            Step {{ ((int) ($candidate['step_index'] ?? 0)) + 1 }}/{{ $candidate['step_total'] }}
+                                                        </span>
+                                                    @endif
                                                 </div>
+                                                @if (! empty($candidate['step_prompt']))
+                                                    <p class="line-clamp-2 text-[11px] text-[#8C8474]" title="{{ $candidate['step_prompt'] }}">{{ $candidate['step_prompt'] }}</p>
+                                                @endif
                                                 <div class="flex flex-wrap gap-1">
+                                                    <button type="button"
+                                                        @click="retryAiStep(@js($candidate['id']))"
+                                                        :disabled="generating"
+                                                        class="inline-flex items-center gap-1 rounded border border-[#E0D6C2] px-2 py-1 text-xs text-[#1E1E1E] hover:bg-[#FAF6EF] disabled:opacity-60"
+                                                        title="Retry this step">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
+                                                            <path fill-rule="evenodd" d="M15.312 11.342a5.25 5.25 0 0 1-8.9 2.433l-.707.708A6.75 6.75 0 1 0 4.5 7.5H3.06a.75.75 0 0 0-.53 1.28l2.25 2.25a.75.75 0 0 0 1.06 0l2.25-2.25A.75.75 0 0 0 7.56 7.5H6a3.75 3.75 0 1 1 6.364 2.702l.707-.707a5.232 5.232 0 0 1 2.24-1.153Z" clip-rule="evenodd"/>
+                                                        </svg>
+                                                        Retry
+                                                    </button>
                                                     <button type="button"
                                                         @click="openAiEditor(@js($candidate['id']))"
                                                         class="rounded border border-[#C9A227] px-2 py-1 text-xs text-[#C9A227] hover:bg-[#FAF6EF]">

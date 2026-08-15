@@ -1561,6 +1561,74 @@ const registerProductImageAlpineData = () => {
             }
         },
 
+        async retryAiStep(candidateId) {
+            if (this.generating || ! candidateId) {
+                return;
+            }
+
+            this.rawUploadError = null;
+            this.generateError = null;
+            this.generating = true;
+            this.generateProgress = 8;
+            this.generateStatus = 'Retrying step…';
+
+            if (this.generateTicker) {
+                clearInterval(this.generateTicker);
+                this.generateTicker = null;
+            }
+
+            const startedAt = Date.now();
+            this.generateTicker = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+                this.generateProgress = Math.min(92, 8 + Math.floor(elapsed * 1.5));
+                this.generateStatus = `Retrying step… (${elapsed}s)`;
+            }, 500);
+
+            try {
+                const result = await Promise.race([
+                    this.$wire.retryAiCandidateStep(
+                        candidateId,
+                        this.rawImageBase64 || '',
+                        this.rawImageMime || 'image/jpeg',
+                        this.selectedSourceImageId || null,
+                    ),
+                    new Promise((_, reject) => {
+                        setTimeout(() => {
+                            reject(new Error('Retry timed out after 120 seconds. Try again.'));
+                        }, 120000);
+                    }),
+                ]);
+
+                await this.$nextTick();
+
+                const serverError = (result && typeof result === 'object' && result.ok === false)
+                    ? String(result.error || 'Retry failed.')
+                    : (this.firstGenerateError() || this.$wire.aiGenerateError || null);
+
+                if (serverError || ! result || result.ok !== true) {
+                    this.generateError = serverError || 'Retry failed. Try again.';
+                    this.generateStatus = 'Retry failed';
+                    this.generateProgress = 0;
+                } else {
+                    this.generateProgress = 100;
+                    this.generateStatus = 'Step updated';
+                    this.generateError = null;
+                }
+            } catch (error) {
+                console.error(error);
+                this.generateError = error?.message || 'Retry failed. Try again.';
+                this.generateStatus = 'Retry failed';
+                this.generateProgress = 0;
+            } finally {
+                if (this.generateTicker) {
+                    clearInterval(this.generateTicker);
+                    this.generateTicker = null;
+                }
+
+                this.generating = false;
+            }
+        },
+
         openAiEditor(id) {
             const candidates = this.$wire.aiCandidates ?? [];
             const candidate = candidates.find((item) => item.id === id);

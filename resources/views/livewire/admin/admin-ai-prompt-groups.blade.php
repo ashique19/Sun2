@@ -6,10 +6,16 @@
                 Named sequences of edit steps for product image generation (e.g. extract → recolour → rotate).
             </p>
         </div>
-        <a href="{{ route('admin.ai-prompts.create') }}" wire:navigate
-            class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">
-            Create Group
-        </a>
+        <div class="flex flex-wrap gap-2">
+            <a href="{{ route('admin.ai-prompts.recent') }}" wire:navigate
+                class="rounded-full border border-[#E0D6C2] px-5 py-2 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
+                Recent prompts
+            </a>
+            <a href="{{ route('admin.ai-prompts.create') }}" wire:navigate
+                class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">
+                Create Group
+            </a>
+        </div>
     </div>
 
     @if ($error)

@@ -9,6 +9,7 @@ use App\Http\Controllers\RobotsController;
 use App\Http\Controllers\SitemapController;
 use App\Livewire\Admin\AdminAiPromptGroupEdit;
 use App\Livewire\Admin\AdminAiPromptGroups;
+use App\Livewire\Admin\AdminAiRecentPrompts;
 use App\Livewire\Admin\AdminAnalytics;
 use App\Livewire\Admin\AdminAnalyticsCategoryRevenue;
 use App\Livewire\Admin\AdminAnalyticsCompare;
@@ -238,6 +239,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/materials/create', AdminMaterialEdit::class)->name('materials.create');
         Route::get('/materials/{material}/edit', AdminMaterialEdit::class)->name('materials.edit');
         Route::get('/ai-prompts', AdminAiPromptGroups::class)->name('ai-prompts');
+        Route::get('/ai-prompts/recent', AdminAiRecentPrompts::class)->name('ai-prompts.recent');
         Route::get('/ai-prompts/create', AdminAiPromptGroupEdit::class)->name('ai-prompts.create');
         Route::get('/ai-prompts/{group}/edit', AdminAiPromptGroupEdit::class)->name('ai-prompts.edit');
         Route::get('/coupons', AdminCoupons::class)->name('coupons');

@@ -1284,6 +1284,16 @@ const registerProductImageAlpineData = () => {
             return this.$wire.aiGenerateError || null;
         },
 
+        scrollToAiProgress() {
+            this.$nextTick(() => {
+                const el = this.$refs.aiGenerateProgress;
+
+                if (el && typeof el.scrollIntoView === 'function') {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            });
+        },
+
         startGenerateProgress() {
             const startedAt = Date.now();
             const stepCount = Math.max(1, this.normalizedAiSteps().length);
@@ -1291,6 +1301,7 @@ const registerProductImageAlpineData = () => {
             this.generateStatus = stepCount > 1
                 ? `Running ${stepCount}-step sequence…`
                 : 'Sending photo to Gemini…';
+            this.scrollToAiProgress();
 
             if (this.generateTicker) {
                 clearInterval(this.generateTicker);
@@ -1571,6 +1582,7 @@ const registerProductImageAlpineData = () => {
             this.generating = true;
             this.generateProgress = 8;
             this.generateStatus = 'Retrying step…';
+            this.scrollToAiProgress();
 
             if (this.generateTicker) {
                 clearInterval(this.generateTicker);

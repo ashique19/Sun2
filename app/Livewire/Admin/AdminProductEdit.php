@@ -4,6 +4,7 @@ namespace App\Livewire\Admin;
 
 use App\Livewire\Admin\Concerns\InteractsWithAdminProductListFilters;
 use App\Models\AiImagePrompt;
+use App\Models\AiPromptGroup;
 use App\Models\Category;
 use App\Models\Material;
 use App\Models\Product;
@@ -199,6 +200,25 @@ class AdminProductEdit extends Component
     public function useRecentPrompt(string $prompt): void
     {
         $this->aiPrompt = $prompt;
+        $this->dispatch('ai-prompt-steps-set', steps: [trim($prompt)]);
+    }
+
+    public function usePromptGroup(int $groupId): void
+    {
+        $group = AiPromptGroup::query()
+            ->with(['prompts' => fn ($q) => $q->orderBy('sort_order')->orderBy('id')])
+            ->findOrFail($groupId);
+
+        $steps = $group->stepTexts();
+
+        if ($steps === []) {
+            $this->aiGenerateError = 'That prompt group has no steps.';
+
+            return;
+        }
+
+        $this->aiPrompt = implode("\n", $steps);
+        $this->dispatch('ai-prompt-steps-set', steps: $steps);
     }
 
     public function openPricedImageModal(ProductPricedImageService $pricedImages): void
@@ -311,13 +331,15 @@ class AdminProductEdit extends Component
     }
 
     /**
-     * @return array{ok: bool, id?: string, product_image_id?: int, error?: string}
+     * @param  list<string>|array<int, string>  $steps
+     * @return array{ok: bool, id?: string, product_image_id?: int, steps?: int, error?: string}
      */
     public function generateAiImage(
         GeminiClient $gemini,
         string $rawImageBase64 = '',
         string $rawImageMime = 'image/jpeg',
         ?int $sourceImageId = null,
+        array $steps = [],
     ): array {
         $this->aiGenerateError = null;
 
@@ -325,8 +347,18 @@ class AdminProductEdit extends Component
             $this->ensureProductSaved();
         }
 
+        $normalizedSteps = $this->normalizeAiSteps($steps);
+
+        if ($normalizedSteps === []) {
+            $this->addError('aiPrompt', 'Add at least one instruction step (min 3 characters).');
+
+            return ['ok' => false, 'error' => 'Add at least one instruction step (min 3 characters).'];
+        }
+
+        $this->aiPrompt = implode("\n", $normalizedSteps);
+
         $this->validate([
-            'aiPrompt' => ['required', 'string', 'min:3', 'max:4000'],
+            'aiPrompt' => ['required', 'string', 'min:3', 'max:16000'],
         ]);
 
         try {
@@ -344,24 +376,51 @@ class AdminProductEdit extends Component
                 throw new RuntimeException('Gemini API key is not configured (GEMINI_API_KEY).');
             }
 
-            $result = $gemini->generateImage([
-                ['text' => trim($this->aiPrompt)],
-                [
-                    'inline_data' => [
-                        'mime_type' => $mime === 'image/jpg' ? 'image/jpeg' : $mime,
-                        'data' => $rawImageBase64,
+            $currentBase64 = $rawImageBase64;
+            $currentMime = $mime === 'image/jpg' ? 'image/jpeg' : $mime;
+            $stepCount = count($normalizedSteps);
+            $systemPrompt = 'You edit product photos for a Bangladeshi jewelry e-commerce catalog. '
+                .'You receive the current product photo and ONE editing instruction. '
+                .'Apply only that instruction to the provided photo. '
+                .'Preserve the same product identity, jewellery piece, shape, and materials unless the instruction explicitly changes them. '
+                .'Do not invent a different product, replace the jewellery with a new design, or ignore the reference photo. '
+                .'Return one edited image.';
+
+            foreach ($normalizedSteps as $index => $step) {
+                $stepNumber = $index + 1;
+                $instruction = $stepCount === 1
+                    ? $step
+                    : "Step {$stepNumber} of {$stepCount} — continue editing THIS same product photo (do not start a new product): {$step}";
+
+                $result = $gemini->generateImage([
+                    ['text' => $instruction],
+                    [
+                        'inline_data' => [
+                            'mime_type' => $currentMime,
+                            'data' => $currentBase64,
+                        ],
                     ],
-                ],
-            ], 'You enhance product photos for a Bangladeshi jewelry e-commerce catalog. Preserve the product identity from the reference photo. Return one polished product image.');
+                ], $systemPrompt);
+
+                $binary = base64_decode((string) $result['base64'], true);
+
+                if ($binary === false || $binary === '') {
+                    throw new RuntimeException("Gemini returned an empty image on step {$stepNumber}.");
+                }
+
+                $normalized = app(ProductImageService::class)->normalizeToGalleryJpeg($binary);
+                $currentBase64 = base64_encode($normalized);
+                $currentMime = 'image/jpeg';
+            }
 
             $candidateId = (string) Str::uuid();
-            $binary = base64_decode((string) $result['base64'], true);
+            $finalBinary = base64_decode($currentBase64, true);
 
-            if ($binary === false || $binary === '') {
+            if ($finalBinary === false || $finalBinary === '') {
                 throw new RuntimeException('Gemini returned an empty image.');
             }
 
-            $this->persistAiCandidateBinary($candidateId, $binary, (string) ($result['mime'] ?? 'image/jpeg'));
+            $this->persistAiCandidateBinary($candidateId, $finalBinary, 'image/jpeg');
 
             $productImage = $this->storeCandidateAsProductImage($candidateId, adminOnly: true);
 
@@ -373,15 +432,21 @@ class AdminProductEdit extends Component
                 'product_image_id' => $productImage?->id,
             ];
 
-            AiImagePrompt::remember(trim($this->aiPrompt), Auth::id());
+            foreach ($normalizedSteps as $step) {
+                AiImagePrompt::remember($step, Auth::id());
+            }
+
             $this->refreshImages();
             $this->syncImageAlts();
-            $this->message = 'AI image saved (admin only — not shown on the storefront).';
+            $this->message = $stepCount > 1
+                ? "AI sequence ({$stepCount} steps) saved (admin only — not shown on the storefront)."
+                : 'AI image saved (admin only — not shown on the storefront).';
 
             return [
                 'ok' => true,
                 'id' => $candidateId,
                 'product_image_id' => $productImage?->id,
+                'steps' => $stepCount,
             ];
         } catch (Throwable $e) {
             $this->aiGenerateError = $e->getMessage();
@@ -390,6 +455,43 @@ class AdminProductEdit extends Component
         } finally {
             $this->aiGenerating = false;
         }
+    }
+
+    /**
+     * @param  list<string>|array<int, mixed>  $steps
+     * @return list<string>
+     */
+    private function normalizeAiSteps(array $steps): array
+    {
+        $normalized = [];
+
+        foreach ($steps as $step) {
+            if (! is_string($step) && ! is_numeric($step)) {
+                continue;
+            }
+
+            $text = trim((string) $step);
+
+            if (strlen($text) < 3) {
+                continue;
+            }
+
+            if (strlen($text) > 4000) {
+                $text = substr($text, 0, 4000);
+            }
+
+            $normalized[] = $text;
+        }
+
+        if ($normalized === [] && trim((string) $this->aiPrompt) !== '') {
+            $fallback = trim((string) $this->aiPrompt);
+
+            if (strlen($fallback) >= 3) {
+                $normalized[] = strlen($fallback) > 4000 ? substr($fallback, 0, 4000) : $fallback;
+            }
+        }
+
+        return array_values($normalized);
     }
 
     /**
@@ -1173,10 +1275,17 @@ class AdminProductEdit extends Component
             ->recent(12)
             ->get(['id', 'prompt', 'last_used_at', 'use_count']);
 
+        $promptGroups = AiPromptGroup::query()
+            ->with(['prompts' => fn ($q) => $q->orderBy('sort_order')->orderBy('id')])
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
         return view('livewire.admin.admin-product-edit', [
             'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
             'materialsForBom' => Material::query()->orderBy('name')->get(['id', 'name', 'unit', 'unit_cost']),
             'recentAiPrompts' => $recentPrompts,
+            'aiPromptGroups' => $promptGroups,
             'geminiConfigured' => app(GeminiClient::class)->isConfigured(),
             'hasBomMaterials' => (bool) $this->product?->materials?->isNotEmpty(),
             'listFilters' => $this->currentAdminProductListFilters(),

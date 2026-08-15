@@ -1149,18 +1149,90 @@ const registerProductImageAlpineData = () => {
         rawImageMime: 'image/jpeg',
         rawImageName: '',
         selectedSourceImageId: null,
+        aiSteps: [''],
         generating: false,
         generateProgress: 0,
         generateStatus: '',
         generateError: null,
         generateTicker: null,
 
+        init() {
+            this.$wire?.$on?.('ai-prompt-steps-set', ({ steps }) => {
+                this.setAiSteps(steps);
+            });
+
+            // Livewire 4 event from PHP dispatch
+            if (typeof Livewire !== 'undefined' && typeof Livewire.on === 'function') {
+                Livewire.on('ai-prompt-steps-set', (payload) => {
+                    const steps = Array.isArray(payload)
+                        ? (payload[0]?.steps ?? payload)
+                        : (payload?.steps ?? payload);
+                    this.setAiSteps(steps);
+                });
+            }
+        },
+
+        normalizedAiSteps() {
+            return (this.aiSteps || [])
+                .map((step) => String(step || '').trim())
+                .filter((step) => step.length >= 3);
+        },
+
+        setAiSteps(steps) {
+            const list = Array.isArray(steps)
+                ? steps.map((step) => String(step || '')).filter((step) => step.trim() !== '')
+                : [];
+            this.aiSteps = list.length > 0 ? list : [''];
+            this.syncAiPromptFromSteps();
+        },
+
+        addAiStep() {
+            this.aiSteps.push('');
+        },
+
+        removeAiStep(index) {
+            if (this.aiSteps.length <= 1) {
+                this.aiSteps = [''];
+                this.syncAiPromptFromSteps();
+
+                return;
+            }
+
+            this.aiSteps.splice(index, 1);
+            this.syncAiPromptFromSteps();
+        },
+
+        moveAiStep(index, delta) {
+            const next = index + delta;
+
+            if (next < 0 || next >= this.aiSteps.length) {
+                return;
+            }
+
+            const copy = this.aiSteps.slice();
+            const tmp = copy[index];
+            copy[index] = copy[next];
+            copy[next] = tmp;
+            this.aiSteps = copy;
+            this.syncAiPromptFromSteps();
+        },
+
+        syncAiPromptFromSteps() {
+            try {
+                this.$wire.aiPrompt = this.normalizedAiSteps().join('\n');
+            } catch {
+                // ignore
+            }
+        },
+
         canGenerate() {
             const hasUpload = this.hasRawImage && this.rawImageBase64 !== '';
             const hasExisting = Number(this.selectedSourceImageId) > 0;
+            const hasSteps = this.normalizedAiSteps().length > 0;
 
             return this.geminiConfigured
                 && (hasUpload || hasExisting)
+                && hasSteps
                 && ! this.rawUploading
                 && ! this.generating;
         },
@@ -1214,8 +1286,11 @@ const registerProductImageAlpineData = () => {
 
         startGenerateProgress() {
             const startedAt = Date.now();
+            const stepCount = Math.max(1, this.normalizedAiSteps().length);
             this.generateProgress = 4;
-            this.generateStatus = 'Sending photo to Gemini…';
+            this.generateStatus = stepCount > 1
+                ? `Running ${stepCount}-step sequence…`
+                : 'Sending photo to Gemini…';
 
             if (this.generateTicker) {
                 clearInterval(this.generateTicker);
@@ -1223,14 +1298,16 @@ const registerProductImageAlpineData = () => {
 
             this.generateTicker = setInterval(() => {
                 const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-                this.generateProgress = Math.min(92, 4 + Math.floor(elapsed * 1.6));
+                this.generateProgress = Math.min(92, 4 + Math.floor(elapsed * 1.2));
 
-                if (elapsed < 8) {
+                if (stepCount > 1) {
+                    this.generateStatus = `Running ${stepCount}-step sequence on the same photo… (${elapsed}s)`;
+                } else if (elapsed < 8) {
                     this.generateStatus = `Sending photo to Gemini… (${elapsed}s)`;
                 } else if (elapsed < 45) {
                     this.generateStatus = `Gemini is generating the image… (${elapsed}s)`;
                 } else {
-                    this.generateStatus = `Still waiting on Gemini… (${elapsed}s). This can take up to about 90 seconds.`;
+                    this.generateStatus = `Still waiting on Gemini… (${elapsed}s). This can take up to about 90 seconds per step.`;
                 }
             }, 500);
         },
@@ -1432,10 +1509,12 @@ const registerProductImageAlpineData = () => {
 
             this.rawUploadError = null;
             this.generateError = null;
+            this.syncAiPromptFromSteps();
             this.generating = true;
             this.startGenerateProgress();
 
-            const timeoutMs = 120000;
+            const steps = this.normalizedAiSteps();
+            const timeoutMs = Math.max(120000, steps.length * 90000);
 
             try {
                 const result = await Promise.race([
@@ -1443,10 +1522,11 @@ const registerProductImageAlpineData = () => {
                         this.rawImageBase64 || '',
                         this.rawImageMime || 'image/jpeg',
                         this.selectedSourceImageId || null,
+                        steps,
                     ),
                     new Promise((_, reject) => {
                         setTimeout(() => {
-                            reject(new Error('Generation timed out after 120 seconds. Try a smaller photo or try again.'));
+                            reject(new Error(`Generation timed out after ${Math.round(timeoutMs / 1000)} seconds. Try fewer steps, a smaller photo, or try again.`));
                         }, timeoutMs);
                     }),
                 ]);

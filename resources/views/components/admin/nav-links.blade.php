@@ -143,6 +143,10 @@
         class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.materials*') ? $active : $inactive }}">
         Materials
     </a>
+    <a href="{{ route('admin.ai-prompts') }}" wire:navigate {!! $click !!}
+        class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.ai-prompts*') ? $active : $inactive }}">
+        AI Prompts
+    </a>
     <a href="{{ route('admin.coupons') }}" wire:navigate {!! $click !!}
         class="{{ $linkBase }} {{ $linkPad }} {{ request()->routeIs('admin.coupons*') ? $active : $inactive }}">
         Coupons

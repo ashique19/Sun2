@@ -766,7 +766,8 @@
         wire:key="ai-generate-modal-host"
         x-data="aiImageCandidates()"
         x-init="geminiConfigured = {{ $geminiConfigured ? 'true' : 'false' }}"
-        x-effect="if (! $wire.showAiGenerateModal) { clearRawImage(); clearGenerateState(); }">
+        x-effect="if (! $wire.showAiGenerateModal) { clearRawImage(); clearGenerateState(); }"
+        @ai-prompt-steps-set.window="setAiSteps(($event.detail && $event.detail.steps) || ($event.detail && $event.detail[0] && $event.detail[0].steps) || $event.detail || [])">
         @if ($showAiGenerateModal)
             <div class="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-4 sm:items-center"
                 wire:click.self="closeAiGenerateModal"
@@ -780,7 +781,7 @@
                         <div>
                             <h2 class="font-semibold text-lg">Generate with AI</h2>
                             <p class="mt-1 text-xs text-[#8C8474]">
-                                Pick an existing product image or upload a raw photo, write a prompt, then Generate. Results are saved as admin-only images (hidden from the storefront) until you make them public.
+                                Pick a source image, then run one or more instruction steps in order. Each step edits the previous result so the same product is refined — not reinvented. Results save as admin-only until you make them public.
                             </p>
                         </div>
                         <button type="button" wire:click="closeAiGenerateModal" class="text-sm text-[#8C8474] hover:text-[#1E1E1E]">Close</button>
@@ -851,18 +852,87 @@
                                     @error('aiRawImage') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
                                 </div>
                             </div>
-                            <div>
-                                <label class="block text-sm font-medium mb-1">Prompt</label>
-                                <textarea wire:model="aiPrompt" rows="4"
-                                    placeholder="Describe how to improve or restyle the product photo…"
-                                    class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm"></textarea>
-                                @error('aiPrompt') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                            <div class="space-y-3">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <label class="block text-sm font-medium">Instruction sequence</label>
+                                        <p class="mt-0.5 text-xs text-[#8C8474]">
+                                            Steps run in order on the same photo (each step edits the previous result).
+                                        </p>
+                                    </div>
+                                    <button type="button" @click="addAiStep()"
+                                        class="rounded-full border border-[#C9A227] px-3 py-1 text-xs font-semibold text-[#C9A227] hover:bg-[#FAF6EF]">
+                                        Add step
+                                    </button>
+                                </div>
+                                <ul class="space-y-2">
+                                    <template x-for="(step, index) in aiSteps" :key="`ai-step-${index}`">
+                                        <li class="rounded-lg border border-[#EFE7D6] p-2.5">
+                                            <div class="mb-1.5 flex items-center justify-between gap-2">
+                                                <span class="text-[11px] font-medium text-[#8C8474]" x-text="`Step ${index + 1}`"></span>
+                                                <div class="flex gap-1">
+                                                    <button type="button" @click="moveAiStep(index, -1)" :disabled="index === 0"
+                                                        class="rounded border border-[#E0D6C2] px-1.5 py-0.5 text-[11px] hover:bg-[#FAF6EF] disabled:opacity-40">↑</button>
+                                                    <button type="button" @click="moveAiStep(index, 1)" :disabled="index === aiSteps.length - 1"
+                                                        class="rounded border border-[#E0D6C2] px-1.5 py-0.5 text-[11px] hover:bg-[#FAF6EF] disabled:opacity-40">↓</button>
+                                                    <button type="button" @click="removeAiStep(index)"
+                                                        class="rounded border border-rose-200 px-1.5 py-0.5 text-[11px] text-rose-700 hover:bg-rose-50">Remove</button>
+                                                </div>
+                                            </div>
+                                            <textarea x-model="aiSteps[index]" rows="2"
+                                                placeholder="e.g. Extract the jewellery onto a clean white background"
+                                                class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm"
+                                                @input="syncAiPromptFromSteps()"></textarea>
+                                        </li>
+                                    </template>
+                                </ul>
+                                @error('aiPrompt') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
                             </div>
                         </div>
 
+                        @if ($aiPromptGroups->isNotEmpty())
+                            <div>
+                                <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                    <p class="text-xs font-medium text-[#6B6459]">Prompt groups</p>
+                                    <a href="{{ route('admin.ai-prompts') }}" wire:navigate
+                                        class="text-[11px] text-[#C9A227] hover:underline">Manage</a>
+                                </div>
+                                <div class="space-y-2">
+                                    @foreach ($aiPromptGroups as $group)
+                                        <details class="rounded-lg border border-[#EFE7D6] bg-[#FAF6EF]/60 px-3 py-2" wire:key="ai-group-{{ $group->id }}">
+                                            <summary class="cursor-pointer list-none text-sm font-medium text-[#1E1E1E]">
+                                                <span class="inline-flex flex-wrap items-center gap-2">
+                                                    <span>{{ $group->name }}</span>
+                                                    <span class="text-[11px] font-normal text-[#8C8474]">{{ $group->prompts->count() }} steps</span>
+                                                </span>
+                                            </summary>
+                                            @if ($group->description)
+                                                <p class="mt-2 text-xs text-[#8C8474]">{{ $group->description }}</p>
+                                            @endif
+                                            <ol class="mt-2 space-y-1 text-xs text-[#6B6459]">
+                                                @foreach ($group->prompts as $stepIndex => $groupPrompt)
+                                                    <li><span class="text-[#8C8474]">{{ $stepIndex + 1 }}.</span> {{ $groupPrompt->prompt }}</li>
+                                                @endforeach
+                                            </ol>
+                                            <button type="button"
+                                                wire:click="usePromptGroup({{ $group->id }})"
+                                                class="mt-3 rounded-full border border-[#C9A227] px-3 py-1 text-xs font-semibold text-[#C9A227] hover:bg-white">
+                                                Use this sequence
+                                            </button>
+                                        </details>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @else
+                            <p class="text-xs text-[#8C8474]">
+                                Tip: save reusable sequences under
+                                <a href="{{ route('admin.ai-prompts') }}" wire:navigate class="text-[#C9A227] hover:underline">AI Prompts</a>.
+                            </p>
+                        @endif
+
                         @if ($recentAiPrompts->isNotEmpty())
                             <div>
-                                <p class="text-xs font-medium text-[#6B6459] mb-2">Recent prompts</p>
+                                <p class="text-xs font-medium text-[#6B6459] mb-2">Recent single prompts</p>
                                 <div class="flex flex-wrap gap-2">
                                     @foreach ($recentAiPrompts as $recent)
                                         <button type="button"
@@ -882,9 +952,9 @@
                                     @click="generateWithRaw()"
                                     :disabled="! canGenerate()"
                                     class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
-                                    <span x-text="generating ? 'Generating…' : 'Generate'"></span>
+                                    <span x-text="generating ? 'Generating…' : (normalizedAiSteps().length > 1 ? `Generate ${normalizedAiSteps().length} steps` : 'Generate')"></span>
                                 </button>
-                                <p class="text-xs text-[#8C8474]">Each Generate saves another admin-only image on this product.</p>
+                                <p class="text-xs text-[#8C8474]">Multi-step runs edit the same product photo in sequence, then saves one admin-only image.</p>
                             </div>
 
                             <div x-show="generating || generateProgress > 0 || generateError" x-cloak class="max-w-md space-y-1">

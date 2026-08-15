@@ -343,6 +343,7 @@
     </div>
 
     @teleport('body')
+        <div wire:key="admin-products-modals">
         <div wire:key="put-price-modal-host">
             @if ($putPriceModalOpen)
                 <div class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
@@ -438,158 +439,159 @@
                 </div>
             @endif
         </div>
-
-        <div wire:key="bulk-ai-generate-modal-host">
-            @if ($bulkAiModalOpen)
-                <div class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
-                    @unless ($bulkAiRunning) wire:click.self="closeBulkAiGenerateModal" @endunless
-                    wire:key="bulk-ai-generate-modal"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label="Generate images with AI">
-                    <div class="flex max-h-[min(90dvh,42rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-xl"
-                        wire:click.stop>
-                        <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
-                            <div>
-                                <h2 class="font-semibold text-lg">Generate image with AI</h2>
-                                <p class="mt-0.5 text-xs text-[#8C8474]">
-                                    Runs the selected prompt sequence on each product’s photo, one at a time.
-                                    Every step is saved as an admin-only image.
-                                </p>
-                            </div>
-                            @unless ($bulkAiRunning)
-                                <button type="button" wire:click="closeBulkAiGenerateModal"
-                                    class="shrink-0 rounded-full border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
-                                    Close
-                                </button>
-                            @endunless
-                        </div>
-
-                        <div class="min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-3">
-                            @unless ($geminiConfigured)
-                                <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                                    Gemini is not configured. Set <code class="text-xs">GEMINI_API_KEY</code> before running.
-                                </div>
-                            @endunless
-
-                            @if ($bulkAiMessage)
-                                <div @class([
-                                    'rounded-lg text-sm px-4 py-3',
-                                    'bg-emerald-50 text-emerald-700' => ! $bulkAiRunning && str_starts_with($bulkAiMessage, 'Finished'),
-                                    'bg-[#FAF6EF] text-[#6B6459]' => $bulkAiRunning || ! str_starts_with($bulkAiMessage, 'Finished'),
-                                ])>{{ $bulkAiMessage }}</div>
-                            @endif
-
-                            @if ($bulkAiRows === [])
-                                <div>
-                                    <label class="block text-sm font-medium mb-1">AI prompt sequence</label>
-                                    @if ($aiPromptGroups->isEmpty())
-                                        <p class="text-sm text-[#6B6459]">
-                                            No prompt sequences yet.
-                                            <a href="{{ route('admin.ai-prompts') }}" wire:navigate class="font-medium text-[#C9A227] hover:underline">Create one</a>
-                                            first.
-                                        </p>
-                                    @else
-                                        <ul class="space-y-2">
-                                            @foreach ($aiPromptGroups as $group)
-                                                @php($stepCount = (int) ($group->prompts_count ?? $group->prompts->count()))
-                                                <li>
-                                                    <label class="flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition
-                                                        {{ (int) $bulkAiPromptGroupId === $group->id
-                                                            ? 'border-[#C9A227] bg-[#FAF6EF]'
-                                                            : 'border-[#EFE7D6] hover:border-[#C9A227]/60' }}">
-                                                        <input type="radio"
-                                                            wire:model.live="bulkAiPromptGroupId"
-                                                            value="{{ $group->id }}"
-                                                            class="mt-1 border-[#C9A227] text-[#C9A227] focus:ring-[#C9A227]"
-                                                            @disabled($bulkAiRunning)>
-                                                        <span class="min-w-0">
-                                                            <span class="block text-sm font-medium text-[#1E1E1E]">{{ $group->name }}</span>
-                                                            <span class="mt-0.5 block text-xs text-[#8C8474]">
-                                                                {{ $stepCount }} {{ $stepCount === 1 ? 'step' : 'steps' }}
-                                                                @if ($group->prompts->isNotEmpty())
-                                                                    · {{ \Illuminate\Support\Str::limit($group->prompts->first()->prompt, 72) }}
-                                                                @endif
-                                                            </span>
-                                                        </span>
-                                                    </label>
-                                                </li>
-                                            @endforeach
-                                        </ul>
-                                    @endif
-                                    @error('bulkAiPromptGroupId')
-                                        <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
-                                    @enderror
-                                    <p class="mt-3 text-xs text-[#8C8474]">
-                                        {{ count($selected) }} selected product{{ count($selected) === 1 ? '' : 's' }}.
-                                        Uses each product’s primary photo as the source.
-                                    </p>
-                                </div>
-                            @else
-                                <ul class="space-y-2">
-                                    @foreach ($bulkAiRows as $row)
-                                        <li wire:key="bulk-ai-{{ $row['id'] }}"
-                                            class="flex items-start gap-3 rounded-lg border border-[#EFE7D6] px-3 py-2.5">
-                                            @if ($row['thumb'])
-                                                <img src="{{ \App\Support\StorefrontAssets::url($row['thumb']) }}"
-                                                    alt=""
-                                                    class="h-12 w-12 shrink-0 rounded object-cover border border-[#E7DFCF] bg-[#FAF6EF]">
-                                            @else
-                                                <div class="h-12 w-12 shrink-0 rounded border border-[#E7DFCF] bg-[#FAF6EF]"></div>
-                                            @endif
-                                            <div class="min-w-0 flex-1">
-                                                <p class="truncate text-sm font-medium text-[#1E1E1E]" title="{{ $row['name'] }}">{{ $row['name'] }}</p>
-                                                @if ($row['message'])
-                                                    <p @class([
-                                                        'mt-0.5 text-xs',
-                                                        'text-rose-600' => $row['status'] === 'failed',
-                                                        'text-[#6B6459]' => $row['status'] !== 'failed',
-                                                    ])>{{ $row['message'] }}</p>
-                                                @endif
-                                            </div>
-                                            <span @class([
-                                                'shrink-0 text-[11px] font-semibold uppercase tracking-wide',
-                                                'text-[#8C8474]' => $row['status'] === 'pending',
-                                                'text-amber-700' => $row['status'] === 'generating',
-                                                'text-emerald-700' => $row['status'] === 'success',
-                                                'text-rose-600' => $row['status'] === 'failed',
-                                            ])>
-                                                @switch($row['status'])
-                                                    @case('pending') Waiting @break
-                                                    @case('generating') Running @break
-                                                    @case('success') Done @break
-                                                    @case('failed') Failed @break
-                                                    @default {{ $row['status'] }}
-                                                @endswitch
-                                            </span>
-                                        </li>
-                                    @endforeach
-                                </ul>
-                            @endif
-                        </div>
-
-                        <div class="flex shrink-0 items-center justify-end gap-2 border-t border-[#EFE7D6] px-4 py-3">
-                            @unless ($bulkAiRunning)
-                                <button type="button" wire:click="closeBulkAiGenerateModal"
-                                    class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
-                                    {{ $bulkAiRows === [] ? 'Cancel' : 'Done' }}
-                                </button>
-                            @endunless
-                            @if ($bulkAiRows === [])
-                                <button type="button"
-                                    wire:click="startBulkAiGenerate"
-                                    wire:loading.attr="disabled"
-                                    wire:target="startBulkAiGenerate"
-                                    @disabled(! $geminiConfigured || $aiPromptGroups->isEmpty())
-                                    class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
-                                    <span wire:loading.remove wire:target="startBulkAiGenerate">Run on {{ count($selected) }} product{{ count($selected) === 1 ? '' : 's' }}</span>
-                                    <span wire:loading wire:target="startBulkAiGenerate">Starting…</span>
-                                </button>
-                            @endif
-                        </div>
-                    </div>
-                </div>
-            @endif
         </div>
     @endteleport
+
+    <div wire:key="bulk-ai-generate-modal-host">
+        @if ($bulkAiModalOpen)
+            <div class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+                @unless ($bulkAiRunning) wire:click.self="closeBulkAiGenerateModal" @endunless
+                wire:key="bulk-ai-generate-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Generate images with AI">
+                <div class="flex max-h-[min(90dvh,42rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+                    wire:click.stop>
+                    <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
+                        <div>
+                            <h2 class="font-semibold text-lg">Generate image with AI</h2>
+                            <p class="mt-0.5 text-xs text-[#8C8474]">
+                                Runs the selected prompt sequence on each product’s photo, one at a time.
+                                Every step is saved as an admin-only image.
+                            </p>
+                        </div>
+                        @unless ($bulkAiRunning)
+                            <button type="button" wire:click="closeBulkAiGenerateModal"
+                                class="shrink-0 rounded-full border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
+                                Close
+                            </button>
+                        @endunless
+                    </div>
+
+                    <div class="min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-3">
+                        @unless ($geminiConfigured)
+                            <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                                Gemini is not configured. Set <code class="text-xs">GEMINI_API_KEY</code> before running.
+                            </div>
+                        @endunless
+
+                        @if ($bulkAiMessage)
+                            <div @class([
+                                'rounded-lg text-sm px-4 py-3',
+                                'bg-emerald-50 text-emerald-700' => ! $bulkAiRunning && str_starts_with($bulkAiMessage, 'Finished'),
+                                'bg-[#FAF6EF] text-[#6B6459]' => $bulkAiRunning || ! str_starts_with($bulkAiMessage, 'Finished'),
+                            ])>{{ $bulkAiMessage }}</div>
+                        @endif
+
+                        @if ($bulkAiRows === [])
+                            <div>
+                                <label class="block text-sm font-medium mb-1">AI prompt sequence</label>
+                                @if ($aiPromptGroups->isEmpty())
+                                    <p class="text-sm text-[#6B6459]">
+                                        No prompt sequences yet.
+                                        <a href="{{ route('admin.ai-prompts') }}" wire:navigate class="font-medium text-[#C9A227] hover:underline">Create one</a>
+                                        first.
+                                    </p>
+                                @else
+                                    <ul class="space-y-2">
+                                        @foreach ($aiPromptGroups as $group)
+                                            @php($stepCount = (int) ($group->prompts_count ?? $group->prompts->count()))
+                                            <li>
+                                                <label class="flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition
+                                                    {{ (int) $bulkAiPromptGroupId === $group->id
+                                                        ? 'border-[#C9A227] bg-[#FAF6EF]'
+                                                        : 'border-[#EFE7D6] hover:border-[#C9A227]/60' }}">
+                                                    <input type="radio"
+                                                        wire:model.live="bulkAiPromptGroupId"
+                                                        value="{{ $group->id }}"
+                                                        class="mt-1 border-[#C9A227] text-[#C9A227] focus:ring-[#C9A227]"
+                                                        @disabled($bulkAiRunning)>
+                                                    <span class="min-w-0">
+                                                        <span class="block text-sm font-medium text-[#1E1E1E]">{{ $group->name }}</span>
+                                                        <span class="mt-0.5 block text-xs text-[#8C8474]">
+                                                            {{ $stepCount }} {{ $stepCount === 1 ? 'step' : 'steps' }}
+                                                            @if ($group->prompts->isNotEmpty())
+                                                                · {{ \Illuminate\Support\Str::limit($group->prompts->first()->prompt, 72) }}
+                                                            @endif
+                                                        </span>
+                                                    </span>
+                                                </label>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                @endif
+                                @error('bulkAiPromptGroupId')
+                                    <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
+                                @enderror
+                                <p class="mt-3 text-xs text-[#8C8474]">
+                                    {{ count($selected) }} selected product{{ count($selected) === 1 ? '' : 's' }}.
+                                    Uses each product’s primary photo as the source.
+                                </p>
+                            </div>
+                        @else
+                            <ul class="space-y-2">
+                                @foreach ($bulkAiRows as $row)
+                                    <li wire:key="bulk-ai-{{ $row['id'] }}"
+                                        class="flex items-start gap-3 rounded-lg border border-[#EFE7D6] px-3 py-2.5">
+                                        @if ($row['thumb'])
+                                            <img src="{{ \App\Support\StorefrontAssets::url($row['thumb']) }}"
+                                                alt=""
+                                                class="h-12 w-12 shrink-0 rounded object-cover border border-[#E7DFCF] bg-[#FAF6EF]">
+                                        @else
+                                            <div class="h-12 w-12 shrink-0 rounded border border-[#E7DFCF] bg-[#FAF6EF]"></div>
+                                        @endif
+                                        <div class="min-w-0 flex-1">
+                                            <p class="truncate text-sm font-medium text-[#1E1E1E]" title="{{ $row['name'] }}">{{ $row['name'] }}</p>
+                                            @if ($row['message'])
+                                                <p @class([
+                                                    'mt-0.5 text-xs',
+                                                    'text-rose-600' => $row['status'] === 'failed',
+                                                    'text-[#6B6459]' => $row['status'] !== 'failed',
+                                                ])>{{ $row['message'] }}</p>
+                                            @endif
+                                        </div>
+                                        <span @class([
+                                            'shrink-0 text-[11px] font-semibold uppercase tracking-wide',
+                                            'text-[#8C8474]' => $row['status'] === 'pending',
+                                            'text-amber-700' => $row['status'] === 'generating',
+                                            'text-emerald-700' => $row['status'] === 'success',
+                                            'text-rose-600' => $row['status'] === 'failed',
+                                        ])>
+                                            @switch($row['status'])
+                                                @case('pending') Waiting @break
+                                                @case('generating') Running @break
+                                                @case('success') Done @break
+                                                @case('failed') Failed @break
+                                                @default {{ $row['status'] }}
+                                            @endswitch
+                                        </span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @endif
+                    </div>
+
+                    <div class="flex shrink-0 items-center justify-end gap-2 border-t border-[#EFE7D6] px-4 py-3">
+                        @unless ($bulkAiRunning)
+                            <button type="button" wire:click="closeBulkAiGenerateModal"
+                                class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
+                                {{ $bulkAiRows === [] ? 'Cancel' : 'Done' }}
+                            </button>
+                        @endunless
+                        @if ($bulkAiRows === [])
+                            <button type="button"
+                                wire:click="startBulkAiGenerate"
+                                wire:loading.attr="disabled"
+                                wire:target="startBulkAiGenerate"
+                                @disabled(! $geminiConfigured || $aiPromptGroups->isEmpty())
+                                class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
+                                <span wire:loading.remove wire:target="startBulkAiGenerate">Run on {{ count($selected) }} product{{ count($selected) === 1 ? '' : 's' }}</span>
+                                <span wire:loading wire:target="startBulkAiGenerate">Starting…</span>
+                            </button>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        @endif
+    </div>
 </div>

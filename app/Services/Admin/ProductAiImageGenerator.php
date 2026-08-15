@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\ProductImage;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\File;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
@@ -32,63 +33,149 @@ class ProductAiImageGenerator
             return ['ok' => false, 'error' => 'Add at least one instruction step (min 3 characters).'];
         }
 
+        $prepared = $this->prepareWorkingInput($product, $sourceImageId);
+
+        if (($prepared['ok'] ?? false) !== true) {
+            return ['ok' => false, 'error' => (string) ($prepared['error'] ?? 'Could not prepare source image.')];
+        }
+
+        $createdIds = [];
+
+        try {
+            foreach ($normalizedSteps as $index => $step) {
+                $result = $this->generateStep($product, $normalizedSteps, $index);
+
+                if (($result['ok'] ?? false) !== true) {
+                    return ['ok' => false, 'error' => (string) ($result['error'] ?? 'AI generation failed.')];
+                }
+
+                $createdIds[] = (int) $result['product_image_id'];
+            }
+        } finally {
+            $this->forgetWorkingInput($product);
+        }
+
+        return [
+            'ok' => true,
+            'steps' => count($normalizedSteps),
+            'product_image_ids' => $createdIds,
+        ];
+    }
+
+    /**
+     * Resolve the source photo and store it as the working input for step-by-step generation.
+     *
+     * @return array{ok: true}|array{ok: false, error: string}
+     */
+    public function prepareWorkingInput(Product $product, ?int $sourceImageId = null): array
+    {
         if (! $this->gemini->isConfigured()) {
             return ['ok' => false, 'error' => 'Gemini API key is not configured (GEMINI_API_KEY).'];
         }
 
         try {
-            [$currentBase64, $currentMime] = $this->resolveSourceImage($product, $sourceImageId);
+            [$base64, $mime] = $this->resolveSourceImage($product, $sourceImageId);
         } catch (InvalidArgumentException $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
 
-        $stepCount = count($normalizedSteps);
-        $createdIds = [];
-        $systemPrompt = $this->systemPrompt();
+        $binary = base64_decode($base64, true);
+
+        if ($binary === false || $binary === '') {
+            return ['ok' => false, 'error' => 'The product image data is invalid.'];
+        }
 
         try {
-            foreach ($normalizedSteps as $index => $step) {
-                $stepNumber = $index + 1;
-                $instruction = $this->stepInstruction($step, $stepNumber, $stepCount);
-
-                $result = $this->gemini->generateImage([
-                    ['text' => $instruction],
-                    [
-                        'inline_data' => [
-                            'mime_type' => $currentMime === 'image/jpg' ? 'image/jpeg' : $currentMime,
-                            'data' => $currentBase64,
-                        ],
-                    ],
-                ], $systemPrompt);
-
-                $binary = base64_decode((string) $result['base64'], true);
-
-                if ($binary === false || $binary === '') {
-                    throw new RuntimeException("Gemini returned an empty image on step {$stepNumber}.");
-                }
-
-                $normalized = $this->images->normalizeToGalleryJpeg($binary);
-                $image = $this->storeAdminOnlyBinary(
-                    $product,
-                    $normalized,
-                    $stepCount > 1 ? "AI step {$stepNumber}" : 'AI',
-                );
-                $createdIds[] = $image->id;
-
-                AiImagePrompt::remember($step, Auth::id());
-
-                $currentBase64 = base64_encode($normalized);
-                $currentMime = 'image/jpeg';
-            }
+            $normalized = $mime === 'image/jpeg' || $mime === 'image/jpg'
+                ? $binary
+                : $this->images->normalizeToGalleryJpeg($binary);
+            $this->writeWorkingInput($product, $normalized);
         } catch (Throwable $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
 
-        return [
-            'ok' => true,
-            'steps' => $stepCount,
-            'product_image_ids' => $createdIds,
-        ];
+        return ['ok' => true];
+    }
+
+    /**
+     * Run a single sequence step using the stored working input, save an admin-only image,
+     * and replace the working input with the step output.
+     *
+     * @param  list<string>  $steps
+     * @return array{ok: true, product_image_id: int, step: int, steps: int}|array{ok: false, error: string}
+     */
+    public function generateStep(Product $product, array $steps, int $stepIndex): array
+    {
+        $normalizedSteps = $this->normalizeSteps($steps);
+        $stepCount = count($normalizedSteps);
+
+        if ($stepCount === 0) {
+            return ['ok' => false, 'error' => 'Add at least one instruction step (min 3 characters).'];
+        }
+
+        if ($stepIndex < 0 || $stepIndex >= $stepCount) {
+            return ['ok' => false, 'error' => 'Invalid sequence step.'];
+        }
+
+        if (! $this->gemini->isConfigured()) {
+            return ['ok' => false, 'error' => 'Gemini API key is not configured (GEMINI_API_KEY).'];
+        }
+
+        $inputBinary = $this->readWorkingInput($product);
+
+        if ($inputBinary === null || $inputBinary === '') {
+            return ['ok' => false, 'error' => 'Working source image is missing. Re-run this product.'];
+        }
+
+        $stepNumber = $stepIndex + 1;
+        $step = $normalizedSteps[$stepIndex];
+        $instruction = $this->stepInstruction($step, $stepNumber, $stepCount);
+
+        try {
+            $result = $this->gemini->generateImage([
+                ['text' => $instruction],
+                [
+                    'inline_data' => [
+                        'mime_type' => 'image/jpeg',
+                        'data' => base64_encode($inputBinary),
+                    ],
+                ],
+            ], $this->systemPrompt());
+
+            $binary = base64_decode((string) $result['base64'], true);
+
+            if ($binary === false || $binary === '') {
+                throw new RuntimeException("Gemini returned an empty image on step {$stepNumber}.");
+            }
+
+            $normalized = $this->images->normalizeToGalleryJpeg($binary);
+            $image = $this->storeAdminOnlyBinary(
+                $product,
+                $normalized,
+                $stepCount > 1 ? "AI step {$stepNumber}" : 'AI',
+            );
+
+            AiImagePrompt::remember($step, Auth::id());
+            $this->writeWorkingInput($product, $normalized);
+
+            return [
+                'ok' => true,
+                'product_image_id' => $image->id,
+                'step' => $stepNumber,
+                'steps' => $stepCount,
+            ];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    public function forgetWorkingInput(Product $product): void
+    {
+        $path = $this->workingInputPath($product);
+
+        if (is_file($path)) {
+            @unlink($path);
+        }
     }
 
     /**
@@ -166,6 +253,32 @@ class ProductAiImageGenerator
         }
 
         return array_values($normalized);
+    }
+
+    private function writeWorkingInput(Product $product, string $binary): void
+    {
+        File::ensureDirectoryExists(dirname($this->workingInputPath($product)));
+        file_put_contents($this->workingInputPath($product), $binary);
+    }
+
+    private function readWorkingInput(Product $product): ?string
+    {
+        $path = $this->workingInputPath($product);
+
+        if (! is_file($path)) {
+            return null;
+        }
+
+        $binary = file_get_contents($path);
+
+        return $binary === false ? null : $binary;
+    }
+
+    private function workingInputPath(Product $product): string
+    {
+        $userId = Auth::id() ?: 0;
+
+        return storage_path('app/private/bulk-ai/'.$userId.'/'.$product->id.'.bin');
     }
 
     private function storeAdminOnlyBinary(Product $product, string $jpegBinary, string $altSuffix): ProductImage

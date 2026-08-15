@@ -95,7 +95,7 @@ class AdminProducts extends Component
 
     public ?string $bulkAiMessage = null;
 
-    /** @var list<array{id: int, name: string, thumb: ?string, status: string, message: ?string, steps_saved: int}> */
+    /** @var list<array{id: int, name: string, thumb: ?string, status: string, message: ?string, steps_saved: int, step_total: int, step_current: int, progress: int}> */
     public array $bulkAiRows = [];
 
     public function updatedSearch(): void
@@ -659,6 +659,9 @@ class AdminProducts extends Component
                 'status' => 'pending',
                 'message' => null,
                 'steps_saved' => 0,
+                'step_total' => count($steps),
+                'step_current' => 0,
+                'progress' => 0,
             ];
         }
 
@@ -670,14 +673,7 @@ class AdminProducts extends Component
 
         $this->bulkAiRunning = true;
         $this->bulkAiMessage = 'Running “'.$group->name.'” on '.count($this->bulkAiRows).' product(s)…';
-
-        if (app()->runningUnitTests()) {
-            $this->processNextBulkAiGenerate($generator);
-
-            return;
-        }
-
-        $this->js('setTimeout(() => $wire.processNextBulkAiGenerate(), 50)');
+        $this->queueNextBulkAiTick();
     }
 
     public function processNextBulkAiGenerate(ProductAiImageGenerator $generator): void
@@ -700,69 +696,163 @@ class AdminProducts extends Component
         }
 
         $steps = $generator->normalizeSteps($group->stepTexts());
-        $nextIndex = null;
+        $activeIndex = null;
 
         foreach ($this->bulkAiRows as $index => $row) {
-            if (($row['status'] ?? '') === 'pending') {
-                $nextIndex = $index;
+            if (($row['status'] ?? '') === 'generating') {
+                $activeIndex = $index;
                 break;
             }
         }
 
-        if ($nextIndex === null) {
-            $this->bulkAiRunning = false;
-            $success = collect($this->bulkAiRows)->where('status', 'success')->count();
-            $failed = collect($this->bulkAiRows)->where('status', 'failed')->count();
-            $this->bulkAiMessage = "Finished. {$success} succeeded, {$failed} failed.";
-            $this->message = $this->bulkAiMessage;
+        if ($activeIndex === null) {
+            foreach ($this->bulkAiRows as $index => $row) {
+                if (($row['status'] ?? '') === 'pending') {
+                    $activeIndex = $index;
+                    break;
+                }
+            }
+        }
+
+        if ($activeIndex === null) {
+            $this->finishBulkAiRun();
 
             return;
         }
 
-        $productId = (int) $this->bulkAiRows[$nextIndex]['id'];
-        $generating = $this->bulkAiRows[$nextIndex];
-        $generating['status'] = 'generating';
-        $generating['message'] = 'Generating…';
-        $this->bulkAiRows[$nextIndex] = $generating;
+        $row = $this->bulkAiRows[$activeIndex];
+        $productId = (int) $row['id'];
+        $product = Product::query()->with('images')->find($productId);
 
-        try {
-            $product = Product::query()->with('images')->findOrFail($productId);
-            $result = $generator->generateSequence($product, $steps);
+        if (! $product) {
+            $this->bulkAiRows[$activeIndex] = $this->bulkAiRowFailed($row, 'Product was deleted.');
+            $this->queueOrFinishBulkAi();
 
-            if (($result['ok'] ?? false) !== true) {
-                throw new \RuntimeException((string) ($result['error'] ?? 'AI generation failed.'));
-            }
-
-            $stepsSaved = (int) ($result['steps'] ?? 0);
-            $done = $this->bulkAiRows[$nextIndex];
-            $done['status'] = 'success';
-            $done['steps_saved'] = $stepsSaved;
-            $done['message'] = $stepsSaved === 1
-                ? 'Saved 1 admin-only image'
-                : "Saved {$stepsSaved} admin-only images";
-            $this->bulkAiRows[$nextIndex] = $done;
-            $this->selected = array_values(array_diff($this->selected, [$productId]));
-        } catch (\Throwable $e) {
-            $failed = $this->bulkAiRows[$nextIndex];
-            $failed['status'] = 'failed';
-            $failed['message'] = $e->getMessage();
-            $this->bulkAiRows[$nextIndex] = $failed;
+            return;
         }
 
-        $hasPending = collect($this->bulkAiRows)->contains(fn (array $row) => ($row['status'] ?? '') === 'pending');
+        // First tick for this product: prepare source and paint progress before the long Gemini call.
+        if (($row['status'] ?? '') === 'pending') {
+            $prepared = $generator->prepareWorkingInput($product);
 
-        if ($hasPending) {
-            if (app()->runningUnitTests()) {
-                $this->processNextBulkAiGenerate($generator);
+            if (($prepared['ok'] ?? false) !== true) {
+                $this->bulkAiRows[$activeIndex] = $this->bulkAiRowFailed(
+                    $row,
+                    (string) ($prepared['error'] ?? 'Could not prepare source image.'),
+                );
+                $generator->forgetWorkingInput($product);
+                $this->queueOrFinishBulkAi();
 
                 return;
             }
 
-            $this->js('setTimeout(() => $wire.processNextBulkAiGenerate(), 50)');
+            $stepTotal = max(1, count($steps));
+            $this->bulkAiRows[$activeIndex] = [
+                ...$row,
+                'status' => 'generating',
+                'step_total' => $stepTotal,
+                'step_current' => 0,
+                'steps_saved' => 0,
+                'progress' => 4,
+                'message' => 'Step 1 of '.$stepTotal.'…',
+            ];
+
+            $this->queueNextBulkAiTick();
 
             return;
         }
 
+        $stepTotal = max(1, (int) ($row['step_total'] ?? count($steps)));
+        $stepIndex = (int) ($row['step_current'] ?? 0);
+
+        $result = $generator->generateStep($product, $steps, $stepIndex);
+
+        if (($result['ok'] ?? false) !== true) {
+            $generator->forgetWorkingInput($product);
+            $this->bulkAiRows[$activeIndex] = $this->bulkAiRowFailed(
+                $row,
+                (string) ($result['error'] ?? 'AI generation failed.'),
+            );
+            $this->queueOrFinishBulkAi();
+
+            return;
+        }
+
+        $stepsSaved = (int) ($row['steps_saved'] ?? 0) + 1;
+        $nextStepIndex = $stepIndex + 1;
+        $progress = (int) round(($nextStepIndex / $stepTotal) * 100);
+
+        if ($nextStepIndex >= $stepTotal) {
+            $generator->forgetWorkingInput($product);
+            $this->bulkAiRows[$activeIndex] = [
+                ...$row,
+                'status' => 'success',
+                'step_current' => $stepTotal,
+                'steps_saved' => $stepsSaved,
+                'progress' => 100,
+                'message' => $stepsSaved === 1
+                    ? 'Saved 1 admin-only image'
+                    : "Saved {$stepsSaved} admin-only images",
+            ];
+            $this->selected = array_values(array_diff($this->selected, [$productId]));
+            $this->queueOrFinishBulkAi();
+
+            return;
+        }
+
+        $this->bulkAiRows[$activeIndex] = [
+            ...$row,
+            'status' => 'generating',
+            'step_current' => $nextStepIndex,
+            'steps_saved' => $stepsSaved,
+            'progress' => max(4, $progress),
+            'message' => 'Step '.($nextStepIndex + 1).' of '.$stepTotal.'…',
+        ];
+
+        $this->queueNextBulkAiTick();
+    }
+
+    /**
+     * @param  array{id: int, name: string, thumb: ?string, status: string, message: ?string, steps_saved: int, step_total: int, step_current: int, progress: int}  $row
+     * @return array{id: int, name: string, thumb: ?string, status: string, message: ?string, steps_saved: int, step_total: int, step_current: int, progress: int}
+     */
+    private function bulkAiRowFailed(array $row, string $message): array
+    {
+        return [
+            ...$row,
+            'status' => 'failed',
+            'message' => $message,
+            'progress' => (int) ($row['progress'] ?? 0),
+        ];
+    }
+
+    private function queueOrFinishBulkAi(): void
+    {
+        $hasMore = collect($this->bulkAiRows)->contains(
+            fn (array $row) => in_array($row['status'] ?? '', ['pending', 'generating'], true),
+        );
+
+        if ($hasMore) {
+            $this->queueNextBulkAiTick();
+
+            return;
+        }
+
+        $this->finishBulkAiRun();
+    }
+
+    private function queueNextBulkAiTick(): void
+    {
+        // Unit tests drive ticks explicitly so intermediate progress can be asserted.
+        if (app()->runningUnitTests()) {
+            return;
+        }
+
+        $this->js('setTimeout(() => $wire.processNextBulkAiGenerate(), 50)');
+    }
+
+    private function finishBulkAiRun(): void
+    {
         $this->bulkAiRunning = false;
         $success = collect($this->bulkAiRows)->where('status', 'success')->count();
         $failed = collect($this->bulkAiRows)->where('status', 'failed')->count();

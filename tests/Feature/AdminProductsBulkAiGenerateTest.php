@@ -90,6 +90,18 @@ class AdminProductsBulkAiGenerateTest extends TestCase
         return $group->fresh(['prompts']);
     }
 
+    private function drainBulkAi($component): void
+    {
+        $guard = 0;
+
+        while ($component->get('bulkAiRunning') && $guard < 100) {
+            $component->call('processNextBulkAiGenerate');
+            $guard++;
+        }
+
+        $this->assertLessThan(100, $guard, 'Bulk AI run did not finish.');
+    }
+
     #[Test]
     public function open_modal_requires_selection_and_lists_prompt_groups(): void
     {
@@ -134,8 +146,11 @@ class AdminProductsBulkAiGenerateTest extends TestCase
             ->call('toggleSelected', $second->id)
             ->call('openBulkAiGenerateModal')
             ->set('bulkAiPromptGroupId', $group->id)
-            ->call('startBulkAiGenerate')
-            ->assertSet('bulkAiRunning', false)
+            ->call('startBulkAiGenerate');
+
+        $this->drainBulkAi($component);
+
+        $component->assertSet('bulkAiRunning', false)
             ->assertSee('Finished. 2 succeeded, 0 failed.');
 
         $rows = $component->get('bulkAiRows');
@@ -144,10 +159,56 @@ class AdminProductsBulkAiGenerateTest extends TestCase
         $this->assertSame('success', $rows[1]['status']);
         $this->assertSame(2, $rows[0]['steps_saved']);
         $this->assertSame(2, $rows[1]['steps_saved']);
+        $this->assertSame(100, $rows[0]['progress']);
+        $this->assertSame(100, $rows[1]['progress']);
         $this->assertSame([], $component->get('selected'));
 
         $this->assertSame(2, ProductImage::query()->where('product_id', $first->id)->where('is_admin_only', true)->count());
         $this->assertSame(2, ProductImage::query()->where('product_id', $second->id)->where('is_admin_only', true)->count());
+        $component->assertSeeHtml(route('admin.products.edit', $first))
+            ->assertSeeHtml(route('admin.products.edit', $second));
+    }
+
+    #[Test]
+    public function bulk_generate_updates_step_progress_between_ticks(): void
+    {
+        config(['gemini.api_key' => 'test-key']);
+
+        $gemini = Mockery::mock(GeminiClient::class);
+        $gemini->shouldReceive('isConfigured')->andReturn(true);
+        $gemini->shouldReceive('generateImage')
+            ->once()
+            ->andReturn([
+                'mime' => 'image/png',
+                'base64' => $this->tinyPngBase64(),
+            ]);
+        $this->app->instance(GeminiClient::class, $gemini);
+
+        $this->actingAs($this->adminUser());
+        $group = $this->promptGroup();
+        $product = $this->productWithPrimaryImage('Progress Ring');
+
+        $component = Livewire::test(AdminProducts::class)
+            ->call('toggleSelected', $product->id)
+            ->call('openBulkAiGenerateModal')
+            ->set('bulkAiPromptGroupId', $group->id)
+            ->call('startBulkAiGenerate')
+            ->assertSet('bulkAiRunning', true);
+
+        $component->call('processNextBulkAiGenerate');
+        $row = $component->get('bulkAiRows')[0];
+        $this->assertSame('generating', $row['status']);
+        $this->assertSame(0, $row['step_current']);
+        $this->assertSame(4, $row['progress']);
+        $this->assertStringContainsString('Step 1 of 2', $row['message']);
+
+        $component->call('processNextBulkAiGenerate');
+        $row = $component->get('bulkAiRows')[0];
+        $this->assertSame('generating', $row['status']);
+        $this->assertSame(1, $row['step_current']);
+        $this->assertSame(50, $row['progress']);
+        $this->assertStringContainsString('Step 2 of 2', $row['message']);
+        $this->assertSame(1, ProductImage::query()->where('product_id', $product->id)->where('is_admin_only', true)->count());
     }
 
     #[Test]
@@ -180,8 +241,11 @@ class AdminProductsBulkAiGenerateTest extends TestCase
             ->call('toggleSelected', $withPhoto->id)
             ->call('openBulkAiGenerateModal')
             ->set('bulkAiPromptGroupId', $group->id)
-            ->call('startBulkAiGenerate')
-            ->assertSee('Finished. 1 succeeded, 1 failed.');
+            ->call('startBulkAiGenerate');
+
+        $this->drainBulkAi($component);
+
+        $component->assertSee('Finished. 1 succeeded, 1 failed.');
 
         $rows = collect($component->get('bulkAiRows'))->keyBy('id');
         $this->assertSame('failed', $rows[$withoutPhoto->id]['status']);

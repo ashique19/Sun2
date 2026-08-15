@@ -134,6 +134,126 @@ class AdminProductAiPromptSequenceTest extends TestCase
     }
 
     #[Test]
+    public function retry_uses_previous_step_product_image_when_private_bins_are_missing(): void
+    {
+        config(['gemini.api_key' => 'test-key']);
+
+        $capturedInputs = [];
+        $gemini = Mockery::mock(GeminiClient::class);
+        $gemini->shouldReceive('isConfigured')->andReturn(true);
+        $gemini->shouldReceive('generateImage')
+            ->times(3)
+            ->andReturnUsing(function (array $parts) use (&$capturedInputs) {
+                $capturedInputs[] = (string) ($parts[1]['inline_data']['data'] ?? '');
+
+                return [
+                    'mime' => 'image/png',
+                    'base64' => $this->tinyPngBase64(),
+                ];
+            });
+        $this->app->instance(GeminiClient::class, $gemini);
+
+        $admin = $this->adminUser();
+        $this->actingAs($admin);
+        $product = $this->product();
+        $source = app(ProductImageService::class)->store(
+            $product,
+            UploadedFile::fake()->image('source.jpg', 320, 240),
+        );
+
+        $component = Livewire::test(AdminProductEdit::class, ['product' => $product->fresh(['images'])])
+            ->call('generateAiImage', '', 'image/jpeg', $source->id, [
+                'Extract the jewellery',
+                'Change colour to rose gold',
+            ])
+            ->assertCount('aiCandidates', 2)
+            ->assertSet('aiGenerateError', null);
+
+        $candidates = $component->get('aiCandidates');
+        $stepOne = $candidates[0];
+        $stepTwo = $candidates[1];
+        $previousProductImageId = (int) ($stepOne['product_image_id'] ?? 0);
+
+        $this->assertGreaterThan(0, $previousProductImageId);
+
+        $previousImage = ProductImage::query()->findOrFail($previousProductImageId);
+        $previousAbsolute = public_path(ltrim(str_replace('\\', '/', (string) $previousImage->path), '/'));
+        $previousBinary = file_get_contents($previousAbsolute);
+        $this->assertNotFalse($previousBinary);
+        $expectedInput = base64_encode($previousBinary);
+
+        $candidateDir = storage_path('app/private/ai-candidates/'.$admin->id);
+        foreach (glob($candidateDir.'/*.bin') ?: [] as $bin) {
+            @unlink($bin);
+        }
+        foreach (glob($candidateDir.'/*.json') ?: [] as $meta) {
+            @unlink($meta);
+        }
+
+        $versionBefore = (int) $stepTwo['version'];
+
+        $component->call('retryAiCandidateStep', $stepTwo['id'], '', 'image/jpeg', null)
+            ->assertSet('aiGenerateError', null)
+            ->assertCount('aiCandidates', 2);
+
+        $this->assertSame($versionBefore + 1, $component->get('aiCandidates')[1]['version']);
+        $this->assertCount(3, $capturedInputs);
+        $this->assertSame($expectedInput, $capturedInputs[2]);
+    }
+
+    #[Test]
+    public function retry_fails_clearly_when_previous_step_image_is_unavailable(): void
+    {
+        config(['gemini.api_key' => 'test-key']);
+
+        $gemini = Mockery::mock(GeminiClient::class);
+        $gemini->shouldReceive('isConfigured')->andReturn(true);
+        $gemini->shouldReceive('generateImage')
+            ->twice()
+            ->andReturn([
+                'mime' => 'image/png',
+                'base64' => $this->tinyPngBase64(),
+            ]);
+        $this->app->instance(GeminiClient::class, $gemini);
+
+        $admin = $this->adminUser();
+        $this->actingAs($admin);
+        $product = $this->product();
+        $source = app(ProductImageService::class)->store(
+            $product,
+            UploadedFile::fake()->image('source.jpg', 320, 240),
+        );
+
+        $component = Livewire::test(AdminProductEdit::class, ['product' => $product->fresh(['images'])])
+            ->call('generateAiImage', '', 'image/jpeg', $source->id, [
+                'Extract the jewellery',
+                'Change colour to rose gold',
+            ])
+            ->assertCount('aiCandidates', 2);
+
+        $candidates = $component->get('aiCandidates');
+        $stepOneId = $candidates[0]['id'];
+        $stepTwoId = $candidates[1]['id'];
+        $previousProductImageId = (int) ($candidates[0]['product_image_id'] ?? 0);
+
+        $candidateDir = storage_path('app/private/ai-candidates/'.$admin->id);
+        foreach (glob($candidateDir.'/*.bin') ?: [] as $bin) {
+            @unlink($bin);
+        }
+
+        ProductImage::query()->whereKey($previousProductImageId)->delete();
+
+        $updated = $candidates;
+        $updated[0]['product_image_id'] = null;
+        $component->set('aiCandidates', $updated);
+
+        $component->call('retryAiCandidateStep', $stepTwoId, '', 'image/jpeg', null)
+            ->assertSet('aiGenerateError', 'The previous step image is no longer available. Re-run the full sequence, then retry.');
+
+        $this->assertSame($stepOneId, $component->get('aiCandidates')[0]['id']);
+    }
+
+    #[Test]
     public function use_prompt_group_loads_sequence_and_modal_links_recent_prompts_page(): void
     {
         $this->actingAs($this->adminUser());

@@ -948,7 +948,10 @@
                                 <p class="text-xs text-[#8C8474]">Each step is saved as its own admin-only image. Use retry on a step if that result looks wrong.</p>
                             </div>
 
-                            <div x-show="generating || generateProgress > 0 || generateError" x-cloak class="max-w-md space-y-1">
+                            <div x-ref="aiGenerateProgress"
+                                x-show="generating || generateProgress > 0 || generateError"
+                                x-cloak
+                                class="max-w-md space-y-1 scroll-mt-4">
                                 <div class="flex items-center justify-between gap-2 text-xs"
                                     :class="generateError ? 'text-rose-600' : 'text-[#8C8474]'">
                                     <span x-text="generateStatus || 'Working…'"></span>

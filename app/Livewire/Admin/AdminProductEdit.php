@@ -536,9 +536,11 @@ class AdminProductEdit extends Component
             }
 
             $this->persistAiCandidateBinary($candidateId, $binary, (string) ($result['mime'] ?? 'image/jpeg'));
-            $this->aiCandidates[$index]['mime'] = 'image/jpeg';
-            $this->aiCandidates[$index]['version'] = ((int) ($candidate['version'] ?? 1)) + 1;
-            $this->aiCandidates[$index]['step_prompt'] = $stepPrompt;
+
+            $updated = $candidate;
+            $updated['mime'] = 'image/jpeg';
+            $updated['version'] = ((int) ($candidate['version'] ?? 1)) + 1;
+            $updated['step_prompt'] = $stepPrompt;
 
             $productImageId = (int) ($candidate['product_image_id'] ?? 0);
 
@@ -550,8 +552,11 @@ class AdminProductEdit extends Component
                     adminOnly: true,
                     altSuffix: 'AI step '.($stepIndex + 1),
                 );
-                $this->aiCandidates[$index]['product_image_id'] = $productImage?->id;
+                $updated['product_image_id'] = $productImage?->id;
             }
+
+            // Reassign the whole row so Livewire marks aiCandidates dirty after nested updates.
+            $this->aiCandidates[$index] = $updated;
 
             AiImagePrompt::remember($stepPrompt, Auth::id());
             $this->refreshImages();
@@ -592,7 +597,11 @@ class AdminProductEdit extends Component
     }
 
     /**
-     * @param  array{sequence_id?: string|null, step_index?: int|null, source_image_id?: int|null}  $candidate
+     * Prefer the previous step's durable product image when private session bins are gone.
+     * Never fall back to the original sequence source for step N>0 — that silently re-runs
+     * the wrong prompt input and looks like a broken retry.
+     *
+     * @param  array{sequence_id?: string|null, step_index?: int|null, source_image_id?: int|null, product_image_id?: int|null}  $candidate
      * @return array{0: string, 1: string}
      */
     private function resolveRetryInputImage(
@@ -615,7 +624,17 @@ class AdminProductEdit extends Component
                 if ($binary !== null && $binary !== '') {
                     return [base64_encode($binary), 'image/jpeg'];
                 }
+
+                $previousProductImageId = (int) ($previous['product_image_id'] ?? 0);
+
+                if ($previousProductImageId > 0) {
+                    return $this->resolveAiSourceImage('', '', $previousProductImageId);
+                }
             }
+
+            throw new InvalidArgumentException(
+                'The previous step image is no longer available. Re-run the full sequence, then retry.'
+            );
         }
 
         if ($sequenceId !== '') {

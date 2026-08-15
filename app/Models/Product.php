@@ -71,11 +71,14 @@ class Product extends Model
         return $this->hasMany(ProductImage::class)->orderBy('sort_order');
     }
 
-    /** Single image for cards/lists (primary preferred, else lowest sort_order). */
+    /** Single image for cards/lists (primary preferred, else lowest sort_order). Storefront-visible only. */
     public function listingImage(): HasOne
     {
         return $this->hasOne(ProductImage::class)->ofMany(
             ['is_primary' => 'max', 'sort_order' => 'min'],
+            function ($query) {
+                $query->where('is_admin_only', false);
+            },
         );
     }
 
@@ -130,13 +133,14 @@ class Product extends Model
         }
 
         if ($this->relationLoaded('images')) {
-            $image = $this->images->firstWhere('is_primary', true) ?? $this->images->first();
+            $visible = $this->images->where('is_admin_only', false);
+            $image = $visible->firstWhere('is_primary', true) ?? $visible->first();
 
             return $image?->path;
         }
 
-        return $this->images()->where('is_primary', true)->value('path')
-            ?? $this->images()->orderBy('sort_order')->value('path');
+        return $this->images()->where('is_admin_only', false)->where('is_primary', true)->value('path')
+            ?? $this->images()->where('is_admin_only', false)->orderBy('sort_order')->value('path');
     }
 
     public function isInStock(): bool

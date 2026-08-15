@@ -499,7 +499,7 @@ class AdminProducts extends Component
         $this->putPriceRemaining = (clone $query)->count();
 
         $this->putPriceBatch = $query
-            ->with(['images' => fn ($q) => $q->orderBy('sort_order')->limit(1)])
+            ->with(['images' => fn ($q) => $q->where('is_admin_only', false)->orderBy('sort_order')->limit(1)])
             ->orderByDesc('id')
             ->limit(self::PUT_PRICE_BATCH_SIZE)
             ->get()
@@ -523,7 +523,7 @@ class AdminProducts extends Component
 
         $products = Product::query()
             ->whereIn('id', $batchIds)
-            ->with(['images' => fn ($q) => $q->orderBy('sort_order')->limit(1)])
+            ->with(['images' => fn ($q) => $q->where('is_admin_only', false)->orderBy('sort_order')->limit(1)])
             ->get()
             ->keyBy('id');
 
@@ -554,7 +554,7 @@ class AdminProducts extends Component
         $filters->remember();
 
         $products = $filters->apply(
-            Product::query()->with(['category:id,name', 'images' => fn ($q) => $q->orderBy('sort_order')->limit(1)])
+            Product::query()->with(['category:id,name', 'images' => fn ($q) => $q->where('is_admin_only', false)->orderBy('sort_order')->limit(1)])
         )
             ->orderBy('display_order')
             ->orderByDesc('id')

@@ -317,6 +317,9 @@
                                     @if ($image->is_primary)
                                         <span class="absolute top-2 left-2 rounded bg-[#C9A227] px-2 py-0.5 text-[10px] font-semibold text-white">Primary</span>
                                     @endif
+                                    @if (! $image->is_primary && $image->is_admin_only)
+                                        <span class="absolute top-2 left-2 rounded bg-[#1E1E1E] px-2 py-0.5 text-[10px] font-semibold text-white">Admin only</span>
+                                    @endif
                                     <button type="button"
                                         @click.stop="openSavedEditor({{ $image->id }}, @js($galleryPreviewUrl))"
                                         class="absolute top-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-[#1E1E1E] shadow-sm ring-1 ring-[#E0D6C2] hover:bg-[#FAF6EF]"
@@ -327,7 +330,9 @@
                                         </svg>
                                     </button>
                                 </div>
-                                @php($imageMeta = $image->fileMeta())
+                                @php
+                                    $imageMeta = $image->fileMeta();
+                                @endphp
                                 @if ($imageMeta && $imageMeta['label'] !== '')
                                     <p class="text-[11px] tabular-nums text-[#8C8474]" title="Image dimensions and file size">{{ $imageMeta['label'] }}</p>
                                 @endif
@@ -339,12 +344,12 @@
                                         class="w-full rounded-lg border border-[#E0D6C2] px-3 py-1.5 text-xs">
                                 </div>
                                 <div class="flex flex-wrap gap-1">
-                                    @unless ($image->is_primary)
+                                    @if (! $image->is_primary && ! $image->is_admin_only)
                                         <button type="button" wire:click="setPrimaryImage({{ $image->id }})"
                                             class="rounded border border-[#E0D6C2] px-2 py-1 text-xs hover:bg-[#FAF6EF]">
                                             Set primary
                                         </button>
-                                    @endunless
+                                    @endif
                                     <button type="button" wire:click="moveImageEarlier({{ $image->id }})"
                                         class="rounded border border-[#E0D6C2] px-2 py-1 text-xs hover:bg-[#FAF6EF]">↑</button>
                                     <button type="button" wire:click="moveImageLater({{ $image->id }})"
@@ -410,7 +415,9 @@
                                 alt="Priced image for {{ $product->name }}"
                                 class="w-full object-contain">
                         </div>
-                        @php($pricedMeta = \App\Support\ImageFileMeta::forPublicPath($product->priced_image_path))
+                        @php
+                            $pricedMeta = \App\Support\ImageFileMeta::forPublicPath($product->priced_image_path);
+                        @endphp
                         @if ($pricedMeta && $pricedMeta['label'] !== '')
                             <p class="text-[11px] tabular-nums text-[#8C8474]" title="Priced image dimensions and file size">{{ $pricedMeta['label'] }}</p>
                         @endif
@@ -773,7 +780,7 @@
                         <div>
                             <h2 class="font-semibold text-lg">Generate with AI</h2>
                             <p class="mt-1 text-xs text-[#8C8474]">
-                                Choose a raw photo, write a prompt, then Generate. Candidates stay for this session only until you add them with +.
+                                Pick an existing product image or upload a raw photo, write a prompt, then Generate. Results are saved as admin-only images (hidden from the storefront) until you make them public.
                             </p>
                         </div>
                         <button type="button" wire:click="closeAiGenerateModal" class="text-sm text-[#8C8474] hover:text-[#1E1E1E]">Close</button>
@@ -788,29 +795,61 @@
                         @endunless
 
                         <div class="grid gap-4 sm:grid-cols-2">
-                            <div>
-                                <label class="block text-sm font-medium mb-1">Raw photo</label>
-                                <input type="file"
-                                    accept="image/jpeg,image/png,image/webp"
-                                    @change="uploadRawPhoto($event)"
-                                    class="block w-full text-sm text-[#6B6459] file:mr-3 file:rounded-full file:border-0 file:bg-[#FAF6EF] file:px-4 file:py-2 file:text-sm file:font-medium file:text-[#C9A227] hover:file:bg-[#EFE7D6] disabled:opacity-60"
-                                    :disabled="rawUploading">
-                                <div x-show="rawUploading" x-cloak class="mt-2 space-y-1">
-                                    <div class="flex items-center justify-between gap-2 text-xs text-[#8C8474]">
-                                        <span>Preparing raw photo…</span>
-                                        <span class="tabular-nums" x-text="`${rawUploadProgress}%`"></span>
-                                    </div>
-                                    <div class="h-1.5 overflow-hidden rounded-full bg-[#EFE7D6]" role="progressbar"
-                                        :aria-valuenow="rawUploadProgress" aria-valuemin="0" aria-valuemax="100">
-                                        <div class="h-full rounded-full bg-[#C9A227] transition-[width] duration-150"
-                                            :style="`width: ${rawUploadProgress}%`"></div>
-                                    </div>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Source image</label>
+                                    @if ($product?->images->isNotEmpty())
+                                        <p class="mb-2 text-xs text-[#8C8474]">Use an existing product image, or upload a new raw photo below.</p>
+                                        <ul class="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                                            @foreach ($product->images as $sourceImage)
+                                                <li>
+                                                    <button type="button"
+                                                        @click="selectExistingSourceImage({{ $sourceImage->id }})"
+                                                        class="relative aspect-square w-full overflow-hidden rounded-lg border bg-[#FAF6EF] ring-offset-1 transition"
+                                                        :class="selectedSourceImageId === {{ $sourceImage->id }} ? 'border-[#C9A227] ring-2 ring-[#C9A227]' : 'border-[#E0D6C2] hover:border-[#C9A227]'"
+                                                        title="Use this product image">
+                                                        <img
+                                                            src="{{ route('admin.products.images.raw', [$product, $sourceImage]) }}?v={{ rawurlencode(md5((string) $sourceImage->path).'-'.$imagesEpoch) }}"
+                                                            alt="{{ $sourceImage->alt }}"
+                                                            class="h-full w-full object-cover">
+                                                        @if ($sourceImage->is_admin_only)
+                                                            <span class="absolute bottom-1 left-1 rounded bg-[#1E1E1E]/90 px-1 py-0.5 text-[9px] font-semibold text-white">Admin</span>
+                                                        @endif
+                                                    </button>
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                        <p x-show="selectedSourceImageId" x-cloak class="mt-2 text-xs text-[#8C8474]">
+                                            Using selected product image as the source.
+                                        </p>
+                                    @else
+                                        <p class="text-xs text-[#8C8474]">No saved product images yet — upload a raw photo below.</p>
+                                    @endif
                                 </div>
-                                <p x-show="! rawUploading && hasRawImage" x-cloak class="mt-2 text-xs text-[#8C8474]">
-                                    Raw photo ready<span x-show="rawImageName" x-text="`: ${rawImageName}`"></span>.
-                                </p>
-                                <p x-show="rawUploadError" x-text="rawUploadError" x-cloak class="mt-1 text-xs text-rose-600"></p>
-                                @error('aiRawImage') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Or upload a raw photo</label>
+                                    <input type="file"
+                                        accept="image/jpeg,image/png,image/webp"
+                                        @change="uploadRawPhoto($event)"
+                                        class="block w-full text-sm text-[#6B6459] file:mr-3 file:rounded-full file:border-0 file:bg-[#FAF6EF] file:px-4 file:py-2 file:text-sm file:font-medium file:text-[#C9A227] hover:file:bg-[#EFE7D6] disabled:opacity-60"
+                                        :disabled="rawUploading">
+                                    <div x-show="rawUploading" x-cloak class="mt-2 space-y-1">
+                                        <div class="flex items-center justify-between gap-2 text-xs text-[#8C8474]">
+                                            <span>Preparing raw photo…</span>
+                                            <span class="tabular-nums" x-text="`${rawUploadProgress}%`"></span>
+                                        </div>
+                                        <div class="h-1.5 overflow-hidden rounded-full bg-[#EFE7D6]" role="progressbar"
+                                            :aria-valuenow="rawUploadProgress" aria-valuemin="0" aria-valuemax="100">
+                                            <div class="h-full rounded-full bg-[#C9A227] transition-[width] duration-150"
+                                                :style="`width: ${rawUploadProgress}%`"></div>
+                                        </div>
+                                    </div>
+                                    <p x-show="! rawUploading && hasRawImage" x-cloak class="mt-2 text-xs text-[#8C8474]">
+                                        Raw photo ready<span x-show="rawImageName" x-text="`: ${rawImageName}`"></span>.
+                                    </p>
+                                    <p x-show="rawUploadError" x-text="rawUploadError" x-cloak class="mt-1 text-xs text-rose-600"></p>
+                                    @error('aiRawImage') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                                </div>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium mb-1">Prompt</label>
@@ -845,7 +884,7 @@
                                     class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
                                     <span x-text="generating ? 'Generating…' : 'Generate'"></span>
                                 </button>
-                                <p class="text-xs text-[#8C8474]">Each Generate adds another candidate to this session list.</p>
+                                <p class="text-xs text-[#8C8474]">Each Generate saves another admin-only image on this product.</p>
                             </div>
 
                             <div x-show="generating || generateProgress > 0 || generateError" x-cloak class="max-w-md space-y-1">
@@ -876,6 +915,7 @@
                                                     <img src="{{ route('admin.products.ai-candidate', $candidate['id']) }}?v={{ $candidate['version'] ?? 1 }}"
                                                         alt="{{ $candidate['name'] }}"
                                                         class="h-full w-full object-cover">
+                                                    <span class="absolute top-2 left-2 rounded bg-[#1E1E1E]/90 px-2 py-0.5 text-[10px] font-semibold text-white">Admin only</span>
                                                 </div>
                                                 <div class="flex flex-wrap gap-1">
                                                     <button type="button"
@@ -887,12 +927,13 @@
                                                         wire:click="promoteAiCandidate(@js($candidate['id']))"
                                                         wire:loading.attr="disabled"
                                                         class="rounded border border-emerald-300 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
-                                                        title="Add to product images">
-                                                        +
+                                                        title="Make public on the storefront gallery">
+                                                        Make public
                                                     </button>
                                                     <button type="button"
                                                         wire:click="removeAiCandidate(@js($candidate['id']))"
-                                                        class="rounded border border-rose-200 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50">
+                                                        class="rounded border border-rose-200 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50"
+                                                        title="Discard and delete the admin-only saved image">
                                                         Discard
                                                     </button>
                                                 </div>
@@ -901,7 +942,6 @@
                                     </ul>
                                 </div>
                             @endif
-                        </div>
 
                         <div wire:ignore>
                             <template x-teleport="body">
@@ -939,6 +979,7 @@
                         </div>
                     </div>
                 </div>
+            </div>
         @endif
     </div>
 

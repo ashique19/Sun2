@@ -72,7 +72,8 @@ class AdminProductAiImageGenerateTest extends TestCase
             ->assertSeeHtml('generateStatus')
             ->assertSeeHtml('role="progressbar"')
             ->assertSeeHtml(':disabled="! canGenerate()"')
-            ->assertSeeHtml('Raw photo ready')
+            ->assertSeeHtml('Or upload a raw photo')
+            ->assertSeeHtml('admin-only')
             ->assertDontSeeHtml('$wire.upload(')
             ->assertDontSeeHtml('wire:model="aiRawImage"');
     }
@@ -122,7 +123,8 @@ class AdminProductAiImageGenerateTest extends TestCase
             ->call('generateAiImage', $this->tinyPngBase64(), 'image/png')
             ->assertSet('aiGenerateError', null)
             ->assertHasNoErrors()
-            ->assertCount('aiCandidates', 1);
+            ->assertCount('aiCandidates', 1)
+            ->assertSet('message', 'AI image saved (admin only — not shown on the storefront).');
 
         $this->assertDatabaseHas('ai_image_prompts', [
             'prompt' => 'Clean white background jewelry photo',
@@ -130,6 +132,7 @@ class AdminProductAiImageGenerateTest extends TestCase
 
         $this->assertSame(1, AiImagePrompt::query()->count());
         $this->assertSame(1, (int) AiImagePrompt::query()->first()->use_count);
+        $this->assertSame(1, ProductImage::query()->where('product_id', $product->id)->where('is_admin_only', true)->count());
     }
 
     #[Test]
@@ -155,6 +158,7 @@ class AdminProductAiImageGenerateTest extends TestCase
             ->assertCount('aiCandidates', 2);
 
         $this->assertSame(2, (int) AiImagePrompt::query()->where('prompt', 'Studio lighting')->value('use_count'));
+        $this->assertSame(2, ProductImage::query()->where('product_id', $product->id)->where('is_admin_only', true)->count());
     }
 
     #[Test]

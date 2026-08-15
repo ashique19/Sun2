@@ -474,7 +474,7 @@ class AdminSocialPostsCreate extends Component
         $options = [];
         $seen = [];
 
-        foreach ($product->images as $image) {
+        foreach ($product->images->where('is_admin_only', false) as $image) {
             $path = is_string($image->path) ? trim($image->path) : '';
             if ($path === '' || isset($seen[$path])) {
                 continue;

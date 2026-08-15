@@ -51,6 +51,7 @@ class JsonLd
     public static function product(Product $product): array
     {
         $images = $product->images
+            ->where('is_admin_only', false)
             ->map(fn ($image) => StorefrontAssets::url($image->path))
             ->filter()
             ->values()

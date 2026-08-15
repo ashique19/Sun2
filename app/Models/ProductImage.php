@@ -13,6 +13,7 @@ class ProductImage extends Model
     {
         return [
             'is_primary' => 'boolean',
+            'is_admin_only' => 'boolean',
             'sort_order' => 'integer',
         ];
     }

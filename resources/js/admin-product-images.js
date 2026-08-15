@@ -1148,6 +1148,7 @@ const registerProductImageAlpineData = () => {
         rawImageBase64: '',
         rawImageMime: 'image/jpeg',
         rawImageName: '',
+        selectedSourceImageId: null,
         generating: false,
         generateProgress: 0,
         generateStatus: '',
@@ -1155,11 +1156,13 @@ const registerProductImageAlpineData = () => {
         generateTicker: null,
 
         canGenerate() {
+            const hasUpload = this.hasRawImage && this.rawImageBase64 !== '';
+            const hasExisting = Number(this.selectedSourceImageId) > 0;
+
             return this.geminiConfigured
-                && this.hasRawImage
+                && (hasUpload || hasExisting)
                 && ! this.rawUploading
-                && ! this.generating
-                && this.rawImageBase64 !== '';
+                && ! this.generating;
         },
 
         clearRawImage() {
@@ -1170,6 +1173,15 @@ const registerProductImageAlpineData = () => {
             this.rawImageBase64 = '';
             this.rawImageMime = 'image/jpeg';
             this.rawImageName = '';
+            this.selectedSourceImageId = null;
+        },
+
+        selectExistingSourceImage(imageId) {
+            this.selectedSourceImageId = Number(imageId) || null;
+            this.hasRawImage = false;
+            this.rawImageBase64 = '';
+            this.rawImageName = '';
+            this.rawUploadError = null;
         },
 
         clearGenerateState() {
@@ -1401,6 +1413,7 @@ const registerProductImageAlpineData = () => {
                 this.rawImageMime = prepared.mime;
                 this.rawImageName = prepared.name;
                 this.hasRawImage = true;
+                this.selectedSourceImageId = null;
                 this.rawUploadProgress = 100;
                 this.rawUploadError = null;
             } catch (error) {
@@ -1426,7 +1439,11 @@ const registerProductImageAlpineData = () => {
 
             try {
                 const result = await Promise.race([
-                    this.$wire.generateAiImage(this.rawImageBase64, this.rawImageMime),
+                    this.$wire.generateAiImage(
+                        this.rawImageBase64 || '',
+                        this.rawImageMime || 'image/jpeg',
+                        this.selectedSourceImageId || null,
+                    ),
                     new Promise((_, reject) => {
                         setTimeout(() => {
                             reject(new Error('Generation timed out after 120 seconds. Try a smaller photo or try again.'));

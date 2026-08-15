@@ -71,6 +71,10 @@ class AdminProductAiCandidateStorageTest extends TestCase
         $candidate = $component->get('aiCandidates')[0];
         $this->assertArrayNotHasKey('base64', $candidate);
         $this->assertSame(1, $candidate['version']);
+        $this->assertNotEmpty($candidate['product_image_id'] ?? null);
+        $this->assertTrue(
+            ProductImage::query()->whereKey($candidate['product_image_id'])->where('is_admin_only', true)->exists()
+        );
 
         $binPath = storage_path('app/private/ai-candidates/'.$admin->id.'/'.$candidate['id'].'.bin');
         $this->assertFileExists($binPath);

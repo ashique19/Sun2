@@ -20,6 +20,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
@@ -107,7 +108,7 @@ class AdminProductEdit extends Component
 
     public string $aiPrompt = '';
 
-    /** @var list<array{id: string, mime: string, name: string, version: int}> */
+    /** @var list<array{id: string, mime: string, name: string, version: int, product_image_id?: int|null}> */
     public array $aiCandidates = [];
 
     public ?string $aiGenerateError = null;
@@ -309,8 +310,15 @@ class AdminProductEdit extends Component
         }
     }
 
-    public function generateAiImage(GeminiClient $gemini, string $rawImageBase64 = '', string $rawImageMime = 'image/jpeg'): array
-    {
+    /**
+     * @return array{ok: bool, id?: string, product_image_id?: int, error?: string}
+     */
+    public function generateAiImage(
+        GeminiClient $gemini,
+        string $rawImageBase64 = '',
+        string $rawImageMime = 'image/jpeg',
+        ?int $sourceImageId = null,
+    ): array {
         $this->aiGenerateError = null;
 
         if (! $this->product) {
@@ -321,32 +329,12 @@ class AdminProductEdit extends Component
             'aiPrompt' => ['required', 'string', 'min:3', 'max:4000'],
         ]);
 
-        $rawImageBase64 = trim($rawImageBase64);
+        try {
+            [$rawImageBase64, $mime] = $this->resolveAiSourceImage($rawImageBase64, $rawImageMime, $sourceImageId);
+        } catch (InvalidArgumentException $e) {
+            $this->addError('aiRawImage', $e->getMessage());
 
-        if ($rawImageBase64 === '') {
-            $this->addError('aiRawImage', 'The raw photo is required.');
-
-            return ['ok' => false, 'error' => 'The raw photo is required.'];
-        }
-
-        $binary = base64_decode($rawImageBase64, true);
-
-        if ($binary === false || $binary === '') {
-            $this->addError('aiRawImage', 'The raw photo data is invalid.');
-
-            return ['ok' => false, 'error' => 'The raw photo data is invalid.'];
-        }
-
-        if (strlen($binary) > 8 * 1024 * 1024) {
-            $this->addError('aiRawImage', 'The raw photo must be 8 MB or smaller.');
-
-            return ['ok' => false, 'error' => 'The raw photo must be 8 MB or smaller.'];
-        }
-
-        $mime = strtolower(trim($rawImageMime));
-
-        if (! in_array($mime, ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'], true)) {
-            $mime = 'image/jpeg';
+            return ['ok' => false, 'error' => $e->getMessage()];
         }
 
         $this->aiGenerating = true;
@@ -373,19 +361,28 @@ class AdminProductEdit extends Component
                 throw new RuntimeException('Gemini returned an empty image.');
             }
 
-            $mime = (string) ($result['mime'] ?? 'image/jpeg');
-            $this->persistAiCandidateBinary($candidateId, $binary, $mime);
+            $this->persistAiCandidateBinary($candidateId, $binary, (string) ($result['mime'] ?? 'image/jpeg'));
+
+            $productImage = $this->storeCandidateAsProductImage($candidateId, adminOnly: true);
 
             $this->aiCandidates[] = [
                 'id' => $candidateId,
                 'mime' => 'image/jpeg',
                 'name' => 'ai-generated-'.(count($this->aiCandidates) + 1).'.jpg',
                 'version' => 1,
+                'product_image_id' => $productImage?->id,
             ];
 
             AiImagePrompt::remember(trim($this->aiPrompt), Auth::id());
+            $this->refreshImages();
+            $this->syncImageAlts();
+            $this->message = 'AI image saved (admin only — not shown on the storefront).';
 
-            return ['ok' => true, 'id' => $candidateId];
+            return [
+                'ok' => true,
+                'id' => $candidateId,
+                'product_image_id' => $productImage?->id,
+            ];
         } catch (Throwable $e) {
             $this->aiGenerateError = $e->getMessage();
 
@@ -393,6 +390,60 @@ class AdminProductEdit extends Component
         } finally {
             $this->aiGenerating = false;
         }
+    }
+
+    /**
+     * @return array{0: string, 1: string} [base64, mime]
+     */
+    private function resolveAiSourceImage(string $rawImageBase64, string $rawImageMime, ?int $sourceImageId): array
+    {
+        if ($sourceImageId) {
+            $image = $this->findOwnedImage($sourceImageId);
+            $absolute = public_path(ltrim(str_replace('\\', '/', (string) $image->path), '/'));
+
+            if (! is_file($absolute) || ! is_readable($absolute)) {
+                throw new InvalidArgumentException('The selected product image file is not readable.');
+            }
+
+            $binary = file_get_contents($absolute);
+
+            if ($binary === false || $binary === '') {
+                throw new InvalidArgumentException('The selected product image is empty.');
+            }
+
+            if (strlen($binary) > 8 * 1024 * 1024) {
+                throw new InvalidArgumentException('The selected product image must be 8 MB or smaller.');
+            }
+
+            $info = @getimagesizefromstring($binary);
+            $mime = is_array($info) ? (string) ($info['mime'] ?? 'image/jpeg') : 'image/jpeg';
+
+            return [base64_encode($binary), $mime];
+        }
+
+        $rawImageBase64 = trim($rawImageBase64);
+
+        if ($rawImageBase64 === '') {
+            throw new InvalidArgumentException('Choose a raw photo or one of the existing product images.');
+        }
+
+        $binary = base64_decode($rawImageBase64, true);
+
+        if ($binary === false || $binary === '') {
+            throw new InvalidArgumentException('The raw photo data is invalid.');
+        }
+
+        if (strlen($binary) > 8 * 1024 * 1024) {
+            throw new InvalidArgumentException('The raw photo must be 8 MB or smaller.');
+        }
+
+        $mime = strtolower(trim($rawImageMime));
+
+        if (! in_array($mime, ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'], true)) {
+            $mime = 'image/jpeg';
+        }
+
+        return [$rawImageBase64, $mime];
     }
 
     public function updateAiCandidate(string $id, string $mime, string $base64): void
@@ -423,18 +474,41 @@ class AdminProductEdit extends Component
             $this->aiCandidates[$index]['name'] = preg_replace('/\.\w+$/', '.jpg', (string) $candidate['name']) ?: 'ai-edited.jpg';
             $this->aiCandidates[$index]['version'] = ((int) ($candidate['version'] ?? 1)) + 1;
 
+            $productImageId = (int) ($candidate['product_image_id'] ?? 0);
+
+            if ($productImageId > 0 && $this->product) {
+                $this->replaceLinkedProductImage($productImageId, $id);
+            }
+
             return;
         }
 
         $this->aiGenerateError = 'Generated image not found in this session.';
     }
 
-    public function removeAiCandidate(string $id): void
+    public function removeAiCandidate(string $id, ProductImageService $images): void
     {
+        $candidate = collect($this->aiCandidates)->firstWhere('id', $id);
+        $productImageId = (int) ($candidate['product_image_id'] ?? 0);
+
+        if ($productImageId > 0 && $this->product) {
+            $image = ProductImage::query()
+                ->where('product_id', $this->product->id)
+                ->whereKey($productImageId)
+                ->where('is_admin_only', true)
+                ->first();
+
+            if ($image) {
+                $images->delete($image);
+                $this->refreshImages();
+                $this->syncImageAlts();
+            }
+        }
+
         $this->forgetAiCandidateBinaries([$id]);
         $this->aiCandidates = array_values(array_filter(
             $this->aiCandidates,
-            fn (array $candidate) => ($candidate['id'] ?? null) !== $id,
+            fn (array $row) => ($row['id'] ?? null) !== $id,
         ));
     }
 
@@ -454,47 +528,111 @@ class AdminProductEdit extends Component
             return;
         }
 
+        $productImageId = (int) ($candidate['product_image_id'] ?? 0);
+
+        if ($productImageId > 0) {
+            $image = $this->findOwnedImage($productImageId);
+            $image->update(['is_admin_only' => false]);
+            $this->refreshImages();
+            $this->syncImageAlts();
+            $this->removeAiCandidate($id, $images);
+            $this->message = 'AI image is now public on the product gallery.';
+
+            return;
+        }
+
+        $productImage = $this->storeCandidateAsProductImage($id, adminOnly: false);
+
+        if (! $productImage) {
+            return;
+        }
+
+        $this->removeAiCandidate($id, $images);
+        $this->message = 'AI image added to product gallery.';
+    }
+
+    private function storeCandidateAsProductImage(string $id, bool $adminOnly): ?ProductImage
+    {
+        $candidate = collect($this->aiCandidates)->firstWhere('id', $id);
         $binary = $this->readAiCandidateBinary($id);
 
         if ($binary === null || $binary === '') {
             $this->aiGenerateError = 'Generated image data is invalid.';
 
-            return;
+            return null;
         }
 
-        $mime = (string) ($candidate['mime'] ?? 'image/jpeg');
-        $extension = match (true) {
-            str_contains($mime, 'png') => 'png',
-            str_contains($mime, 'webp') => 'webp',
-            default => 'jpg',
-        };
+        $name = is_array($candidate)
+            ? (string) ($candidate['name'] ?? 'ai-generated.jpg')
+            : 'ai-generated.jpg';
 
         $tempPath = tempnam(sys_get_temp_dir(), 'aiimg_');
 
         if ($tempPath === false) {
             $this->aiGenerateError = 'Could not create a temporary file.';
 
-            return;
+            return null;
         }
 
-        $pathWithExt = $tempPath.'.'.$extension;
+        $pathWithExt = $tempPath.'.jpg';
         rename($tempPath, $pathWithExt);
         file_put_contents($pathWithExt, $binary);
 
         try {
             $upload = new UploadedFile(
                 $pathWithExt,
-                (string) ($candidate['name'] ?? 'ai-generated.'.$extension),
-                $mime,
+                $name,
+                'image/jpeg',
                 null,
                 true,
             );
 
-            $images->store($this->product, $upload, $this->product->name);
-            $this->removeAiCandidate($id);
+            return app(ProductImageService::class)->store(
+                $this->product,
+                $upload,
+                $adminOnly ? ($this->product->name.' (AI)') : $this->product->name,
+                $adminOnly,
+            );
+        } finally {
+            if (is_file($pathWithExt)) {
+                @unlink($pathWithExt);
+            }
+        }
+    }
+
+    private function replaceLinkedProductImage(int $productImageId, string $candidateId): void
+    {
+        $binary = $this->readAiCandidateBinary($candidateId);
+
+        if ($binary === null || $binary === '') {
+            return;
+        }
+
+        $image = ProductImage::query()
+            ->where('product_id', $this->product->id)
+            ->whereKey($productImageId)
+            ->first();
+
+        if (! $image) {
+            return;
+        }
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'aiimg_');
+
+        if ($tempPath === false) {
+            return;
+        }
+
+        $pathWithExt = $tempPath.'.jpg';
+        rename($tempPath, $pathWithExt);
+        file_put_contents($pathWithExt, $binary);
+
+        try {
+            $upload = new UploadedFile($pathWithExt, 'ai-edited.jpg', 'image/jpeg', null, true);
+            app(ProductImageService::class)->replace($image, $upload);
             $this->refreshImages();
             $this->syncImageAlts();
-            $this->message = 'AI image added to product gallery.';
+            $this->message = 'Admin-only AI image updated.';
         } finally {
             if (is_file($pathWithExt)) {
                 @unlink($pathWithExt);
@@ -957,6 +1095,13 @@ class AdminProductEdit extends Component
     public function setPrimaryImage(int $imageId, ProductImageService $images): void
     {
         $image = $this->findOwnedImage($imageId);
+
+        if ($image->is_admin_only) {
+            $this->message = 'Admin-only AI images cannot be the storefront primary.';
+
+            return;
+        }
+
         $images->setPrimary($image);
         $this->refreshImages();
 

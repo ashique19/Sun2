@@ -39,7 +39,11 @@ class StorefrontProduct extends Component
     {
         abort_unless($product->is_published, 404);
 
-        $this->product = $product->load(['images', 'category', 'approvedReviews.user']);
+        $this->product = $product->load([
+            'images' => fn ($q) => $q->where('is_admin_only', false)->orderBy('sort_order'),
+            'category',
+            'approvedReviews.user',
+        ]);
 
         if (auth()->check()) {
             $this->isWishlisted = $wishlist->has(auth()->id(), $product->id);

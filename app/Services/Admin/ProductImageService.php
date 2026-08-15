@@ -124,7 +124,7 @@ class ProductImageService
         }
     }
 
-    public function store(Product $product, UploadedFile $file, ?string $alt = null): ProductImage
+    public function store(Product $product, UploadedFile $file, ?string $alt = null, bool $adminOnly = false): ProductImage
     {
         $directory = $this->productDirectory($product->id);
         File::ensureDirectoryExists($directory);
@@ -133,7 +133,8 @@ class ProductImageService
         $path = $this->persistCompressedVariants($file->getRealPath() ?: '', $directory, $basename, $product->id);
 
         $nextOrder = (int) $product->images()->max('sort_order') + 1;
-        $isPrimary = ! $product->images()->exists();
+        $isPrimary = ! $adminOnly
+            && ! $product->images()->where('is_admin_only', false)->exists();
 
         return ProductImage::query()->create([
             'product_id' => $product->id,
@@ -141,6 +142,7 @@ class ProductImageService
             'alt' => $alt ?: $product->name,
             'sort_order' => $nextOrder,
             'is_primary' => $isPrimary,
+            'is_admin_only' => $adminOnly,
             'perceptual_hash' => $this->safeHash(public_path(ltrim($path, '/'))),
         ]);
     }
@@ -167,6 +169,7 @@ class ProductImageService
             if ($wasPrimary) {
                 $replacement = ProductImage::query()
                     ->where('product_id', $productId)
+                    ->where('is_admin_only', false)
                     ->orderBy('sort_order')
                     ->first();
 

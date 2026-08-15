@@ -110,7 +110,8 @@ class AdminOrdersSteadfastLinkTest extends TestCase
         Livewire::test(AdminOrders::class, ['segment' => 'delivered'])
             ->assertSee('Steadfast ↗')
             ->assertSeeHtml('href="https://steadfast.com.bd/user/consignment/277193413"')
-            ->assertSee('SF123456');
+            ->assertSee('SF123456')
+            ->assertSeeHtml('wire:key="order-tracking-');
     }
 
     #[Test]

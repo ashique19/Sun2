@@ -44,6 +44,15 @@ class AdminOrderSegment
         return array_key_exists($segment, self::SEGMENTS);
     }
 
+    /**
+     * Segments that show stored courier tracking (timeline + tracker).
+     * Live API refresh stays Dispatched-only.
+     */
+    public static function showsCourierTracking(string $segment): bool
+    {
+        return in_array($segment, ['dispatched', 'delivered', 'cancel-return', 'return-pending'], true);
+    }
+
     public static function label(string $segment): string
     {
         return self::SEGMENTS[$segment] ?? 'Orders';

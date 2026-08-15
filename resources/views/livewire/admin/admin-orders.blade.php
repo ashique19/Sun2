@@ -259,7 +259,7 @@
                                     </div>
                                     <p class="mt-0.5 text-xs text-[#8C8474]">{{ $order->placed_at?->format('d M Y') }}</p>
                                     <p class="mt-0.5 text-xs text-[#8C8474]">Placed by {{ $order->placedByLabel() }}</p>
-                                    @if ($segment !== 'dispatched' && ($steadfastUrl = $order->steadfastConsignmentUrl()))
+                                    @if (! $showCourierTracking && ($steadfastUrl = $order->steadfastConsignmentUrl()))
                                         <p class="mt-0.5 text-xs">
                                             <a href="{{ $steadfastUrl }}"
                                                 target="_blank"
@@ -497,7 +497,7 @@
                                 @endif
                             </div>
 
-                            @if ($segment === 'dispatched')
+                            @if ($showCourierTracking)
                                 @php($events = $trackingByOrder[$order->id]['events'] ?? [])
                                 @php($courierStatus = $trackingByOrder[$order->id]['status'] ?? null)
                                 <div wire:key="order-tracking-{{ $order->id }}" x-data="{ open: true }" class="overflow-hidden rounded-lg border border-[#EFE7D6]">
@@ -513,7 +513,8 @@
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     class="font-semibold uppercase tracking-wide text-[#C9A227] hover:underline"
-                                                    title="Open Steadfast consignment">
+                                                    title="Open Steadfast consignment"
+                                                    @click.stop>
                                                     {{ $order->courier?->name ?? 'Steadfast' }} ↗
                                                 </a>
                                             @else
@@ -523,10 +524,14 @@
                                             <span class="break-all text-[#6B6459]">{{ $order->courier_tracker ?: '—' }}</span>
                                             <span class="text-[#C9B99A]">|</span>
                                             <span class="font-semibold uppercase tracking-wide">
-                                                <span wire:loading.delay wire:target="refreshCourierStatuses">Loading…</span>
-                                                <span wire:loading.remove wire:target="refreshCourierStatuses">
+                                                @if ($segment === 'dispatched')
+                                                    <span wire:loading.delay wire:target="refreshCourierStatuses">Loading…</span>
+                                                    <span wire:loading.remove wire:target="refreshCourierStatuses">
+                                                        {{ $courierStatus ? strtoupper($courierStatus) : '—' }}
+                                                    </span>
+                                                @else
                                                     {{ $courierStatus ? strtoupper($courierStatus) : '—' }}
-                                                </span>
+                                                @endif
                                             </span>
                                         </span>
                                         <svg class="h-4 w-4 shrink-0 text-[#8C8474] transition-transform" :class="open ? 'rotate-180' : ''" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">

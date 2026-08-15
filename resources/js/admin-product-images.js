@@ -1566,25 +1566,6 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
-            // #region agent log
-            const __agentRetryPayload = {
-                hypothesisId: 'C,E',
-                location: 'admin-product-images.js:retryAiStep:entry',
-                message: 'alpine retryAiStep entry',
-                data: {
-                    candidateId,
-                    candidateIdType: typeof candidateId,
-                    rawLen: (this.rawImageBase64 || '').length,
-                    rawMime: this.rawImageMime || 'image/jpeg',
-                    selectedSourceImageId: this.selectedSourceImageId || null,
-                    generating: this.generating,
-                    wireCandidatesCount: Array.isArray(this.$wire?.aiCandidates) ? this.$wire.aiCandidates.length : null,
-                },
-                timestamp: Date.now(),
-            };
-            console.info('[ai-retry-debug]', __agentRetryPayload);
-            // #endregion
-
             this.rawUploadError = null;
             this.generateError = null;
             this.generating = true;
@@ -1619,26 +1600,6 @@ const registerProductImageAlpineData = () => {
                 ]);
 
                 await this.$nextTick();
-
-                // #region agent log
-                const __agentRetryResult = {
-                    hypothesisId: 'B,E',
-                    location: 'admin-product-images.js:retryAiStep:result',
-                    message: 'alpine retryAiStep result',
-                    data: {
-                        resultType: typeof result,
-                        resultIsNull: result == null,
-                        resultOk: result && typeof result === 'object' ? result.ok : undefined,
-                        resultError: result && typeof result === 'object' ? result.error : undefined,
-                        wireAiGenerateError: this.$wire?.aiGenerateError ?? null,
-                        wireVersions: Array.isArray(this.$wire?.aiCandidates)
-                            ? this.$wire.aiCandidates.map((c) => ({ id: c.id, version: c.version }))
-                            : null,
-                    },
-                    timestamp: Date.now(),
-                };
-                console.info('[ai-retry-debug]', __agentRetryResult);
-                // #endregion
 
                 const serverError = (result && typeof result === 'object' && result.ok === false)
                     ? String(result.error || 'Retry failed.')

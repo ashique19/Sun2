@@ -474,6 +474,21 @@ class AdminProductEdit extends Component
         string $rawImageMime = 'image/jpeg',
         ?int $sourceImageId = null,
     ): array {
+        // #region agent log
+        $this->agentDebugLog('A,C', 'AdminProductEdit.php:retryAiCandidateStep:entry', 'retry entry', [
+            'candidateId' => $candidateId,
+            'candidateIdType' => get_debug_type($candidateId),
+            'rawLen' => strlen($rawImageBase64),
+            'rawMime' => $rawImageMime,
+            'sourceImageId' => $sourceImageId,
+            'sourceImageIdType' => get_debug_type($sourceImageId),
+            'geminiClass' => $gemini::class,
+            'candidatesCount' => count($this->aiCandidates),
+            'candidateIds' => array_column($this->aiCandidates, 'id'),
+            'argOrderHint' => 'expected: DI gemini, then candidateId, raw, mime, sourceImageId',
+        ]);
+        // #endregion
+
         $this->aiGenerateError = null;
 
         $index = collect($this->aiCandidates)->search(fn (array $row) => ($row['id'] ?? null) === $candidateId);
@@ -481,12 +496,32 @@ class AdminProductEdit extends Component
         if ($index === false) {
             $this->aiGenerateError = 'Generated image not found in this session.';
 
+            // #region agent log
+            $this->agentDebugLog('C', 'AdminProductEdit.php:retryAiCandidateStep:not-found', 'candidate missing', [
+                'candidateId' => $candidateId,
+                'error' => $this->aiGenerateError,
+            ]);
+            // #endregion
+
             return ['ok' => false, 'error' => $this->aiGenerateError];
         }
 
         /** @var array{id: string, step_index?: int|null, step_total?: int|null, step_prompt?: string|null, sequence_id?: string|null, source_image_id?: int|null, product_image_id?: int|null, version?: int} $candidate */
         $candidate = $this->aiCandidates[$index];
         $stepPrompt = trim((string) ($candidate['step_prompt'] ?? $this->aiPrompt));
+
+        // #region agent log
+        $this->agentDebugLog('A,B', 'AdminProductEdit.php:retryAiCandidateStep:candidate', 'resolved candidate row', [
+            'index' => $index,
+            'indexType' => get_debug_type($index),
+            'step_index' => $candidate['step_index'] ?? null,
+            'sequence_id' => $candidate['sequence_id'] ?? null,
+            'source_image_id' => $candidate['source_image_id'] ?? null,
+            'product_image_id' => $candidate['product_image_id'] ?? null,
+            'version_before' => $candidate['version'] ?? null,
+            'step_prompt_len' => strlen($stepPrompt),
+        ]);
+        // #endregion
 
         if (strlen($stepPrompt) < 3) {
             $this->aiGenerateError = 'This step has no instruction to retry.';
@@ -497,16 +532,32 @@ class AdminProductEdit extends Component
         $stepIndex = (int) ($candidate['step_index'] ?? 0);
         $stepTotal = max(1, (int) ($candidate['step_total'] ?? 1));
         $sequenceId = (string) ($candidate['sequence_id'] ?? '');
+        $resolvedSourceId = $sourceImageId ?? (isset($candidate['source_image_id']) ? (int) $candidate['source_image_id'] : null);
 
         try {
             [$inputBase64, $inputMime] = $this->resolveRetryInputImage(
                 $candidate,
                 $rawImageBase64,
                 $rawImageMime,
-                $sourceImageId ?? (isset($candidate['source_image_id']) ? (int) $candidate['source_image_id'] : null),
+                $resolvedSourceId,
             );
+            // #region agent log
+            $this->agentDebugLog('A,D', 'AdminProductEdit.php:retryAiCandidateStep:input-ok', 'resolveRetryInputImage succeeded', [
+                'inputBase64Len' => strlen($inputBase64),
+                'inputMime' => $inputMime,
+                'resolvedSourceId' => $resolvedSourceId,
+            ]);
+            // #endregion
         } catch (InvalidArgumentException $e) {
             $this->aiGenerateError = $e->getMessage();
+
+            // #region agent log
+            $this->agentDebugLog('A,D', 'AdminProductEdit.php:retryAiCandidateStep:input-fail', 'resolveRetryInputImage failed', [
+                'error' => $e->getMessage(),
+                'resolvedSourceId' => $resolvedSourceId,
+                'rawLen' => strlen($rawImageBase64),
+            ]);
+            // #endregion
 
             return ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -540,6 +591,17 @@ class AdminProductEdit extends Component
             $this->aiCandidates[$index]['version'] = ((int) ($candidate['version'] ?? 1)) + 1;
             $this->aiCandidates[$index]['step_prompt'] = $stepPrompt;
 
+            // #region agent log
+            $this->agentDebugLog('B', 'AdminProductEdit.php:retryAiCandidateStep:version-mutated', 'nested version mutation', [
+                'index' => $index,
+                'version_after_assign' => $this->aiCandidates[$index]['version'] ?? null,
+                'aiCandidates_version_snapshot' => array_map(
+                    fn (array $row) => ['id' => $row['id'] ?? null, 'version' => $row['version'] ?? null],
+                    $this->aiCandidates
+                ),
+            ]);
+            // #endregion
+
             $productImageId = (int) ($candidate['product_image_id'] ?? 0);
 
             if ($productImageId > 0) {
@@ -558,13 +620,26 @@ class AdminProductEdit extends Component
             $this->syncImageAlts();
             $this->message = 'Step '.($stepIndex + 1).' regenerated (admin only).';
 
-            return [
+            $payload = [
                 'ok' => true,
                 'id' => $candidateId,
                 'product_image_id' => $this->aiCandidates[$index]['product_image_id'] ?? null,
             ];
+
+            // #region agent log
+            $this->agentDebugLog('B,E', 'AdminProductEdit.php:retryAiCandidateStep:success', 'retry success return', $payload);
+            // #endregion
+
+            return $payload;
         } catch (Throwable $e) {
             $this->aiGenerateError = $e->getMessage();
+
+            // #region agent log
+            $this->agentDebugLog('E', 'AdminProductEdit.php:retryAiCandidateStep:exception', 'retry exception', [
+                'error' => $e->getMessage(),
+                'class' => $e::class,
+            ]);
+            // #endregion
 
             return ['ok' => false, 'error' => $e->getMessage()];
         } finally {
@@ -604,15 +679,44 @@ class AdminProductEdit extends Component
         $stepIndex = (int) ($candidate['step_index'] ?? 0);
         $sequenceId = (string) ($candidate['sequence_id'] ?? '');
 
+        // #region agent log
+        $this->agentDebugLog('A', 'AdminProductEdit.php:resolveRetryInputImage:entry', 'resolve retry input', [
+            'stepIndex' => $stepIndex,
+            'sequenceId' => $sequenceId,
+            'rawLen' => strlen($rawImageBase64),
+            'sourceImageId' => $sourceImageId,
+            'dir' => $this->aiCandidateDirectory(),
+            'prevTargetExists' => false,
+            'sourceTargetExists' => $sequenceId !== '' && is_file($this->aiCandidateBinPath($sequenceId.'-source')),
+        ]);
+        // #endregion
+
         if ($stepIndex > 0 && $sequenceId !== '') {
             $previous = collect($this->aiCandidates)
                 ->first(fn (array $row) => ($row['sequence_id'] ?? null) === $sequenceId
                     && (int) ($row['step_index'] ?? -1) === ($stepIndex - 1));
 
+            // #region agent log
+            $prevId = is_array($previous) ? (string) ($previous['id'] ?? '') : '';
+            $prevPath = $prevId !== '' ? $this->aiCandidateBinPath($prevId) : null;
+            $this->agentDebugLog('A', 'AdminProductEdit.php:resolveRetryInputImage:previous', 'previous step lookup', [
+                'foundPrevious' => is_array($previous),
+                'previousId' => $prevId !== '' ? $prevId : null,
+                'previousBinExists' => $prevPath ? is_file($prevPath) : false,
+                'previousBinBytes' => ($prevPath && is_file($prevPath)) ? filesize($prevPath) : null,
+            ]);
+            // #endregion
+
             if (is_array($previous)) {
                 $binary = $this->readAiCandidateBinary((string) $previous['id']);
 
                 if ($binary !== null && $binary !== '') {
+                    // #region agent log
+                    $this->agentDebugLog('A', 'AdminProductEdit.php:resolveRetryInputImage:branch', 'branch=previous_candidate', [
+                        'bytes' => strlen($binary),
+                    ]);
+                    // #endregion
+
                     return [base64_encode($binary), 'image/jpeg'];
                 }
             }
@@ -622,11 +726,67 @@ class AdminProductEdit extends Component
             $sourceBinary = $this->readAiCandidateBinary($sequenceId.'-source');
 
             if ($sourceBinary !== null && $sourceBinary !== '') {
+                // #region agent log
+                $this->agentDebugLog('A', 'AdminProductEdit.php:resolveRetryInputImage:branch', 'branch=sequence_source', [
+                    'bytes' => strlen($sourceBinary),
+                ]);
+                // #endregion
+
                 return [base64_encode($sourceBinary), 'image/jpeg'];
             }
+
+            // #region agent log
+            $this->agentDebugLog('A', 'AdminProductEdit.php:resolveRetryInputImage:source-miss', 'sequence source missing', [
+                'path' => $this->aiCandidateBinPath($sequenceId.'-source'),
+                'exists' => is_file($this->aiCandidateBinPath($sequenceId.'-source')),
+            ]);
+            // #endregion
         }
 
+        // #region agent log
+        $this->agentDebugLog('A,D', 'AdminProductEdit.php:resolveRetryInputImage:branch', 'branch=resolveAiSourceImage_fallback', [
+            'rawLen' => strlen($rawImageBase64),
+            'sourceImageId' => $sourceImageId,
+        ]);
+        // #endregion
+
         return $this->resolveAiSourceImage($rawImageBase64, $rawImageMime, $sourceImageId);
+    }
+
+    /**
+     * Temporary: Alpine client-side debug sink for AI retry investigation.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function agentDebugAiRetryClient(array $payload = []): void
+    {
+        $this->agentDebugLog(
+            (string) ($payload['hypothesisId'] ?? 'E'),
+            (string) ($payload['location'] ?? 'alpine:client'),
+            (string) ($payload['message'] ?? 'alpine client log'),
+            is_array($payload['data'] ?? null) ? $payload['data'] : ['raw' => $payload],
+        );
+    }
+
+    /**
+     * Temporary debug instrumentation for AI retry investigation.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function agentDebugLog(string $hypothesisId, string $location, string $message, array $data = []): void
+    {
+        $payload = json_encode([
+            'id' => 'log_'.uniqid(),
+            'timestamp' => (int) (microtime(true) * 1000),
+            'hypothesisId' => $hypothesisId,
+            'location' => $location,
+            'message' => $message,
+            'data' => $data,
+        ], JSON_THROW_ON_ERROR)."\n";
+
+        foreach (['/opt/cursor/logs/debug.log', '/tmp/ai-retry-debug.log'] as $path) {
+            @file_put_contents($path, $payload, FILE_APPEND | LOCK_EX);
+        }
     }
 
     /**

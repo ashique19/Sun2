@@ -22,6 +22,7 @@
     <div class="md:hidden sticky top-0 z-20 border-b border-[#E7DFCF] bg-white px-4 py-3 flex items-center justify-between gap-3">
         <a href="{{ $isModeratorOnly ? route('admin.orders.new') : route('admin.dashboard') }}" wire:navigate class="font-serif font-semibold text-[#C9A227]">Admin</a>
         <div class="flex items-center gap-2">
+            <x-admin.shortcut-icons />
             <a href="{{ route('home') }}" class="text-sm text-[#6B6459] hover:text-[#C9A227]">Store</a>
             <label for="admin-mobile-nav-toggle"
                 class="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#E0D6C2] bg-[#FAF6EF] text-[#1E1E1E]"

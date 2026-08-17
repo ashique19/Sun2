@@ -32,13 +32,16 @@ class AdminDashboardLayoutTest extends TestCase
         $this->actingAs($this->adminUser());
 
         Livewire::test(AdminDashboard::class)
-            ->assertSeeHtml('aria-label="Create product"')
-            ->assertSee(route('admin.products.create'), false)
+            ->assertSeeHtml('hidden md:block')
+            ->assertSeeHtml('data-admin-shortcut="products"')
+            ->assertSee(route('admin.products'), false)
+            ->assertDontSee(route('admin.products.create'), false)
             // Product uses a cube icon; order keeps the plain "+".
             ->assertSeeHtml('d="M10.362 1.093a.75.75 0 0 0-.724 0L2.523 5.018')
-            ->assertSeeHtml('aria-label="Create order"')
-            ->assertSee(route('admin.orders.create'), false)
-            ->assertSeeHtml('aria-label="Open inbox"')
+            ->assertSeeHtml('data-admin-shortcut="orders"')
+            ->assertSee(route('admin.orders.new'), false)
+            ->assertDontSee(route('admin.orders.create'), false)
+            ->assertSeeHtml('data-admin-shortcut="inbox"')
             ->assertSee(route('admin.inbox'), false)
             ->assertSee('Admin Attention')
             ->assertSee('All clear')
@@ -77,6 +80,41 @@ class AdminDashboardLayoutTest extends TestCase
             ->assertDontSee('Both months total')
             ->assertDontSee('Current month')
             ->assertDontSee('Previous month');
+    }
+
+    #[Test]
+    public function small_screen_top_nav_points_products_orders_and_inbox_at_index(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $html = $this->get(route('admin.dashboard'))
+            ->assertOk()
+            ->assertSeeHtml('md:hidden sticky top-0')
+            ->assertSeeHtml('data-admin-shortcut="products"')
+            ->assertSeeHtml('data-admin-shortcut="orders"')
+            ->assertSeeHtml('data-admin-shortcut="inbox"')
+            ->getContent();
+
+        $this->assertMatchesRegularExpression(
+            '/href="[^"]*\/admin\/products"[^>]*data-admin-shortcut="products"/',
+            $html,
+        );
+        $this->assertMatchesRegularExpression(
+            '/href="[^"]*\/admin\/orders\/new"[^>]*data-admin-shortcut="orders"/',
+            $html,
+        );
+        $this->assertMatchesRegularExpression(
+            '/href="[^"]*\/admin\/inbox"[^>]*data-admin-shortcut="inbox"/',
+            $html,
+        );
+        $this->assertDoesNotMatchRegularExpression(
+            '/href="[^"]*\/admin\/products\/create"[^>]*data-admin-shortcut="products"/',
+            $html,
+        );
+        $this->assertDoesNotMatchRegularExpression(
+            '/href="[^"]*\/admin\/orders\/create"[^>]*data-admin-shortcut="orders"/',
+            $html,
+        );
     }
 
     #[Test]

@@ -129,8 +129,63 @@
                                 <span class="text-sm font-medium text-[#1E1E1E]">Exchange</span>
                             </label>
                             <p class="text-xs text-[#8C8474] mt-1">
-                                Marks the order as has return and prefixes address &amp; courier note with [EXCHANGE PARCEL].
+                                Prefixes address &amp; courier note with [EXCHANGE PARCEL]. Link the original so its goods are written off.
                             </p>
+                            @if ($isExchange)
+                                <div class="mt-2 space-y-2 rounded-lg border border-sky-200 bg-sky-50/70 px-3 py-2">
+                                    @if ($exchangeOfOrderId)
+                                        <p class="text-sm text-[#1E1E1E]">
+                                            Original
+                                            <a href="{{ route('admin.orders.show', $exchangeOfOrderId) }}"
+                                                class="font-medium text-[#C9A227] hover:underline">#{{ $exchangeOfOrderNumber }}</a>
+                                            <button type="button" wire:click="clearExchangeOf"
+                                                class="ml-2 text-xs text-[#8C8474] hover:text-rose-700">
+                                                Clear
+                                            </button>
+                                        </p>
+                                    @else
+                                        <p class="text-xs text-[#6B6459]">
+                                            Search the original order, or pick one from this phone. Unlinked exchanges still work as before.
+                                        </p>
+                                        <input type="text"
+                                            wire:model.live.debounce.300ms="exchangeOfSearch"
+                                            placeholder="Search order #"
+                                            class="w-full rounded-lg border border-[#E0D6C2] bg-white px-3 py-1.5 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                        @if ($exchangeOfMatches !== [])
+                                            <ul class="divide-y divide-sky-100 overflow-hidden rounded-md border border-sky-200 bg-white">
+                                                @foreach ($exchangeOfMatches as $match)
+                                                    <li>
+                                                        <button type="button"
+                                                            wire:click="selectExchangeOf({{ $match['id'] }})"
+                                                            class="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-[#FAF6EF]">
+                                                            <span>
+                                                                <span class="font-medium">#{{ $match['order_number'] }}</span>
+                                                                <span class="text-[#8C8474]"> · {{ $match['name'] }}</span>
+                                                            </span>
+                                                            <span class="text-xs capitalize text-[#8C8474]">{{ $match['status'] }}</span>
+                                                        </button>
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        @endif
+                                        @if ($previousOrders !== [])
+                                            <div class="flex flex-wrap gap-1.5">
+                                                @foreach (array_slice($previousOrders, 0, 5) as $previousOrder)
+                                                    <button type="button"
+                                                        wire:click="selectExchangeOf({{ $previousOrder['id'] }})"
+                                                        class="rounded-full border border-sky-200 bg-white px-2.5 py-0.5 text-[11px] font-medium text-sky-800 hover:border-[#C9A227]">
+                                                        #{{ $previousOrder['order_number'] }}
+                                                        <span class="font-normal capitalize text-[#8C8474]">{{ $previousOrder['status'] }}</span>
+                                                    </button>
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                    @endif
+                                    @error('exchangeOfOrderId')
+                                        <p class="text-xs text-rose-600">{{ $message }}</p>
+                                    @enderror
+                                </div>
+                            @endif
                         </div>
                         <div class="min-w-0">
                             <label class="block text-[#6B6459] mb-1">City</label>

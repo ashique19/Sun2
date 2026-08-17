@@ -119,6 +119,8 @@ class ReturnHubArrivalService
             ->with([
                 'courier:id,name,slug',
                 'items:id,order_id,name,quantity,returned_quantity,return_received,product_image,product_id',
+                'exchangeOf:id,order_number',
+                'replacements:id,order_number,exchange_of_order_id',
             ])
             ->where('has_return', true)
             ->whereNotNull('return_hub_arrived_at')
@@ -132,6 +134,7 @@ class ReturnHubArrivalService
                 'status',
                 'has_return',
                 'is_replacement',
+                'exchange_of_order_id',
                 'return_hub_arrived_at',
                 'courier_id',
                 'courier_tracker',

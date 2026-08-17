@@ -309,6 +309,7 @@
                             @if ($order->is_replacement)
                                 <span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-[#FAF6EF] text-[#6B6459]">Exchange</span>
                             @endif
+                            <x-admin.order-exchange-links :order="$order" />
                             @if ($order->return_hub_arrived_at)
                                 <span class="text-[10px] text-[#8C8474]">{{ $order->return_hub_arrived_at->diffForHumans() }}</span>
                             @endif

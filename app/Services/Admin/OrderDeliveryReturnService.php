@@ -288,6 +288,96 @@ class OrderDeliveryReturnService
     }
 
     /**
+     * When a replacement parcel is linked, mark the original's goods as returning
+     * and write off their value. Delivery stays earned if the original was delivered.
+     */
+    public function settleOriginalForExchange(Order $original, Order $replacement, ?int $changedBy = null): Order
+    {
+        if ($original->id === $replacement->id) {
+            throw new RuntimeException('An exchange cannot link to itself.');
+        }
+
+        if (in_array($original->status, ['cancelled', 'returned'], true)) {
+            return $original;
+        }
+
+        return DB::transaction(function () use ($original, $replacement, $changedBy) {
+            $original = Order::query()->whereKey($original->id)->lockForUpdate()->firstOrFail();
+            $original->load('items', 'adjustments');
+            $replacement->loadMissing('items');
+
+            $returnedQtyByItemId = $this->returnedQuantitiesForExchange($original, $replacement);
+            [$anyReturned, $allReturned] = $this->applyReturnedQuantities($original, $returnedQtyByItemId);
+
+            if ($anyReturned) {
+                $actor = $changedBy ? User::query()->find($changedBy) : auth()->user();
+                // Delivered originals already earned delivery; only write it off when
+                // the parcel never arrived and every unit is coming back.
+                $writeOffDelivery = $allReturned && $original->status !== 'delivered';
+                $this->applyReturnWriteOff(
+                    $original->fresh(['items', 'adjustments']),
+                    allReturned: $writeOffDelivery,
+                    actor: $actor,
+                );
+            }
+
+            $this->setHasReturn($original->fresh(), true);
+
+            return $original->fresh(['items', 'adjustments']);
+        });
+    }
+
+    /**
+     * Match replacement product qty against remaining original units; if nothing
+     * overlaps, return every remaining unit on the original.
+     *
+     * @return array<int, int>
+     */
+    private function returnedQuantitiesForExchange(Order $original, Order $replacement): array
+    {
+        $neededByProductId = [];
+
+        foreach ($replacement->items as $line) {
+            $productId = (int) ($line->product_id ?? 0);
+
+            if ($productId <= 0) {
+                continue;
+            }
+
+            $neededByProductId[$productId] = ($neededByProductId[$productId] ?? 0) + (int) $line->quantity;
+        }
+
+        $matchedAny = false;
+        $result = [];
+
+        foreach ($original->items as $item) {
+            $ordered = (int) $item->quantity;
+            $already = (int) $item->returned_quantity;
+            $remaining = max(0, $ordered - $already);
+            $take = 0;
+            $productId = (int) ($item->product_id ?? 0);
+
+            if ($productId > 0 && $remaining > 0 && ($neededByProductId[$productId] ?? 0) > 0) {
+                $take = min($remaining, $neededByProductId[$productId]);
+                $neededByProductId[$productId] -= $take;
+                $matchedAny = true;
+            }
+
+            $result[(int) $item->id] = $already + $take;
+        }
+
+        if ($matchedAny) {
+            return $result;
+        }
+
+        foreach ($original->items as $item) {
+            $result[(int) $item->id] = (int) $item->quantity;
+        }
+
+        return $result;
+    }
+
+    /**
      * After delivery: mark returned units, write off their value, keep delivered, flag Return Pending.
      *
      * @param  array<int, int>  $returnedQtyByItemId

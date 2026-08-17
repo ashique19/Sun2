@@ -73,6 +73,8 @@ class AdminOrderShow extends Component
             'statusHistory.changedBy',
             'courierLogs.courier',
             'channelConversation.messages',
+            'exchangeOf:id,order_number',
+            'replacements:id,order_number,exchange_of_order_id',
         ]);
         $this->status = (string) $order->status;
         $this->adminNote = (string) ($order->admin_note ?? '');

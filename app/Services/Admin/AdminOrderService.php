@@ -22,6 +22,7 @@ class AdminOrderService
         private OrderAdjustmentSync $adjustmentSync,
         private OrderAdjustmentAuditor $auditor,
         private OrderPaymentSync $paymentSync,
+        private OrderDeliveryReturnService $deliveryReturns,
     ) {}
 
     /**
@@ -57,6 +58,8 @@ class AdminOrderService
                 'created_at' => $order->placed_at ?? now(),
             ]);
 
+            $this->settleLinkedExchangeOriginal($order->fresh(['items']), previousExchangeOfId: null);
+
             return $order->fresh(['items']);
         });
     }
@@ -69,6 +72,7 @@ class AdminOrderService
     {
         return DB::transaction(function () use ($order, $orderData, $lines) {
             $order->load('items');
+            $previousExchangeOfId = $order->exchange_of_order_id ? (int) $order->exchange_of_order_id : null;
 
             $orderData = $this->attachCustomerUser($orderData);
 
@@ -99,7 +103,9 @@ class AdminOrderService
                 $this->statusHistory->record($order, $changeSummary);
             }
 
-            return $order;
+            $this->settleLinkedExchangeOriginal($order->fresh(['items']), $previousExchangeOfId);
+
+            return $order->fresh(['items']);
         });
     }
 
@@ -342,6 +348,9 @@ class AdminOrderService
             'courier_note' => $validated['courier_note'] ?? null,
             'customer_note' => $validated['customer_note'] ?? null,
             'is_replacement' => (bool) ($validated['is_replacement'] ?? false),
+            'exchange_of_order_id' => ! empty($validated['exchange_of_order_id'])
+                ? (int) $validated['exchange_of_order_id']
+                : null,
             'has_return' => (bool) ($validated['has_return'] ?? false),
             'placed_at' => $validated['placed_at'] ?? now(),
         ];
@@ -353,5 +362,33 @@ class AdminOrderService
         }
 
         return $attributes;
+    }
+
+    /**
+     * First time an original is linked (create or later edit), settle its returned qty.
+     */
+    private function settleLinkedExchangeOriginal(Order $replacement, ?int $previousExchangeOfId): void
+    {
+        if (! $replacement->is_replacement) {
+            return;
+        }
+
+        $originalId = $replacement->exchange_of_order_id ? (int) $replacement->exchange_of_order_id : null;
+
+        if (! $originalId || $originalId === $previousExchangeOfId) {
+            return;
+        }
+
+        $original = Order::query()->find($originalId);
+
+        if (! $original) {
+            return;
+        }
+
+        $this->deliveryReturns->settleOriginalForExchange(
+            $original,
+            $replacement,
+            auth()->id(),
+        );
     }
 }

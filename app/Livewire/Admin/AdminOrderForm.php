@@ -70,6 +70,15 @@ class AdminOrderForm extends Component
 
     public bool $isExchange = false;
 
+    public ?int $exchangeOfOrderId = null;
+
+    public string $exchangeOfOrderNumber = '';
+
+    public string $exchangeOfSearch = '';
+
+    /** @var list<array{id:int,order_number:string,status:string,total:float,placed_at:?string,name:string}> */
+    public array $exchangeOfMatches = [];
+
     public ?string $addressLocationHint = null;
 
     public bool $suppressAddressGuess = false;
@@ -150,8 +159,9 @@ class AdminOrderForm extends Component
         $this->orderDate = now('Asia/Dhaka')->toDateString();
 
         if ($order?->exists) {
-            $this->order = $order->load(['items.product', 'courier']);
+            $this->order = $order->load(['items.product', 'courier', 'exchangeOf:id,order_number']);
             $this->fillFromOrder($this->order);
+            $this->hydrateExchangeOf($this->order->exchange_of_order_id ? (int) $this->order->exchange_of_order_id : null);
             $this->orderDate = $this->order->placed_at?->timezone('Asia/Dhaka')->toDateString()
                 ?? $this->orderDate;
         } elseif ($this->repeat) {
@@ -159,6 +169,9 @@ class AdminOrderForm extends Component
 
             if ($source) {
                 $this->fillFromOrder($source);
+                if ($source->is_replacement && $source->exchange_of_order_id) {
+                    $this->hydrateExchangeOf((int) $source->exchange_of_order_id);
+                }
                 $this->message = 'Prefilled from order #'.$source->order_number.'. Saving will create a new order.';
             }
         } elseif ($this->customer) {
@@ -213,6 +226,7 @@ class AdminOrderForm extends Component
             $this->courierNote = '';
             $this->customerNote = '';
             $this->isExchange = false;
+            $this->clearExchangeOf();
             $this->autoDelivery = true;
             $this->lines = [];
 
@@ -249,6 +263,7 @@ class AdminOrderForm extends Component
         $this->courierNote = '';
         $this->customerNote = '';
         $this->isExchange = false;
+        $this->clearExchangeOf();
         $this->autoDelivery = true;
         $this->lines = [];
 
@@ -507,6 +522,103 @@ class AdminOrderForm extends Component
     {
         $this->address = $this->applyExchangePrefix($this->address, $value);
         $this->courierNote = $this->applyExchangePrefix($this->courierNote, $value);
+
+        if (! $value) {
+            $this->clearExchangeOf();
+
+            return;
+        }
+
+        if (! $this->exchangeOfOrderId && $this->repeat) {
+            $this->selectExchangeOf((int) $this->repeat);
+        }
+    }
+
+    public function updatedExchangeOfSearch(): void
+    {
+        $this->searchExchangeOf();
+    }
+
+    public function searchExchangeOf(): void
+    {
+        $term = trim($this->exchangeOfSearch);
+
+        if ($term === '') {
+            $this->exchangeOfMatches = [];
+
+            return;
+        }
+
+        $query = Order::query()
+            ->when($this->order?->id, fn ($q) => $q->where('id', '!=', $this->order->id))
+            ->orderByDesc('id')
+            ->limit(8);
+
+        if (ctype_digit($term)) {
+            $query->where(function ($q) use ($term) {
+                $q->where('id', (int) $term)
+                    ->orWhere('order_number', $term)
+                    ->orWhere('order_number', 'like', $term.'%');
+            });
+        } else {
+            $query->where('order_number', 'like', '%'.$term.'%');
+        }
+
+        $this->exchangeOfMatches = $query
+            ->get(['id', 'order_number', 'status', 'total', 'placed_at', 'name'])
+            ->map(fn (Order $order) => [
+                'id' => (int) $order->id,
+                'order_number' => (string) $order->order_number,
+                'status' => (string) $order->status,
+                'total' => (float) $order->total,
+                'placed_at' => $order->placed_at?->format('d M Y'),
+                'name' => (string) $order->name,
+            ])
+            ->all();
+    }
+
+    public function selectExchangeOf(int $orderId): void
+    {
+        if ($this->order && (int) $this->order->id === $orderId) {
+            return;
+        }
+
+        $original = Order::query()->find($orderId);
+
+        if (! $original) {
+            return;
+        }
+
+        $this->isExchange = true;
+        $this->hydrateExchangeOf((int) $original->id, (string) $original->order_number);
+        $this->exchangeOfSearch = '';
+        $this->exchangeOfMatches = [];
+        $this->address = $this->applyExchangePrefix($this->address, true);
+        $this->courierNote = $this->applyExchangePrefix($this->courierNote, true);
+    }
+
+    public function clearExchangeOf(): void
+    {
+        $this->exchangeOfOrderId = null;
+        $this->exchangeOfOrderNumber = '';
+        $this->exchangeOfSearch = '';
+        $this->exchangeOfMatches = [];
+    }
+
+    private function hydrateExchangeOf(?int $orderId, ?string $orderNumber = null): void
+    {
+        if (! $orderId) {
+            $this->clearExchangeOf();
+
+            return;
+        }
+
+        if ($orderNumber === null) {
+            $orderNumber = (string) (Order::query()->whereKey($orderId)->value('order_number') ?? $orderId);
+        }
+
+        $this->exchangeOfOrderId = $orderId;
+        $this->exchangeOfOrderNumber = $orderNumber;
     }
 
     public function updatedAddress(): void
@@ -847,7 +959,10 @@ class AdminOrderForm extends Component
             'admin_note' => $validated['adminNote'] ?? null,
             'courier_note' => $this->courierNote !== '' ? $this->courierNote : null,
             'is_replacement' => $this->isExchange,
-            'has_return' => $this->isExchange ? true : ($this->order?->has_return ?? false),
+            'exchange_of_order_id' => $this->isExchange ? $this->exchangeOfOrderId : null,
+            'has_return' => $this->order
+                ? (bool) $this->order->has_return
+                : ($this->isExchange && $this->exchangeOfOrderId === null),
             'email' => $this->order?->email,
             'status' => $this->order?->status ?? 'new',
             'customer_note' => trim((string) ($validated['customerNote'] ?? '')) !== ''
@@ -1184,6 +1299,20 @@ class AdminOrderForm extends Component
             'courierNote' => ['nullable', 'string', 'max:5000'],
             'customerNote' => ['nullable', 'string', 'max:2000'],
             'isExchange' => ['boolean'],
+            'exchangeOfOrderId' => [
+                'nullable',
+                'integer',
+                'exists:orders,id',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null || $value === '') {
+                        return;
+                    }
+
+                    if ($this->order && (int) $value === (int) $this->order->id) {
+                        $fail('An exchange cannot link to itself.');
+                    }
+                },
+            ],
             'deliveryCharge' => ['required', 'integer', 'min:0'],
             'charge' => ['required', 'integer', 'min:0'],
             'discount' => ['required', 'integer', 'min:0'],

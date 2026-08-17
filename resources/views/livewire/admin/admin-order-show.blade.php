@@ -8,6 +8,15 @@
                 <span class="text-[#D8CDB6]">·</span>
                 Placed by {{ $order->placedByLabel() }}
             </p>
+            <div class="mt-1 flex flex-wrap items-center gap-2">
+                @if ($order->is_replacement)
+                    <span title="Exchange order"
+                        class="inline-flex items-center rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
+                        Exc
+                    </span>
+                @endif
+                <x-admin.order-exchange-links :order="$order" />
+            </div>
         </div>
         <div class="flex flex-wrap items-center gap-2 sm:gap-3">
             <a href="{{ route('admin.orders.print', $order) }}" target="_blank"

@@ -139,6 +139,7 @@
                                     Exc
                                 </span>
                             @endif
+                            <x-admin.order-exchange-links :order="$order" />
                         </div>
                         <div class="grid w-full grid-cols-2 gap-3 sm:w-auto sm:min-w-[14rem] sm:flex-1 sm:grid-cols-2 md:grid-cols-3">
                             @forelse ($order->items as $item)
@@ -251,6 +252,7 @@
                                                 Exc
                                             </span>
                                         @endif
+                                        <x-admin.order-exchange-links :order="$order" />
                                         <span @class([
                                             'rounded-full px-2 py-0.5 text-[11px] capitalize',
                                             'bg-amber-50 text-amber-800 border border-amber-200' => $order->status === 'draft',

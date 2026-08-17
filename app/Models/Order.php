@@ -65,6 +65,7 @@ class Order extends Model
             'actual_delivery_date' => 'datetime',
             'payment_date' => 'datetime',
             'is_replacement' => 'boolean',
+            'exchange_of_order_id' => 'integer',
             'has_return' => 'boolean',
             'return_hub_arrived_at' => 'datetime',
         ];
@@ -158,6 +159,18 @@ class Order extends Model
     public function items(): HasMany
     {
         return $this->hasMany(OrderProduct::class);
+    }
+
+    /** Original order this replacement parcel is exchanging. */
+    public function exchangeOf(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'exchange_of_order_id');
+    }
+
+    /** Replacement parcels created for this original order. */
+    public function replacements(): HasMany
+    {
+        return $this->hasMany(self::class, 'exchange_of_order_id');
     }
 
     public function adjustments(): HasMany

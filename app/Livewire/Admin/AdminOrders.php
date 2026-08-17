@@ -1116,6 +1116,8 @@ class AdminOrders extends Component
             'channelConversation:id,channel,customer_name,last_inbound_at',
             'items:'.$itemColumns,
             'adjustments:id,order_id,type,label,amount,sort_order',
+            'exchangeOf:id,order_number',
+            'replacements:id,order_number,exchange_of_order_id',
         ];
 
         $showCourierTracking = AdminOrderSegment::showsCourierTracking($this->segment);

@@ -32,13 +32,16 @@ class AdminDashboardLayoutTest extends TestCase
         $this->actingAs($this->adminUser());
 
         Livewire::test(AdminDashboard::class)
-            ->assertSeeHtml('aria-label="Create product"')
-            ->assertSee(route('admin.products.create'), false)
+            ->assertSeeHtml('hidden md:block')
+            ->assertSeeHtml('aria-label="Products"')
+            ->assertSee(route('admin.products'), false)
+            ->assertDontSee(route('admin.products.create'), false)
             // Product uses a cube icon; order keeps the plain "+".
             ->assertSeeHtml('d="M10.362 1.093a.75.75 0 0 0-.724 0L2.523 5.018')
-            ->assertSeeHtml('aria-label="Create order"')
-            ->assertSee(route('admin.orders.create'), false)
-            ->assertSeeHtml('aria-label="Open inbox"')
+            ->assertSeeHtml('aria-label="Orders"')
+            ->assertSee(route('admin.orders.new'), false)
+            ->assertDontSee(route('admin.orders.create'), false)
+            ->assertSeeHtml('aria-label="Inbox"')
             ->assertSee(route('admin.inbox'), false)
             ->assertSee('Admin Attention')
             ->assertSee('All clear')
@@ -77,6 +80,24 @@ class AdminDashboardLayoutTest extends TestCase
             ->assertDontSee('Both months total')
             ->assertDontSee('Current month')
             ->assertDontSee('Previous month');
+    }
+
+    #[Test]
+    public function small_screen_top_nav_points_products_orders_and_inbox_at_index(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $this->get(route('admin.dashboard'))
+            ->assertOk()
+            ->assertSeeHtml('md:hidden sticky top-0')
+            ->assertSeeHtml('aria-label="Products"')
+            ->assertSee(route('admin.products'), false)
+            ->assertDontSee(route('admin.products.create'), false)
+            ->assertSeeHtml('aria-label="Orders"')
+            ->assertSee(route('admin.orders.new'), false)
+            ->assertDontSee(route('admin.orders.create'), false)
+            ->assertSeeHtml('aria-label="Inbox"')
+            ->assertSee(route('admin.inbox'), false);
     }
 
     #[Test]

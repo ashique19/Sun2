@@ -22,6 +22,8 @@ use InvalidArgumentException;
 
 class ChannelOrderDraftService
 {
+    public const INBOX_STAFF_DRAFT_NOTE = 'Draft started from Inbox by staff.';
+
     public function __construct(
         private ChannelOrderParser $parser,
         private ChannelMessageOrderMapper $mapper,
@@ -161,7 +163,7 @@ class ChannelOrderDraftService
         }
 
         $orderData = $this->buildOrderAttributes($conversation, $parsed);
-        $orderData['admin_note'] = 'Draft started from Inbox by staff.';
+        $orderData['admin_note'] = self::INBOX_STAFF_DRAFT_NOTE;
         $orderData['ai_parse_meta'] = array_merge($orderData['ai_parse_meta'] ?? [], [
             'source' => 'staff',
             'staff_locked_fields' => [],
@@ -473,16 +475,19 @@ class ChannelOrderDraftService
                 $user = $this->customers->findOrCreateCustomer($phone, (string) $order->name, $order->email);
             }
 
+            $extraAttributes = array_filter([
+                'user_id' => $user?->id,
+                'updated_by' => $confirmedBy,
+                'placed_at' => $order->placed_at ?? now(),
+            ], fn ($v) => $v !== null);
+            $extraAttributes['admin_note'] = $this->adminNoteWithoutInboxStaffDraftMarker($order->admin_note);
+
             $order = $this->statusService->update(
                 $order,
                 'new',
                 'AI draft confirmed by staff.',
                 $confirmedBy,
-                array_filter([
-                    'user_id' => $user?->id,
-                    'updated_by' => $confirmedBy,
-                    'placed_at' => $order->placed_at ?? now(),
-                ], fn ($v) => $v !== null),
+                $extraAttributes,
             );
 
             $conversation = $order->channelConversation;
@@ -514,6 +519,21 @@ class ChannelOrderDraftService
 
             Cache::forget(AdminOrderSegment::COUNTS_CACHE_KEY);
         });
+    }
+
+    private function adminNoteWithoutInboxStaffDraftMarker(?string $note): ?string
+    {
+        if ($note === null || $note === '') {
+            return null;
+        }
+
+        if (! str_contains($note, self::INBOX_STAFF_DRAFT_NOTE)) {
+            return $note;
+        }
+
+        $cleaned = trim(preg_replace('/\s{2,}/', ' ', str_replace(self::INBOX_STAFF_DRAFT_NOTE, '', $note)) ?? '');
+
+        return $cleaned === '' ? null : $cleaned;
     }
 
     /**

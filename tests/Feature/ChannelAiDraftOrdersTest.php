@@ -285,6 +285,55 @@ class ChannelAiDraftOrdersTest extends TestCase
         $this->assertSame(4, $product->fresh()->stock_quantity);
     }
 
+    public function test_confirm_draft_removes_inbox_staff_admin_note(): void
+    {
+        $admin = $this->adminUser();
+        $conversation = ChannelConversation::query()->create([
+            'channel' => ChannelConversation::CHANNEL_MESSENGER,
+            'external_user_id' => 'PSID_NOTE',
+            'last_inbound_at' => now(),
+            'customer_name' => 'Nila',
+            'customer_phone' => '01627237432',
+        ]);
+
+        $draft = app(ChannelOrderDraftService::class)->ensureDraftForConversation($conversation, $admin->id);
+
+        $this->assertSame(ChannelOrderDraftService::INBOX_STAFF_DRAFT_NOTE, $draft->admin_note);
+
+        Livewire::actingAs($admin)
+            ->test(AdminOrders::class, ['segment' => 'draft-ai'])
+            ->call('confirmDraft', $draft->id)
+            ->assertHasNoErrors();
+
+        $confirmed = $draft->fresh();
+        $this->assertSame('new', $confirmed->status);
+        $this->assertNull($confirmed->admin_note);
+    }
+
+    public function test_confirm_draft_keeps_other_admin_note_text(): void
+    {
+        $admin = $this->adminUser();
+        $conversation = ChannelConversation::query()->create([
+            'channel' => ChannelConversation::CHANNEL_MESSENGER,
+            'external_user_id' => 'PSID_NOTE_KEEP',
+            'last_inbound_at' => now(),
+        ]);
+
+        $draft = $this->baseOrder([
+            'status' => Order::STATUS_DRAFT,
+            'order_number' => '3002',
+            'placed_via' => Order::PLACED_VIA_MESSENGER,
+            'channel_conversation_id' => $conversation->id,
+            'admin_note' => ChannelOrderDraftService::INBOX_STAFF_DRAFT_NOTE.' Gift wrap requested.',
+        ]);
+        $conversation->update(['draft_order_id' => $draft->id]);
+
+        $confirmed = app(ChannelOrderDraftService::class)->confirm($draft, $admin->id);
+
+        $this->assertSame('new', $confirmed->status);
+        $this->assertSame('Gift wrap requested.', $confirmed->admin_note);
+    }
+
     public function test_conversation_viewer_and_reply_within_window(): void
     {
         Http::fake([

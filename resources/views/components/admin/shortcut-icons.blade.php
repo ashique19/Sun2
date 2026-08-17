@@ -7,6 +7,7 @@
     @unless ($isModeratorOnly)
         <a href="{{ route('admin.products') }}"
             wire:navigate
+            data-admin-shortcut="products"
             class="{{ $button }}"
             aria-label="Products"
             title="Products">
@@ -18,6 +19,7 @@
 
     <a href="{{ route('admin.orders.new') }}"
         wire:navigate
+        data-admin-shortcut="orders"
         class="{{ $button }}"
         aria-label="Orders"
         title="Orders">
@@ -27,6 +29,7 @@
     @unless ($isModeratorOnly)
         <a href="{{ route('admin.inbox') }}"
             wire:navigate
+            data-admin-shortcut="inbox"
             class="{{ $button }}"
             aria-label="Inbox"
             title="Inbox">

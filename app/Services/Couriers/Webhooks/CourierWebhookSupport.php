@@ -5,6 +5,7 @@ namespace App\Services\Couriers\Webhooks;
 use App\Models\CourierData;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
+use App\Services\Admin\AdminAttentionService;
 use App\Services\Admin\OrderDeliveryReturnService;
 use App\Services\Admin\OrderStatusService;
 use App\Services\Orders\OrderCourierChargeSync;
@@ -21,6 +22,7 @@ class CourierWebhookSupport
         private readonly OrderCourierChargeSync $courierChargeSync,
         private readonly OrderDeliverySettlement $deliverySettlement,
         private readonly OrderDeliveryReturnService $deliveryReturns,
+        private readonly AdminAttentionService $adminAttention,
     ) {}
 
     /**
@@ -129,6 +131,21 @@ class CourierWebhookSupport
 
         if ($mappedStatus === 'delivered') {
             $cod = $this->codAmount($payload, $order);
+            $expected = $order->collectableAmount();
+            $isPartial = $this->isPartialDeliveryPayload($payload);
+
+            if ($isPartial || $this->adminAttention->isCodMismatchSignificant($expected, $cod)) {
+                $this->holdDeliveryForReview(
+                    order: $order,
+                    payload: $payload,
+                    expectedAmount: $expected,
+                    collectedAmount: $cod,
+                    isPartial: $isPartial,
+                );
+
+                return;
+            }
+
             $this->deliverySettlement->recordCollection(
                 order: $order,
                 amount: $cod,
@@ -160,6 +177,56 @@ class CourierWebhookSupport
             'changed_by' => null,
             'created_at' => now(),
         ]);
+    }
+
+    /**
+     * Partial / COD-mismatch delivery: never auto-complete. Admin settles via qty modal.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function holdDeliveryForReview(
+        Order $order,
+        array $payload,
+        float $expectedAmount,
+        float $collectedAmount,
+        bool $isPartial,
+    ): void {
+        $event = (string) ($payload['event'] ?? $payload['status'] ?? '');
+
+        $this->adminAttention->createCodMismatch(
+            order: $order,
+            expectedAmount: $expectedAmount,
+            collectedAmount: $collectedAmount,
+            metadata: [
+                'webhook_payload' => $payload,
+                'reported_status' => $event,
+                'is_partial_delivery' => $isPartial,
+                'source' => str_starts_with(strtolower($event), 'order.')
+                    ? 'pathao_webhook'
+                    : 'webhook',
+            ],
+        );
+
+        $reviewNote = $isPartial
+            ? 'Partial delivery reported'.($event !== '' ? " ({$event})" : '')
+                .": Expected COD ৳{$expectedAmount}, collected ৳{$collectedAmount}. Requires admin attention."
+            : "COD mismatch: Expected ৳{$expectedAmount}, collected ৳{$collectedAmount}. Courier reported delivered. Requires admin attention.";
+
+        $this->recordHistory($order, $order->status, $reviewNote);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function isPartialDeliveryPayload(array $payload): bool
+    {
+        $haystack = strtolower(implode(' ', array_filter([
+            (string) ($payload['event'] ?? ''),
+            (string) ($payload['status'] ?? ''),
+            (string) ($payload['notification_type'] ?? ''),
+        ])));
+
+        return str_contains($haystack, 'partial');
     }
 
     /**

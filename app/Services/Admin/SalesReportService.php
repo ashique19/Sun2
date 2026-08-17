@@ -4,6 +4,7 @@ namespace App\Services\Admin;
 
 use App\Models\Order;
 use App\Models\Product;
+use App\Support\OrderEconomicsSql;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -98,6 +99,9 @@ class SalesReportService
      */
     public function productSummary(Product $product): array
     {
+        $keptQty = OrderEconomicsSql::keptQuantityExpression();
+        $keptValue = OrderEconomicsSql::keptValueExpression();
+
         $row = DB::table('order_products')
             ->join('orders', 'orders.id', '=', 'order_products.order_id')
             ->where('order_products.product_id', $product->id)
@@ -105,8 +109,8 @@ class SalesReportService
             ->selectRaw('COUNT(DISTINCT orders.id) as order_count')
             ->selectRaw('COALESCE(SUM(order_products.quantity), 0) as sales_volume')
             ->selectRaw('COALESCE(SUM(order_products.line_total), 0) as sales_value')
-            ->selectRaw("COALESCE(SUM(CASE WHEN orders.status = 'delivered' THEN order_products.quantity ELSE 0 END), 0) as delivered_volume")
-            ->selectRaw("COALESCE(SUM(CASE WHEN orders.status = 'delivered' THEN order_products.line_total ELSE 0 END), 0) as delivered_value")
+            ->selectRaw("COALESCE(SUM(CASE WHEN orders.status = 'delivered' THEN {$keptQty} ELSE 0 END), 0) as delivered_volume")
+            ->selectRaw("COALESCE(SUM(CASE WHEN orders.status = 'delivered' THEN {$keptValue} ELSE 0 END), 0) as delivered_value")
             ->selectRaw('COALESCE(SUM(order_products.returned_quantity), 0) as returned_volume')
             ->selectRaw('COALESCE(SUM(order_products.commission_earned), 0) as commission_earned')
             ->first();
@@ -180,6 +184,8 @@ class SalesReportService
         $end = now('Asia/Dhaka')->startOfMonth();
         $start = $end->copy()->subMonths($months - 1);
         [$yearExpr, $monthExpr] = $this->yearMonthExpressions('orders.placed_at');
+        $keptQty = OrderEconomicsSql::keptQuantityExpression();
+        $keptValue = OrderEconomicsSql::keptValueExpression();
 
         $sales = DB::table('order_products')
             ->join('orders', 'orders.id', '=', 'order_products.order_id')
@@ -202,8 +208,8 @@ class SalesReportService
             ->where('orders.placed_at', '>=', $start->toDateTimeString())
             ->selectRaw("{$yearExpr} as year")
             ->selectRaw("{$monthExpr} as month")
-            ->selectRaw('COALESCE(SUM(order_products.quantity), 0) as delivered_volume')
-            ->selectRaw('COALESCE(SUM(order_products.line_total), 0) as delivered_value')
+            ->selectRaw("COALESCE(SUM({$keptQty}), 0) as delivered_volume")
+            ->selectRaw("COALESCE(SUM({$keptValue}), 0) as delivered_value")
             ->groupByRaw("{$yearExpr}, {$monthExpr}")
             ->get()
             ->keyBy(fn ($row) => ((int) $row->year).'-'.((int) $row->month));

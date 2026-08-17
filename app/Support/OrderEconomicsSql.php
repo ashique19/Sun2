@@ -62,6 +62,22 @@ class OrderEconomicsSql
         END";
     }
 
+    /**
+     * Kept sellable units (ordered minus returned).
+     */
+    public static function keptQuantityExpression(string $alias = 'order_products'): string
+    {
+        return self::greatest("({$alias}.quantity - COALESCE({$alias}.returned_quantity, 0))", '0');
+    }
+
+    /**
+     * Kept merchandise value using unit price (not full line_total when units returned).
+     */
+    public static function keptValueExpression(string $alias = 'order_products'): string
+    {
+        return '('.self::keptQuantityExpression($alias)." * COALESCE({$alias}.price, 0))";
+    }
+
     public static function greatest(string $left, string $right): string
     {
         return DB::connection()->getDriverName() === 'sqlite'

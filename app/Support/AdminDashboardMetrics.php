@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
 class AdminDashboardMetrics
 {
-    public const DAILY_CACHE_KEY = 'admin.dashboard_daily_totals.v4';
+    public const DAILY_CACHE_KEY = 'admin.dashboard_daily_totals.v5';
 
     public const DAILY_CACHE_TTL = 60;
 
@@ -282,6 +282,8 @@ class AdminDashboardMetrics
 
         $monthExpr = DhakaSql::yearMonth('orders.placed_at');
 
+        $keptValue = OrderEconomicsSql::keptValueExpression();
+
         $aggregated = DB::table('orders')
             ->leftJoin('order_products', 'order_products.order_id', '=', 'orders.id')
             ->leftJoin('products', 'products.id', '=', 'order_products.product_id')
@@ -297,7 +299,7 @@ class AdminDashboardMetrics
             ->selectRaw('COUNT(DISTINCT orders.id) as order_qty')
             ->selectRaw('COALESCE(SUM(COALESCE(order_products.line_total, 0)), 0) as order_value')
             ->selectRaw("COUNT(DISTINCT CASE WHEN orders.status = 'delivered' THEN orders.id END) as delivery_qty")
-            ->selectRaw("COALESCE(SUM(CASE WHEN orders.status = 'delivered' THEN COALESCE(order_products.line_total, 0) ELSE 0 END), 0) as delivery_value")
+            ->selectRaw("COALESCE(SUM(CASE WHEN orders.status = 'delivered' THEN {$keptValue} ELSE 0 END), 0) as delivery_value")
             ->groupByRaw("{$monthExpr}, categories.id")
             ->get();
 

@@ -255,6 +255,30 @@
                         </div>
                     </div>
 
+                    @php($exchangePair = $order->exchangePairEconomics())
+                    @if ($exchangePair)
+                        <div class="space-y-2 border-t border-[#E7DFCF] pt-3">
+                            <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Exchange pair P/L</p>
+                            <p class="text-xs text-[#8C8474]">
+                                Original + replacement as one event:
+                                @foreach ($exchangePair['orders'] as $member)
+                                    <a href="{{ route('admin.orders.show', $member) }}" wire:navigate
+                                        class="font-medium text-sky-700 hover:underline">#{{ $member->order_number }}</a>@if (! $loop->last), @endif
+                                @endforeach
+                            </p>
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Collected</span><span class="tabular-nums">&#2547; {{ number_format($exchangePair['collected'], 0) }}</span></div>
+                            <div class="flex justify-between gap-3 text-emerald-700"><span>− Returned write-off</span><span class="tabular-nums">&#2547; {{ number_format($exchangePair['write_off'], 0) }}</span></div>
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Combined COGS</span><span class="tabular-nums">&#2547; {{ number_format($exchangePair['cogs'], 0) }}</span></div>
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Combined packaging</span><span class="tabular-nums">&#2547; {{ number_format($exchangePair['packaging'], 0) }}</span></div>
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Combined courier</span><span class="tabular-nums">&#2547; {{ number_format($exchangePair['courier'], 0) }}</span></div>
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Combined COD %</span><span class="tabular-nums">&#2547; {{ number_format($exchangePair['cod'], 2) }}</span></div>
+                            <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 text-base font-semibold">
+                                <span>Pair gross profit</span>
+                                <span @class(['tabular-nums', 'text-rose-600' => $exchangePair['gross_profit'] < 0])>&#2547; {{ number_format($exchangePair['gross_profit'], 0) }}</span>
+                            </div>
+                        </div>
+                    @endif
+
                     <div class="space-y-2 border-t border-[#E7DFCF] pt-3">
                         <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Payment</p>
                         <div class="flex justify-between gap-3 text-[#6B6459]"><span>Paid</span><span class="tabular-nums">&#2547; {{ number_format($order->paid_amount, 0) }}</span></div>

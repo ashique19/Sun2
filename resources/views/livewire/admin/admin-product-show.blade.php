@@ -185,7 +185,8 @@
             <p class="text-[11px] uppercase tracking-wide text-[#8C8474]">Delivered</p>
             <p class="mt-1 text-xl font-semibold tabular-nums">{{ number_format($summary['delivered_volume']) }}</p>
             <p class="mt-0.5 text-xs text-[#8C8474]">
-                {{ $summary['delivered_pct'] === null ? '—' : number_format($summary['delivered_pct'], 1).'%' }}
+                Kept units
+                · {{ $summary['delivered_pct'] === null ? '—' : number_format($summary['delivered_pct'], 1).'%' }}
                 · &#2547; {{ number_format($summary['delivered_value'], 0) }}
             </p>
         </div>

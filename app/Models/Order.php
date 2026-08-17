@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 
 class Order extends Model
 {
@@ -171,6 +172,100 @@ class Order extends Model
     public function replacements(): HasMany
     {
         return $this->hasMany(self::class, 'exchange_of_order_id');
+    }
+
+    /**
+     * Original + replacements as one commercial event (null when this order is unlinked).
+     *
+     * @return array{
+     *     orders: Collection<int, Order>,
+     *     collected: float,
+     *     write_off: float,
+     *     cogs: float,
+     *     packaging: float,
+     *     courier: float,
+     *     cod: float,
+     *     gross_profit: float
+     * }|null
+     */
+    public function exchangePairEconomics(): ?array
+    {
+        $members = $this->exchangePairOrders();
+
+        if ($members->count() < 2) {
+            return null;
+        }
+
+        $collected = 0.0;
+        $writeOff = 0.0;
+        $cogs = 0.0;
+        $packaging = 0.0;
+        $courier = 0.0;
+        $cod = 0.0;
+        $grossProfit = 0.0;
+
+        foreach ($members as $member) {
+            $member->loadMissing(['items', 'adjustments', 'courier']);
+            $totals = $member->moneyTotals();
+            $collected += (float) ($member->collected_amount ?? 0);
+            $writeOff += (float) $member->adjustments
+                ->where('source', 'partial_return_writeoff')
+                ->sum('amount');
+            $cogs += $totals->cogs;
+            $packaging += $totals->packagingCost;
+            $courier += $totals->courierCharge;
+            $cod += $totals->codCharge;
+            $grossProfit += $totals->grossProfit;
+        }
+
+        return [
+            'orders' => $members,
+            'collected' => round($collected, 2),
+            'write_off' => round($writeOff, 2),
+            'cogs' => round($cogs, 2),
+            'packaging' => round($packaging, 2),
+            'courier' => round($courier, 2),
+            'cod' => round($cod, 2),
+            'gross_profit' => round($grossProfit, 2),
+        ];
+    }
+
+    /**
+     * @return Collection<int, Order>
+     */
+    private function exchangePairOrders(): Collection
+    {
+        $ids = [];
+
+        if ($this->exchange_of_order_id) {
+            $ids[] = (int) $this->exchange_of_order_id;
+            $ids[] = (int) $this->id;
+            $ids = array_merge(
+                $ids,
+                Order::query()->where('exchange_of_order_id', $this->exchange_of_order_id)->pluck('id')->all(),
+            );
+        } else {
+            $this->loadMissing('replacements');
+
+            if ($this->replacements->isEmpty()) {
+                return collect();
+            }
+
+            $ids[] = (int) $this->id;
+            $ids = array_merge($ids, $this->replacements->modelKeys());
+        }
+
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+
+        if (count($ids) < 2) {
+            return collect();
+        }
+
+        return Order::query()
+            ->with(['items', 'adjustments', 'courier'])
+            ->whereIn('id', $ids)
+            ->orderBy('id')
+            ->get();
     }
 
     public function adjustments(): HasMany

@@ -319,7 +319,7 @@ class AnalyticsService
 
     /**
      * Delivered line revenue by product category × month (order created_at).
-     * Values are order-line `line_total` sums (not prorated collected amounts).
+     * Values are kept-unit merchandise (qty − returned × price), not full line_total.
      *
      * @return array{
      *     year: int,
@@ -339,6 +339,7 @@ class AnalyticsService
         ];
 
         $monthExpr = DhakaSql::month('orders.created_at');
+        $keptValue = OrderEconomicsSql::keptValueExpression();
 
         $aggregated = DB::table('order_products')
             ->join('orders', 'orders.id', '=', 'order_products.order_id')
@@ -351,7 +352,7 @@ class AnalyticsService
             ->selectRaw('categories.id as category_id')
             // MAX() keeps MySQL ONLY_FULL_GROUP_BY happy (name is determined by category id).
             ->selectRaw("MAX(COALESCE(NULLIF(categories.name, ''), 'Uncategorized')) as name")
-            ->selectRaw('COALESCE(SUM(order_products.line_total), 0) as amount')
+            ->selectRaw("COALESCE(SUM({$keptValue}), 0) as amount")
             ->groupByRaw("{$monthExpr}, categories.id")
             ->get();
 

@@ -297,6 +297,7 @@ class AnalyticsYearCompareService
         [$from, $to] = $this->createdAtBounds($startYear, $endYear);
         $yearExpr = DhakaSql::year('orders.created_at');
         $monthExpr = DhakaSql::month('orders.created_at');
+        $keptValue = OrderEconomicsSql::keptValueExpression();
 
         $rows = DB::table('order_products')
             ->join('orders', 'orders.id', '=', 'order_products.order_id')
@@ -305,7 +306,7 @@ class AnalyticsYearCompareService
             ->where('orders.created_at', 'not like', '0000-00-00%')
             ->selectRaw("{$yearExpr} as year")
             ->selectRaw("{$monthExpr} as month")
-            ->selectRaw('COALESCE(SUM(order_products.line_total), 0) as value')
+            ->selectRaw("COALESCE(SUM({$keptValue}), 0) as value")
             ->groupByRaw("{$yearExpr}, {$monthExpr}")
             ->get();
 

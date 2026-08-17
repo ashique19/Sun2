@@ -83,6 +83,9 @@ class AdminOrders extends Component
 
     public string $partialCourierCharge = '0';
 
+    /** dispatched = rider partial; delivered = post-delivery H/R. */
+    public string $partialMode = 'dispatched';
+
     /** @var list<array{id:int,name:string,quantity:int,image:?string}> */
     public array $partialItems = [];
 
@@ -558,8 +561,7 @@ class AdminOrders extends Component
                 return;
             }
 
-            $settlement->setHasReturn($order, true);
-            $this->removeSettledFromList([(int) $orderId]);
+            $this->openDeliveredHasReturn($orderId);
 
             return;
         }
@@ -607,6 +609,46 @@ class AdminOrders extends Component
             $this->partialReturns[$item->id] = 0;
         }
 
+        $this->partialMode = 'dispatched';
+        $this->showPartialModal = true;
+        $this->resetErrorBag();
+    }
+
+    public function openDeliveredHasReturn(int $orderId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->segment !== 'delivered') {
+            return;
+        }
+
+        $order = Order::query()
+            ->with(['items:id,order_id,name,quantity,product_image,returned_quantity'])
+            ->find($orderId);
+
+        if (! $order || $order->status !== 'delivered' || $order->has_return) {
+            return;
+        }
+
+        $this->partialOrderId = (int) $order->id;
+        $this->partialOrderNumber = (string) $order->order_number;
+        $this->partialExpectedCod = '0';
+        $this->partialCourierCharge = '0';
+        $this->partialCollectedTk = '0';
+        $this->partialMode = 'delivered';
+        $this->partialReturns = [];
+        $this->partialItems = [];
+
+        foreach ($order->items as $item) {
+            $this->partialItems[] = [
+                'id' => (int) $item->id,
+                'name' => (string) $item->name,
+                'quantity' => (int) $item->quantity,
+                'image' => $item->imageUrl(),
+            ];
+            $this->partialReturns[$item->id] = (int) $item->returned_quantity;
+        }
+
         $this->showPartialModal = true;
         $this->resetErrorBag();
     }
@@ -621,6 +663,7 @@ class AdminOrders extends Component
         $this->partialCollectedTk = '0';
         $this->partialExpectedCod = '0';
         $this->partialCourierCharge = '0';
+        $this->partialMode = 'dispatched';
         $this->resetErrorBag();
     }
 
@@ -628,7 +671,17 @@ class AdminOrders extends Component
     {
         AdminAccess::ensureStaffAdmin();
 
-        if ($this->segment !== 'dispatched' || ! $this->partialOrderId) {
+        if (! $this->partialOrderId) {
+            return;
+        }
+
+        if ($this->partialMode === 'delivered') {
+            $this->submitDeliveredHasReturn($settlement);
+
+            return;
+        }
+
+        if ($this->segment !== 'dispatched') {
             return;
         }
 
@@ -656,6 +709,37 @@ class AdminOrders extends Component
             $returned,
             (float) $this->partialCollectedTk,
         );
+
+        $settledId = (int) $order->id;
+        $this->closePartialModal();
+        $this->removeSettledFromList([$settledId]);
+    }
+
+    private function submitDeliveredHasReturn(OrderDeliveryReturnService $settlement): void
+    {
+        if ($this->segment !== 'delivered') {
+            return;
+        }
+
+        $this->validate([
+            'partialReturns' => ['required', 'array'],
+            'partialReturns.*' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $order = Order::query()->find($this->partialOrderId);
+
+        if (! $order || $order->status !== 'delivered' || $order->has_return) {
+            $this->closePartialModal();
+
+            return;
+        }
+
+        $returned = [];
+        foreach ($this->partialReturns as $itemId => $qty) {
+            $returned[(int) $itemId] = (int) $qty;
+        }
+
+        $settlement->flagDeliveredReturn($order, $returned);
 
         $settledId = (int) $order->id;
         $this->closePartialModal();

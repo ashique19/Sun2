@@ -441,7 +441,7 @@
                                         wire:click="toggleHasReturn({{ $order->id }})"
                                         wire:loading.attr="disabled"
                                         wire:target="toggleHasReturn({{ $order->id }})"
-                                        title="Flag has return (moves to Return Pending)"
+                                        title="Flag returned units (moves to Return Pending)"
                                         class="inline-flex h-8 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white px-2.5 text-xs font-semibold text-[#6B6459] hover:bg-[#FAF6EF] disabled:opacity-60">
                                         H/R
                                     </button>
@@ -730,7 +730,9 @@
                         <div class="w-full max-w-lg rounded-xl border border-[#EFE7D6] bg-white p-6 shadow-xl space-y-4 max-h-[85vh] overflow-y-auto" wire:click.stop>
                             <div class="flex items-start justify-between gap-3">
                                 <div>
-                                    <h2 class="font-semibold text-lg">Partial return</h2>
+                                    <h2 class="font-semibold text-lg">
+                                        {{ $partialMode === 'delivered' ? 'Flag return (H/R)' : 'Partial return' }}
+                                    </h2>
                                     <p class="text-xs text-[#8C8474] mt-1">Order #{{ $partialOrderNumber }}</p>
                                 </div>
                                 <button type="button" wire:click="closePartialModal" class="text-sm text-[#8C8474] hover:text-[#1E1E1E]">Close</button>
@@ -762,6 +764,11 @@
                                 @error('partialReturns.*') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
                             </div>
 
+                            @if ($partialMode === 'delivered')
+                                <p class="text-xs text-[#8C8474]">
+                                    Status stays Delivered. Returned value is written off and the order moves to Return Pending until stock is received.
+                                </p>
+                            @else
                             <div>
                                 <label class="mb-1 block text-sm font-medium">Collected Tk</label>
                                 <input type="number" min="0" step="1" wire:model="partialCollectedTk"
@@ -781,11 +788,12 @@
                                     All products returned → Cancelled. Some kept → Delivered. Both set has_return.
                                 </p>
                             </div>
+                            @endif
 
                             <div class="flex flex-wrap gap-3 pt-1">
                                 <button type="button" wire:click="submitPartialReturn"
                                     class="rounded-full bg-[#1E1E1E] px-6 py-2.5 text-sm font-semibold text-white hover:bg-black">
-                                    Submit partial
+                                    {{ $partialMode === 'delivered' ? 'Flag return' : 'Submit partial' }}
                                 </button>
                                 <button type="button" wire:click="closePartialModal"
                                     class="rounded-full border border-[#E0D6C2] px-6 py-2.5 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF]">

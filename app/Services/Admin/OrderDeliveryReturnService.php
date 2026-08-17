@@ -63,7 +63,8 @@ class OrderDeliveryReturnService
     }
 
     /**
-     * Full cancel & return without delivery charge (C/R).
+     * Full cancel & return: write off merch + delivery, reverse courier COD book,
+     * debit courier fee, collect 0, flag Return Pending.
      */
     public function cancelAndReturn(Order $order, ?int $changedBy = null): Order
     {
@@ -74,7 +75,7 @@ class OrderDeliveryReturnService
             status: 'returned',
             note: 'Cancel and Return (no delivery charge).',
             changedBy: $changedBy,
-            applyCourierFeeDebit: false,
+            applyCourierFeeDebit: true,
         );
     }
 
@@ -105,6 +106,8 @@ class OrderDeliveryReturnService
             $order->load('items', 'courier');
 
             $this->applyCourierReturnedLines($order);
+            $actor = $changedBy ? User::query()->find($changedBy) : auth()->user();
+            $this->applyReturnWriteOff($order->fresh(['items', 'adjustments']), allReturned: true, actor: $actor);
             $order->refresh()->load('courier');
 
             if ($order->courier) {
@@ -174,33 +177,7 @@ class OrderDeliveryReturnService
             $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
             $order->load('items', 'courier');
 
-            $anyReturned = false;
-            $allReturned = true;
-
-            foreach ($order->items as $item) {
-                $ordered = (int) $item->quantity;
-                $returned = (int) ($returnedQtyByItemId[$item->id] ?? 0);
-
-                if ($returned < 0 || $returned > $ordered) {
-                    throw ValidationException::withMessages([
-                        'partialReturns.'.$item->id => 'Returned qty for “'.$item->name.'” must be between 0 and '.$ordered.'.',
-                    ]);
-                }
-
-                if ($returned > 0) {
-                    $anyReturned = true;
-                }
-
-                if ($returned < $ordered) {
-                    $allReturned = false;
-                }
-
-                $item->update([
-                    'returned_quantity' => $returned,
-                    'to_be_returned' => $returned > 0,
-                    'return_received' => false,
-                ]);
-            }
+            [$anyReturned, $allReturned] = $this->applyReturnedQuantities($order, $returnedQtyByItemId);
 
             if (! $anyReturned) {
                 throw ValidationException::withMessages([
@@ -219,7 +196,7 @@ class OrderDeliveryReturnService
             // Write off returned merchandise (and delivery when nothing was kept) so the
             // bill matches what the rider should have collected — otherwise residual due
             // looks like a wrong "recorded" COD (e.g. 2320 − 1220 → 1100).
-            $this->applyPartialReturnWriteOff($order->fresh(['items', 'adjustments']), $allReturned, $actor);
+            $this->applyReturnWriteOff($order->fresh(['items', 'adjustments']), $allReturned, $actor);
 
             // $collectedTk is what the rider collected from the customer (gross).
             // Do not subtract courier_charge here — that fee is applied in receivable math only.
@@ -298,7 +275,48 @@ class OrderDeliveryReturnService
                 ]);
             }
 
+            $hasUnreceivedReturns = $order->items->contains(
+                fn ($item) => (int) $item->returned_quantity > 0,
+            );
+
+            if ($hasUnreceivedReturns) {
+                $this->setHasReturn($order->fresh(), true);
+            }
+
             return $order->refresh();
+        });
+    }
+
+    /**
+     * After delivery: mark returned units, write off their value, keep delivered, flag Return Pending.
+     *
+     * @param  array<int, int>  $returnedQtyByItemId
+     */
+    public function flagDeliveredReturn(Order $order, array $returnedQtyByItemId, ?int $changedBy = null): Order
+    {
+        if ($order->status !== 'delivered') {
+            throw new RuntimeException('Only delivered orders can be flagged for return this way.');
+        }
+
+        return DB::transaction(function () use ($order, $returnedQtyByItemId, $changedBy) {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+            $order->load('items', 'adjustments');
+
+            [$anyReturned] = $this->applyReturnedQuantities($order, $returnedQtyByItemId);
+
+            if (! $anyReturned) {
+                throw ValidationException::withMessages([
+                    'partialReturns' => 'Enter at least one returned quantity to flag H/R.',
+                ]);
+            }
+
+            $actor = $changedBy ? User::query()->find($changedBy) : auth()->user();
+            // Delivery was already earned; only write off returned merchandise.
+            $this->applyReturnWriteOff($order->fresh(['items', 'adjustments']), allReturned: false, actor: $actor);
+
+            $this->setHasReturn($order->fresh(), true);
+
+            return $order->fresh(['items', 'adjustments']);
         });
     }
 
@@ -337,9 +355,46 @@ class OrderDeliveryReturnService
     }
 
     /**
+     * @param  array<int, int>  $returnedQtyByItemId
+     * @return array{0: bool, 1: bool} [anyReturned, allReturned]
+     */
+    private function applyReturnedQuantities(Order $order, array $returnedQtyByItemId): array
+    {
+        $anyReturned = false;
+        $allReturned = true;
+
+        foreach ($order->items as $item) {
+            $ordered = (int) $item->quantity;
+            $returned = (int) ($returnedQtyByItemId[$item->id] ?? 0);
+
+            if ($returned < 0 || $returned > $ordered) {
+                throw ValidationException::withMessages([
+                    'partialReturns.'.$item->id => 'Returned qty for “'.$item->name.'” must be between 0 and '.$ordered.'.',
+                ]);
+            }
+
+            if ($returned > 0) {
+                $anyReturned = true;
+            }
+
+            if ($returned < $ordered) {
+                $allReturned = false;
+            }
+
+            $item->update([
+                'returned_quantity' => $returned,
+                'to_be_returned' => $returned > 0,
+                'return_received' => false,
+            ]);
+        }
+
+        return [$anyReturned, $allReturned];
+    }
+
+    /**
      * Reduce the customer bill for returned merchandise (and delivery when nothing was kept).
      */
-    private function applyPartialReturnWriteOff(Order $order, bool $allReturned, ?User $actor): void
+    private function applyReturnWriteOff(Order $order, bool $allReturned, ?User $actor): void
     {
         $returnedMerchandise = 0.0;
 

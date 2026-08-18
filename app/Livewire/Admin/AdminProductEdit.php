@@ -39,6 +39,8 @@ class AdminProductEdit extends Component
 
     public ?int $category_id = null;
 
+    public string $newCategoryName = '';
+
     public string $name = '';
 
     public string $slug = '';
@@ -1023,6 +1025,51 @@ class AdminProductEdit extends Component
         }
     }
 
+    public function createCategory(): void
+    {
+        $this->newCategoryName = trim($this->newCategoryName);
+
+        $this->validate([
+            'newCategoryName' => ['required', 'string', 'max:120'],
+        ]);
+
+        $existing = Category::query()
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($this->newCategoryName)])
+            ->first();
+
+        if ($existing) {
+            $this->category_id = $existing->id;
+            $this->newCategoryName = '';
+            $this->message = 'Category “'.$existing->name.'” selected.';
+
+            return;
+        }
+
+        $base = Str::slug($this->newCategoryName);
+        if ($base === '') {
+            $base = 'category';
+        }
+
+        $slug = $base;
+        $suffix = 2;
+        while (Category::query()->where('slug', $slug)->exists()) {
+            $slug = $base.'-'.$suffix;
+            $suffix++;
+        }
+
+        $category = Category::query()->create([
+            'name' => $this->newCategoryName,
+            'slug' => $slug,
+            'is_active' => true,
+            'is_homepage' => true,
+            'display_order' => 0,
+        ]);
+
+        $this->category_id = $category->id;
+        $this->newCategoryName = '';
+        $this->message = 'Category “'.$category->name.'” created.';
+    }
+
     /**
      * Create or update the product without redirecting. Call before uploading images on create.
      */
@@ -1474,7 +1521,7 @@ class AdminProductEdit extends Component
             ->get();
 
         return view('livewire.admin.admin-product-edit', [
-            'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
+            'categories' => Category::query()->orderBy('name')->get(['id', 'name', 'slug']),
             'materialsForBom' => Material::query()->orderBy('name')->get(['id', 'name', 'unit', 'unit_cost']),
             'aiPromptGroups' => $promptGroups,
             'geminiConfigured' => app(GeminiClient::class)->isConfigured(),

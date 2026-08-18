@@ -63,4 +63,46 @@ class StorefrontAssetsTest extends TestCase
             @unlink($absolute);
         }
     }
+
+    #[Test]
+    public function unsuffixed_category_thumbs_prefer_local_sibling_variants(): void
+    {
+        $md = 'img/categories/999002/cat-thumb.jpg';
+        $sm = 'img/categories/999002/cat-thumb_sm.jpg';
+        File::ensureDirectoryExists(dirname(public_path($md)));
+        File::put(public_path($md), 'md-bytes');
+        File::put(public_path($sm), 'sm-bytes');
+
+        try {
+            $url = StorefrontAssets::smallUrl('/'.$md);
+
+            $this->assertNotNull($url);
+            $this->assertStringNotContainsString('sundoritoma.com', $url);
+            $this->assertStringContainsString($sm, $url);
+        } finally {
+            @unlink(public_path($md));
+            @unlink(public_path($sm));
+            @rmdir(dirname(public_path($md)));
+        }
+    }
+
+    #[Test]
+    public function variant_url_falls_back_to_original_local_file_when_sibling_is_missing(): void
+    {
+        $relative = 'img/categories/999003/only-master.jpg';
+        $absolute = public_path($relative);
+        File::ensureDirectoryExists(dirname($absolute));
+        File::put($absolute, 'master-bytes');
+
+        try {
+            $url = StorefrontAssets::smallUrl('/'.$relative);
+
+            $this->assertNotNull($url);
+            $this->assertStringNotContainsString('sundoritoma.com', $url);
+            $this->assertStringContainsString($relative, $url);
+        } finally {
+            @unlink($absolute);
+            @rmdir(dirname($absolute));
+        }
+    }
 }

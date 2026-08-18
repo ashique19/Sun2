@@ -44,8 +44,10 @@
                         <button type="button" wire:click="clearThumbnail"
                             class="text-xs text-rose-600 hover:underline mt-1">Remove image</button>
                     </div>
+                @elseif ($thumbUpload)
+                    <p class="text-xs text-[#6B6459]">Image selected. Save the category to store it.</p>
                 @endif
-                <input type="file" wire:model="thumbUpload" accept="image/jpeg,image/png,image/webp,image/gif"
+                <input type="file" wire:model.live="thumbUpload" accept="image/jpeg,image/png,image/webp,image/gif"
                     class="block w-full text-sm text-[#6B6459] file:mr-3 file:rounded-lg file:border-0 file:bg-[#FAF6EF] file:px-3 file:py-2 file:text-sm file:font-medium file:text-[#1E1E1E] hover:file:bg-[#F1EADB]">
                 <div wire:loading wire:target="thumbUpload" class="text-xs text-[#8C8474]">Uploading…</div>
                 @error('thumbUpload') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
@@ -62,7 +64,8 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-3 pt-2">
-            <button type="submit" class="rounded-full bg-[#C9A227] px-8 py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f]">
+            <button type="submit" wire:loading.attr="disabled" wire:target="thumbUpload,save"
+                class="rounded-full bg-[#C9A227] px-8 py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
                 {{ $category ? 'Save Category' : 'Create Category' }}
             </button>
 

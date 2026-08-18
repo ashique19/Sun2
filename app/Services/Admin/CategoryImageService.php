@@ -11,22 +11,35 @@ use RuntimeException;
 
 class CategoryImageService
 {
-    /** Longest edge for category thumbnails (homepage cards). */
+    /** Longest edge for the stored category thumbnail (homepage cards). */
     public const MAX_EDGE = 600;
+
+    public const EDGE_MD = 600;
+
+    public const EDGE_SM = 400;
+
+    public const EDGE_XS = 200;
+
+    public const JPEG_QUALITY = 82;
+
+    /**
+     * @var array<string, int>
+     */
+    public const VARIANT_EDGES = [
+        'md' => self::EDGE_MD,
+        'sm' => self::EDGE_SM,
+        'xs' => self::EDGE_XS,
+    ];
 
     public function store(Category $category, UploadedFile $file): string
     {
         $directory = $this->categoryDirectory($category->id);
         File::ensureDirectoryExists($directory);
 
-        $filename = now()->format('YmdHis').'_'.Str::lower(Str::random(6)).'.jpg';
-        $destination = $directory.DIRECTORY_SEPARATOR.$filename;
-
-        $this->resizeAndSaveJpeg($file, $destination);
+        $basename = now()->format('YmdHis').'_'.Str::lower(Str::random(6));
+        $path = $this->persistVariants($file, $directory, $basename, $category->id);
 
         $oldPath = $category->thumb_image;
-        $path = '/img/categories/'.$category->id.'/'.$filename;
-
         $category->update(['thumb_image' => $path]);
 
         if ($oldPath && $oldPath !== $path) {
@@ -55,15 +68,45 @@ class CategoryImageService
 
         $normalized = ltrim(str_replace('\\', '/', $path), '/');
 
-        if (! str_starts_with($normalized, 'img/categories/')) {
+        // Only delete files this service wrote under /img/categories/{id}/…
+        // Shared catalog originals (Earring.jpg, Necklace.jpg, …) must stay.
+        if (! preg_match('#^img/categories/\d+/[^/]+$#', $normalized)) {
             return;
         }
 
-        $absolute = public_path($normalized);
+        foreach ($this->variantPaths($normalized) as $relative) {
+            $absolute = public_path($relative);
 
-        if (is_file($absolute)) {
-            @unlink($absolute);
+            if (is_file($absolute)) {
+                @unlink($absolute);
+            }
         }
+
+        $directory = dirname(public_path($normalized));
+
+        if (is_dir($directory) && File::isEmptyDirectory($directory)) {
+            @rmdir($directory);
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function variantPaths(string $normalized): array
+    {
+        $paths = [$normalized];
+
+        if (preg_match('/_(xs|sm|md|lg)(\.[a-zA-Z0-9]+)$/i', $normalized)) {
+            foreach (['xs', 'sm', 'md', 'lg'] as $variant) {
+                $paths[] = preg_replace('/_(xs|sm|md|lg)(\.[a-zA-Z0-9]+)$/i', '_'.$variant.'$2', $normalized);
+            }
+        } else {
+            foreach (['xs', 'sm', 'md'] as $variant) {
+                $paths[] = preg_replace('/(\.[a-zA-Z0-9]+)$/i', '_'.$variant.'$1', $normalized);
+            }
+        }
+
+        return array_values(array_unique(array_filter($paths)));
     }
 
     private function categoryDirectory(int $categoryId): string
@@ -71,7 +114,7 @@ class CategoryImageService
         return public_path(implode(DIRECTORY_SEPARATOR, ['img', 'categories', (string) $categoryId]));
     }
 
-    private function resizeAndSaveJpeg(UploadedFile $file, string $destination): void
+    private function persistVariants(UploadedFile $file, string $directory, string $basename, int $categoryId): string
     {
         $source = $file->getRealPath();
 
@@ -99,24 +142,50 @@ class CategoryImageService
             throw new RuntimeException('Unsupported image type for category thumbnail.');
         }
 
-        $max = self::MAX_EDGE;
-        $scale = min(1.0, $max / max($width, $height));
+        try {
+            $masterName = $basename.'.jpg';
+            $this->writeFit($image, $width, $height, $directory.DIRECTORY_SEPARATOR.$masterName, self::MAX_EDGE);
+
+            foreach (self::VARIANT_EDGES as $variant => $edge) {
+                if ($edge >= self::MAX_EDGE) {
+                    continue;
+                }
+
+                $this->writeFit(
+                    $image,
+                    $width,
+                    $height,
+                    $directory.DIRECTORY_SEPARATOR.$basename.'_'.$variant.'.jpg',
+                    $edge,
+                );
+            }
+        } finally {
+            imagedestroy($image);
+        }
+
+        return '/img/categories/'.$categoryId.'/'.$masterName;
+    }
+
+    /**
+     * @param  \GdImage  $image
+     */
+    private function writeFit(mixed $image, int $width, int $height, string $destination, int $maxEdge): void
+    {
+        $scale = min(1.0, $maxEdge / max($width, $height));
         $newWidth = max(1, (int) round($width * $scale));
         $newHeight = max(1, (int) round($height * $scale));
 
         $canvas = imagecreatetruecolor($newWidth, $newHeight);
 
         if ($canvas === false) {
-            imagedestroy($image);
             throw new RuntimeException('Could not create thumbnail canvas.');
         }
 
         $white = imagecolorallocate($canvas, 255, 255, 255);
         imagefilledrectangle($canvas, 0, 0, $newWidth, $newHeight, $white);
         imagecopyresampled($canvas, $image, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
-        imagedestroy($image);
 
-        CleanJpegWriter::write($canvas, $destination, 82);
+        CleanJpegWriter::write($canvas, $destination, self::JPEG_QUALITY);
         imagedestroy($canvas);
     }
 }

@@ -72,6 +72,12 @@ class AdminCategoryEdit extends Component
         $this->slug = Str::slug($value);
     }
 
+    public function updatedThumbUpload(): void
+    {
+        $this->removeThumb = false;
+        $this->error = null;
+    }
+
     public function clearThumbnail(): void
     {
         $this->thumbUpload = null;
@@ -127,9 +133,18 @@ class AdminCategoryEdit extends Component
         }
 
         if ($this->thumbUpload) {
-            $this->thumb_image = $images->store($this->category->fresh(), $this->thumbUpload);
-            $this->thumbUpload = null;
-            $this->removeThumb = false;
+            try {
+                $this->thumb_image = $images->store($this->category->fresh(), $this->thumbUpload);
+                $this->thumbUpload = null;
+                $this->removeThumb = false;
+            } catch (\Throwable $e) {
+                report($e);
+                $this->error = 'Could not save the thumbnail. Please try another image.';
+                $this->category = $this->category->fresh();
+                $this->thumb_image = $this->category->thumb_image;
+
+                return;
+            }
         }
 
         $this->category = $this->category->fresh();
@@ -182,7 +197,15 @@ class AdminCategoryEdit extends Component
     private function thumbPreviewUrl(): ?string
     {
         if ($this->thumbUpload) {
-            return $this->thumbUpload->temporaryUrl();
+            try {
+                if (is_object($this->thumbUpload) && method_exists($this->thumbUpload, 'temporaryUrl')) {
+                    return $this->thumbUpload->temporaryUrl();
+                }
+            } catch (\Throwable) {
+                return null;
+            }
+
+            return null;
         }
 
         if ($this->removeThumb) {

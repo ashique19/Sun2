@@ -59,12 +59,32 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium mb-1">Category</label>
-                    <select wire:model.live="category_id" class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
-                        <option value="">— None —</option>
-                        @foreach ($categories as $category)
-                            <option value="{{ $category->id }}">{{ $category->name }}</option>
-                        @endforeach
-                    </select>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select wire:model.live="category_id" class="min-w-0 flex-1 rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                            <option value="">— None —</option>
+                            @foreach ($categories as $category)
+                                <option value="{{ $category->id }}">{{ $category->name }}</option>
+                            @endforeach
+                        </select>
+                        @php
+                            $selectedCategory = $categories->firstWhere('id', (int) $this->category_id);
+                        @endphp
+                        @if ($selectedCategory)
+                            <a href="{{ route('admin.categories.edit', $selectedCategory) }}" wire:navigate
+                                class="shrink-0 text-sm font-medium text-[#C9A227] hover:underline">
+                                Edit category
+                            </a>
+                        @endif
+                    </div>
+                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                        <input type="text" wire:model="newCategoryName" placeholder="New category name"
+                            class="min-w-0 flex-1 rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                        <button type="button" wire:click="createCategory"
+                            class="shrink-0 rounded-lg border border-[#E0D6C2] bg-white px-3 py-2 text-sm font-medium text-[#6B6459] hover:border-[#C9A227] hover:bg-[#FAF6EF] hover:text-[#C9A227]">
+                            Create category
+                        </button>
+                    </div>
+                    @error('newCategoryName') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="block text-sm font-medium mb-1">Display order</label>

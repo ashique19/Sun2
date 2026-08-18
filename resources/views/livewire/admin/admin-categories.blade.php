@@ -34,7 +34,10 @@
                                 <div class="h-10 w-10 rounded border border-[#E7DFCF] bg-[#FAF6EF]"></div>
                             @endif
                         </td>
-                        <td class="px-4 py-3 font-medium">{{ $category->name }}</td>
+                        <td class="px-4 py-3 font-medium">
+                            <a href="{{ route('admin.categories.edit', $category) }}" wire:navigate
+                                class="hover:text-[#C9A227] hover:underline">{{ $category->name }}</a>
+                        </td>
                         <td class="px-4 py-3 text-[#8C8474]">{{ $category->slug }}</td>
                         <td class="px-4 py-3">{{ $category->products_count }}</td>
                         <td class="px-4 py-3">{{ $category->display_order }}</td>

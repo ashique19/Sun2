@@ -40,12 +40,13 @@
             margin: 0;
             padding: 3vw 2vw 4vw;
             text-align: center;
-            page-break-after: always;
-            break-after: page;
-        }
-        .slip:last-child {
             page-break-after: auto;
             break-after: auto;
+            page-break-inside: auto;
+            break-inside: auto;
+        }
+        .slip + .slip {
+            border-top: 0.4vw dashed #000;
         }
         .parcel-label {
             font-size: clamp(22px, 6vw, 48px);
@@ -87,6 +88,12 @@
                 margin: 0 !important;
             }
             @page { margin: 0; size: auto; }
+            .slip {
+                page-break-after: auto !important;
+                break-after: auto !important;
+                page-break-inside: auto !important;
+                break-inside: auto !important;
+            }
         }
     </style>
 </head>

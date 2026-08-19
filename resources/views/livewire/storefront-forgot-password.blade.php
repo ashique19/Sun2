@@ -11,7 +11,7 @@
         @endif
 
         @if ($step === 'request')
-            <form wire:submit="sendReset" class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-4">
+            <form wire:submit="sendReset" wire:key="forgot-password-request" class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-4">
                 <div>
                     <label class="block text-sm font-medium mb-1">{{ __('storefront.email_or_mobile') }}</label>
                     <input type="text" wire:model="identifier" placeholder="01XXXXXXXXX"
@@ -33,10 +33,11 @@
                 </a>
             </div>
         @elseif ($step === 'phone-otp')
-            <form wire:submit="resetWithOtp" class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-4">
+            <form wire:submit="resetWithOtp" wire:key="forgot-password-otp" class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-4">
+                <p class="text-sm text-[#6B6459]">{{ __('storefront.otp_sent_display', ['phone' => $resetPhone]) }}</p>
                 <div>
                     <label class="block text-sm font-medium mb-1">{{ __('storefront.otp_code') }}</label>
-                    <input type="text" wire:model="otp" maxlength="6" inputmode="numeric"
+                    <input type="text" wire:model="otp" wire:key="forgot-password-otp-input" maxlength="6" inputmode="numeric"
                         class="w-full tracking-[0.4em] text-center text-lg rounded-lg border border-[#E0D6C2] px-4 py-3 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
                     @error('otp') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                     @if (app()->hasDebugModeEnabled())

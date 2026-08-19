@@ -18,6 +18,8 @@ class StorefrontForgotPassword extends Component
 {
     public string $identifier = '';
 
+    public string $resetPhone = '';
+
     public string $step = 'request';
 
     public string $otp = '';
@@ -66,10 +68,11 @@ class StorefrontForgotPassword extends Component
 
         try {
             app(PasswordResetOtpService::class)->send($this->identifier);
+            $this->resetPhone = PhoneNumber::display($this->identifier);
             $this->step = 'phone-otp';
             $this->otp = '';
             $this->statusMessage = __('storefront.otp_sent_display', [
-                'phone' => PhoneNumber::display($this->identifier),
+                'phone' => $this->resetPhone,
             ]);
         } catch (\Throwable $e) {
             $this->formError = $e->getMessage();
@@ -80,12 +83,18 @@ class StorefrontForgotPassword extends Component
     {
         $this->formError = null;
 
+        if ($this->resetPhone === '') {
+            $this->formError = __('storefront.account_not_found');
+
+            return;
+        }
+
         $this->validate([
             'otp' => ['required', 'string', 'size:6'],
             'password' => ['required', 'confirmed', PasswordRule::defaults()],
         ]);
 
-        $user = User::findByPhone($this->identifier);
+        $user = User::findByPhone($this->resetPhone);
 
         if (! $user) {
             $this->formError = __('storefront.account_not_found');
@@ -93,7 +102,7 @@ class StorefrontForgotPassword extends Component
             return;
         }
 
-        if (! $otpService->verify($this->identifier, $this->otp)) {
+        if (! $otpService->verify($this->resetPhone, $this->otp)) {
             $this->addError('otp', __('storefront.otp_invalid'));
 
             return;

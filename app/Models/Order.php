@@ -115,6 +115,11 @@ class Order extends Model
         };
     }
 
+    public function isPlacedByStorefrontCustomer(): bool
+    {
+        return $this->placed_via === self::PLACED_VIA_STOREFRONT;
+    }
+
     public function isAiDraft(): bool
     {
         return $this->status === self::STATUS_DRAFT;

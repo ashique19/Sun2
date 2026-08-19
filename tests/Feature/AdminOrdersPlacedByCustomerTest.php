@@ -50,14 +50,30 @@ class AdminOrdersPlacedByCustomerTest extends TestCase
     }
 
     #[Test]
-    public function customer_placed_orders_use_bold_purple_label_on_orders_list(): void
+    public function storefront_orders_use_purple_customer_label_on_orders_list(): void
     {
         $this->actingAs($this->adminUser());
         $this->order();
 
         Livewire::test(AdminOrders::class, ['segment' => 'new'])
-            ->assertSeeHtml('font-semibold text-purple-700')
+            ->assertSeeHtml('admin-order-placed-by--customer')
             ->assertSee('Placed by Customer');
+    }
+
+    #[Test]
+    public function storefront_orders_stay_purple_when_customer_account_is_linked(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $customer = User::factory()->create(['name' => 'Guest Customer']);
+        Role::findOrCreate('customers');
+        $customer->assignRole('customers');
+
+        $this->order(['created_by' => $customer->id, 'user_id' => $customer->id]);
+
+        Livewire::test(AdminOrders::class, ['segment' => 'new'])
+            ->assertSeeHtml('admin-order-placed-by--customer')
+            ->assertSee('Placed by Guest Customer');
     }
 
     #[Test]
@@ -72,8 +88,8 @@ class AdminOrdersPlacedByCustomerTest extends TestCase
         ]);
 
         Livewire::test(AdminOrders::class, ['segment' => 'new'])
-            ->assertSeeHtml('text-[#8C8474]')
-            ->assertSee('Placed by Staff Member')
-            ->assertDontSee('Placed by Customer');
+            ->assertSeeHtml('admin-order-placed-by')
+            ->assertDontSeeHtml('admin-order-placed-by--customer')
+            ->assertSee('Placed by Staff Member');
     }
 }

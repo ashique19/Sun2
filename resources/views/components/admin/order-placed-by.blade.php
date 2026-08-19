@@ -1,12 +1,8 @@
 @props(['order'])
 
-@php($label = $order->placedByLabel())
-@php($isCustomer = $label === 'Customer')
-
 <p {{ $attributes->class([
-    'text-xs',
-    'font-semibold text-purple-700' => $isCustomer,
-    'text-[#8C8474]' => ! $isCustomer,
+    'text-xs admin-order-placed-by',
+    'admin-order-placed-by--customer' => $order->isPlacedByStorefrontCustomer(),
 ]) }}>
-    Placed by {{ $label }}
+    Placed by {{ $order->placedByLabel() }}
 </p>

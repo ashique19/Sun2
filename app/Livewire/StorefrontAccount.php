@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use Illuminate\Validation\Rules\Password;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -10,6 +11,30 @@ use Livewire\Component;
 #[Layout('components.layouts.app')]
 class StorefrontAccount extends Component
 {
+    public string $password = '';
+
+    public string $password_confirmation = '';
+
+    public ?string $passwordStatusMessage = null;
+
+    public function setPassword(): void
+    {
+        $user = auth()->user();
+
+        if ($user->password) {
+            return;
+        }
+
+        $this->validate([
+            'password' => ['required', 'confirmed', Password::defaults()],
+        ]);
+
+        $user->update(['password' => $this->password]);
+
+        $this->reset(['password', 'password_confirmation']);
+        $this->passwordStatusMessage = __('storefront.password_set_success');
+    }
+
     public function render()
     {
         $user = auth()->user();
@@ -18,6 +43,7 @@ class StorefrontAccount extends Component
         return view('livewire.storefront-account', [
             'user' => $user,
             'recentOrders' => $recentOrders,
+            'needsPassword' => $user->password === null,
         ]);
     }
 }

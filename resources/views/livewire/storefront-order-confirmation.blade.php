@@ -4,7 +4,13 @@
         <h1 class="font-serif text-3xl font-semibold mb-2">{{ __('storefront.order_confirmed') }}</h1>
         <p class="text-[#6B6459] mb-1">{{ __('storefront.thank_you', ['name' => $order->name]) }}</p>
         <p class="text-[#6B6459] mb-8">{{ __('storefront.order_placed', ['number' => $order->order_number]) }}</p>
-        <p class="text-sm text-[#8C8474] mb-8">{{ __('storefront.save_order_hint') }}</p>
+        <p class="text-sm text-[#8C8474] mb-8">
+            @auth
+                {{ __('storefront.track_order_hint') }}
+            @else
+                {{ __('storefront.save_order_hint') }}
+            @endauth
+        </p>
 
         <div class="rounded-xl border border-[#EFE7D6] bg-white p-6 text-left text-sm space-y-3 mb-8">
             <div class="flex justify-between">
@@ -34,13 +40,17 @@
         </div>
 
         <a href="{{ route('home') }}" wire:navigate
-           class="inline-block rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white hover:bg-[#b8931f] transition">
+           class="inline-block rounded-full border border-[#E0D6C2] px-8 py-3 text-sm font-semibold text-[#6B6459] hover:bg-[#FAF6EF] transition">
             {{ __('storefront.continue_shopping_btn') }}
         </a>
         @auth
             <a href="{{ route('account.orders.show', $order) }}" wire:navigate
-               class="inline-block ml-3 rounded-full border border-[#C9A227] px-8 py-3 text-sm font-semibold text-[#C9A227] hover:bg-[#FAF6EF] transition">
-                {{ __('storefront.view_in_account') }}
+               class="inline-block ml-3 rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white hover:bg-[#b8931f] transition">
+                {{ __('storefront.track_order_btn') }}
+            </a>
+            <a href="{{ route('account') }}" wire:navigate
+               class="inline-block mt-3 sm:mt-0 sm:ml-3 rounded-full border border-[#C9A227] px-8 py-3 text-sm font-semibold text-[#C9A227] hover:bg-[#FAF6EF] transition">
+                {{ __('storefront.go_to_dashboard_btn') }}
             </a>
         @endauth
     </div>

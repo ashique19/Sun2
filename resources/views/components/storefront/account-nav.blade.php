@@ -9,7 +9,7 @@
     </a>
     <a href="{{ route('account.password') }}" wire:navigate
         class="block rounded-lg px-3 py-2 {{ request()->routeIs('account.password') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : 'text-[#6B6459] hover:bg-[#FAF6EF]' }}">
-        {{ __('storefront.change_password') }}
+        {{ auth()->user()->password ? __('storefront.change_password') : __('storefront.set_password_nav') }}
     </a>
     <a href="{{ route('account.orders') }}" wire:navigate
         class="block rounded-lg px-3 py-2 {{ request()->routeIs('account.orders*') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : 'text-[#6B6459] hover:bg-[#FAF6EF]' }}">

@@ -22,14 +22,20 @@ class StorefrontChangePassword extends Component
 
     public function updatePassword(): void
     {
+        $user = auth()->user();
+
+        if ($user->password === null) {
+            $this->setInitialPassword();
+
+            return;
+        }
+
         $this->validate([
             'current_password' => ['required', 'string'],
             'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
-        $user = auth()->user();
-
-        if (! $user->password || ! Hash::check($this->current_password, $user->password)) {
+        if (! Hash::check($this->current_password, (string) $user->password)) {
             $this->addError('current_password', 'Current password is incorrect.');
 
             return;
@@ -41,8 +47,28 @@ class StorefrontChangePassword extends Component
         $this->statusMessage = __('storefront.password_changed');
     }
 
+    public function setInitialPassword(): void
+    {
+        $user = auth()->user();
+
+        if ($user->password !== null) {
+            return;
+        }
+
+        $this->validate([
+            'password' => ['required', 'confirmed', Password::defaults()],
+        ]);
+
+        $user->update(['password' => $this->password]);
+
+        $this->reset(['password', 'password_confirmation']);
+        $this->statusMessage = __('storefront.password_set_success');
+    }
+
     public function render()
     {
-        return view('livewire.storefront-change-password');
+        return view('livewire.storefront-change-password', [
+            'needsPassword' => auth()->user()->password === null,
+        ]);
     }
 }

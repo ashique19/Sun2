@@ -57,6 +57,7 @@ class AdminDashboardReturnHubArrivalTest extends TestCase
             'name' => 'Hub Return Customer',
             'phone' => '01710000003',
             'address' => 'Dhaka',
+            'area' => 'Mirpur',
             'status' => 'returned',
             'subtotal' => 1000,
             'total' => 1000,
@@ -104,7 +105,7 @@ class AdminDashboardReturnHubArrivalTest extends TestCase
         Livewire::test(AdminDashboard::class)
             ->assertSee('Return parcels at Steadfast hub')
             ->assertSee('arrived at Steadfast Rampura hub')
-            ->assertSee($order->name)
+            ->assertSee($order->name.' ('.$order->area.')')
             ->assertSee('#'.$order->order_number)
             ->assertSee('Mark as received')
             ->assertSeeHtml('bg-[#C9A227]')

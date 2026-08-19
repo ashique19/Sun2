@@ -131,6 +131,7 @@ class ReturnHubArrivalService
                 'id',
                 'order_number',
                 'name',
+                'area',
                 'status',
                 'has_return',
                 'is_replacement',

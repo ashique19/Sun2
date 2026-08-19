@@ -280,7 +280,7 @@
                         <div class="flex flex-wrap items-center gap-2">
                             <a href="{{ route('admin.orders.show', $order) }}" wire:navigate
                                 class="min-w-0 truncate text-sm font-medium text-[#1E1E1E] hover:text-[#C9A227]">
-                                {{ $order->name }}
+                                        {{ $order->name }}{{ $order->area ? ' ('.$order->area.')' : '' }}
                             </a>
                             <span class="text-xs text-[#8C8474]">#{{ $order->order_number }}</span>
                             @if ($order->is_replacement)
@@ -452,7 +452,7 @@
                         <div class="flex flex-wrap items-center gap-2">
                             <a href="{{ route('admin.orders.show', $order) }}" wire:navigate
                                 class="min-w-0 truncate text-sm font-medium text-[#1E1E1E] hover:text-[#C9A227]">
-                                {{ $order->name }}
+                                {{ $order->name }}{{ $order->area ? ' ('.$order->area.')' : '' }}
                             </a>
                             @foreach (($courierChargeQuickAmounts[$order->id] ?? []) as $quickAmount)
                                 <button type="button"

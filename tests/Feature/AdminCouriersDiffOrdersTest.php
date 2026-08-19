@@ -194,7 +194,7 @@ class AdminCouriersDiffOrdersTest extends TestCase
             ],
         ]);
 
-        // book 1500 − pending (500+1200)=1700 → expected_api -200; API 700 → large diff
+        // Dispatched COD is not in the API wallet. Receivable/expected_api = 0; API 700 → large diff
         Livewire::test(AdminCouriers::class)
             ->call('loadApiBalances')
             ->assertSeeHtml('wire:click="openDiffOrders('.$courier->id.')"')
@@ -218,13 +218,13 @@ class AdminCouriersDiffOrdersTest extends TestCase
         ]);
 
         Http::fake([
-            'portal.packzy.com/api/v1/get_balance' => Http::response(['current_balance' => 1500], 200),
+            'portal.packzy.com/api/v1/get_balance' => Http::response(['current_balance' => 0], 200),
         ]);
 
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
 
-        // No pending → expected_api = book 1500; API 1500 → Diff 0
+        // No delivered cash received → expected_api 0; API 0 → Diff 0
         Livewire::test(AdminCouriers::class)
             ->call('loadApiBalances')
             ->assertDontSeeHtml('wire:click="openDiffOrders('.$courier->id.')"')

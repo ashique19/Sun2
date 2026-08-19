@@ -49,27 +49,28 @@ class AdminDashboardSteadfastBalanceTest extends TestCase
 
         Order::query()->create([
             'order_number' => 'PEND-DASH-1',
-            'name' => 'Pending Customer',
+            'name' => 'Delivered Customer',
             'phone' => '01710000001',
             'address' => 'Dhaka',
             'city' => 'Dhaka',
-            'status' => 'dispatched',
+            'status' => 'delivered',
             'subtotal' => 1000,
             'delivery_charge' => 80,
             'courier_charge' => 60,
+            'collected_amount' => 1080,
             'cod_amount' => 1080,
             'total' => 1080,
             'courier_id' => $courier->id,
-            'dispatch_date' => now(),
+            'actual_delivery_date' => now(),
             'placed_at' => now(),
         ]);
 
-        // expected_api = book − pending = 1880 − 1080 = 800
+        // cash received 1080 − courier charge 60 − COD% 10 = 1010
         Livewire::test(AdminDashboard::class)
             ->assertSeeHtml('data-steadfast-expected-api')
             ->assertSee('Steadfast')
             ->assertSee('API balance should be')
-            ->assertSeeHtml('&#2547; 800')
+            ->assertSeeHtml('&#2547; 1,010')
             ->assertSeeHtml(route('admin.couriers'));
     }
 

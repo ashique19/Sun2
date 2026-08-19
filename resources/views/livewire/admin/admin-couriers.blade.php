@@ -10,10 +10,10 @@
                 <span class="tabular-nums font-medium text-[#6B6459]">&#2547; {{ number_format($totalPending ?? 0, 0) }}</span>
             </p>
             <p class="text-xs text-[#8C8474] mt-1">
-                Receivable = delivered/cancelled/returned COD − courier charge − COD % − withdrawals
+                Receivable = cash received − courier charge − COD % − withdrawals
                 (cancelled with collected 0 still subtracts courier charge; COD % is 0).
                 Pending = COD still with courier on dispatched parcels.
-                Expected API = book − pending.
+                Expected API = receivable (what the live wallet should hold).
                 API = live Steadfast wallet (refresh manually).
             </p>
             @if ($apiBalanceError)
@@ -52,7 +52,7 @@
                         <th class="px-4 py-3 font-medium">Slug</th>
                         <th class="px-4 py-3 font-medium">Charge</th>
                         <th class="px-4 py-3 font-medium">
-                            <span title="Delivered COD minus courier fees and withdrawals">Receivable</span>
+                            <span title="Cash received minus courier fees, COD %, and withdrawals">Receivable</span>
                         </th>
                         <th class="px-4 py-3 font-medium">
                             <span title="COD still with courier on dispatched orders">Pending</span>
@@ -76,9 +76,9 @@
                                 'pending' => 0,
                                 'receivable' => 0,
                                 'book' => (float) $courier->balance,
-                                'expected_api' => (float) $courier->balance,
+                                'expected_api' => 0,
                             ];
-                            $expectedApi = (float) ($summary['expected_api'] ?? (($summary['book'] ?? 0) - ($summary['pending'] ?? 0)));
+                            $expectedApi = (float) ($summary['expected_api'] ?? $summary['receivable'] ?? 0);
                             $apiDiff = $apiBalance !== null ? round((float) $apiBalance - $expectedApi, 2) : null;
                         @endphp
                         <tr class="hover:bg-[#FAF6EF]/60" wire:key="courier-{{ $courier->id }}">
@@ -106,30 +106,30 @@
                                     <span class="text-[#8C8474]">…</span>
                                 @elseif ($apiBalance !== null)
                                     <div>&#2547; {{ number_format($apiBalance, 0) }}</div>
-                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Book − pending">
+                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Cash received − courier charge − COD % − withdrawals">
                                         Should be &#2547; {{ number_format($expectedApi, 0) }}
                                     </div>
                                     @if (abs($apiDiff) < 0.5)
                                         <div class="text-[11px] mt-0.5 text-emerald-700"
-                                            title="API − (book − pending)">
+                                            title="API − receivable">
                                             Diff {{ $apiDiff > 0 ? '+' : ($apiDiff < 0 ? '−' : '') }}&#2547; {{ number_format(abs($apiDiff), 0) }}
                                         </div>
                                     @else
                                         <button type="button"
                                             wire:click="openDiffOrders({{ $courier->id }})"
-                                            title="API − (book − pending). Open orders that explain this Diff."
+                                            title="API − receivable. Open orders that explain this Diff."
                                             class="mt-0.5 text-[11px] font-semibold text-amber-700 underline decoration-amber-300 underline-offset-2 hover:text-amber-900">
                                             Diff {{ $apiDiff > 0 ? '+' : '−' }}&#2547; {{ number_format(abs($apiDiff), 0) }}
                                         </button>
                                     @endif
                                 @elseif (! $apiBalancesLoaded && $courier->slug && in_array(strtolower((string) $courier->slug), $apiSlugs, true))
                                     <div class="text-[#8C8474]">Tap Refresh API</div>
-                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Book − pending">
+                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Cash received − courier charge − COD % − withdrawals">
                                         Should be &#2547; {{ number_format($expectedApi, 0) }}
                                     </div>
                                 @elseif ($courier->slug && in_array(strtolower((string) $courier->slug), $apiSlugs, true))
                                     <div class="text-[#8C8474]" title="{{ $apiBalanceError ?: 'Unavailable' }}">—</div>
-                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Book − pending">
+                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Cash received − courier charge − COD % − withdrawals">
                                         Should be &#2547; {{ number_format($expectedApi, 0) }}
                                     </div>
                                 @else

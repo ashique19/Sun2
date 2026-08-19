@@ -67,6 +67,19 @@ class StorefrontCustomerOrdersTest extends TestCase
     }
 
     #[Test]
+    public function order_history_shows_details_and_tracking_button(): void
+    {
+        $user = $this->customer();
+        $this->orderFor($user, ['order_number' => '4001', 'status' => 'new']);
+
+        $this->actingAs($user);
+
+        Livewire::test(\App\Livewire\StorefrontOrderHistory::class)
+            ->assertSee(__('storefront.view_details_tracking_btn'))
+            ->assertSee('#4001');
+    }
+
+    #[Test]
     public function order_detail_shows_courier_tracking_when_dispatched(): void
     {
         $user = $this->customer();

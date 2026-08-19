@@ -207,6 +207,7 @@ return [
     'order_progress' => 'অর্ডার অগ্রগতি',
     'tracking_updates' => 'ট্র্যাকিং আপডেট',
     'no_tracking_yet' => 'এখনো কোনো ট্র্যাকিং আপডেট নেই।',
+    'view_details_tracking_btn' => 'বিস্তারিত ও ট্র্যাকিং',
 
     'status' => 'স্ট্যাটাস',
     'placed' => 'তারিখ',

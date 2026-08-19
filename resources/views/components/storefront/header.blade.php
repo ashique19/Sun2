@@ -107,16 +107,6 @@
                     @endif
                 </a>
 
-                <label for="mobile-nav-toggle"
-                    class="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#1E1E1E]"
-                    aria-label="{{ __('storefront.menu') }}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <rect x="4" y="6" width="16" height="2" rx="1"/>
-                        <rect x="4" y="11" width="16" height="2" rx="1"/>
-                        <rect x="4" y="16" width="16" height="2" rx="1"/>
-                    </svg>
-                </label>
-
                 <a href="{{ route('cart') }}" wire:navigate class="relative inline-flex h-10 w-10 shrink-0 items-center justify-center text-[#1E1E1E] hover:text-[#C9A227]" title="{{ __('storefront.cart') }}" aria-label="{{ __('storefront.cart') }}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M3 5h2l1.2 9.2a2 2 0 0 0 2 1.8h8.4a2 2 0 0 0 2-1.7L20 8H7"/>
@@ -129,6 +119,16 @@
                         </span>
                     @endif
                 </a>
+
+                <label for="mobile-nav-toggle"
+                    class="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#1E1E1E]"
+                    aria-label="{{ __('storefront.menu') }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <rect x="4" y="6" width="16" height="2" rx="1"/>
+                        <rect x="4" y="11" width="16" height="2" rx="1"/>
+                        <rect x="4" y="16" width="16" height="2" rx="1"/>
+                    </svg>
+                </label>
             </div>
         </div>
 

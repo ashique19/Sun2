@@ -5,7 +5,7 @@
         </h1>
 
         <div class="grid lg:grid-cols-4 gap-4 lg:gap-8 items-start">
-            <div class="lg:col-span-1">
+            <div class="min-w-0 lg:col-span-1">
                 <x-storefront.account-nav />
             </div>
 

@@ -52,4 +52,22 @@ class AdminAccess
     {
         abort_unless(self::canViewNewOrder($order), 403);
     }
+
+    public static function adminCount(): int
+    {
+        return User::role('admin')->count();
+    }
+
+    public static function wouldRemoveLastAdmin(User $user, ?string $newRole = null): bool
+    {
+        if (! $user->hasRole('admin')) {
+            return false;
+        }
+
+        if (self::adminCount() > 1) {
+            return false;
+        }
+
+        return $newRole === null || $newRole !== 'admin';
+    }
 }

@@ -28,6 +28,7 @@ class AdminUsers extends Component
         'customers' => 'Customers',
         'moderators' => 'Moderators',
         'resellers' => 'Resellers',
+        'admins' => 'Admins',
     ];
 
     public function mount(string $segment = 'customers'): void
@@ -39,6 +40,7 @@ class AdminUsers extends Component
         Role::findOrCreate('customers');
         Role::findOrCreate('moderator');
         Role::findOrCreate('reseller');
+        Role::findOrCreate('admin');
     }
 
     public function switchSegment(string $segment): void
@@ -77,6 +79,12 @@ class AdminUsers extends Component
             return;
         }
 
+        if ($user->is_active && AdminAccess::wouldRemoveLastAdmin($user)) {
+            $this->error = 'Cannot deactivate the only admin account.';
+
+            return;
+        }
+
         $user->update(['is_active' => ! $user->is_active]);
         $this->message = $user->is_active ? 'User activated.' : 'User deactivated.';
     }
@@ -99,6 +107,12 @@ class AdminUsers extends Component
             return;
         }
 
+        if (AdminAccess::wouldRemoveLastAdmin($user)) {
+            $this->error = 'Cannot delete the only admin account.';
+
+            return;
+        }
+
         if ($user->orders()->exists()) {
             $this->error = 'Cannot delete “'.$user->name.'” while orders still reference them. Deactivate instead.';
 
@@ -114,6 +128,7 @@ class AdminUsers extends Component
         $role = match ($this->segment) {
             'moderators' => 'moderator',
             'resellers' => 'reseller',
+            'admins' => 'admin',
             default => 'customers',
         };
 
@@ -142,7 +157,23 @@ class AdminUsers extends Component
     {
         $user = User::query()->find($userId);
 
-        if (! $user || $user->hasAnyRole(['admin', 'dev'])) {
+        if (! $user) {
+            $this->error = 'User not found.';
+
+            return null;
+        }
+
+        if ($this->segment === 'admins') {
+            if ($user->hasRole('dev') || ! $user->hasRole('admin')) {
+                $this->error = 'That user cannot be managed here.';
+
+                return null;
+            }
+
+            return $user;
+        }
+
+        if ($user->hasAnyRole(['admin', 'dev'])) {
             $this->error = 'That user cannot be managed here.';
 
             return null;

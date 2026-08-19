@@ -5,6 +5,7 @@
             class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">
             @if ($segment === 'moderators') Create Moderator
             @elseif ($segment === 'resellers') Create Reseller
+            @elseif ($segment === 'admins') Create Admin
             @else Create Customer
             @endif
         </a>
@@ -85,6 +86,8 @@
                                 No {{ strtolower($segmentLabel) }} yet.
                                 @if ($segment === 'resellers')
                                     <a href="{{ route('admin.users.create', ['role' => 'reseller']) }}" wire:navigate class="text-[#C9A227] hover:underline">Create one</a>.
+                                @elseif ($segment === 'admins')
+                                    <a href="{{ route('admin.users.create', ['role' => 'admin']) }}" wire:navigate class="text-[#C9A227] hover:underline">Create one</a>.
                                 @endif
                             </td>
                         </tr>

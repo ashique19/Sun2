@@ -183,6 +183,10 @@
                 class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.users.resellers') ? $active : $inactive }}">
                 Resellers
             </a>
+            <a href="{{ route('admin.users.admins') }}" wire:navigate {!! $click !!}
+                class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.users.admins') ? $active : $inactive }}">
+                Admins
+            </a>
         </div>
         <p class="{{ $sectionLabel }}">Reports</p>
         <div class="{{ $subGroupMobile }}">
@@ -214,6 +218,10 @@
                 <a href="{{ route('admin.users.resellers') }}" wire:navigate
                     class="block rounded-lg px-3 {{ $linkPadSm }} {{ request()->routeIs('admin.users.resellers') ? $active : $inactive }}">
                     Resellers
+                </a>
+                <a href="{{ route('admin.users.admins') }}" wire:navigate
+                    class="block rounded-lg px-3 {{ $linkPadSm }} {{ request()->routeIs('admin.users.admins') ? $active : $inactive }}">
+                    Admins
                 </a>
             </div>
         </div>

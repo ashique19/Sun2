@@ -47,10 +47,11 @@ class AdminUserEdit extends Component
         Role::findOrCreate('customers');
         Role::findOrCreate('moderator');
         Role::findOrCreate('reseller');
+        Role::findOrCreate('admin');
 
         if ($user?->exists) {
-            if ($user->hasAnyRole(['admin', 'dev'])) {
-                abort(403, 'Admin and developer accounts cannot be edited here.');
+            if ($user->hasRole('dev')) {
+                abort(403, 'Developer accounts cannot be edited here.');
             }
 
             $this->user = $user;
@@ -58,15 +59,17 @@ class AdminUserEdit extends Component
             $this->phone = (string) $user->phone;
             $this->email = (string) ($user->email ?? '');
             $this->is_active = (bool) $user->is_active;
-            $this->role = $user->hasRole('moderator')
-                ? 'moderator'
-                : ($user->hasRole('reseller') ? 'reseller' : 'customers');
+            $this->role = $user->hasRole('admin')
+                ? 'admin'
+                : ($user->hasRole('moderator')
+                    ? 'moderator'
+                    : ($user->hasRole('reseller') ? 'reseller' : 'customers'));
 
             return;
         }
 
         $requested = request()->query('role');
-        if (in_array($requested, ['customers', 'moderator', 'reseller'], true)) {
+        if (in_array($requested, ['customers', 'moderator', 'reseller', 'admin'], true)) {
             $this->role = $requested;
         }
     }
@@ -94,7 +97,7 @@ class AdminUserEdit extends Component
             'name' => ['required', 'string', 'max:120'],
             'phone' => ['required', 'string', 'max:32', new BangladeshMobile, $phoneUnique],
             'email' => ['nullable', 'email', 'max:120', $emailUnique],
-            'role' => ['required', 'in:customers,moderator,reseller'],
+            'role' => ['required', 'in:customers,moderator,reseller,admin'],
             'is_active' => ['boolean'],
         ];
 
@@ -110,6 +113,18 @@ class AdminUserEdit extends Component
 
         if ($this->user && (int) $this->user->id === (int) auth()->id() && ! $validated['is_active']) {
             $this->addError('is_active', 'You cannot deactivate your own account.');
+
+            return;
+        }
+
+        if ($this->user && AdminAccess::wouldRemoveLastAdmin($this->user, $validated['role'])) {
+            $this->addError('role', 'Cannot change the role of the only admin account.');
+
+            return;
+        }
+
+        if ($this->user && ! $validated['is_active'] && AdminAccess::wouldRemoveLastAdmin($this->user)) {
+            $this->addError('is_active', 'Cannot deactivate the only admin account.');
 
             return;
         }
@@ -153,8 +168,14 @@ class AdminUserEdit extends Component
             return;
         }
 
-        if ($this->user->hasAnyRole(['admin', 'dev'])) {
+        if ($this->user->hasRole('dev')) {
             abort(403);
+        }
+
+        if (AdminAccess::wouldRemoveLastAdmin($this->user)) {
+            $this->error = 'Cannot delete the only admin account.';
+
+            return;
         }
 
         if ($this->user->orders()->exists()) {
@@ -163,9 +184,12 @@ class AdminUserEdit extends Component
             return;
         }
 
-        $role = $this->user->hasRole('moderator')
-            ? 'moderators'
-            : ($this->user->hasRole('reseller') ? 'resellers' : 'customers');
+        $role = match (true) {
+            $this->user->hasRole('admin') => 'admins',
+            $this->user->hasRole('moderator') => 'moderators',
+            $this->user->hasRole('reseller') => 'resellers',
+            default => 'customers',
+        };
         $this->user->delete();
         $this->redirect(route('admin.users.'.$role), navigate: true);
     }
@@ -209,7 +233,8 @@ class AdminUserEdit extends Component
         return view('livewire.admin.admin-user-edit', [
             'canDelete' => $this->user
                 && (int) $this->user->id !== (int) auth()->id()
-                && $this->user->orders()->doesntExist(),
+                && $this->user->orders()->doesntExist()
+                && ! AdminAccess::wouldRemoveLastAdmin($this->user),
             'isReseller' => $this->user?->hasRole('reseller') ?? false,
             'resellerBalance' => $this->user ? (float) $this->user->reseller_balance : 0.0,
         ])->title($this->title());

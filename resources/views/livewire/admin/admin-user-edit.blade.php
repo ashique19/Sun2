@@ -1,6 +1,7 @@
 <div>
     @php
         $backSegment = match (true) {
+            $role === 'admin' => 'admins',
             $role === 'moderator' => 'moderators',
             $role === 'reseller' => 'resellers',
             default => 'customers',
@@ -40,6 +41,7 @@
                     <option value="customers">Customer</option>
                     <option value="moderator">Moderator</option>
                     <option value="reseller">Reseller</option>
+                    <option value="admin">Admin</option>
                 </select>
                 @error('role') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
             </div>

@@ -357,6 +357,8 @@ class StorefrontCheckout extends Component
                 'area' => $area->name,
                 'city' => $city->name,
                 'state' => $city->division ?? $city->name,
+                'city_id' => $city->id,
+                'area_id' => $area->id,
                 'customer_note' => $this->customerNote,
                 'reseller_id' => $resolvedReseller?->id,
             ], $appliedCoupons);

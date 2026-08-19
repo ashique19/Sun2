@@ -47,12 +47,22 @@ class GuestCheckoutAccountTest extends TestCase
             'name' => 'Guest Shopper',
             'phone' => '01710000000',
             'email' => null,
+            'address' => 'House 12',
+            'area' => 'Uttara',
+            'city' => 'Dhaka',
+            'state' => 'Dhaka',
         ]);
 
         $this->assertNotNull($user);
         $this->assertNull($user->password);
         $this->assertTrue($user->hasRole('customers'));
         $this->assertSame($user->id, $orphan->fresh()->user_id);
+
+        $address = $user->addresses()->where('is_default', true)->first();
+        $this->assertNotNull($address);
+        $this->assertSame('House 12', $address->address);
+        $this->assertSame('Uttara', $address->area);
+        $this->assertSame('Dhaka', $address->city);
     }
 
     #[Test]

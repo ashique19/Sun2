@@ -52,6 +52,23 @@ class CartService
         session()->forget(self::SESSION_KEY);
     }
 
+    /** @param  array<int, int>  $items  product_id => quantity */
+    public function replaceItems(array $items): void
+    {
+        $normalized = [];
+
+        foreach ($items as $productId => $quantity) {
+            $productId = (int) $productId;
+            $quantity = (int) $quantity;
+
+            if ($productId > 0 && $quantity > 0) {
+                $normalized[$productId] = $quantity;
+            }
+        }
+
+        session([self::SESSION_KEY => $normalized]);
+    }
+
     /** @return Collection<int, array{product: Product, quantity: int, line_total: float}> */
     public function lines(): Collection
     {

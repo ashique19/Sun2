@@ -24,6 +24,15 @@
                     {{ $selected === [] ? 'bg-[#D8CDB6] cursor-not-allowed' : 'bg-[#C9A227] hover:bg-[#b8931f]' }}">
                 Make post ({{ count($selected) }})
             </button>
+            <button type="button" wire:click="shareSelectedCart" @disabled($selected === [])
+                wire:loading.attr="disabled"
+                wire:target="shareSelectedCart"
+                class="rounded-full px-5 py-2 text-sm font-semibold transition border
+                    {{ $selected === []
+                        ? 'border-[#E0D6C2] text-[#B0A898] cursor-not-allowed bg-white'
+                        : 'border-[#C9A227] text-[#C9A227] bg-white hover:bg-[#FAF6EF]' }}">
+                +Cart ({{ count($selected) }})
+            </button>
             <button type="button" wire:click="openBulkAiGenerateModal" @disabled($selected === [])
                 class="rounded-full px-5 py-2 text-sm font-semibold transition border
                     {{ $selected === []

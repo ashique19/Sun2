@@ -57,6 +57,7 @@ use App\Livewire\Admin\AdminUserEdit;
 use App\Livewire\Admin\AdminUsers;
 use App\Livewire\PublicInvestorPitch;
 use App\Livewire\PublicProductShare;
+use App\Livewire\PublicSharedCart;
 use App\Livewire\Reseller\ResellerDashboard;
 use App\Livewire\Reseller\ResellerOrderCreate;
 use App\Livewire\Reseller\ResellerOrders;
@@ -110,6 +111,9 @@ Route::get('/page/{page:slug}', StorefrontPage::class)->name('page.show');
 Route::get('/share/products/{token}', PublicProductShare::class)
     ->where('token', '[A-Za-z0-9]{32,64}')
     ->name('share.products');
+Route::get('/share/cart/{token}', PublicSharedCart::class)
+    ->where('token', '[A-Za-z0-9]{32,64}')
+    ->name('share.cart');
 Route::get('/share/investor-pitch/{token}', PublicInvestorPitch::class)
     ->where('token', '[A-Za-z0-9]{32,64}')
     ->name('share.investor-pitch');

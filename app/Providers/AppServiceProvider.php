@@ -10,6 +10,7 @@ use App\Models\ProductImage;
 use App\Observers\SitemapInvalidationObserver;
 use App\Services\Facebook\FacebookPageTokenService;
 use App\Services\Sms\LogSmsSender;
+use App\Services\Sms\MimSmsSender;
 use App\Services\Sms\SslWirelessSmsSender;
 use App\Support\Fileinfo;
 use Illuminate\Support\Facades\Schema;
@@ -24,6 +25,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(SmsSender::class, function () {
             return match (config('sms.driver')) {
                 'ssl_wireless' => new SslWirelessSmsSender,
+                'mimsms' => new MimSmsSender,
                 default => new LogSmsSender,
             };
         });

@@ -130,8 +130,16 @@ class StorefrontAssets
             return $pathOrUrl;
         }
 
+        $original = $path;
+
         if (preg_match('/_(xs|sm|md|lg)(\.[a-zA-Z0-9]+)$/i', $path)) {
             $path = preg_replace('/_(xs|sm|md|lg)(\.[a-zA-Z0-9]+)$/i', '_'.$variant.'$2', $path);
+        } else {
+            $sibling = preg_replace('/(\.[a-zA-Z0-9]+)$/i', '_'.$variant.'$1', $path);
+
+            if (is_string($sibling) && is_file(public_path($sibling))) {
+                return asset($sibling);
+            }
         }
 
         // Order line snapshots are usually _xs-only; product thumbs live under img/thumb.
@@ -141,6 +149,10 @@ class StorefrontAssets
 
         if (is_file(public_path($path))) {
             return asset($path);
+        }
+
+        if ($path !== $original && is_file(public_path($original))) {
+            return asset($original);
         }
 
         return self::CDN_BASE.$path;

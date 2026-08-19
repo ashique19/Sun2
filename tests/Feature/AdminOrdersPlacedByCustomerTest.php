@@ -50,13 +50,13 @@ class AdminOrdersPlacedByCustomerTest extends TestCase
     }
 
     #[Test]
-    public function customer_placed_orders_use_bold_green_label_on_orders_list(): void
+    public function customer_placed_orders_use_bold_purple_label_on_orders_list(): void
     {
         $this->actingAs($this->adminUser());
         $this->order();
 
         Livewire::test(AdminOrders::class, ['segment' => 'new'])
-            ->assertSeeHtml('font-semibold text-emerald-700')
+            ->assertSeeHtml('font-semibold text-purple-700')
             ->assertSee('Placed by Customer');
     }
 

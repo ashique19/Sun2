@@ -96,7 +96,7 @@ class SteadfastWebhookInboxService
 
         return CourierData::query()
             ->with([
-                'order:id,order_number,name,status,courier_id,courier_tracker,courier_consignment_id',
+                'order:id,order_number,name,area,status,courier_id,courier_tracker,courier_consignment_id',
                 'order.courier:id,name,slug',
             ])
             ->whereIn('id', $latestIdsQuery)

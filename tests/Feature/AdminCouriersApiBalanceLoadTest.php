@@ -112,6 +112,24 @@ class AdminCouriersApiBalanceLoadTest extends TestCase
         $courier->update(['balance' => 1500]);
 
         Order::query()->create([
+            'order_number' => 'DEL-API-1',
+            'name' => 'Delivered Customer',
+            'phone' => '01710000002',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'delivered',
+            'subtotal' => 1000,
+            'delivery_charge' => 80,
+            'courier_charge' => 60,
+            'collected_amount' => 1080,
+            'cod_amount' => 1080,
+            'total' => 1080,
+            'courier_id' => $courier->id,
+            'actual_delivery_date' => now(),
+            'placed_at' => now(),
+        ]);
+
+        Order::query()->create([
             'order_number' => 'PEND-API-1',
             'name' => 'Pending Customer',
             'phone' => '01710000001',
@@ -128,14 +146,15 @@ class AdminCouriersApiBalanceLoadTest extends TestCase
             'placed_at' => now(),
         ]);
 
-        // Expected API = book 1500 − pending 500 = 1000; actual API 700 → diff −300
+        // Expected API = 1080 − 60 courier − 10 COD% = 1010 (dispatched pending is excluded)
+        // actual API 700 → diff −310
         Livewire::test(AdminCouriers::class)
             ->assertSee('Should be')
-            ->assertSee('1,000')
+            ->assertSee('1,010')
             ->call('loadApiBalances')
             ->assertSeeHtml('&#2547; 700')
-            ->assertSeeHtml('Should be &#2547; 1,000')
-            ->assertSeeHtml('Diff −&#2547; 300');
+            ->assertSeeHtml('Should be &#2547; 1,010')
+            ->assertSeeHtml('Diff −&#2547; 310');
     }
 
     #[Test]

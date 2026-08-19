@@ -2,7 +2,7 @@
     <div class="mx-auto max-w-6xl px-4 py-8">
         <h1 class="font-serif text-3xl font-semibold mb-8">{{ __('storefront.my_account') }}</h1>
 
-        <div class="grid lg:grid-cols-4 gap-8 items-start">
+        <div class="grid lg:grid-cols-4 gap-4 lg:gap-8 items-start">
             <div class="lg:col-span-1">
                 <x-storefront.account-nav />
             </div>

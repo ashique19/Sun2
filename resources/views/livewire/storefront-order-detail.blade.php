@@ -5,7 +5,7 @@
             <a href="{{ route('account.orders') }}" wire:navigate class="text-sm text-[#C9A227] hover:underline">&larr; {{ __('storefront.back_to_orders') }}</a>
         </div>
 
-        <div class="grid lg:grid-cols-4 gap-8 items-start">
+        <div class="grid lg:grid-cols-4 gap-4 lg:gap-8 items-start">
             <div class="lg:col-span-1">
                 <x-storefront.account-nav />
             </div>

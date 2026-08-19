@@ -4,7 +4,7 @@
             {{ $needsPassword ? __('storefront.set_password_title') : __('storefront.change_password') }}
         </h1>
 
-        <div class="grid lg:grid-cols-4 gap-8 items-start">
+        <div class="grid lg:grid-cols-4 gap-4 lg:gap-8 items-start">
             <div class="lg:col-span-1">
                 <x-storefront.account-nav />
             </div>

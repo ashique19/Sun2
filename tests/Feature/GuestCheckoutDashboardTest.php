@@ -160,6 +160,7 @@ class GuestCheckoutDashboardTest extends TestCase
         ]);
 
         Livewire::test(StorefrontAccount::class)
+            ->assertSee('storefront-account-nav__pills', false)
             ->assertSee(__('storefront.set_password_title'))
             ->set('password', 'SecretPass1!')
             ->set('password_confirmation', 'SecretPass1!')

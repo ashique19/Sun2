@@ -5,7 +5,7 @@
 
 <p {{ $attributes->class([
     'text-xs',
-    'font-semibold text-[#C9A227]' => $isCustomer,
+    'font-semibold text-emerald-700' => $isCustomer,
     'text-[#8C8474]' => ! $isCustomer,
 ]) }}>
     Placed by {{ $label }}

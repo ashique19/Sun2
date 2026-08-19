@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\Storefront\GuestCheckoutAccountService;
+use App\Services\Storefront\GuestCheckoutStaffPhoneException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
@@ -76,7 +77,7 @@ class GuestCheckoutAccountTest extends TestCase
     }
 
     #[Test]
-    public function it_does_not_attach_checkout_to_staff_accounts_with_same_phone(): void
+    public function it_blocks_guest_checkout_for_staff_accounts_with_same_phone(): void
     {
         Role::findOrCreate('admin');
 
@@ -85,13 +86,28 @@ class GuestCheckoutAccountTest extends TestCase
             'phone' => '01710000000',
         ])->assignRole('admin');
 
-        $user = app(GuestCheckoutAccountService::class)->resolveCheckoutAccount([
+        $this->expectException(GuestCheckoutStaffPhoneException::class);
+        $this->expectExceptionMessage(__('storefront.checkout_staff_phone_blocked', ['role' => __('storefront.role_admin')]));
+
+        app(GuestCheckoutAccountService::class)->resolveCheckoutAccount([
             'name' => 'Guest Shopper',
             'phone' => '01710000000',
             'email' => null,
         ]);
+    }
 
-        $this->assertNull($user);
-        $this->assertSame(1, User::query()->count());
+    #[Test]
+    public function it_reports_reseller_role_for_blocked_guest_checkout_phone(): void
+    {
+        Role::findOrCreate('reseller');
+
+        User::factory()->create([
+            'name' => 'Reseller',
+            'phone' => '01710000000',
+        ])->assignRole('reseller');
+
+        $role = app(GuestCheckoutAccountService::class)->blockedRoleForGuestCheckout('01710000000');
+
+        $this->assertSame(__('storefront.role_reseller'), $role);
     }
 }

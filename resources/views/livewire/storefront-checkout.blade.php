@@ -139,8 +139,6 @@
                             {{ __('storefront.otp_sent_to', ['phone' => $phone]) }}
                             @if (app()->hasDebugModeEnabled())
                                 <span class="block mt-1 text-xs text-[#8C8474]">Debug: OTP <strong>123456</strong></span>
-                            @elseif (app()->environment('local'))
-                                <span class="block mt-1 text-xs text-[#8C8474]">Local: check <code>storage/logs/laravel.log</code></span>
                             @endif
                         </p>
 

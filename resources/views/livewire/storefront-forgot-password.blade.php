@@ -41,8 +41,6 @@
                     @error('otp') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                     @if (app()->hasDebugModeEnabled())
                         <p class="text-xs text-[#8C8474] mt-1">Debug: OTP <strong>123456</strong></p>
-                    @elseif (app()->environment('local'))
-                        <p class="text-xs text-[#8C8474] mt-1">Local: check <code>storage/logs/laravel.log</code></p>
                     @endif
                 </div>
                 <div>

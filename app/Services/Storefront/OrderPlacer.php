@@ -31,10 +31,13 @@ class OrderPlacer
                 throw new \RuntimeException('Cart is empty.');
             }
 
+            $accountUser = app(GuestCheckoutAccountService::class)->resolveCheckoutAccount($customer);
+            $userId = $accountUser?->id ?? auth()->id();
+
             $order = Order::query()->create([
                 'order_number' => 'PENDING',
-                'user_id' => auth()->id(),
-                'created_by' => auth()->id(),
+                'user_id' => $userId,
+                'created_by' => $userId,
                 'placed_via' => Order::PLACED_VIA_STOREFRONT,
                 'name' => $customer['name'],
                 'phone' => PhoneNumber::display($customer['phone']),
@@ -112,7 +115,13 @@ class OrderPlacer
             session()->forget('checkout.coupon_codes');
             session(['checkout.last_order_id' => $order->id]);
 
-            return $order->fresh(['items', 'adjustments', 'paymentTransactions']);
+            $order = $order->fresh(['items', 'adjustments', 'paymentTransactions']);
+
+            if ($accountUser !== null && auth()->guest()) {
+                app(GuestCheckoutAccountService::class)->login($accountUser);
+            }
+
+            return $order;
         });
     }
 }

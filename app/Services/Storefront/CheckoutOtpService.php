@@ -32,7 +32,8 @@ class CheckoutOtpService
         ], $ttl);
 
         $message = sprintf(
-            'Your Sundoritoma order confirmation OTP is %s. Valid for %d minutes. Do not share this code.',
+            'Your %s order confirmation OTP is %s. Valid for %d minutes. Do not share this code.',
+            config('sms.from', 'Sundoritoma'),
             $code,
             config('checkout.otp_ttl_minutes', 10),
         );

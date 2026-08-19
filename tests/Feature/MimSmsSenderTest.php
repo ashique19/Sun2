@@ -20,13 +20,12 @@ class MimSmsSenderTest extends TestCase
         parent::setUp();
 
         Config::set('sms.driver', 'mimsms');
+        Config::set('sms.from', 'Sundoritoma');
         Config::set('sms.mimsms', [
             'api_url' => 'https://api.mimsms.com/api/V2/SMS',
             'username' => 'shop@example.com',
             'api_key' => 'secret-api-key',
             'sender_name' => 'Sundoritoma',
-            'transaction_type' => 'T',
-            'campaign_id' => null,
         ]);
     }
 
@@ -35,7 +34,7 @@ class MimSmsSenderTest extends TestCase
         $this->assertInstanceOf(MimSmsSender::class, app(SmsSender::class));
     }
 
-    public function test_sends_sms_with_normalized_mobile_number(): void
+    public function test_sends_otp_sms_as_transactional_with_normalized_mobile_number(): void
     {
         Http::fake([
             'api.mimsms.com/*' => Http::response([
@@ -44,7 +43,7 @@ class MimSmsSenderTest extends TestCase
             ]),
         ]);
 
-        app(SmsSender::class)->send('01627237432', 'Your OTP is 123456');
+        app(SmsSender::class)->send('01627237432', 'Your Sundoritoma order confirmation OTP is 123456. Do not share this code.');
 
         Http::assertSent(function (Request $request): bool {
             return $request->url() === 'https://api.mimsms.com/api/V2/SMS'
@@ -53,7 +52,7 @@ class MimSmsSenderTest extends TestCase
                 && $request['MobileNumber'] === '8801627237432'
                 && $request['SenderName'] === 'Sundoritoma'
                 && $request['TransactionType'] === 'T'
-                && $request['Message'] === 'Your OTP is 123456'
+                && $request['Message'] === 'Your Sundoritoma order confirmation OTP is 123456. Do not share this code.'
                 && ! array_key_exists('CampaignId', $request->data());
         });
     }
@@ -65,7 +64,15 @@ class MimSmsSenderTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('MiMSMS is not configured.');
 
-        app(SmsSender::class)->send('01627237432', 'Hello');
+        app(SmsSender::class)->send('01627237432', 'Your Sundoritoma OTP is 123456.');
+    }
+
+    public function test_throws_when_otp_message_is_missing_brand_name(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('MiMSMS OTP messages must include the brand name (Sundoritoma) in the message body.');
+
+        app(SmsSender::class)->send('01627237432', 'Your OTP is 123456.');
     }
 
     public function test_throws_when_gateway_rejects_message(): void
@@ -80,23 +87,6 @@ class MimSmsSenderTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('MiMSMS gateway rejected the message: Invalid sender name');
 
-        app(SmsSender::class)->send('01627237432', 'Hello');
-    }
-
-    public function test_includes_campaign_id_for_promotional_messages(): void
-    {
-        Config::set('sms.mimsms.transaction_type', 'P');
-        Config::set('sms.mimsms.campaign_id', '42');
-
-        Http::fake([
-            'api.mimsms.com/*' => Http::response([
-                'status' => 'Success',
-            ]),
-        ]);
-
-        app(SmsSender::class)->send('01627237432', 'Sale ends tonight');
-
-        Http::assertSent(fn (Request $request): bool => $request['TransactionType'] === 'P'
-            && $request['CampaignId'] === '42');
+        app(SmsSender::class)->send('01627237432', 'Your Sundoritoma OTP is 123456.');
     }
 }

@@ -31,7 +31,8 @@ class PasswordResetOtpService
         ], $ttl);
 
         $message = sprintf(
-            'Your Sundoritoma password reset OTP is %s. Valid for %d minutes. Do not share this code.',
+            'Your %s password reset OTP is %s. Valid for %d minutes. Do not share this code.',
+            config('sms.from', 'Sundoritoma'),
             $code,
             config('checkout.otp_ttl_minutes', 10),
         );

@@ -9,6 +9,9 @@ use RuntimeException;
 
 class MimSmsSender implements SmsSender
 {
+    /** MiMSMS routes OTP through transactional SMS (type T), not promotional. */
+    private const TRANSACTION_TYPE_OTP = 'T';
+
     public function send(string $phone, string $message): void
     {
         $config = config('sms.mimsms');
@@ -17,18 +20,16 @@ class MimSmsSender implements SmsSender
             throw new RuntimeException('MiMSMS is not configured.');
         }
 
+        $this->assertOtpMessageIncludesBrand($message);
+
         $payload = [
             'UserName' => $config['username'],
             'ApiKey' => $config['api_key'],
             'MobileNumber' => $this->formatMobileNumber($phone),
             'SenderName' => $config['sender_name'],
-            'TransactionType' => $config['transaction_type'],
+            'TransactionType' => self::TRANSACTION_TYPE_OTP,
             'Message' => $message,
         ];
-
-        if ($config['transaction_type'] === 'P' && filled($config['campaign_id'])) {
-            $payload['CampaignId'] = $config['campaign_id'];
-        }
 
         $response = Http::asJson()
             ->acceptJson()
@@ -52,5 +53,18 @@ class MimSmsSender implements SmsSender
     private function formatMobileNumber(string $phone): string
     {
         return '880'.PhoneNumber::normalize($phone);
+    }
+
+    private function assertOtpMessageIncludesBrand(string $message): void
+    {
+        $brand = (string) config('sms.from');
+
+        if ($brand === '' || str_contains(strtolower($message), strtolower($brand))) {
+            return;
+        }
+
+        throw new RuntimeException(
+            'MiMSMS OTP messages must include the brand name ('.$brand.') in the message body.',
+        );
     }
 }

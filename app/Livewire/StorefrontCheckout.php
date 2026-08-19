@@ -12,6 +12,8 @@ use App\Services\Storefront\CartService;
 use App\Services\Storefront\CheckoutOtpService;
 use App\Services\Storefront\CheckoutPricing;
 use App\Services\Storefront\CouponService;
+use App\Services\Storefront\GuestCheckoutAccountService;
+use App\Services\Storefront\GuestCheckoutStaffPhoneException;
 use App\Services\Storefront\OrderPlacer;
 use App\Support\PhoneNumber;
 use Livewire\Attributes\Layout;
@@ -54,6 +56,8 @@ class StorefrontCheckout extends Component
     public ?string $otpError = null;
 
     public ?string $formError = null;
+
+    public ?string $loginRequiredForRole = null;
 
     public ?string $addressLocationHint = null;
 
@@ -225,9 +229,10 @@ class StorefrontCheckout extends Component
         $this->couponError = null;
     }
 
-    public function sendOtp(CartService $cart, CouponService $coupons, CheckoutOtpService $otpService): void
+    public function sendOtp(CartService $cart, CouponService $coupons, CheckoutOtpService $otpService, GuestCheckoutAccountService $accounts): void
     {
         $this->formError = null;
+        $this->loginRequiredForRole = null;
         $this->otpError = null;
 
         $this->validate([
@@ -264,6 +269,14 @@ class StorefrontCheckout extends Component
         }
 
         try {
+            $accounts->assertGuestCheckoutAllowed($this->phone);
+        } catch (GuestCheckoutStaffPhoneException $e) {
+            $this->loginRequiredForRole = $e->roleLabel;
+
+            return;
+        }
+
+        try {
             $otpService->send($this->phone);
             $this->step = 'otp';
             $this->otp = '';
@@ -289,8 +302,10 @@ class StorefrontCheckout extends Component
         CouponService $coupons,
         CheckoutOtpService $otpService,
         OrderPlacer $placer,
+        GuestCheckoutAccountService $accounts,
     ): void {
         $this->otpError = null;
+        $this->loginRequiredForRole = null;
 
         $this->validate([
             'otp' => ['required', 'string', 'size:6'],
@@ -298,6 +313,15 @@ class StorefrontCheckout extends Component
 
         if (! $otpService->verify($this->phone, $this->otp)) {
             $this->otpError = __('storefront.otp_invalid');
+
+            return;
+        }
+
+        try {
+            $accounts->assertGuestCheckoutAllowed($this->phone);
+        } catch (GuestCheckoutStaffPhoneException $e) {
+            $this->step = 'details';
+            $this->loginRequiredForRole = $e->roleLabel;
 
             return;
         }

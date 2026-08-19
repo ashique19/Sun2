@@ -15,7 +15,14 @@
                     <form wire:submit="sendOtp" class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-4">
                         <h2 class="font-semibold text-lg">{{ __('storefront.delivery_details') }}</h2>
 
-                        @if ($formError)
+                        @if ($loginRequiredForRole)
+                            <div class="rounded-lg bg-rose-50 text-rose-700 text-sm px-4 py-3 space-y-2">
+                                <p class="font-bold">{{ __('storefront.checkout_staff_phone_blocked', ['role' => $loginRequiredForRole]) }}</p>
+                                <a href="{{ route('login') }}" wire:navigate class="inline-block font-semibold text-[#C9A227] hover:underline">
+                                    {{ __('storefront.log_in_link') }}
+                                </a>
+                            </div>
+                        @elseif ($formError)
                             <div class="rounded-lg bg-rose-50 text-rose-700 text-sm px-4 py-3">{{ $formError }}</div>
                         @endif
 

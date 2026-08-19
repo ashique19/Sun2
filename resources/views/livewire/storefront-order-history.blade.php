@@ -30,9 +30,12 @@
                                             @endforeach
                                         </div>
                                     @endif
-                                    <div class="text-right shrink-0">
+                                    <div class="text-right shrink-0 space-y-1">
                                         <div class="font-medium">&#2547; {{ number_format($order->total, 0) }}</div>
-                                        <div class="capitalize text-[#6B6459]">{{ $order->status }}</div>
+                                        <x-storefront.order-status-badge :order="$order" class="justify-end" />
+                                        @if ($order->status === 'dispatched' && $order->courier_tracker)
+                                            <div class="text-xs text-[#8C8474]">{{ $order->courier_tracker }}</div>
+                                        @endif
                                     </div>
                                 </a>
                             @endforeach

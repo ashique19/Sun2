@@ -26,6 +26,12 @@ class Order extends Model
     public const STATUS_DRAFT = 'draft';
 
     /** @var list<string> */
+    public const CUSTOMER_ACTIVE_STATUSES = ['new', 'confirmed', 'dispatched'];
+
+    /** @var list<string> */
+    public const CUSTOMER_TRACKING_STATUSES = ['dispatched', 'delivered', 'returned'];
+
+    /** @var list<string> */
     public const PLACED_VIA_OPTIONS = [
         self::PLACED_VIA_STOREFRONT,
         self::PLACED_VIA_ADMIN,
@@ -500,5 +506,47 @@ class Order extends Model
         }
 
         return null;
+    }
+
+    /**
+     * @param  Builder<Order>  $query
+     * @return Builder<Order>
+     */
+    public function scopeActiveForCustomer(Builder $query): Builder
+    {
+        return $query->whereIn('status', self::CUSTOMER_ACTIVE_STATUSES);
+    }
+
+    public function isActiveForCustomer(): bool
+    {
+        return in_array($this->status, self::CUSTOMER_ACTIVE_STATUSES, true);
+    }
+
+    public function showsCustomerCourierTracking(): bool
+    {
+        if (! in_array($this->status, self::CUSTOMER_TRACKING_STATUSES, true)) {
+            return false;
+        }
+
+        if (filled($this->courier_tracker)) {
+            return true;
+        }
+
+        $this->loadMissing('courierLogs');
+
+        return $this->courierLogs->isNotEmpty();
+    }
+
+    public function customerStatusLabel(): string
+    {
+        return self::customerStatusLabelFor((string) $this->status);
+    }
+
+    public static function customerStatusLabelFor(string $status): string
+    {
+        $key = 'storefront.order_status_'.$status;
+        $label = __($key);
+
+        return $label !== $key ? $label : ucfirst($status);
     }
 }

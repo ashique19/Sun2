@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Livewire\Concerns\ManagesProductImagePreview;
 use App\Models\Order;
+use App\Services\Couriers\CourierTrackingService;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -23,6 +24,9 @@ class StorefrontOrderDetail extends Component
             'items.product.images:id,product_id,path,is_primary,sort_order',
             'coupon',
             'adjustments',
+            'courier:id,name,slug',
+            'courierLogs',
+            'statusHistory' => fn ($query) => $query->orderBy('created_at'),
         ]);
     }
 
@@ -31,10 +35,18 @@ class StorefrontOrderDetail extends Component
         return 'Order #'.$this->order->order_number.' - Sundoritoma';
     }
 
-    public function render()
+    public function render(CourierTrackingService $tracking)
     {
-        return view('livewire.storefront-order-detail')
-            ->title($this->title());
+        $showsTracking = $this->order->showsCustomerCourierTracking();
+
+        return view('livewire.storefront-order-detail', [
+            'showsTracking' => $showsTracking,
+            'trackingEvents' => $showsTracking ? $tracking->eventsFromLoadedLogs($this->order) : [],
+            'courierStatus' => $showsTracking ? $tracking->displayStatus($this->order) : null,
+            'statusProgress' => $this->order->statusHistory
+                ->unique('status')
+                ->values(),
+        ])->title($this->title());
     }
 
     private function canViewOrder(Order $order): bool

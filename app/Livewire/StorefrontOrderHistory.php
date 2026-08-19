@@ -28,6 +28,7 @@ class StorefrontOrderHistory extends Component
                 'items:id,order_id,name,quantity,product_image,product_id',
                 'items.product:id,slug,name',
                 'items.product.images:id,product_id,path,is_primary,sort_order',
+                'courier:id,name',
             ])
             ->withCount('items')
             ->latest('placed_at')

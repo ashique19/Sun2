@@ -38,11 +38,17 @@ class StorefrontAccount extends Component
     public function render()
     {
         $user = auth()->user();
-        $recentOrders = $user->orders()->latest('placed_at')->latest('id')->limit(5)->get();
+        $activeOrders = $user->orders()
+            ->activeForCustomer()
+            ->with(['courier:id,name'])
+            ->latest('placed_at')
+            ->latest('id')
+            ->limit(10)
+            ->get();
 
         return view('livewire.storefront-account', [
             'user' => $user,
-            'recentOrders' => $recentOrders,
+            'activeOrders' => $activeOrders,
             'needsPassword' => $user->password === null,
         ]);
     }

@@ -12,9 +12,9 @@
 
             <div class="lg:col-span-3 space-y-6">
                 <div class="rounded-xl border border-[#EFE7D6] bg-white p-6 text-sm space-y-3">
-                    <div class="flex justify-between">
+                    <div class="flex justify-between items-center gap-3">
                         <span class="text-[#8C8474]">{{ __('storefront.status') }}</span>
-                        <span class="capitalize font-medium">{{ $order->status }}</span>
+                        <x-storefront.order-status-badge :order="$order" />
                     </div>
                     <div class="flex justify-between">
                         <span class="text-[#8C8474]">{{ __('storefront.placed') }}</span>
@@ -33,6 +33,15 @@
                         <span class="text-right">{{ $order->address }}@if($order->area), {{ $order->area }}@endif, {{ $order->city }}</span>
                     </div>
                 </div>
+
+                @if ($showsTracking)
+                    <x-storefront.order-tracking-card
+                        :order="$order"
+                        :courier-status="$courierStatus"
+                        :tracking-events="$trackingEvents"
+                        :status-progress="$statusProgress"
+                    />
+                @endif
 
                 <div class="rounded-xl border border-[#EFE7D6] bg-white p-6">
                     <h2 class="font-semibold mb-4">{{ __('storefront.items_label') }}</h2>

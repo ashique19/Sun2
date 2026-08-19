@@ -64,22 +64,32 @@
                 </div>
 
                 <div class="rounded-xl border border-[#EFE7D6] bg-white p-6">
-                    <h2 class="font-semibold text-lg mb-4">{{ __('storefront.recent_orders') }}</h2>
-                    @if ($recentOrders->isEmpty())
-                        <p class="text-sm text-[#6B6459]">{{ __('storefront.no_orders_yet') }}</p>
+                    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                        <h2 class="font-semibold text-lg">{{ __('storefront.active_orders') }}</h2>
+                        <a href="{{ route('account.orders') }}" wire:navigate class="text-sm text-[#C9A227] hover:underline">
+                            {{ __('storefront.view_all_orders') }}
+                        </a>
+                    </div>
+                    @if ($activeOrders->isEmpty())
+                        <p class="text-sm text-[#6B6459]">{{ __('storefront.no_active_orders') }}</p>
                         <a href="{{ route('home') }}" wire:navigate class="inline-block mt-4 text-sm text-[#C9A227] hover:underline">{{ __('storefront.start_shopping') }}</a>
                     @else
                         <div class="space-y-3 text-sm">
-                            @foreach ($recentOrders as $order)
+                            @foreach ($activeOrders as $order)
                                 <a href="{{ route('account.orders.show', $order) }}" wire:navigate
-                                    class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#E7DFCF] px-4 py-3 hover:bg-[#FAF6EF] transition">
-                                    <div>
-                                        <span class="font-medium">#{{ $order->order_number }}</span>
-                                        <span class="text-[#8C8474] ml-2">{{ $order->placed_at?->format('d M Y') }}</span>
-                                    </div>
-                                    <div class="flex items-center gap-4">
-                                        <span class="capitalize text-[#6B6459]">{{ $order->status }}</span>
+                                    class="block rounded-lg border border-[#E7DFCF] px-4 py-3 hover:bg-[#FAF6EF] transition">
+                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                        <div>
+                                            <span class="font-medium">#{{ $order->order_number }}</span>
+                                            <span class="text-[#8C8474] ml-2">{{ $order->placed_at?->format('d M Y') }}</span>
+                                        </div>
                                         <span class="font-medium">&#2547; {{ number_format($order->total, 0) }}</span>
+                                    </div>
+                                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                                        <x-storefront.order-status-badge :order="$order" />
+                                        @if ($order->status === 'dispatched' && $order->courier_tracker)
+                                            <span class="text-xs text-[#8C8474]">{{ __('storefront.tracking_code') }}: {{ $order->courier_tracker }}</span>
+                                        @endif
                                     </div>
                                 </a>
                             @endforeach

@@ -309,6 +309,15 @@ body:has(.mobile-nav-toggle:checked) {
     flex-shrink: 0;
 }
 
+.storefront-bottom-nav__link--whatsapp {
+    color: #25d366;
+    font-weight: 600;
+}
+
+.storefront-bottom-nav__link--whatsapp:hover {
+    color: #128c7e;
+}
+
 @media (min-width: 640px) {
     .storefront-bottom-nav {
         display: none !important;

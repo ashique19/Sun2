@@ -64,6 +64,8 @@ class StorefrontCheckoutOtpHintTest extends TestCase
             ->set('areaId', $area->id)
             ->call('sendOtp')
             ->assertSet('step', 'otp')
+            ->assertSee(__('storefront.order_summary'))
+            ->assertSee(__('storefront.verify_place_order'))
             ->assertDontSee('Local: check')
             ->assertDontSee('storage/logs/laravel.log');
     }

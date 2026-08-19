@@ -128,6 +128,7 @@ class GuestCheckoutDashboardTest extends TestCase
             ->assertSee(__('storefront.track_order_btn'))
             ->assertSee(__('storefront.go_to_dashboard_btn'))
             ->assertSee(__('storefront.track_order_hint'))
+            ->assertSee('flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3', false)
             ->assertDontSee('storage/logs/laravel.log');
     }
 

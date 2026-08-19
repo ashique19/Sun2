@@ -373,9 +373,11 @@
                     <div wire:key="steadfast-webhook-{{ $entry->id }}" class="flex flex-wrap items-start gap-3 px-4 py-3 hover:bg-[#FAF6EF]/50">
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-2">
-                                <span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-[#FAF6EF] text-[#6B6459]">
-                                    {{ str_replace('_', ' ', $notificationType) }}
-                                </span>
+                                @if ($notificationType !== 'tracking_update')
+                                    <span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-[#FAF6EF] text-[#6B6459]">
+                                        {{ str_replace('_', ' ', $notificationType) }}
+                                    </span>
+                                @endif
                                 @if ($order)
                                     <a href="{{ route('admin.orders.show', $order) }}" wire:navigate
                                         class="text-xs font-medium text-[#C9A227] hover:underline">

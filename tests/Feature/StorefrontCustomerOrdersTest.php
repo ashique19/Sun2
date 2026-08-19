@@ -62,6 +62,7 @@ class StorefrontCustomerOrdersTest extends TestCase
         Livewire::test(StorefrontAccount::class)
             ->assertSee('#2001')
             ->assertSee(__('storefront.order_status_dispatched'))
+            ->assertSee(__('storefront.view_details_tracking_btn'))
             ->assertDontSee('#2002')
             ->assertDontSee('#2003');
     }

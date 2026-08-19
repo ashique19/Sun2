@@ -46,6 +46,7 @@ return [
         'account.wishlist',
         'search',
         'share.products',
+        'share.cart',
         'share.investor-pitch',
     ],
 

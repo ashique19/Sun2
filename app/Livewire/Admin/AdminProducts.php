@@ -10,6 +10,7 @@ use App\Services\Admin\ProductAiImageGenerator;
 use App\Services\Admin\ProductImageService;
 use App\Services\Admin\ProductPricedImageService;
 use App\Services\Admin\ProductUnitCostService;
+use App\Services\Admin\SharedCartService;
 use App\Support\AdminAccess;
 use App\Support\AdminProductListFilters;
 use Livewire\Attributes\Layout;
@@ -277,6 +278,20 @@ class AdminProducts extends Component
         $productsParam = implode(',', $ids);
 
         return redirect()->route('admin.social-posts.create', ['products' => $productsParam]);
+    }
+
+    public function shareSelectedCart(SharedCartService $sharedCarts): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->selected === []) {
+            return;
+        }
+
+        $share = $sharedCarts->createFromProductIds($this->selected, auth()->id());
+        $url = route('share.cart', $share->token);
+
+        $this->js('window.open('.json_encode($url).', "_blank")');
     }
 
     public function saveInlineEdit(): void

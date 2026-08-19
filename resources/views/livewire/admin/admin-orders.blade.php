@@ -119,7 +119,7 @@
                         <div class="min-w-0 sm:flex-1">
                             <div class="font-medium text-[#1E1E1E]">{{ $order->name }}</div>
                             <div class="text-sm text-[#8C8474]">{{ $order->phone }}</div>
-                            <div class="mt-0.5 text-xs text-[#8C8474]">Placed by {{ $order->placedByLabel() }}</div>
+                            <x-admin.order-placed-by :order="$order" class="mt-0.5" />
                             @php($areaCity = collect([$order->area, $order->city])->filter()->implode(', '))
                             @if ($areaCity !== '' || filled($order->address))
                                 <div x-data="{ open: false }" class="mt-1">
@@ -260,7 +260,7 @@
                                         ])>{{ $order->status === 'draft' ? 'Draft by AI' : $order->status }}</span>
                                     </div>
                                     <p class="mt-0.5 text-xs text-[#8C8474]">{{ $order->placed_at?->format('d M Y') }}</p>
-                                    <p class="mt-0.5 text-xs text-[#8C8474]">Placed by {{ $order->placedByLabel() }}</p>
+                                    <x-admin.order-placed-by :order="$order" class="mt-0.5" />
                                     @if (! $showCourierTracking && ($steadfastUrl = $order->steadfastConsignmentUrl()))
                                         <p class="mt-0.5 text-xs">
                                             <a href="{{ $steadfastUrl }}"

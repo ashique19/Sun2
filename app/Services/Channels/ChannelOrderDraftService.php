@@ -412,6 +412,18 @@ class ChannelOrderDraftService
             $orderData['area'] = $existing->area;
             $orderData['city'] = $existing->city;
         }
+
+        // Preserve staff-entered city/area during weak AI re-sync.
+        // When the conversation parser produces null city/area (missing text),
+        // keep the existing staff-fixed values so they don't get wiped out.
+        if (blank($orderData['area'] ?? null) && filled($existing->area)) {
+            $orderData['area'] = $existing->area;
+        }
+
+        if (blank($orderData['city'] ?? null) && filled($existing->city)) {
+            $orderData['city'] = $existing->city;
+        }
+
         if (in_array(ChannelMessageOrderMapper::FIELD_PRODUCT, $locked, true)) {
             // Keep existing lines; totals already recalculated on the draft.
             $lines = [];
@@ -461,6 +473,10 @@ class ChannelOrderDraftService
     {
         if (! $order->isAiDraft()) {
             throw new InvalidArgumentException('Only AI draft orders can be confirmed.');
+        }
+
+        if (blank($order->city) || blank($order->area)) {
+            throw new InvalidArgumentException('City and area are required before confirming this draft.');
         }
 
         return DB::transaction(function () use ($order, $confirmedBy) {

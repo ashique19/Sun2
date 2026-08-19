@@ -105,11 +105,15 @@
             }
         },
         modalBlocksSwipe() {
-            return Boolean(
-                document.querySelector('[role=dialog][aria-modal=true]')
-                || document.querySelector('[role=dialog].fixed')
-                || document.body.classList.contains('overflow-hidden')
-            );
+            const dialogs = Array.from(document.querySelectorAll('[role=dialog][aria-modal=true], [role=dialog].fixed'));
+
+            return dialogs.some((dialog) => {
+                const style = window.getComputedStyle(dialog);
+
+                return style.display !== 'none'
+                    && style.visibility !== 'hidden'
+                    && style.pointerEvents !== 'none';
+            }) || document.body.classList.contains('overflow-hidden');
         },
     }"
     @@touchstart.window.passive="onStart($event)"

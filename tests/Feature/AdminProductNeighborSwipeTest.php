@@ -71,7 +71,10 @@ class AdminProductNeighborSwipeTest extends TestCase
             ->assertSeeHtml('max-width: 767px')
             ->assertSeeHtml("getAttribute('data-previous-url')")
             ->assertSeeHtml('modalBlocksSwipe()')
-            ->assertSeeHtml('[role=dialog][aria-modal=true]')
+            ->assertSeeHtml("querySelectorAll('[role=dialog][aria-modal=true], [role=dialog].fixed')")
+            ->assertSeeHtml('window.getComputedStyle(dialog)')
+            ->assertSeeHtml("style.visibility !== 'hidden'")
+            ->assertSeeHtml("style.pointerEvents !== 'none'")
             ->html();
 
         // Alpine must stay in attributes — broken quoting used to dump JS into visible text.

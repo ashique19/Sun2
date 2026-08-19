@@ -39,29 +39,7 @@
                     </div>
                 @endif
 
-                <div class="rounded-xl border border-[#EFE7D6] bg-white p-6">
-                    <h2 class="font-semibold text-lg mb-4">{{ __('storefront.welcome_user', ['name' => $user->name]) }}</h2>
-                    <dl class="grid sm:grid-cols-2 gap-4 text-sm">
-                        <div>
-                            <dt class="text-[#8C8474]">{{ __('storefront.mobile') }}</dt>
-                            <dd class="font-medium">{{ $user->phone }}</dd>
-                        </div>
-                        <div>
-                            <dt class="text-[#8C8474]">{{ __('storefront.email_label') }}</dt>
-                            <dd class="font-medium">{{ $user->email }}</dd>
-                        </div>
-                    </dl>
-                    <div class="mt-6 flex flex-wrap gap-3">
-                        <a href="{{ route('account.profile') }}" wire:navigate
-                            class="rounded-full border border-[#C9A227] px-5 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]">
-                            {{ __('storefront.edit_profile') }}
-                        </a>
-                        <a href="{{ route('account.orders') }}" wire:navigate
-                            class="rounded-full border border-[#E0D6C2] px-5 py-2 text-sm hover:bg-[#FAF6EF]">
-                            {{ __('storefront.view_all_orders') }}
-                        </a>
-                    </div>
-                </div>
+                <h2 class="font-serif text-2xl font-semibold">{{ __('storefront.welcome_user', ['name' => $user->name]) }}</h2>
 
                 <div class="rounded-xl border border-[#EFE7D6] bg-white p-6">
                     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">

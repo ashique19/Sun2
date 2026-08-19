@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Livewire\Admin\AdminOrders;
 use App\Livewire\Admin\AdminOrderShow;
+use App\Models\Area;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
+use App\Models\City;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductImage;
@@ -200,6 +202,29 @@ class ChannelAiDraftOrdersTest extends TestCase
         $product = $this->product(['stock_quantity' => 10]);
         $admin = $this->adminUser();
 
+        $city = City::query()->firstOrCreate(
+            ['name' => 'Dhaka'],
+            [
+                'division' => null,
+                'is_dhaka' => true,
+                'is_active' => true,
+                'slug' => 'dhaka-'.uniqid(),
+            ],
+        );
+
+        // `syncDraftFromConversation()` resolves parsed city/area text via DB rows.
+        Area::query()->firstOrCreate(
+            ['city_id' => $city->id, 'name' => 'Mirpur'],
+            [
+                'police_station' => null,
+                'is_active' => true,
+                'unit_type' => 'thana',
+                'slug' => 'mirpur-'.uniqid(),
+                'delivery_charge_upto_5' => 80,
+                'delivery_charge_over_5' => 150,
+            ],
+        );
+
         $conversation = ChannelConversation::query()->create([
             'channel' => ChannelConversation::CHANNEL_MESSENGER,
             'external_user_id' => 'PSID_CONFIRM',
@@ -242,6 +267,58 @@ class ChannelAiDraftOrdersTest extends TestCase
             ->assertSeeHtml('aria-label="Open conversation in Inbox"');
     }
 
+    public function test_staff_entered_city_and_area_are_preserved_on_weak_resync_when_parser_outputs_null(): void
+    {
+        $product = $this->product(['stock_quantity' => 10]);
+        $admin = $this->adminUser();
+
+        $conversation = ChannelConversation::query()->create([
+            'channel' => ChannelConversation::CHANNEL_MESSENGER,
+            'external_user_id' => 'PSID_PRESERVE',
+            'last_inbound_at' => now(),
+        ]);
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_preserve_1',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => "Nila\n01627237432\n{$product->name}",
+            'sent_at' => now(),
+        ]);
+
+        config(['gemini.api_key' => null]);
+
+        $draft = app(ChannelOrderDraftService::class)
+            ->syncDraftFromConversation($conversation->fresh(['messages']));
+
+        $this->assertNotNull($draft);
+        $this->assertTrue($draft->isAiDraft());
+        $this->assertTrue(blank($draft->city));
+        $this->assertTrue(blank($draft->area));
+
+        // Staff fixes location on the draft UI.
+        $draft->forceFill([
+            'city' => 'Dhaka',
+            'area' => 'Mirpur',
+        ])->save();
+
+        // Another message comes in, but still without city/area text.
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_preserve_2',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => "Nila\n01627237432\n{$product->name}",
+            'sent_at' => now(),
+        ]);
+
+        $resynced = app(ChannelOrderDraftService::class)
+            ->syncDraftFromConversation($conversation->fresh(['messages']));
+
+        $this->assertSame($draft->id, $resynced->id);
+        $this->assertSame('Dhaka', $resynced->city);
+        $this->assertSame('Mirpur', $resynced->area);
+    }
+
     public function test_livewire_confirm_draft_from_list(): void
     {
         $admin = $this->adminUser();
@@ -258,6 +335,7 @@ class ChannelAiDraftOrdersTest extends TestCase
             'order_number' => '3001',
             'placed_via' => Order::PLACED_VIA_MESSENGER,
             'channel_conversation_id' => $conversation->id,
+            'area' => 'Mirpur',
             'subtotal' => 1200,
             'total' => 1200,
             'cod_amount' => 1200,
@@ -298,6 +376,11 @@ class ChannelAiDraftOrdersTest extends TestCase
 
         $draft = app(ChannelOrderDraftService::class)->ensureDraftForConversation($conversation, $admin->id);
 
+        $draft->forceFill([
+            'city' => 'Dhaka',
+            'area' => 'Mirpur',
+        ])->save();
+
         $this->assertSame(ChannelOrderDraftService::INBOX_STAFF_DRAFT_NOTE, $draft->admin_note);
 
         Livewire::actingAs($admin)
@@ -324,6 +407,7 @@ class ChannelAiDraftOrdersTest extends TestCase
             'order_number' => '3002',
             'placed_via' => Order::PLACED_VIA_MESSENGER,
             'channel_conversation_id' => $conversation->id,
+            'area' => 'Mirpur',
             'admin_note' => ChannelOrderDraftService::INBOX_STAFF_DRAFT_NOTE.' Gift wrap requested.',
         ]);
         $conversation->update(['draft_order_id' => $draft->id]);

@@ -117,6 +117,43 @@ class AdminDashboardSteadfastWebhooksTest extends TestCase
     }
 
     #[Test]
+    public function dashboard_shows_customer_area_beside_name_when_present(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+
+        $order = Order::query()->create([
+            'order_number' => 'WH-AREA-'.uniqid(),
+            'name' => 'Area Customer',
+            'area' => 'Mirpur',
+            'phone' => '01700000099',
+            'address' => 'Dhaka',
+            'status' => 'dispatched',
+            'subtotal' => 500,
+            'total' => 500,
+            'courier_id' => $courier->id,
+            'courier_tracker' => 'SFR_AREA',
+            'courier_consignment_id' => '2706976AA',
+            'placed_at' => now()->subDay(),
+            'dispatch_date' => now()->subDay(),
+        ]);
+
+        CourierData::query()->create([
+            'order_id' => $order->id,
+            'courier_id' => $courier->id,
+            'api_data' => [
+                'notification_type' => 'delivery_status',
+                'status' => 'in_transit',
+                'invoice' => $order->order_number,
+            ],
+            'created_at' => now()->subHour(),
+        ]);
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSee('Area Customer (Mirpur)');
+    }
+
+    #[Test]
     public function inbox_ignores_old_poll_and_dispatch_payloads_and_caps_at_twenty(): void
     {
         $this->actingAs($this->adminUser());

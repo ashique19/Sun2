@@ -381,7 +381,7 @@
                                         class="text-xs font-medium text-[#C9A227] hover:underline">
                                         Order #{{ $order->order_number }}
                                     </a>
-                                    <span class="truncate text-xs text-[#6B6459]">{{ $order->name }}</span>
+                                    <span class="truncate text-xs text-[#6B6459]">{{ $order->name }}{{ $order->area ? ' ('.$order->area.')' : '' }}</span>
                                 @else
                                     <span class="text-xs text-[#8C8474]">Order unavailable</span>
                                 @endif

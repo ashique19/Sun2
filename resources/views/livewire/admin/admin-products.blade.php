@@ -24,9 +24,9 @@
                     {{ $selected === [] ? 'bg-[#D8CDB6] cursor-not-allowed' : 'bg-[#C9A227] hover:bg-[#b8931f]' }}">
                 Make post ({{ count($selected) }})
             </button>
-            <button type="button" wire:click="shareSelectedCart" @disabled($selected === [])
+            <button type="button" wire:click="openShareCartModal" @disabled($selected === [])
                 wire:loading.attr="disabled"
-                wire:target="shareSelectedCart"
+                wire:target="openShareCartModal,confirmShareCart"
                 class="rounded-full px-5 py-2 text-sm font-semibold transition border
                     {{ $selected === []
                         ? 'border-[#E0D6C2] text-[#B0A898] cursor-not-allowed bg-white'
@@ -112,6 +112,76 @@
                 class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
                 Cancel
             </button>
+        </div>
+    @endif
+
+    @if ($shareCartModalOpen)
+        <div class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+            wire:click.self="closeShareCartModal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Share cart with customer">
+            <div class="flex max-h-[min(90dvh,40rem)] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+                wire:click.stop>
+                <div class="flex shrink-0 items-center justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
+                    <div>
+                        <h2 class="font-semibold text-lg">Share cart</h2>
+                        <p class="mt-0.5 text-xs text-[#8C8474]">Set quantities, then open the guest cart link.</p>
+                    </div>
+                    <button type="button" wire:click="closeShareCartModal"
+                        class="shrink-0 rounded-full border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
+                        Close
+                    </button>
+                </div>
+
+                <div class="max-h-[min(24rem,calc(90dvh-11rem))] overflow-y-auto px-4 py-3 space-y-3">
+                    @foreach ($shareCartRows as $row)
+                        <div wire:key="share-cart-row-{{ $row['id'] }}"
+                            class="flex items-center gap-3 rounded-xl border border-[#EFE7D6] bg-[#FAF6EF]/40 p-3">
+                            <div class="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-[#E7DFCF] bg-[#FAF6EF]">
+                                @if ($row['thumb'])
+                                    <img src="{{ \App\Support\StorefrontAssets::url($row['thumb']) }}"
+                                        alt=""
+                                        class="h-full w-full object-cover">
+                                @endif
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate text-sm font-medium text-[#1E1E1E]" title="{{ $row['name'] }}">{{ $row['name'] }}</p>
+                                <p class="text-xs tabular-nums text-[#8C8474]">&#2547; {{ $row['price'] }}</p>
+                            </div>
+                            <div class="shrink-0">
+                                <label for="share-cart-qty-{{ $row['id'] }}" class="sr-only">Quantity for {{ $row['name'] }}</label>
+                                <input id="share-cart-qty-{{ $row['id'] }}"
+                                    type="number"
+                                    min="1"
+                                    max="999"
+                                    step="1"
+                                    inputmode="numeric"
+                                    wire:model="shareCartQuantities.{{ $row['id'] }}"
+                                    class="w-20 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums text-center focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                @if ($errors->has('shareCartQuantities.'.$row['id']))
+                                    <p class="mt-1 text-[11px] text-rose-600">{{ $errors->first('shareCartQuantities.'.$row['id']) }}</p>
+                                @endif
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+
+                <div class="flex shrink-0 items-center justify-end gap-2 border-t border-[#EFE7D6] px-4 py-3">
+                    <button type="button" wire:click="closeShareCartModal"
+                        class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
+                        Cancel
+                    </button>
+                    <button type="button"
+                        wire:click="confirmShareCart"
+                        wire:loading.attr="disabled"
+                        wire:target="confirmShareCart"
+                        class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
+                        <span wire:loading.remove wire:target="confirmShareCart">Create link</span>
+                        <span wire:loading wire:target="confirmShareCart">Creating…</span>
+                    </button>
+                </div>
+            </div>
         </div>
     @endif
 

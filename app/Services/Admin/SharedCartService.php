@@ -12,8 +12,9 @@ class SharedCartService
 {
     /**
      * @param  list<int>  $productIds
+     * @param  array<int, int>  $quantitiesByProductId
      */
-    public function createFromProductIds(array $productIds, ?int $createdBy = null): SharedCart
+    public function createFromProductIds(array $productIds, ?int $createdBy = null, array $quantitiesByProductId = []): SharedCart
     {
         $productIds = array_values(array_unique(array_map('intval', $productIds)));
 
@@ -38,7 +39,7 @@ class SharedCartService
         $items = $products
             ->map(fn (Product $product) => [
                 'product_id' => (int) $product->id,
-                'quantity' => 1,
+                'quantity' => max(1, (int) ($quantitiesByProductId[$product->id] ?? 1)),
             ])
             ->values()
             ->all();

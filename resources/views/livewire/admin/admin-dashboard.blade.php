@@ -672,12 +672,20 @@
                                 {{ number_format($tile['totals']['order_qty']) }}
                                 · ৳{{ number_format($tile['totals']['order_value'], 0) }}
                             </p>
+                            <p class="mt-0.5 text-[10px] tabular-nums text-[#8C8474]">
+                                avg {{ number_format($tile['averages']['order_qty'], 1) }}
+                                · ৳{{ number_format($tile['averages']['order_value'], 0) }}/day
+                            </p>
                         </div>
                         <div>
                             <p class="text-[#8C8474]">Delivered</p>
                             <p class="font-semibold tabular-nums text-[#1E1E1E]">
                                 {{ number_format($tile['totals']['delivery_qty']) }}
                                 · ৳{{ number_format($tile['totals']['delivery_value'], 0) }}
+                            </p>
+                            <p class="mt-0.5 text-[10px] tabular-nums text-[#8C8474]">
+                                avg {{ number_format($tile['averages']['delivery_qty'], 1) }}
+                                · ৳{{ number_format($tile['averages']['delivery_value'], 0) }}/day
                             </p>
                         </div>
                     </div>

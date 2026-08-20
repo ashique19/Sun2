@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminAiCandidateFileController;
+use App\Http\Controllers\Admin\AdminCustomerExportController;
 use App\Http\Controllers\Admin\AdminProductImageFileController;
 use App\Http\Controllers\ChannelMessageMediaController;
 use App\Http\Controllers\MessengerConversationSyncController;
@@ -265,6 +266,9 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/reviews', AdminReviews::class)->name('reviews');
         Route::redirect('/users', '/admin/users/customers');
         Route::get('/users/customers', AdminUsers::class)->defaults('segment', 'customers')->name('users.customers');
+        Route::get('/users/customers/export/{token}', AdminCustomerExportController::class)
+            ->whereUuid('token')
+            ->name('users.customers.export');
         Route::get('/users/moderators', AdminUsers::class)->defaults('segment', 'moderators')->name('users.moderators');
         Route::get('/users/resellers', AdminUsers::class)->defaults('segment', 'resellers')->name('users.resellers');
         Route::get('/users/admins', AdminUsers::class)->defaults('segment', 'admins')->name('users.admins');

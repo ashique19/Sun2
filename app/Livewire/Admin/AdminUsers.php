@@ -5,18 +5,19 @@ namespace App\Livewire\Admin;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\Admin\CustomerAnalyticsService;
+use App\Services\Admin\CustomerExportService;
 use App\Services\Sms\PromotionalSmsService;
 use App\Support\AdminAccess;
-use App\Support\SimpleXlsxExporter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Spatie\Permission\Models\Role;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 #[Layout('components.layouts.admin')]
 class AdminUsers extends Component
@@ -315,7 +316,7 @@ class AdminUsers extends Component
         $this->resetPage();
     }
 
-    public function exportFilteredCustomers(SimpleXlsxExporter $xlsx): StreamedResponse
+    public function exportFilteredCustomers(): mixed
     {
         AdminAccess::ensureStaffAdmin();
 
@@ -323,31 +324,20 @@ class AdminUsers extends Component
             abort(404);
         }
 
-        $customers = $this->managedUsersQuery('customers')
-            ->withCount([
-                'orders as orders_count' => fn ($q) => $q->where('status', '!=', Order::STATUS_DRAFT),
-            ])
-            ->orderByDesc('id')
-            ->get(['id', 'name', 'phone', 'email', 'is_active', 'created_at']);
+        $token = (string) Str::uuid();
 
-        $headers = ['Name', 'Phone', 'Email', 'Orders', 'Status', 'Joined'];
-        $rows = $customers->map(fn (User $user) => [
-            $user->name,
-            $user->phone,
-            $user->email ?: '',
-            (int) ($user->orders_count ?? 0),
-            $user->is_active ? 'Active' : 'Off',
-            $user->created_at?->format('Y-m-d') ?? '',
-        ])->all();
+        Cache::put(CustomerExportService::cacheKey($token), [
+            'user_id' => (int) auth()->id(),
+            'search' => $this->search,
+            'cityFilter' => $this->cityFilter,
+            'cityNoneOnly' => $this->cityNoneOnly,
+            'ordersMin' => $this->ordersMin,
+            'ordersMax' => $this->ordersMax,
+            'categoryId' => $this->categoryId,
+        ], now()->addMinutes(5));
 
-        $binary = $xlsx->build($headers, $rows);
-        $filename = 'customers-'.now()->format('Y-m-d-His').'.xlsx';
-
-        return response()->streamDownload(function () use ($binary): void {
-            echo $binary;
-        }, $filename, [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ]);
+        // Full-page download avoids Livewire base64-embedding the XLSX (empty/black error modal on large sets).
+        return $this->redirect(route('admin.users.customers.export', ['token' => $token]), navigate: false);
     }
 
     public function toggleCustomerSelection(int $userId): void

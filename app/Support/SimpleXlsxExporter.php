@@ -17,6 +17,33 @@ class SimpleXlsxExporter
      */
     public function build(array $headers, array $rows): string
     {
+        $path = tempnam(sys_get_temp_dir(), 'xlsx');
+        if ($path === false) {
+            throw new RuntimeException('Unable to create temporary export file.');
+        }
+
+        // tempnam creates an empty file; ZipArchive needs a non-existing path on some setups.
+        @unlink($path);
+        $path .= '.xlsx';
+
+        $this->writeToFile($path, $headers, $rows);
+
+        $binary = file_get_contents($path);
+        @unlink($path);
+
+        if ($binary === false) {
+            throw new RuntimeException('Unable to read generated XLSX file.');
+        }
+
+        return $binary;
+    }
+
+    /**
+     * @param  list<string>  $headers
+     * @param  list<list<string|int|float|null>>  $rows
+     */
+    public function writeToFile(string $path, array $headers, array $rows): void
+    {
         $sheetRowsXml = $this->sheetDataXml($headers, $rows);
 
         $files = [
@@ -55,31 +82,17 @@ XML,
                 ."\n".'</worksheet>',
         ];
 
-        $tmp = tempnam(sys_get_temp_dir(), 'xlsx');
-        if ($tmp === false) {
-            throw new RuntimeException('Unable to create temporary export file.');
-        }
-
         $zip = new ZipArchive;
-        if ($zip->open($tmp, ZipArchive::OVERWRITE) !== true) {
-            @unlink($tmp);
+        $opened = $zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+        if ($opened !== true) {
             throw new RuntimeException('Unable to open XLSX archive for writing.');
         }
 
-        foreach ($files as $path => $contents) {
-            $zip->addFromString($path, $contents);
+        foreach ($files as $name => $contents) {
+            $zip->addFromString($name, $contents);
         }
 
         $zip->close();
-
-        $binary = file_get_contents($tmp);
-        @unlink($tmp);
-
-        if ($binary === false) {
-            throw new RuntimeException('Unable to read generated XLSX file.');
-        }
-
-        return $binary;
     }
 
     /**

@@ -28,6 +28,24 @@ class ProductPricedImageService
 
     public const AUTO_SIZE_RATIO = 0.20;
 
+    /**
+     * Western → Bangla digit map for stamped price text.
+     *
+     * @var array<string, string>
+     */
+    private const BANGLA_DIGITS = [
+        '0' => '০',
+        '1' => '১',
+        '2' => '২',
+        '3' => '৩',
+        '4' => '৪',
+        '5' => '৫',
+        '6' => '৬',
+        '7' => '৭',
+        '8' => '৮',
+        '9' => '৯',
+    ];
+
     public function generate(Product $product, ?array $layout = null): string
     {
         $sourcePath = $product->primaryImagePath();
@@ -76,7 +94,7 @@ class ProductPricedImageService
     }
 
     /**
-     * Centered overlay sized to ~20% of the primary image's shorter side.
+     * Centered overlay sized so the stamp panel is ~20% of the primary image width.
      *
      * @return array{position: string, font: int}
      */
@@ -84,28 +102,29 @@ class ProductPricedImageService
     {
         $info = @getimagesize($sourcePath);
         $width = (int) ($info[0] ?? 800);
-        $height = (int) ($info[1] ?? 800);
-        $target = max(self::FONT_MIN, (int) round(min($width, $height) * self::AUTO_SIZE_RATIO));
+        $target = max(self::FONT_MIN, (int) round($width * self::AUTO_SIZE_RATIO));
 
-        $lo = self::FONT_MIN;
-        $hi = self::AUTO_FONT_MAX;
-        $font = self::AUTO_FONT_MAX;
+        $bestFont = self::FONT_DEFAULT;
+        $bestDiff = PHP_INT_MAX;
 
-        while ($lo <= $hi) {
-            $mid = intdiv($lo + $hi, 2);
-            $panelHeight = $this->overlayMetrics($product, $mid)['panelHeight'];
+        for ($font = self::FONT_MIN; $font <= self::AUTO_FONT_MAX; $font++) {
+            $panelWidth = $this->overlayMetrics($product, $font)['panelWidth'];
+            $diff = abs($panelWidth - $target);
 
-            if ($panelHeight >= $target) {
-                $font = $mid;
-                $hi = $mid - 1;
-            } else {
-                $lo = $mid + 1;
+            if ($diff < $bestDiff) {
+                $bestDiff = $diff;
+                $bestFont = $font;
+            }
+
+            // Once the panel is already wider than the target, larger fonts only get further away.
+            if ($panelWidth >= $target) {
+                break;
             }
         }
 
         return [
             'position' => 'center',
-            'font' => min(self::AUTO_FONT_MAX, max(self::FONT_MIN, $font)),
+            'font' => $bestFont,
         ];
     }
 
@@ -187,19 +206,19 @@ class ProductPricedImageService
 
     public function fontPath(): string
     {
-        $bundled = resource_path('fonts/DejaVuSans-Bold.ttf');
+        $bundled = resource_path('fonts/NotoSansBengali-Bold.ttf');
 
         if (is_file($bundled)) {
             return $bundled;
         }
 
-        $system = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+        $system = '/usr/share/fonts/truetype/noto/NotoSansBengali-Bold.ttf';
 
         if (is_file($system)) {
             return $system;
         }
 
-        throw new RuntimeException('Priced image font file is missing.');
+        throw new RuntimeException('Priced image Bangla font file is missing.');
     }
 
     /**
@@ -349,9 +368,12 @@ class ProductPricedImageService
 
         $lines = [];
         if ($product->compare_at_price !== null && (float) $product->compare_at_price > (float) $product->price) {
-            $lines[] = ['text' => 'Tk '.number_format((float) $product->compare_at_price, 0), 'strike' => true];
+            $lines[] = ['text' => $this->toBanglaDigits((float) $product->compare_at_price), 'strike' => true];
         }
-        $lines[] = ['text' => 'Tk '.number_format((float) $product->price, 0), 'strike' => false];
+        $lines[] = [
+            'text' => '৳'.$this->toBanglaDigits((float) $product->price).'/পিস',
+            'strike' => false,
+        ];
 
         $maxWidth = 0;
         $lineHeights = [];
@@ -376,6 +398,14 @@ class ProductPricedImageService
             'panelWidth' => $maxWidth + ($padding * 2),
             'panelHeight' => $textBlockHeight + ($padding * 2),
         ];
+    }
+
+    /**
+     * Format a whole-taka amount with Bangla digits (no thousands separator).
+     */
+    public function toBanglaDigits(float|int $amount): string
+    {
+        return strtr((string) (int) round($amount), self::BANGLA_DIGITS);
     }
 
     private function frostPanel(\GdImage $canvas, int $x, int $y, int $panelWidth, int $panelHeight): void

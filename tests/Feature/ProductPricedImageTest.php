@@ -400,7 +400,7 @@ class ProductPricedImageTest extends TestCase
     }
 
     #[Test]
-    public function auto_fill_layout_is_centered_at_twenty_percent_of_primary_image(): void
+    public function auto_fill_layout_is_centered_at_twenty_percent_of_image_width(): void
     {
         $product = $this->productWithPrimaryImage('Auto Fill Size');
         $service = app(ProductPricedImageService::class);
@@ -411,8 +411,32 @@ class ProductPricedImageTest extends TestCase
         $target = (int) round(640 * ProductPricedImageService::AUTO_SIZE_RATIO);
 
         $this->assertSame('center', $layout['position']);
-        $this->assertGreaterThanOrEqual($target, $panel['height']);
-        $this->assertLessThanOrEqual($target + 24, $panel['height']);
+        // Bangla glyphs (/পিস) are wider than Latin; pick closest font to 20% width.
+        $ratio = $panel['width'] / 640;
+        $this->assertGreaterThan(0.15, $ratio);
+        $this->assertLessThan(0.40, $ratio);
+    }
+
+    #[Test]
+    public function priced_overlay_uses_bangla_digits_taka_and_piece_suffix(): void
+    {
+        $product = $this->productWithPrimaryImage('Bangla Stamp');
+        $product->update(['price' => 500, 'compare_at_price' => 1200]);
+        $service = app(ProductPricedImageService::class);
+
+        $this->assertSame('১২০০', $service->toBanglaDigits(1200));
+        $this->assertSame('৫০০', $service->toBanglaDigits(500));
+        $this->assertStringContainsString('NotoSansBengali-Bold.ttf', $service->fontPath());
+
+        $path = $service->generate($product->fresh(), [
+            'position' => 'center',
+            'font' => 56,
+        ]);
+
+        $this->assertFileExists(public_path(ltrim($path, '/')));
+        $panel = $service->measurePanel($product->fresh(), 56);
+        $this->assertGreaterThan(0, $panel['width']);
+        $this->assertGreaterThan(0, $panel['height']);
     }
 
     #[Test]

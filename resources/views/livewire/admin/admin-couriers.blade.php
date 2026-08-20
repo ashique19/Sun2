@@ -15,6 +15,7 @@
                 Pending = COD still with courier on undelivered (dispatched) parcels.
                 Expected API = receivable (net owed after courier charge, COD charge, and withdrawals).
                 API = live Steadfast wallet (refresh manually).
+                If receivable looks lifelong-huge vs API, use Neutralize to record prior remittances (book stays unchanged).
             </p>
             @if ($apiBalanceError)
                 <p class="text-xs text-amber-700 mt-1">{{ $apiBalanceError }}</p>
@@ -148,6 +149,11 @@
                                 @endif
                             </td>
                             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
+                                @if ((float) ($summary['receivable'] ?? 0) > 0)
+                                    <button type="button"
+                                        wire:click="openNeutralize({{ $courier->id }})"
+                                        class="text-[#6B6459] hover:text-[#C9A227] hover:underline">Neutralize</button>
+                                @endif
                                 @if ((float) $courier->balance > 0)
                                     <button type="button"
                                         wire:click="openWithdraw({{ $courier->id }})"
@@ -208,6 +214,102 @@
                         Record withdrawal
                     </button>
                     <button type="button" wire:click="closeWithdraw"
+                        class="rounded-full border border-[#E0D6C2] px-6 py-2.5 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    @if ($showNeutralizeModal)
+        @php
+            $neutralizeCurrent = (int) round((float) $neutralizeCurrentReceivable);
+            $neutralizeTargetInt = is_numeric($neutralizeTarget) ? (int) $neutralizeTarget : null;
+            $neutralizeWriteOff = $neutralizeTargetInt !== null
+                ? max(0, $neutralizeCurrent - $neutralizeTargetInt)
+                : null;
+        @endphp
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" wire:click.self="closeNeutralize">
+            <div class="w-full max-w-lg rounded-xl border border-[#EFE7D6] bg-white p-6 shadow-xl space-y-4"
+                wire:key="neutralize-modal-{{ $neutralizeCourierId }}">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h2 class="font-semibold text-lg">Neutralize receivable — {{ $neutralizeCourierName }}</h2>
+                        <p class="text-xs text-[#8C8474] mt-1">
+                            Records prior remittances so lifetime receivable matches reality.
+                            <span class="font-medium text-[#6B6459]">Book balance is not changed.</span>
+                        </p>
+                    </div>
+                    <button type="button" wire:click="closeNeutralize" class="text-sm text-[#8C8474] hover:text-[#1E1E1E]">Close</button>
+                </div>
+
+                <dl class="grid grid-cols-2 gap-3 rounded-lg border border-[#EFE7D6] bg-[#FAF6EF]/60 px-4 py-3 text-sm">
+                    <div>
+                        <dt class="text-[#8C8474] text-xs">Current receivable</dt>
+                        <dd class="font-semibold tabular-nums">&#2547; {{ number_format($neutralizeCurrent, 0) }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-[#8C8474] text-xs">Book</dt>
+                        <dd class="tabular-nums">&#2547; {{ number_format((float) $neutralizeBook, 0) }}</dd>
+                    </div>
+                    <div class="col-span-2">
+                        <dt class="text-[#8C8474] text-xs">Live API</dt>
+                        <dd class="tabular-nums">
+                            @if ($neutralizeApi !== '')
+                                &#2547; {{ number_format((float) $neutralizeApi, 0) }}
+                            @else
+                                <span class="text-[#8C8474]">Tap Refresh API first for a suggested target</span>
+                            @endif
+                        </dd>
+                    </div>
+                </dl>
+
+                <div class="flex flex-wrap gap-2">
+                    @if ($neutralizeApi !== '')
+                        <button type="button" wire:click="setNeutralizeTargetToApi"
+                            class="rounded-full border border-[#E0D6C2] px-3 py-1 text-xs font-medium text-[#6B6459] hover:border-[#C9A227] hover:bg-[#FAF6EF]">
+                            Match API
+                        </button>
+                    @endif
+                    <button type="button" wire:click="setNeutralizeTargetToBook"
+                        class="rounded-full border border-[#E0D6C2] px-3 py-1 text-xs font-medium text-[#6B6459] hover:border-[#C9A227] hover:bg-[#FAF6EF]">
+                        Match book
+                    </button>
+                    <button type="button" wire:click="setNeutralizeTargetToZero"
+                        class="rounded-full border border-[#E0D6C2] px-3 py-1 text-xs font-medium text-[#6B6459] hover:border-[#C9A227] hover:bg-[#FAF6EF]">
+                        Zero
+                    </button>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1">Target receivable after neutralize (&#2547;)</label>
+                    <input type="number" min="0" max="{{ max(0, $neutralizeCurrent - 1) }}" step="1" wire:model.live="neutralizeTarget"
+                        class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                    @error('neutralizeTarget') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+                    @if ($neutralizeWriteOff !== null && $neutralizeWriteOff > 0)
+                        <p class="text-xs text-[#6B6459] mt-1">
+                            Will record prior remittance of
+                            <span class="font-semibold tabular-nums">&#2547; {{ number_format($neutralizeWriteOff, 0) }}</span>
+                            (receivable {{ number_format($neutralizeCurrent, 0) }} → {{ number_format($neutralizeTargetInt, 0) }}).
+                        </p>
+                    @endif
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1">Note (optional)</label>
+                    <input type="text" wire:model="neutralizeNote" placeholder="e.g. Catch-up remittances before ledger tracking"
+                        class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                    @error('neutralizeNote') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+                </div>
+
+                <div class="flex flex-wrap gap-3 pt-1">
+                    <button type="button" wire:click="confirmNeutralize"
+                        wire:confirm="Record prior remittances and lower receivable? Book balance will not change."
+                        class="rounded-full bg-[#C9A227] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f]">
+                        Record prior remittances
+                    </button>
+                    <button type="button" wire:click="closeNeutralize"
                         class="rounded-full border border-[#E0D6C2] px-6 py-2.5 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
                         Cancel
                     </button>

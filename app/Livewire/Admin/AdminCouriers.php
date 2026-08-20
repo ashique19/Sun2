@@ -29,6 +29,22 @@ class AdminCouriers extends Component
 
     public string $withdrawNote = '';
 
+    public bool $showNeutralizeModal = false;
+
+    public ?int $neutralizeCourierId = null;
+
+    public string $neutralizeCourierName = '';
+
+    public string $neutralizeCurrentReceivable = '0';
+
+    public string $neutralizeBook = '0';
+
+    public string $neutralizeApi = '';
+
+    public string $neutralizeTarget = '';
+
+    public string $neutralizeNote = '';
+
     /** @var array<int, float|null> */
     public array $apiBalances = [];
 
@@ -143,6 +159,89 @@ class AdminCouriers extends Component
 
         $this->closeWithdraw();
         $this->message = 'Withdrawal recorded for '.$courier->name.'.';
+    }
+
+    public function openNeutralize(int $courierId, CourierBalanceService $balances): void
+    {
+        $this->error = null;
+        $this->message = null;
+        $this->resetValidation();
+
+        $courier = Courier::query()->findOrFail($courierId);
+        $summary = $balances->summarize($courier);
+        $receivable = (int) round((float) $summary['receivable']);
+        $book = (int) round((float) $summary['book']);
+        $api = $this->apiBalances[$courier->id] ?? null;
+
+        if ($receivable <= 0) {
+            $this->error = 'Nothing to neutralize — receivable is already ৳'.number_format($receivable, 0).'.';
+
+            return;
+        }
+
+        $this->neutralizeCourierId = $courier->id;
+        $this->neutralizeCourierName = $courier->name;
+        $this->neutralizeCurrentReceivable = (string) $receivable;
+        $this->neutralizeBook = (string) $book;
+        $this->neutralizeApi = $api !== null ? (string) (int) round((float) $api) : '';
+        // Prefer live API when known; otherwise leave blank so admin chooses consciously.
+        $this->neutralizeTarget = $this->neutralizeApi;
+        $this->neutralizeNote = '';
+        $this->showNeutralizeModal = true;
+    }
+
+    public function closeNeutralize(): void
+    {
+        $this->showNeutralizeModal = false;
+        $this->neutralizeCourierId = null;
+        $this->neutralizeTarget = '';
+        $this->neutralizeNote = '';
+        $this->neutralizeApi = '';
+        $this->resetValidation();
+    }
+
+    public function setNeutralizeTargetToApi(): void
+    {
+        if ($this->neutralizeApi !== '') {
+            $this->neutralizeTarget = $this->neutralizeApi;
+        }
+    }
+
+    public function setNeutralizeTargetToBook(): void
+    {
+        $this->neutralizeTarget = $this->neutralizeBook;
+    }
+
+    public function setNeutralizeTargetToZero(): void
+    {
+        $this->neutralizeTarget = '0';
+    }
+
+    public function confirmNeutralize(CourierBalanceService $balances): void
+    {
+        $this->error = null;
+        $this->message = null;
+
+        $current = max(0, (int) round((float) $this->neutralizeCurrentReceivable));
+
+        $this->validate([
+            'neutralizeCourierId' => ['required', 'integer', 'exists:couriers,id'],
+            'neutralizeTarget' => ['required', 'integer', 'min:0', 'max:'.max(0, $current - 1)],
+            'neutralizeNote' => ['nullable', 'string', 'max:255'],
+        ], [
+            'neutralizeTarget.max' => 'Target must be less than current receivable (৳'.number_format($current, 0).').',
+        ]);
+
+        $courier = Courier::query()->findOrFail($this->neutralizeCourierId);
+
+        $balances->neutralizeReceivable(
+            $courier,
+            (int) $this->neutralizeTarget,
+            $this->neutralizeNote !== '' ? $this->neutralizeNote : null,
+        );
+
+        $this->closeNeutralize();
+        $this->message = 'Prior remittances recorded for '.$courier->name.'. Receivable updated; book unchanged.';
     }
 
     public function openDiffOrders(int $courierId, CourierBalanceService $balances): void

@@ -181,6 +181,60 @@ class CourierBalanceService
     }
 
     /**
+     * Catch up lifetime receivable without changing book balance.
+     *
+     * Historical remittances often left Steadfast / book correct but never got
+     * Couriers → Withdraw entries, so order-sum receivable stays lifelong huge.
+     * This records a prior_remittance ledger line counted like a withdrawal for
+     * receivable math only — couriers.balance is left untouched.
+     *
+     * @param  int  $targetReceivable  Desired remaining receivable after neutralize (≥ 0)
+     */
+    public function neutralizeReceivable(
+        Courier $courier,
+        int $targetReceivable,
+        ?string $note = null,
+        ?int $createdBy = null,
+    ): Courier {
+        if ($targetReceivable < 0) {
+            throw ValidationException::withMessages([
+                'neutralizeTarget' => 'Target receivable cannot be negative.',
+            ]);
+        }
+
+        $summary = $this->summarize($courier);
+        $current = (int) round($summary['receivable']);
+        $amount = $current - $targetReceivable;
+
+        if ($amount <= 0) {
+            throw ValidationException::withMessages([
+                'neutralizeTarget' => 'Target must be less than current receivable (৳'.number_format($current, 0).').',
+            ]);
+        }
+
+        return DB::transaction(function () use ($courier, $amount, $targetReceivable, $note, $createdBy, $current) {
+            $locked = Courier::query()->whereKey($courier->id)->lockForUpdate()->firstOrFail();
+            $book = round((float) $locked->balance, 2);
+
+            CourierBalanceEntry::query()->create([
+                'courier_id' => $locked->id,
+                'type' => 'prior_remittance',
+                'amount' => -$amount,
+                'balance_after' => $book,
+                'order_id' => null,
+                'note' => $note ?: sprintf(
+                    'Prior remittances: neutralize receivable ৳%s → ৳%s (book unchanged)',
+                    number_format($current, 0),
+                    number_format($targetReceivable, 0),
+                ),
+                'created_by' => $createdBy ?? auth()->id(),
+            ]);
+
+            return $locked->fresh();
+        });
+    }
+
+    /**
      * Live wallet balance from the courier API, if available.
      *
      * Never throws — API/network failures return null so admin pages stay usable.
@@ -265,7 +319,7 @@ class CourierBalanceService
 
         $withdrawnByCourier = CourierBalanceEntry::query()
             ->whereIn('courier_id', $ids)
-            ->where('type', 'withdraw')
+            ->whereIn('type', ['withdraw', 'prior_remittance'])
             ->selectRaw('courier_id, ABS(COALESCE(SUM(amount), 0)) as withdrawn')
             ->groupBy('courier_id')
             ->pluck('withdrawn', 'courier_id');

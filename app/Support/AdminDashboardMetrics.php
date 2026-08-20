@@ -140,7 +140,9 @@ class AdminDashboardMetrics
      *         label: string,
      *         is_current: bool,
      *         days: list<array{date: string, label: string, order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}>,
-     *         totals: array{order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}
+     *         totals: array{order_qty: int, order_value: float, delivery_qty: int, delivery_value: float},
+     *         day_count: int,
+     *         averages: array{order_qty: float, order_value: float, delivery_qty: float, delivery_value: float}
      *     }>,
      *     last7: array{
      *         key: string,
@@ -220,9 +222,23 @@ class AdminDashboardMetrics
             ];
         };
 
+        $averagesFor = function (array $totals, int $dayCount): array {
+            $divisor = max(1, $dayCount);
+
+            return [
+                'order_qty' => round($totals['order_qty'] / $divisor, 1),
+                'order_value' => round($totals['order_value'] / $divisor, 0),
+                'delivery_qty' => round($totals['delivery_qty'] / $divisor, 1),
+                'delivery_value' => round($totals['delivery_value'] / $divisor, 0),
+            ];
+        };
+
         $currentDays = $buildDays($currentMonthStart, $today);
         $previousDays = $buildDays($previousMonthStart, $previousMonthEnd);
         $last7Days = $buildDays($last7Start, $today);
+
+        $currentTotals = $sumDays($currentDays);
+        $previousTotals = $sumDays($previousDays);
 
         return [
             'months' => [
@@ -232,7 +248,9 @@ class AdminDashboardMetrics
                     'label' => 'This month',
                     'is_current' => true,
                     'days' => $currentDays,
-                    'totals' => $sumDays($currentDays),
+                    'totals' => $currentTotals,
+                    'day_count' => count($currentDays),
+                    'averages' => $averagesFor($currentTotals, count($currentDays)),
                 ],
                 [
                     'key' => $previousMonthStart->format('Y-m'),
@@ -240,7 +258,9 @@ class AdminDashboardMetrics
                     'label' => 'Last month',
                     'is_current' => false,
                     'days' => $previousDays,
-                    'totals' => $sumDays($previousDays),
+                    'totals' => $previousTotals,
+                    'day_count' => count($previousDays),
+                    'averages' => $averagesFor($previousTotals, count($previousDays)),
                 ],
             ],
             'last7' => [

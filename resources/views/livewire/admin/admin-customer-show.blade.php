@@ -6,6 +6,10 @@
             <p class="text-sm text-[#8C8474] mt-1">Customer profile</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
+            <button type="button" wire:click="openResetPasswordModal"
+                class="rounded-lg border border-[#E0D6C2] bg-white px-4 py-2 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
+                Reset password
+            </button>
             <a href="{{ route('admin.users.edit', $customer) }}" wire:navigate
                 class="rounded-lg border border-[#E0D6C2] bg-white px-4 py-2 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
                 Edit user
@@ -16,6 +20,13 @@
             </a>
         </div>
     </div>
+
+    @if ($message)
+        <div class="rounded-lg bg-emerald-50 text-emerald-700 text-sm px-4 py-3 mb-4">{{ $message }}</div>
+    @endif
+    @if ($error)
+        <div class="rounded-lg bg-rose-50 text-rose-700 text-sm px-4 py-3 mb-4">{{ $error }}</div>
+    @endif
 
     <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6 mb-6">
         <h2 class="font-semibold mb-4">Details</h2>
@@ -98,4 +109,53 @@
             <div class="rounded-xl border border-[#EFE7D6] bg-white px-4 py-3">{{ $orders->links() }}</div>
         @endif
     </div>
+
+    @teleport('body')
+        <div wire:key="customer-reset-password-modal-host">
+            @if ($resetPasswordModalOpen)
+                <div class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+                    wire:click.self="closeResetPasswordModal"
+                    wire:key="customer-reset-password-modal"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Reset password">
+                    <div class="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-xl" wire:click.stop>
+                        <div class="flex items-center justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
+                            <div>
+                                <h2 class="font-semibold text-lg">Reset password</h2>
+                                <p class="mt-0.5 text-xs text-[#8C8474]">Set a new password for {{ $displayName }}.</p>
+                            </div>
+                            <button type="button" wire:click="closeResetPasswordModal"
+                                class="shrink-0 rounded-full border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
+                                Close
+                            </button>
+                        </div>
+                        <form wire:submit="resetPassword" class="space-y-4 px-4 py-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">New password</label>
+                                <input type="password" wire:model="password" autocomplete="new-password"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                                @error('password') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Confirm password</label>
+                                <input type="password" wire:model="password_confirmation" autocomplete="new-password"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                            </div>
+                            <div class="flex justify-end gap-2 pt-1">
+                                <button type="button" wire:click="closeResetPasswordModal"
+                                    class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
+                                    Cancel
+                                </button>
+                                <button type="submit"
+                                    class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f]">
+                                    Save password
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            @endif
+        </div>
+    @endteleport
 </div>

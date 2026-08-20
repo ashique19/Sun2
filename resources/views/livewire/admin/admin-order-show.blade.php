@@ -130,7 +130,19 @@
             <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
                 <h2 class="mb-4 font-semibold">Customer &amp; Delivery</h2>
                 <dl class="grid gap-3 text-sm sm:grid-cols-2 sm:gap-4">
-                    <div><dt class="text-[#8C8474]">Name</dt><dd class="font-medium break-words">{{ $order->name }}</dd></div>
+                    <div>
+                        <dt class="text-[#8C8474]">Name</dt>
+                        <dd class="font-medium break-words">
+                            @if ($order->user_id && \App\Support\AdminAccess::isStaffAdmin())
+                                <a href="{{ route('admin.customers.show', $order->user_id) }}" wire:navigate
+                                    class="text-[#C9A227] hover:underline">
+                                    {{ $order->name }}
+                                </a>
+                            @else
+                                {{ $order->name }}
+                            @endif
+                        </dd>
+                    </div>
                     <div><dt class="text-[#8C8474]">Phone</dt><dd class="font-medium">{{ $order->phone }}</dd></div>
                     <div><dt class="text-[#8C8474]">Email</dt><dd class="break-all">{{ $order->email ?: '—' }}</dd></div>
                     <div><dt class="text-[#8C8474]">City</dt><dd class="break-words">{{ $order->city }}@if($order->area), {{ $order->area }}@endif</dd></div>

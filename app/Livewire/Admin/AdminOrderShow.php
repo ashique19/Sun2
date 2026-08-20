@@ -75,6 +75,7 @@ class AdminOrderShow extends Component
             'channelConversation.messages',
             'exchangeOf:id,order_number',
             'replacements:id,order_number,exchange_of_order_id',
+            'user:id,name,phone',
         ]);
         $this->status = (string) $order->status;
         $this->adminNote = (string) ($order->admin_note ?? '');

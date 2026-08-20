@@ -6,6 +6,7 @@ use App\Livewire\Concerns\ManagesProductImagePreview;
 use App\Models\Order;
 use App\Models\User;
 use App\Support\AdminAccess;
+use Illuminate\Validation\Rules\Password;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -28,6 +29,16 @@ class AdminCustomerShow extends Component
 
     public string $displayArea = '';
 
+    public bool $resetPasswordModalOpen = false;
+
+    public string $password = '';
+
+    public string $password_confirmation = '';
+
+    public ?string $message = null;
+
+    public ?string $error = null;
+
     public function mount(User $user): void
     {
         AdminAccess::ensureStaffAdmin();
@@ -43,6 +54,46 @@ class AdminCustomerShow extends Component
     public function title(): string
     {
         return $this->displayName !== '' ? $this->displayName : 'Customer';
+    }
+
+    public function openResetPasswordModal(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->resetPasswordModalOpen = true;
+        $this->password = '';
+        $this->password_confirmation = '';
+        $this->resetValidation();
+        $this->error = null;
+        $this->js('document.body.classList.add("overflow-hidden")');
+    }
+
+    public function closeResetPasswordModal(): void
+    {
+        $this->resetPasswordModalOpen = false;
+        $this->password = '';
+        $this->password_confirmation = '';
+        $this->resetValidation();
+        $this->js('document.body.classList.remove("overflow-hidden")');
+    }
+
+    public function resetPassword(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->message = null;
+        $this->error = null;
+
+        $validated = $this->validate([
+            'password' => ['required', 'confirmed', Password::defaults()],
+        ]);
+
+        $this->customer->update([
+            'password' => $validated['password'],
+        ]);
+
+        $this->closeResetPasswordModal();
+        $this->message = 'Password reset for '.$this->customer->name.'.';
     }
 
     public function render()

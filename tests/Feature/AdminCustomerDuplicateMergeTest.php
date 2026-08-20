@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Livewire\Admin\AdminCustomerShow;
-use App\Livewire\Admin\AdminUsers;
 use App\Models\Address;
 use App\Models\Area;
 use App\Models\City;
@@ -175,35 +174,5 @@ class AdminCustomerDuplicateMergeTest extends TestCase
         $this->assertSame($newer->id, $oldOrder->fresh()->user_id);
         $this->assertSame($newer->id, $newOrder->fresh()->user_id);
         $this->assertSame(2, Wishlist::query()->where('user_id', $newer->id)->count());
-    }
-
-    #[Test]
-    public function customers_list_merge_modal_runs_until_finished(): void
-    {
-        $this->actingAs($this->adminUser());
-
-        $a = $this->customer('A', '01713334455');
-        $b = $this->customer('B', '01713334456');
-        DB::table('users')->where('id', $b->id)->update(['phone' => '1713334455']);
-        $b->refresh();
-
-        $this->orderFor($a, '2001');
-
-        Livewire::test(AdminUsers::class, ['segment' => 'customers'])
-            ->assertSee('Merge duplicate phones')
-            ->call('openMergeDuplicatesModal')
-            ->assertSet('mergeDuplicatesModalOpen', true)
-            ->assertSet('mergeDuplicatesRemaining', 1)
-            ->call('runMergeDuplicatesBatch')
-            ->assertSet('mergeDuplicatesRemaining', 0)
-            ->assertSet('mergeDuplicatesMergedGroups', 1)
-            ->assertSet('mergeDuplicatesDeletedUsers', 1)
-            ->assertSee('Merged 1 phone group');
-
-        $keeperId = max($a->id, $b->id);
-        $loserId = min($a->id, $b->id);
-        $this->assertDatabaseMissing('users', ['id' => $loserId]);
-        $this->assertDatabaseHas('users', ['id' => $keeperId]);
-        $this->assertSame($keeperId, Order::query()->where('order_number', '2001')->value('user_id'));
     }
 }

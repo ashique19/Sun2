@@ -325,21 +325,33 @@ class ProductPricedImageService
             $lineHeight = $lineHeights[$index];
             // imagettftext uses baseline Y.
             $baseline = $cursorY + $lineHeight;
-            imagettftext($canvas, $fontSize, 0, $x + $padding, $baseline, $black, $fontFile, $line['text']);
+            $textX = $x + $padding;
+            imagettftext($canvas, $fontSize, 0, $textX, $baseline, $black, $fontFile, $line['text']);
+
+            $box = imagettfbbox($fontSize, 0, $fontFile, $line['text']);
+            $textWidth = (int) abs($box[2] - $box[0]);
 
             if ($line['strike']) {
-                $box = imagettfbbox($fontSize, 0, $fontFile, $line['text']);
-                $textWidth = (int) abs($box[2] - $box[0]);
                 $strikeThickness = max(3, (int) round($fontSize * 0.1));
                 $strikeCenterY = $cursorY + (int) floor($lineHeight / 2);
                 $strikeTop = $strikeCenterY - (int) floor($strikeThickness / 2);
                 imagefilledrectangle(
                     $canvas,
-                    $x + $padding,
+                    $textX,
                     $strikeTop,
-                    $x + $padding + $textWidth,
+                    $textX + $textWidth,
                     $strikeTop + $strikeThickness - 1,
                     $black
+                );
+            }
+
+            if (($line['piece_suffix'] ?? false) === true) {
+                $this->blitPieceSuffix(
+                    $canvas,
+                    $textX + $textWidth,
+                    $cursorY,
+                    $lineHeight,
+                    $fontSize,
                 );
             }
 
@@ -352,7 +364,7 @@ class ProductPricedImageService
 
     /**
      * @return array{
-     *     lines: list<array{text: string, strike: bool}>,
+     *     lines: list<array{text: string, strike: bool, piece_suffix?: bool}>,
      *     lineHeights: list<int>,
      *     padding: int,
      *     lineGap: int,
@@ -370,9 +382,12 @@ class ProductPricedImageService
         if ($product->compare_at_price !== null && (float) $product->compare_at_price > (float) $product->price) {
             $lines[] = ['text' => $this->toBanglaDigits((float) $product->compare_at_price), 'strike' => true];
         }
+        // Sale line is Taka + digits only; "/পিস" is composited from a HarfBuzz-shaped
+        // PNG because PHP GD cannot OpenType-shape Bengali (ি-kar), which made "পিস" look like "পসি".
         $lines[] = [
-            'text' => '৳'.$this->toBanglaDigits((float) $product->price).'/পিস',
+            'text' => '৳'.$this->toBanglaDigits((float) $product->price),
             'strike' => false,
+            'piece_suffix' => true,
         ];
 
         $maxWidth = 0;
@@ -384,6 +399,13 @@ class ProductPricedImageService
             }
             $textWidth = (int) abs($box[2] - $box[0]);
             $textHeight = (int) abs($box[7] - $box[1]);
+
+            if (($line['piece_suffix'] ?? false) === true) {
+                $suffix = $this->pieceSuffixSizeForFont($fontSize);
+                $textWidth += $suffix['width'];
+                $textHeight = max($textHeight, $suffix['height']);
+            }
+
             $maxWidth = max($maxWidth, $textWidth);
             $lineHeights[] = $textHeight;
         }
@@ -406,6 +428,88 @@ class ProductPricedImageService
     public function toBanglaDigits(float|int $amount): string
     {
         return strtr((string) (int) round($amount), self::BANGLA_DIGITS);
+    }
+
+    /**
+     * Path to the pre-shaped "/পিস" stamp suffix (HarfBuzz-rendered; GD cannot shape it).
+     */
+    public function pieceSuffixPath(): string
+    {
+        $path = resource_path('images/priced-stamp-piece-suffix.png');
+
+        if (! is_file($path)) {
+            throw new RuntimeException('Priced image piece-suffix asset is missing.');
+        }
+
+        return $path;
+    }
+
+    /**
+     * @return array{width: int, height: int}
+     */
+    private function pieceSuffixSizeForFont(int $fontSize): array
+    {
+        $info = @getimagesize($this->pieceSuffixPath());
+        $nativeW = max(1, (int) ($info[0] ?? 1));
+        $nativeH = max(1, (int) ($info[1] ?? 1));
+        $height = max(1, (int) round($fontSize * 1.45));
+        $width = max(1, (int) round($nativeW * ($height / $nativeH)));
+
+        return ['width' => $width, 'height' => $height];
+    }
+
+    private function blitPieceSuffix(\GdImage $canvas, int $x, int $lineTop, int $lineHeight, int $fontSize): void
+    {
+        $suffix = @imagecreatefrompng($this->pieceSuffixPath());
+
+        if ($suffix === false) {
+            throw new RuntimeException('Could not load priced image piece-suffix asset.');
+        }
+
+        $size = $this->pieceSuffixSizeForFont($fontSize);
+        $scaled = imagecreatetruecolor($size['width'], $size['height']);
+
+        if ($scaled === false) {
+            imagedestroy($suffix);
+            throw new RuntimeException('Could not scale priced image piece-suffix asset.');
+        }
+
+        $white = imagecolorallocate($scaled, 255, 255, 255);
+        imagefill($scaled, 0, 0, $white);
+        imagecopyresampled(
+            $scaled,
+            $suffix,
+            0,
+            0,
+            0,
+            0,
+            $size['width'],
+            $size['height'],
+            imagesx($suffix),
+            imagesy($suffix),
+        );
+        imagedestroy($suffix);
+
+        $destY = $lineTop + (int) max(0, round(($lineHeight - $size['height']) / 2));
+        $black = imagecolorallocate($canvas, 0, 0, 0);
+
+        // Asset is black ink on white; skip near-white so the frosted seal shows through.
+        for ($sy = 0; $sy < $size['height']; $sy++) {
+            for ($sx = 0; $sx < $size['width']; $sx++) {
+                $rgb = imagecolorat($scaled, $sx, $sy);
+                $r = ($rgb >> 16) & 0xFF;
+                $g = ($rgb >> 8) & 0xFF;
+                $b = $rgb & 0xFF;
+
+                if ($r > 230 && $g > 230 && $b > 230) {
+                    continue;
+                }
+
+                imagesetpixel($canvas, $x + $sx, $destY + $sy, $black);
+            }
+        }
+
+        imagedestroy($scaled);
     }
 
     private function frostPanel(\GdImage $canvas, int $x, int $y, int $panelWidth, int $panelHeight): void

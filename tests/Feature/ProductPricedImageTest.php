@@ -427,6 +427,7 @@ class ProductPricedImageTest extends TestCase
         $this->assertSame('১২০০', $service->toBanglaDigits(1200));
         $this->assertSame('৫০০', $service->toBanglaDigits(500));
         $this->assertStringContainsString('NotoSansBengali-Bold.ttf', $service->fontPath());
+        $this->assertFileExists($service->pieceSuffixPath());
 
         $path = $service->generate($product->fresh(), [
             'position' => 'center',

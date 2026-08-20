@@ -13,7 +13,7 @@
                 Receivable = cash received − courier charge − COD % − withdrawals
                 (cancelled with collected 0 still subtracts courier charge; COD % is 0).
                 Pending = COD still with courier on dispatched parcels.
-                Expected API = receivable + pending (what the live wallet should hold).
+                Expected API = receivable (book balance owed by courier after withdrawals).
                 API = live Steadfast wallet (refresh manually).
             </p>
             @if ($apiBalanceError)

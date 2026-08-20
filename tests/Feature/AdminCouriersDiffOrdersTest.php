@@ -194,7 +194,7 @@ class AdminCouriersDiffOrdersTest extends TestCase
             ],
         ]);
 
-        // Dispatched COD is in the API wallet. expected_api = 1700 pending; API 700 → diff
+        // No settled receivable yet; expected_api 0 vs API 700 → nonzero diff opens modal
         Livewire::test(AdminCouriers::class)
             ->call('loadApiBalances')
             ->assertSeeHtml('wire:click="openDiffOrders('.$courier->id.')"')

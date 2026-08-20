@@ -220,7 +220,7 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
 
         $this->assertNotNull($outbound);
         $this->assertSame($inbound->id, $outbound->reply_to_message_id);
-        $this->assertSame('Tk '.number_format((float) $product->price, 0), $outbound->body);
+        $this->assertSame($product->priceWithUnitLabel(), $outbound->body);
         $this->assertNull($outbound->media_url);
 
         @unlink($customerAbsolute);
@@ -248,7 +248,7 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
             $data = $request->data();
             $text = is_array($data['message'] ?? null) ? ($data['message']['text'] ?? null) : null;
 
-            if (is_string($text) && str_starts_with($text, 'Tk ')) {
+            if (is_string($text) && str_starts_with($text, '৳ ')) {
                 $priceAttempts[] = $data;
 
                 if (isset($data['reply_to'])) {
@@ -305,7 +305,7 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
 
         $this->assertNotNull($outbound);
         $this->assertSame($inbound->id, $outbound->reply_to_message_id);
-        $this->assertSame('Tk '.number_format((float) $product->price, 0), $outbound->body);
+        $this->assertSame($product->priceWithUnitLabel(), $outbound->body);
         $this->assertSame('m_price_fallback', $outbound->external_message_id);
 
         @unlink($customerAbsolute);

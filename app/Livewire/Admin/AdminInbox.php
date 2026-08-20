@@ -888,7 +888,7 @@ class AdminInbox extends Component
 
         $this->ensureConversationSelected((int) $conversation->id);
 
-        $body = 'Tk '.number_format((float) $product->price, 0);
+        $body = $product->priceWithUnitLabel();
         $result = $replies->sendText($conversation, $body, false, $message);
 
         if (! ($result['ok'] ?? false)) {

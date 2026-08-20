@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Bangla;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -45,6 +46,14 @@ class Product extends Model
         $unit = trim((string) ($this->price_unit ?? ''));
 
         return $unit !== '' ? $unit : 'পিস';
+    }
+
+    /**
+     * Catalog selling price for Messenger / storefront-style text (e.g. ৳ ৫০০/পিস).
+     */
+    public function priceWithUnitLabel(): string
+    {
+        return '৳ '.Bangla::money((float) $this->price).'/'.$this->priceUnitLabel();
     }
 
     public function getRouteKeyName(): string

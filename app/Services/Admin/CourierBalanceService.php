@@ -181,12 +181,14 @@ class CourierBalanceService
     }
 
     /**
-     * Catch up lifetime receivable without changing book balance.
+     * Catch up receivable without changing book balance.
      *
-     * Historical remittances often left Steadfast / book correct but never got
-     * Couriers → Withdraw entries, so order-sum receivable stays lifelong huge.
-     * This records a prior_remittance ledger line counted like a withdrawal for
-     * receivable math only — couriers.balance is left untouched.
+     * - Positive lifetime receivable (missing Withdraw history): write a negative
+     *   prior_remittance to lower receivable toward the target.
+     * - Negative receivable (cancel/return fees never settled in remittance math):
+     *   write a positive prior_remittance to raise receivable toward the target.
+     *
+     * Book (couriers.balance) is left untouched either way.
      *
      * @param  int  $targetReceivable  Desired remaining receivable after neutralize (≥ 0)
      */
@@ -204,26 +206,28 @@ class CourierBalanceService
 
         $summary = $this->summarize($courier);
         $current = (int) round($summary['receivable']);
-        $amount = $current - $targetReceivable;
+        $delta = $current - $targetReceivable;
 
-        if ($amount <= 0) {
+        if ($delta === 0) {
             throw ValidationException::withMessages([
-                'neutralizeTarget' => 'Target must be less than current receivable (৳'.number_format($current, 0).').',
+                'neutralizeTarget' => 'Target matches current receivable (৳'.number_format($current, 0).'). Nothing to neutralize.',
             ]);
         }
 
-        return DB::transaction(function () use ($courier, $amount, $targetReceivable, $note, $createdBy, $current) {
+        return DB::transaction(function () use ($courier, $delta, $targetReceivable, $note, $createdBy, $current) {
             $locked = Courier::query()->whereKey($courier->id)->lockForUpdate()->firstOrFail();
             $book = round((float) $locked->balance, 2);
 
+            // Entry amount is the opposite of (current − target): lowering receivable
+            // stores a negative line; raising a negative receivable stores a positive line.
             CourierBalanceEntry::query()->create([
                 'courier_id' => $locked->id,
                 'type' => 'prior_remittance',
-                'amount' => -$amount,
+                'amount' => -$delta,
                 'balance_after' => $book,
                 'order_id' => null,
                 'note' => $note ?: sprintf(
-                    'Prior remittances: neutralize receivable ৳%s → ৳%s (book unchanged)',
+                    'Prior remittance adjust: neutralize receivable ৳%s → ৳%s (book unchanged)',
                     number_format($current, 0),
                     number_format($targetReceivable, 0),
                 ),
@@ -320,7 +324,7 @@ class CourierBalanceService
         $withdrawnByCourier = CourierBalanceEntry::query()
             ->whereIn('courier_id', $ids)
             ->whereIn('type', ['withdraw', 'prior_remittance'])
-            ->selectRaw('courier_id, ABS(COALESCE(SUM(amount), 0)) as withdrawn')
+            ->selectRaw('courier_id, COALESCE(SUM(-amount), 0) as withdrawn')
             ->groupBy('courier_id')
             ->pluck('withdrawn', 'courier_id');
 

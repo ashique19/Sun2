@@ -95,7 +95,7 @@ class AdminCouriersNeutralizeReceivableTest extends TestCase
     }
 
     #[Test]
-    public function neutralize_rejects_target_at_or_above_current_receivable(): void
+    public function neutralize_rejects_target_equal_to_current_receivable(): void
     {
         $courier = $this->steadfast();
         $this->deliveredOrder($courier);
@@ -103,6 +103,103 @@ class AdminCouriersNeutralizeReceivableTest extends TestCase
         $this->expectException(ValidationException::class);
 
         app(CourierBalanceService::class)->neutralizeReceivable($courier->fresh(), targetReceivable: 1010);
+    }
+
+    #[Test]
+    public function neutralize_raises_negative_receivable_without_changing_book(): void
+    {
+        $courier = Courier::query()->create([
+            'name' => 'CarryBee',
+            'slug' => 'carrybee',
+            'charge' => 60,
+            'osd_charge' => 110,
+            'cod_percentage' => 1,
+            'balance' => 0,
+            'is_active' => true,
+            'is_default' => false,
+        ]);
+
+        // Cancelled with collected 0 still contributes −courier_charge to receivable.
+        Order::query()->create([
+            'order_number' => 'NEUT-NEG-1',
+            'name' => 'Returned Customer',
+            'phone' => '01710000088',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'cancelled',
+            'subtotal' => 1000,
+            'delivery_charge' => 80,
+            'courier_charge' => 60,
+            'collected_amount' => 0,
+            'total' => 1080,
+            'courier_id' => $courier->id,
+            'placed_at' => now(),
+        ]);
+
+        $summaryBefore = app(CourierBalanceService::class)->summarize($courier->fresh());
+        $this->assertSame(-60.0, $summaryBefore['receivable']);
+
+        app(CourierBalanceService::class)->neutralizeReceivable($courier->fresh(), targetReceivable: 0);
+
+        $entry = CourierBalanceEntry::query()
+            ->where('courier_id', $courier->id)
+            ->where('type', 'prior_remittance')
+            ->first();
+
+        $this->assertNotNull($entry);
+        $this->assertSame(60.0, (float) $entry->amount);
+        $this->assertSame(0.0, (float) $courier->fresh()->balance);
+
+        $summary = app(CourierBalanceService::class)->summarize($courier->fresh());
+        $this->assertSame(0.0, $summary['receivable']);
+        $this->assertSame(0.0, $summary['expected_api']);
+        $this->assertSame(-60.0, $summary['withdrawn']);
+    }
+
+    #[Test]
+    public function couriers_page_shows_neutralize_for_negative_receivable(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $courier = Courier::query()->create([
+            'name' => 'CarryBee',
+            'slug' => 'carrybee',
+            'charge' => 60,
+            'osd_charge' => 110,
+            'cod_percentage' => 1,
+            'balance' => 0,
+            'is_active' => true,
+            'is_default' => false,
+        ]);
+
+        Order::query()->create([
+            'order_number' => 'NEUT-NEG-UI',
+            'name' => 'Returned Customer',
+            'phone' => '01710000077',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'returned',
+            'subtotal' => 1000,
+            'delivery_charge' => 80,
+            'courier_charge' => 60,
+            'collected_amount' => 0,
+            'total' => 1080,
+            'courier_id' => $courier->id,
+            'placed_at' => now(),
+        ]);
+
+        Livewire::test(AdminCouriers::class)
+            ->assertSee('CarryBee')
+            ->assertSeeHtml('-60')
+            ->assertSee('Neutralize')
+            ->call('openNeutralize', $courier->id)
+            ->assertSet('showNeutralizeModal', true)
+            ->assertSet('neutralizeCurrentReceivable', '-60')
+            ->assertSet('neutralizeTarget', '0')
+            ->call('confirmNeutralize')
+            ->assertSet('showNeutralizeModal', false);
+
+        $this->assertSame(0.0, app(CourierBalanceService::class)->summarize($courier->fresh())['receivable']);
     }
 
     #[Test]

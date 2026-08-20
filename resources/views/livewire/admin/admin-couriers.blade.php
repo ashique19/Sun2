@@ -96,7 +96,7 @@
                                 @endif
                             </td>
                             <td class="px-4 py-3">&#2547; {{ number_format($courier->charge, 0) }}</td>
-                            <td class="px-4 py-3 tabular-nums {{ ($summary['receivable'] ?? 0) > 0 ? 'text-amber-700 font-medium' : 'text-[#6B6459]' }}">
+                            <td class="px-4 py-3 tabular-nums {{ ($summary['receivable'] ?? 0) > 0 ? 'text-amber-700 font-medium' : (($summary['receivable'] ?? 0) < 0 ? 'text-rose-700 font-medium' : 'text-[#6B6459]') }}">
                                 &#2547; {{ number_format($summary['receivable'] ?? 0, 0) }}
                             </td>
                             <td class="px-4 py-3 tabular-nums text-[#6B6459]">
@@ -149,7 +149,7 @@
                                 @endif
                             </td>
                             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
-                                @if ((float) ($summary['receivable'] ?? 0) > 0)
+                                @if ((float) ($summary['receivable'] ?? 0) != 0.0)
                                     <button type="button"
                                         wire:click="openNeutralize({{ $courier->id }})"
                                         class="text-[#6B6459] hover:text-[#C9A227] hover:underline">Neutralize</button>
@@ -226,8 +226,8 @@
         @php
             $neutralizeCurrent = (int) round((float) $neutralizeCurrentReceivable);
             $neutralizeTargetInt = is_numeric($neutralizeTarget) ? (int) $neutralizeTarget : null;
-            $neutralizeWriteOff = $neutralizeTargetInt !== null
-                ? max(0, $neutralizeCurrent - $neutralizeTargetInt)
+            $neutralizeDelta = $neutralizeTargetInt !== null
+                ? $neutralizeCurrent - $neutralizeTargetInt
                 : null;
         @endphp
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" wire:click.self="closeNeutralize">
@@ -237,7 +237,7 @@
                     <div>
                         <h2 class="font-semibold text-lg">Neutralize receivable — {{ $neutralizeCourierName }}</h2>
                         <p class="text-xs text-[#8C8474] mt-1">
-                            Records prior remittances so lifetime receivable matches reality.
+                            Adjusts receivable to match reality (prior remittances or fee write-off).
                             <span class="font-medium text-[#6B6459]">Book balance is not changed.</span>
                         </p>
                     </div>
@@ -247,7 +247,9 @@
                 <dl class="grid grid-cols-2 gap-3 rounded-lg border border-[#EFE7D6] bg-[#FAF6EF]/60 px-4 py-3 text-sm">
                     <div>
                         <dt class="text-[#8C8474] text-xs">Current receivable</dt>
-                        <dd class="font-semibold tabular-nums">&#2547; {{ number_format($neutralizeCurrent, 0) }}</dd>
+                        <dd @class(['font-semibold tabular-nums', 'text-rose-700' => $neutralizeCurrent < 0])>
+                            &#2547; {{ number_format($neutralizeCurrent, 0) }}
+                        </dd>
                     </div>
                     <div>
                         <dt class="text-[#8C8474] text-xs">Book</dt>
@@ -284,13 +286,18 @@
 
                 <div>
                     <label class="block text-sm font-medium mb-1">Target receivable after neutralize (&#2547;)</label>
-                    <input type="number" min="0" max="{{ max(0, $neutralizeCurrent - 1) }}" step="1" wire:model.live="neutralizeTarget"
+                    <input type="number" min="0" step="1" wire:model.live="neutralizeTarget"
                         class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
                     @error('neutralizeTarget') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
-                    @if ($neutralizeWriteOff !== null && $neutralizeWriteOff > 0)
+                    @if ($neutralizeDelta !== null && $neutralizeDelta !== 0)
                         <p class="text-xs text-[#6B6459] mt-1">
-                            Will record prior remittance of
-                            <span class="font-semibold tabular-nums">&#2547; {{ number_format($neutralizeWriteOff, 0) }}</span>
+                            @if ($neutralizeDelta > 0)
+                                Will record prior remittance of
+                                <span class="font-semibold tabular-nums">&#2547; {{ number_format($neutralizeDelta, 0) }}</span>
+                            @else
+                                Will credit receivable by
+                                <span class="font-semibold tabular-nums">&#2547; {{ number_format(abs($neutralizeDelta), 0) }}</span>
+                            @endif
                             (receivable {{ number_format($neutralizeCurrent, 0) }} → {{ number_format($neutralizeTargetInt, 0) }}).
                         </p>
                     @endif
@@ -298,16 +305,16 @@
 
                 <div>
                     <label class="block text-sm font-medium mb-1">Note (optional)</label>
-                    <input type="text" wire:model="neutralizeNote" placeholder="e.g. Catch-up remittances before ledger tracking"
+                    <input type="text" wire:model="neutralizeNote" placeholder="e.g. Catch-up remittances / cancel-fee write-off"
                         class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
                     @error('neutralizeNote') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                 </div>
 
                 <div class="flex flex-wrap gap-3 pt-1">
                     <button type="button" wire:click="confirmNeutralize"
-                        wire:confirm="Record prior remittances and lower receivable? Book balance will not change."
+                        wire:confirm="Adjust receivable to the target? Book balance will not change."
                         class="rounded-full bg-[#C9A227] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f]">
-                        Record prior remittances
+                        Record adjustment
                     </button>
                     <button type="button" wire:click="closeNeutralize"
                         class="rounded-full border border-[#E0D6C2] px-6 py-2.5 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF]">

@@ -173,19 +173,15 @@ class AdminCouriers extends Component
         $book = (int) round((float) $summary['book']);
         $api = $this->apiBalances[$courier->id] ?? null;
 
-        if ($receivable <= 0) {
-            $this->error = 'Nothing to neutralize — receivable is already ৳'.number_format($receivable, 0).'.';
-
-            return;
-        }
-
         $this->neutralizeCourierId = $courier->id;
         $this->neutralizeCourierName = $courier->name;
         $this->neutralizeCurrentReceivable = (string) $receivable;
         $this->neutralizeBook = (string) $book;
         $this->neutralizeApi = $api !== null ? (string) (int) round((float) $api) : '';
-        // Prefer live API when known; otherwise leave blank so admin chooses consciously.
-        $this->neutralizeTarget = $this->neutralizeApi;
+        // Prefer live API; otherwise Zero when current is negative, else leave blank.
+        $this->neutralizeTarget = $this->neutralizeApi !== ''
+            ? $this->neutralizeApi
+            : ($receivable < 0 ? '0' : '');
         $this->neutralizeNote = '';
         $this->showNeutralizeModal = true;
     }
@@ -222,14 +218,14 @@ class AdminCouriers extends Component
         $this->error = null;
         $this->message = null;
 
-        $current = max(0, (int) round((float) $this->neutralizeCurrentReceivable));
+        $current = (int) round((float) $this->neutralizeCurrentReceivable);
 
         $this->validate([
             'neutralizeCourierId' => ['required', 'integer', 'exists:couriers,id'],
-            'neutralizeTarget' => ['required', 'integer', 'min:0', 'max:'.max(0, $current - 1)],
+            'neutralizeTarget' => ['required', 'integer', 'min:0', 'not_in:'.$current],
             'neutralizeNote' => ['nullable', 'string', 'max:255'],
         ], [
-            'neutralizeTarget.max' => 'Target must be less than current receivable (৳'.number_format($current, 0).').',
+            'neutralizeTarget.not_in' => 'Target matches current receivable (৳'.number_format($current, 0).'). Nothing to neutralize.',
         ]);
 
         $courier = Courier::query()->findOrFail($this->neutralizeCourierId);

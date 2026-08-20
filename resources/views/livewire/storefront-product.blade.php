@@ -57,10 +57,7 @@
                 <h1 class="font-serif text-3xl font-semibold leading-tight">{{ $product->name }}</h1>
 
                 <div class="mt-4">
-                    @if ($product->compare_at_price && $product->compare_at_price > $product->price)
-                        <div class="text-[#8C8474] line-through text-lg">&#2547; {{ number_format($product->compare_at_price, 0) }}</div>
-                    @endif
-                    <span class="text-2xl font-semibold">&#2547; {{ number_format($product->price, 0) }}</span>
+                    <x-storefront.product-price :product="$product" size="lg" />
                 </div>
 
                 @if ($product->review_count > 0)

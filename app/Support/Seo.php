@@ -20,11 +20,11 @@ class Seo
 
     /**
      * Title used in WhatsApp / Messenger / Facebook link previews.
-     * Format: "৳ 1,500 (Necklace, earring set…)"
+     * Format: "৳ 1,500/পিস (Necklace, earring set…)"
      */
     public static function productShareTitle(Product $product): string
     {
-        $price = '৳ '.number_format((float) $product->price, 0);
+        $price = '৳ '.number_format((float) $product->price, 0).'/'.$product->priceUnitLabel();
         $name = trim((string) $product->name);
 
         if ($name === '') {

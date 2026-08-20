@@ -58,10 +58,7 @@
                             <div class="flex-1 min-w-0">
                                 <a href="{{ route('product.show', $product) }}" wire:navigate class="font-medium hover:text-[#C9A227] line-clamp-2">{{ $product->name }}</a>
                                 <div class="mt-1">
-                                    @if ($product->compare_at_price && $product->compare_at_price > $product->price)
-                                        <div class="text-xs text-[#8C8474] line-through">&#2547; {{ number_format($product->compare_at_price, 0) }}</div>
-                                    @endif
-                                    <p class="text-sm text-[#8C8474]">&#2547; {{ number_format($product->price, 0) }} {{ __('storefront.each') }}</p>
+                                    <x-storefront.product-price :product="$product" size="sm" />
                                 </div>
                                 <p class="mt-2 text-sm text-[#6B6459]">{{ __('storefront.quantity') }}: {{ $line['quantity'] }}</p>
                             </div>

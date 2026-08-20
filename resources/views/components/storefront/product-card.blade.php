@@ -23,10 +23,7 @@
         @endif
         <h3 class="font-medium text-sm leading-snug line-clamp-2 group-hover:text-[#C9A227] transition">{{ $product->name }}</h3>
         <div class="mt-2">
-            @if ($product->compare_at_price && $product->compare_at_price > $product->price)
-                <div class="text-xs text-[#8C8474] line-through">&#2547; {{ number_format($product->compare_at_price, 0) }}</div>
-            @endif
-            <span class="font-semibold text-[#1E1E1E]">&#2547; {{ number_format($product->price, 0) }}</span>
+            <x-storefront.product-price :product="$product" />
         </div>
         @unless ($product->isInStock())
             <p class="mt-1 text-xs text-rose-600">{{ __('storefront.out_of_stock') }}</p>

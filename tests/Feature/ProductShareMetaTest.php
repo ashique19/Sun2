@@ -49,7 +49,7 @@ class ProductShareMetaTest extends TestCase
         $response->assertOk();
 
         $shareTitle = Seo::productShareTitle($product);
-        $this->assertSame('৳ 1,500 (Necklace, earring set)', $shareTitle);
+        $this->assertSame('৳ 1,500/পিস (Necklace, earring set)', $shareTitle);
 
         $response->assertSee('<meta property="og:title" content="'.$shareTitle.'">', false);
         $response->assertSee('<meta name="twitter:title" content="'.$shareTitle.'">', false);

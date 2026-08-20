@@ -17,7 +17,7 @@ class SeoProductShareTitleTest extends TestCase
             'price' => 1500,
         ]);
 
-        $this->assertSame('৳ 1,500 (Necklace, earring set)', Seo::productShareTitle($product));
+        $this->assertSame('৳ 1,500/পিস (Necklace, earring set)', Seo::productShareTitle($product));
     }
 
     #[Test]
@@ -28,7 +28,7 @@ class SeoProductShareTitleTest extends TestCase
             'price' => 980.00,
         ]);
 
-        $this->assertSame('৳ 980 (Gold plated jhumka)', Seo::productShareTitle($product));
+        $this->assertSame('৳ 980/পিস (Gold plated jhumka)', Seo::productShareTitle($product));
     }
 
     #[Test]
@@ -39,6 +39,18 @@ class SeoProductShareTitleTest extends TestCase
             'price' => 200,
         ]);
 
-        $this->assertSame('৳ 200', Seo::productShareTitle($product));
+        $this->assertSame('৳ 200/পিস', Seo::productShareTitle($product));
+    }
+
+    #[Test]
+    public function it_includes_custom_price_unit_in_share_title(): void
+    {
+        $product = new Product([
+            'name' => 'Anklet pair',
+            'price' => 750,
+            'price_unit' => 'জোড়া',
+        ]);
+
+        $this->assertSame('৳ 750/জোড়া (Anklet pair)', Seo::productShareTitle($product));
     }
 }

@@ -82,9 +82,16 @@ XML,
                 ."\n".'</worksheet>',
         ];
 
+        // #region agent log
+        file_put_contents('/opt/cursor/logs/debug.log', json_encode(['hypothesisId' => 'C', 'location' => 'SimpleXlsxExporter.php:writeToFile', 'message' => 'opening ZipArchive', 'data' => ['path' => $path, 'parentWritable' => is_writable(dirname($path)), 'zipClassExists' => class_exists(ZipArchive::class), 'headerCount' => count($headers), 'rowCount' => count($rows), 'sheetXmlBytes' => strlen($sheetRowsXml)], 'timestamp' => (int) (microtime(true) * 1000)])."\n", FILE_APPEND);
+        // #endregion
+
         $zip = new ZipArchive;
         $opened = $zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE);
         if ($opened !== true) {
+            // #region agent log
+            file_put_contents('/opt/cursor/logs/debug.log', json_encode(['hypothesisId' => 'C', 'location' => 'SimpleXlsxExporter.php:zipOpenFail', 'message' => 'ZipArchive open failed', 'data' => ['path' => $path, 'opened' => $opened], 'timestamp' => (int) (microtime(true) * 1000)])."\n", FILE_APPEND);
+            // #endregion
             throw new RuntimeException('Unable to open XLSX archive for writing.');
         }
 

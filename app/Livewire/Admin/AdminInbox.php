@@ -638,9 +638,7 @@ class AdminInbox extends Component
             return;
         }
 
-        $this->replyText = $this->replyText === ''
-            ? $body
-            : rtrim(str_replace(["\r\n", "\r"], "\n", $this->replyText))."\n".$body;
+        $this->replyText = $body;
         $this->error = null;
     }
 

@@ -6,13 +6,82 @@ use App\Models\Order;
 use App\Models\User;
 use App\Support\SimpleXlsxExporter;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Cache;
+use RuntimeException;
+use Spatie\Permission\Models\Role;
+use Throwable;
 
 class CustomerExportService
 {
     public static function cacheKey(string $token): string
     {
         return 'customer-export:'.$token;
+    }
+
+    public static function sessionKey(string $token): string
+    {
+        return 'customer_export_'.$token;
+    }
+
+    /**
+     * @param  array{
+     *     user_id?: int,
+     *     search?: string,
+     *     cityFilter?: string,
+     *     cityNoneOnly?: bool,
+     *     ordersMin?: string,
+     *     ordersMax?: string,
+     *     categoryId?: string
+     * }  $payload
+     */
+    public function remember(string $token, array $payload): void
+    {
+        $ttl = now()->addMinutes(5);
+
+        session()->put(self::sessionKey($token), $payload);
+
+        try {
+            Cache::put(self::cacheKey($token), $payload, $ttl);
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * @return array{
+     *     user_id?: int,
+     *     search?: string,
+     *     cityFilter?: string,
+     *     cityNoneOnly?: bool,
+     *     ordersMin?: string,
+     *     ordersMax?: string,
+     *     categoryId?: string
+     * }|null
+     */
+    public function pull(string $token): ?array
+    {
+        $sessionKey = self::sessionKey($token);
+        $payload = session()->pull($sessionKey);
+
+        if (is_array($payload)) {
+            try {
+                Cache::forget(self::cacheKey($token));
+            } catch (Throwable) {
+                // Session hit is enough.
+            }
+
+            return $payload;
+        }
+
+        try {
+            $cached = Cache::pull(self::cacheKey($token));
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
+
+        return is_array($cached) ? $cached : null;
     }
 
     /**
@@ -24,16 +93,26 @@ class CustomerExportService
      *     ordersMax?: string,
      *     categoryId?: string
      * }  $filters
-     * @return array{path: string, filename: string}
+     * @return array{binary: string, filename: string}
      */
-    public function writeXlsx(array $filters, SimpleXlsxExporter $xlsx): array
+    public function buildXlsx(array $filters, SimpleXlsxExporter $xlsx): array
     {
+        Role::findOrCreate('customers');
+
         $customers = $this->filteredCustomersQuery($filters)
+            ->select([
+                'users.id',
+                'users.name',
+                'users.phone',
+                'users.email',
+                'users.is_active',
+                'users.created_at',
+            ])
             ->withCount([
                 'orders as orders_count' => fn ($q) => $q->where('status', '!=', Order::STATUS_DRAFT),
             ])
-            ->orderByDesc('id')
-            ->get(['users.id', 'users.name', 'users.phone', 'users.email', 'users.is_active', 'users.created_at']);
+            ->orderByDesc('users.id')
+            ->get();
 
         $headers = ['Name', 'Phone', 'Email', 'Orders', 'Status', 'Joined'];
         $rows = $customers->map(fn (User $user) => [
@@ -46,12 +125,13 @@ class CustomerExportService
         ])->all();
 
         $filename = 'customers-'.now()->format('Y-m-d-His').'.xlsx';
-        $dir = storage_path('app/exports');
-        File::ensureDirectoryExists($dir);
-        $path = $dir.DIRECTORY_SEPARATOR.$filename;
-        $xlsx->writeToFile($path, $headers, $rows);
+        $binary = $xlsx->build($headers, $rows);
 
-        return ['path' => $path, 'filename' => $filename];
+        if ($binary === '' || ! str_starts_with($binary, 'PK')) {
+            throw new RuntimeException('Generated export file was empty or invalid.');
+        }
+
+        return ['binary' => $binary, 'filename' => $filename];
     }
 
     /**

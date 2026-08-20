@@ -28,10 +28,15 @@ class SimpleXlsxExporter
 
         $this->writeToFile($path, $headers, $rows);
 
+        if (! is_file($path) || filesize($path) === 0) {
+            @unlink($path);
+            throw new RuntimeException('Generated XLSX file is missing or empty.');
+        }
+
         $binary = file_get_contents($path);
         @unlink($path);
 
-        if ($binary === false) {
+        if ($binary === false || $binary === '' || ! str_starts_with($binary, 'PK')) {
             throw new RuntimeException('Unable to read generated XLSX file.');
         }
 

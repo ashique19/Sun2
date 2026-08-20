@@ -6,8 +6,7 @@ use App\Services\Admin\CustomerExportService;
 use App\Support\AdminAccess;
 use App\Support\SimpleXlsxExporter;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 class AdminCustomerExportController
@@ -17,26 +16,26 @@ class AdminCustomerExportController
         string $token,
         CustomerExportService $exports,
         SimpleXlsxExporter $xlsx,
-    ): BinaryFileResponse {
+    ): StreamedResponse {
         AdminAccess::ensureStaffAdmin();
 
-        $filters = Cache::pull(CustomerExportService::cacheKey($token));
+        $filters = $exports->pull($token);
 
         if (! is_array($filters) || (int) ($filters['user_id'] ?? 0) !== (int) $request->user()->id) {
             abort(404);
         }
 
         try {
-            $file = $exports->writeXlsx($filters, $xlsx);
+            $file = $exports->buildXlsx($filters, $xlsx);
         } catch (Throwable $e) {
             report($e);
             abort(500, 'Unable to export customers.');
         }
 
-        return response()->download(
-            $file['path'],
-            $file['filename'],
-            ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
-        )->deleteFileAfterSend(true);
+        return response()->streamDownload(function () use ($file): void {
+            echo $file['binary'];
+        }, $file['filename'], [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
     }
 }

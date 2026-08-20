@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Tests\TestCase;
 
 class AdminCustomersExportTest extends TestCase
@@ -50,12 +49,67 @@ class AdminCustomersExportTest extends TestCase
     }
 
     #[Test]
+    public function export_livewire_flow_downloads_xlsx_via_session_token(): void
+    {
+        $admin = $this->adminUser();
+        $this->actingAs($admin);
+        $this->customer('Export Me', '01711111111');
+
+        $component = Livewire::test(AdminUsers::class, ['segment' => 'customers'])
+            ->call('exportFilteredCustomers');
+
+        $component->assertRedirect();
+
+        $redirect = $component->effects['redirect'] ?? null;
+        $this->assertIsString($redirect);
+        $this->assertMatchesRegularExpression('#/admin/users/customers/export/[0-9a-f-]{36}#i', $redirect);
+
+        $response = $this->actingAs($admin)->get($redirect);
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        $this->assertStringContainsString(
+            'attachment; filename=',
+            (string) $response->headers->get('content-disposition')
+        );
+        $this->assertSame('PK', substr($response->streamedContent(), 0, 2));
+    }
+
+    #[Test]
     public function download_route_streams_xlsx_for_valid_token(): void
     {
         $admin = $this->adminUser();
         $this->customer('Export Me', '01711111111');
 
         $token = '11111111-1111-1111-1111-111111111111';
+        app(CustomerExportService::class)->remember($token, [
+            'user_id' => $admin->id,
+            'search' => '',
+            'cityFilter' => '',
+            'cityNoneOnly' => false,
+            'ordersMin' => '',
+            'ordersMax' => '',
+            'categoryId' => '',
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('admin.users.customers.export', ['token' => $token]));
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        $this->assertStringContainsString(
+            'attachment; filename=',
+            (string) $response->headers->get('content-disposition')
+        );
+        $this->assertSame('PK', substr($response->streamedContent(), 0, 2));
+    }
+
+    #[Test]
+    public function download_route_streams_xlsx_when_only_cache_has_token(): void
+    {
+        $admin = $this->adminUser();
+        $this->customer('Export Me', '01711111111');
+
+        $token = '55555555-5555-5555-5555-555555555555';
         Cache::put(CustomerExportService::cacheKey($token), [
             'user_id' => $admin->id,
             'search' => '',
@@ -69,17 +123,7 @@ class AdminCustomersExportTest extends TestCase
         $response = $this->actingAs($admin)->get(route('admin.users.customers.export', ['token' => $token]));
 
         $response->assertOk();
-        $response->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        $this->assertStringContainsString(
-            'attachment; filename=',
-            (string) $response->headers->get('content-disposition')
-        );
-
-        $base = $response->baseResponse;
-        $this->assertInstanceOf(BinaryFileResponse::class, $base);
-        $content = file_get_contents($base->getFile()->getPathname());
-        $this->assertNotFalse($content);
-        $this->assertSame('PK', substr($content, 0, 2));
+        $this->assertSame('PK', substr($response->streamedContent(), 0, 2));
     }
 
     #[Test]
@@ -100,7 +144,7 @@ class AdminCustomersExportTest extends TestCase
         $other = $this->adminUser();
         $token = '44444444-4444-4444-4444-444444444444';
 
-        Cache::put(CustomerExportService::cacheKey($token), [
+        app(CustomerExportService::class)->remember($token, [
             'user_id' => $owner->id,
             'search' => '',
             'cityFilter' => '',
@@ -108,7 +152,7 @@ class AdminCustomersExportTest extends TestCase
             'ordersMin' => '',
             'ordersMax' => '',
             'categoryId' => '',
-        ], now()->addMinutes(5));
+        ]);
 
         $this->actingAs($other)
             ->get(route('admin.users.customers.export', ['token' => $token]))

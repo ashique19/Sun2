@@ -10,7 +10,6 @@ use App\Services\Sms\PromotionalSmsService;
 use App\Support\AdminAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
@@ -316,7 +315,7 @@ class AdminUsers extends Component
         $this->resetPage();
     }
 
-    public function exportFilteredCustomers(): mixed
+    public function exportFilteredCustomers(CustomerExportService $exports): mixed
     {
         AdminAccess::ensureStaffAdmin();
 
@@ -326,7 +325,7 @@ class AdminUsers extends Component
 
         $token = (string) Str::uuid();
 
-        Cache::put(CustomerExportService::cacheKey($token), [
+        $exports->remember($token, [
             'user_id' => (int) auth()->id(),
             'search' => $this->search,
             'cityFilter' => $this->cityFilter,
@@ -334,10 +333,18 @@ class AdminUsers extends Component
             'ordersMin' => $this->ordersMin,
             'ordersMax' => $this->ordersMax,
             'categoryId' => $this->categoryId,
-        ], now()->addMinutes(5));
+        ]);
 
-        // Full-page download avoids Livewire base64-embedding the XLSX (empty/black error modal on large sets).
-        return $this->redirect(route('admin.users.customers.export', ['token' => $token]), navigate: false);
+        // Flush session before the browser follows the redirect so the download
+        // request can read the token (and auth) without waiting on a lock.
+        session()->save();
+
+        // Relative redirect keeps the download on this host even if APP_URL is misconfigured.
+        // Streaming happens in the controller (not Livewire) so the XLSX is not base64-embedded.
+        return $this->redirect(
+            route('admin.users.customers.export', ['token' => $token], absolute: false),
+            navigate: false,
+        );
     }
 
     public function toggleCustomerSelection(int $userId): void

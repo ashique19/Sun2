@@ -3,6 +3,7 @@
 namespace App\Livewire\Admin;
 
 use App\Models\User;
+use App\Services\Admin\CustomerDuplicateMergeService;
 use App\Support\AdminAccess;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
@@ -23,6 +24,23 @@ class AdminUsers extends Component
     public ?string $message = null;
 
     public ?string $error = null;
+
+    public bool $mergeDuplicatesModalOpen = false;
+
+    public bool $mergeDuplicatesRunning = false;
+
+    public int $mergeDuplicatesRemaining = 0;
+
+    public int $mergeDuplicatesMergedGroups = 0;
+
+    public int $mergeDuplicatesDeletedUsers = 0;
+
+    public int $mergeDuplicatesReassignedOrders = 0;
+
+    public ?string $mergeDuplicatesMessage = null;
+
+    /** @var list<string> */
+    public array $mergeDuplicatesSamples = [];
 
     public const SEGMENTS = [
         'customers' => 'Customers',
@@ -59,6 +77,83 @@ class AdminUsers extends Component
     public function updatedSearch(): void
     {
         $this->resetPage();
+    }
+
+    public function openMergeDuplicatesModal(CustomerDuplicateMergeService $merger): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->segment !== 'customers') {
+            return;
+        }
+
+        $this->mergeDuplicatesModalOpen = true;
+        $this->mergeDuplicatesRunning = false;
+        $this->mergeDuplicatesMergedGroups = 0;
+        $this->mergeDuplicatesDeletedUsers = 0;
+        $this->mergeDuplicatesReassignedOrders = 0;
+        $this->mergeDuplicatesSamples = [];
+        $this->mergeDuplicatesRemaining = $merger->duplicateGroupCount();
+        $this->mergeDuplicatesMessage = $this->mergeDuplicatesRemaining === 0
+            ? 'No duplicate customer phones found.'
+            : $this->mergeDuplicatesRemaining.' phone number(s) have more than one customer profile.';
+        $this->js('document.body.classList.add("overflow-hidden")');
+    }
+
+    public function closeMergeDuplicatesModal(): void
+    {
+        $this->mergeDuplicatesModalOpen = false;
+        $this->mergeDuplicatesRunning = false;
+        $this->mergeDuplicatesMessage = null;
+        $this->mergeDuplicatesSamples = [];
+        $this->js('document.body.classList.remove("overflow-hidden")');
+    }
+
+    public function runMergeDuplicatesBatch(CustomerDuplicateMergeService $merger): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->mergeDuplicatesModalOpen || $this->segment !== 'customers') {
+            $this->mergeDuplicatesRunning = false;
+
+            return;
+        }
+
+        $this->mergeDuplicatesRunning = true;
+
+        $result = $merger->mergeNextBatch();
+
+        $this->mergeDuplicatesMergedGroups += $result['merged_groups'];
+        $this->mergeDuplicatesDeletedUsers += $result['deleted_users'];
+        $this->mergeDuplicatesReassignedOrders += $result['reassigned_orders'];
+        $this->mergeDuplicatesRemaining = $result['remaining_groups'];
+        $this->mergeDuplicatesSamples = array_slice(array_merge(
+            $this->mergeDuplicatesSamples,
+            $result['samples'],
+        ), 0, 12);
+
+        if ($result['done']) {
+            $this->mergeDuplicatesRunning = false;
+            $this->mergeDuplicatesMessage = $this->mergeDuplicatesMergedGroups === 0
+                ? 'No duplicate customer phones found.'
+                : 'Merged '.$this->mergeDuplicatesMergedGroups.' phone group(s), removed '
+                    .$this->mergeDuplicatesDeletedUsers.' older profile(s), reassigned '
+                    .$this->mergeDuplicatesReassignedOrders.' order(s).';
+            $this->message = $this->mergeDuplicatesMessage;
+
+            return;
+        }
+
+        $this->mergeDuplicatesMessage = 'Merged '.$this->mergeDuplicatesMergedGroups.' group(s) so far. '
+            .$this->mergeDuplicatesRemaining.' left…';
+
+        if (app()->runningUnitTests()) {
+            $this->runMergeDuplicatesBatch($merger);
+
+            return;
+        }
+
+        $this->js('setTimeout(() => $wire.runMergeDuplicatesBatch(), 50)');
     }
 
     public function toggleActive(int $userId): void

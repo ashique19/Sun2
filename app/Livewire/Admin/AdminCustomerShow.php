@@ -68,7 +68,6 @@ class AdminCustomerShow extends Component
             ->first(['id', 'name', 'phone', 'address', 'area', 'city']);
 
         $defaultAddress = $this->customer->addresses()
-            ->with(['city:id,name', 'area:id,name'])
             ->orderByDesc('is_default')
             ->orderByDesc('id')
             ->first();
@@ -78,13 +77,14 @@ class AdminCustomerShow extends Component
         $this->displayAddress = (string) ($latestOrder?->address
             ?: $defaultAddress?->address
             ?: '');
+        // addresses.city / addresses.area are string columns that shadow the city()/area() relations.
         $this->displayCity = (string) ($latestOrder?->city
-            ?: $defaultAddress?->city?->name
-            ?: $defaultAddress?->city
+            ?: $defaultAddress?->city()->value('name')
+            ?: $defaultAddress?->getAttribute('city')
             ?: '');
         $this->displayArea = (string) ($latestOrder?->area
-            ?: $defaultAddress?->area?->name
-            ?: $defaultAddress?->area
+            ?: $defaultAddress?->area()->value('name')
+            ?: $defaultAddress?->getAttribute('area')
             ?: '');
     }
 }

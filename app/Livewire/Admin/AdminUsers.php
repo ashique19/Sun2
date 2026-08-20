@@ -178,7 +178,10 @@ class AdminUsers extends Component
     {
         AdminAccess::ensureStaffAdmin();
 
-        if ($this->segment !== 'customers' || $this->selectedCustomerIds === []) {
+        $selectedIds = array_values(array_unique(array_map('intval', $this->selectedCustomerIds)));
+        $this->selectedCustomerIds = $selectedIds;
+
+        if ($this->segment !== 'customers' || $selectedIds === []) {
             $this->error = 'Select at least one customer to send promotional SMS.';
 
             return;
@@ -189,6 +192,7 @@ class AdminUsers extends Component
         $this->promoSmsMessage = '';
         $this->promoSmsCampaignId = (string) (config('sms.mimsms.promotional_campaign_id') ?? '');
         $this->error = null;
+        $this->message = null;
         $this->js('document.body.classList.add("overflow-hidden")');
     }
 

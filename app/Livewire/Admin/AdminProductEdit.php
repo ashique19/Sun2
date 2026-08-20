@@ -79,6 +79,8 @@ class AdminProductEdit extends Component
 
     public string $compare_at_price = '';
 
+    public string $price_unit = 'পিস';
+
     public int $stock_quantity = 0;
 
     public int $display_order = 0;
@@ -156,6 +158,7 @@ class AdminProductEdit extends Component
         $this->compare_at_price = $product->compare_at_price !== null
             ? (string) (int) round((float) $product->compare_at_price)
             : '';
+        $this->price_unit = $product->priceUnitLabel();
         $this->stock_quantity = (int) $product->stock_quantity;
         $this->display_order = (int) $product->display_order;
         $this->is_published = (bool) $product->is_published;
@@ -1005,11 +1008,13 @@ class AdminProductEdit extends Component
     {
         $existingPrice = $this->product?->price;
         $existingCompareAtPrice = $this->product?->compare_at_price;
+        $existingPriceUnit = $this->product?->price_unit;
         $this->ensureProductSaved();
 
         if ($this->product?->priced_image_path
             && ((float) $existingPrice !== (float) $this->product->price
-                || (float) $existingCompareAtPrice !== (float) $this->product->compare_at_price)) {
+                || (float) $existingCompareAtPrice !== (float) $this->product->compare_at_price
+                || (string) $existingPriceUnit !== (string) $this->product->price_unit)) {
             app(ProductPricedImageService::class)->generate($this->product->fresh());
         }
 
@@ -1245,6 +1250,7 @@ class AdminProductEdit extends Component
                     $fail('Regular price must be greater than selling price.');
                 }
             }],
+            'price_unit' => ['required', 'string', 'max:40'],
             'stock_quantity' => ['integer', 'min:0'],
             'display_order' => ['integer', 'min:0', 'max:32767'],
             'is_published' => ['boolean'],
@@ -1264,6 +1270,7 @@ class AdminProductEdit extends Component
         $validated['compare_at_price'] = isset($validated['compare_at_price']) && $validated['compare_at_price'] !== ''
             ? (int) round((float) $validated['compare_at_price'])
             : null;
+        $validated['price_unit'] = trim((string) ($validated['price_unit'] ?? '')) ?: 'পিস';
         $validated['sku'] = $validated['sku'] !== '' ? $validated['sku'] : null;
         $en = ProductDescriptionHtml::sanitize($validated['description'] ?? '');
         $bn = ProductDescriptionHtml::sanitize($validated['description_bn'] ?? '');

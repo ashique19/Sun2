@@ -428,6 +428,7 @@ class ProductPricedImageTest extends TestCase
         $this->assertSame('৫০০', $service->toBanglaDigits(500));
         $this->assertStringContainsString('NotoSansBengali-Bold.ttf', $service->fontPath());
         $this->assertFileExists($service->pieceSuffixPath());
+        $this->assertFileExists($service->unitSuffixPath($product->fresh()));
 
         $path = $service->generate($product->fresh(), [
             'position' => 'center',
@@ -438,6 +439,54 @@ class ProductPricedImageTest extends TestCase
         $panel = $service->measurePanel($product->fresh(), 56);
         $this->assertGreaterThan(0, $panel['width']);
         $this->assertGreaterThan(0, $panel['height']);
+    }
+
+    #[Test]
+    public function priced_image_uses_product_price_unit_suffix(): void
+    {
+        $product = $this->productWithPrimaryImage('Pair Unit');
+        $product->update([
+            'price' => 900,
+            'compare_at_price' => 1200,
+            'price_unit' => 'জোড়া',
+        ]);
+        $service = app(ProductPricedImageService::class);
+
+        $this->assertSame('জোড়া', $product->fresh()->priceUnitLabel());
+        $this->assertStringEndsWith('jora.png', $service->unitSuffixPath($product->fresh()));
+
+        $path = $service->generate($product->fresh(), [
+            'position' => 'center',
+            'font' => 48,
+        ]);
+
+        $this->assertFileExists(public_path(ltrim($path, '/')));
+    }
+
+    #[Test]
+    public function edit_form_can_save_price_unit_and_rebuild_priced_image(): void
+    {
+        $this->actingAs($this->adminUser());
+        $product = $this->productWithPrimaryImage('Unit Edit');
+        app(ProductPricedImageService::class)->generate($product->fresh(), [
+            'position' => 'center',
+            'font' => 48,
+        ]);
+        $before = $product->fresh()->priced_image_path;
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product->fresh(['images'])])
+            ->assertSet('price_unit', 'পিস')
+            ->assertSee('Price unit')
+            ->assertSee('জোড়া')
+            ->assertSee('সেট')
+            ->set('price_unit', 'সেট')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $product->refresh();
+        $this->assertSame('সেট', $product->price_unit);
+        $this->assertNotNull($product->priced_image_path);
+        $this->assertNotSame($before, $product->priced_image_path);
     }
 
     #[Test]

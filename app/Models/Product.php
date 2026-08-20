@@ -30,6 +30,23 @@ class Product extends Model
         ];
     }
 
+    /** Common Bangla price units for stamps / catalog. */
+    public const PRICE_UNIT_PRESETS = [
+        'পিস',
+        'জোড়া',
+        'সেট',
+    ];
+
+    /**
+     * Unit label shown on priced images (e.g. পিস, জোড়া, সেট).
+     */
+    public function priceUnitLabel(): string
+    {
+        $unit = trim((string) ($this->price_unit ?? ''));
+
+        return $unit !== '' ? $unit : 'পিস';
+    }
+
     public function getRouteKeyName(): string
     {
         return 'slug';

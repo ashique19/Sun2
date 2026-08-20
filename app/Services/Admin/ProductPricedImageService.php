@@ -5,6 +5,7 @@ namespace App\Services\Admin;
 use App\Models\Product;
 use App\Support\CleanJpegWriter;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -44,6 +45,17 @@ class ProductPricedImageService
         '7' => '৭',
         '8' => '৮',
         '9' => '৯',
+    ];
+
+    /**
+     * Bundled HarfBuzz-shaped "/unit" PNGs (GD cannot shape Bengali).
+     *
+     * @var array<string, string>
+     */
+    private const UNIT_SUFFIX_ASSETS = [
+        'পিস' => 'pis.png',
+        'জোড়া' => 'jora.png',
+        'সেট' => 'set.png',
     ];
 
     public function generate(Product $product, ?array $layout = null): string
@@ -346,8 +358,9 @@ class ProductPricedImageService
             }
 
             if (($line['piece_suffix'] ?? false) === true) {
-                $this->blitPieceSuffix(
+                $this->blitUnitSuffix(
                     $canvas,
+                    $product,
                     $textX + $textWidth,
                     $cursorY,
                     $lineHeight,
@@ -382,8 +395,8 @@ class ProductPricedImageService
         if ($product->compare_at_price !== null && (float) $product->compare_at_price > (float) $product->price) {
             $lines[] = ['text' => $this->toBanglaDigits((float) $product->compare_at_price), 'strike' => true];
         }
-        // Sale line is Taka + digits only; "/পিস" is composited from a HarfBuzz-shaped
-        // PNG because PHP GD cannot OpenType-shape Bengali (ি-kar), which made "পিস" look like "পসি".
+        // Sale line is Taka + digits only; "/{unit}" is composited from a shaped PNG
+        // because PHP GD cannot OpenType-shape Bengali (ি-kar / ে-kar / etc.).
         $lines[] = [
             'text' => '৳'.$this->toBanglaDigits((float) $product->price),
             'strike' => false,
@@ -401,7 +414,7 @@ class ProductPricedImageService
             $textHeight = (int) abs($box[7] - $box[1]);
 
             if (($line['piece_suffix'] ?? false) === true) {
-                $suffix = $this->pieceSuffixSizeForFont($fontSize);
+                $suffix = $this->unitSuffixSizeForFont($product, $fontSize);
                 $textWidth += $suffix['width'];
                 $textHeight = max($textHeight, $suffix['height']);
             }
@@ -431,13 +444,39 @@ class ProductPricedImageService
     }
 
     /**
-     * Path to the pre-shaped "/পিস" stamp suffix (HarfBuzz-rendered; GD cannot shape it).
+     * Absolute path to a black-on-white "/{unit}" PNG for the product's price unit.
+     */
+    public function unitSuffixPath(Product $product): string
+    {
+        $unit = $product->priceUnitLabel();
+
+        if (isset(self::UNIT_SUFFIX_ASSETS[$unit])) {
+            $path = resource_path('images/priced-units/'.self::UNIT_SUFFIX_ASSETS[$unit]);
+
+            if (! is_file($path)) {
+                throw new RuntimeException('Priced image unit asset is missing for “'.$unit.'”.');
+            }
+
+            return $path;
+        }
+
+        return $this->ensureCustomUnitSuffixPng($unit);
+    }
+
+    /**
+     * @deprecated Use unitSuffixPath(); kept for older tests expecting the পিস asset.
      */
     public function pieceSuffixPath(): string
     {
-        $path = resource_path('images/priced-stamp-piece-suffix.png');
+        $path = resource_path('images/priced-units/pis.png');
 
         if (! is_file($path)) {
+            $legacy = resource_path('images/priced-stamp-piece-suffix.png');
+
+            if (is_file($legacy)) {
+                return $legacy;
+            }
+
             throw new RuntimeException('Priced image piece-suffix asset is missing.');
         }
 
@@ -447,9 +486,9 @@ class ProductPricedImageService
     /**
      * @return array{width: int, height: int}
      */
-    private function pieceSuffixSizeForFont(int $fontSize): array
+    private function unitSuffixSizeForFont(Product $product, int $fontSize): array
     {
-        $info = @getimagesize($this->pieceSuffixPath());
+        $info = @getimagesize($this->unitSuffixPath($product));
         $nativeW = max(1, (int) ($info[0] ?? 1));
         $nativeH = max(1, (int) ($info[1] ?? 1));
         $height = max(1, (int) round($fontSize * 1.45));
@@ -458,20 +497,26 @@ class ProductPricedImageService
         return ['width' => $width, 'height' => $height];
     }
 
-    private function blitPieceSuffix(\GdImage $canvas, int $x, int $lineTop, int $lineHeight, int $fontSize): void
-    {
-        $suffix = @imagecreatefrompng($this->pieceSuffixPath());
+    private function blitUnitSuffix(
+        \GdImage $canvas,
+        Product $product,
+        int $x,
+        int $lineTop,
+        int $lineHeight,
+        int $fontSize,
+    ): void {
+        $suffix = @imagecreatefrompng($this->unitSuffixPath($product));
 
         if ($suffix === false) {
-            throw new RuntimeException('Could not load priced image piece-suffix asset.');
+            throw new RuntimeException('Could not load priced image unit suffix.');
         }
 
-        $size = $this->pieceSuffixSizeForFont($fontSize);
+        $size = $this->unitSuffixSizeForFont($product, $fontSize);
         $scaled = imagecreatetruecolor($size['width'], $size['height']);
 
         if ($scaled === false) {
             imagedestroy($suffix);
-            throw new RuntimeException('Could not scale priced image piece-suffix asset.');
+            throw new RuntimeException('Could not scale priced image unit suffix.');
         }
 
         $white = imagecolorallocate($scaled, 255, 255, 255);
@@ -493,7 +538,6 @@ class ProductPricedImageService
         $destY = $lineTop + (int) max(0, round(($lineHeight - $size['height']) / 2));
         $black = imagecolorallocate($canvas, 0, 0, 0);
 
-        // Asset is black ink on white; skip near-white so the frosted seal shows through.
         for ($sy = 0; $sy < $size['height']; $sy++) {
             for ($sx = 0; $sx < $size['width']; $sx++) {
                 $rgb = imagecolorat($scaled, $sx, $sy);
@@ -510,6 +554,147 @@ class ProductPricedImageService
         }
 
         imagedestroy($scaled);
+    }
+
+    /**
+     * Render and cache a custom unit suffix with HarfBuzz when available, else GD.
+     */
+    private function ensureCustomUnitSuffixPng(string $unit): string
+    {
+        $hash = hash('sha256', $unit);
+        $cached = storage_path('app/priced-unit-suffixes/'.$hash.'.png');
+
+        if (is_file($cached)) {
+            return $cached;
+        }
+
+        File::ensureDirectoryExists(dirname($cached));
+
+        $hbView = $this->hbViewBinary();
+
+        if ($hbView !== null) {
+            $tmp = tempnam(sys_get_temp_dir(), 'priced-unit-');
+
+            if ($tmp === false) {
+                throw new RuntimeException('Could not create temp file for priced unit suffix.');
+            }
+
+            $tmpPng = $tmp.'.png';
+            @unlink($tmp);
+
+            $result = Process::run([
+                $hbView,
+                '-O', 'png',
+                '-o', $tmpPng,
+                '--font-size=160',
+                '--margin=4',
+                '--background=FFFFFF',
+                '--foreground=000000',
+                $this->fontPath(),
+                '/'.$unit,
+            ]);
+
+            if ($result->successful() && is_file($tmpPng)) {
+                $this->trimWhitePngToFile($tmpPng, $cached);
+                @unlink($tmpPng);
+
+                return $cached;
+            }
+
+            @unlink($tmpPng);
+        }
+
+        $this->renderUnitSuffixWithGd($unit, $cached);
+
+        return $cached;
+    }
+
+    private function hbViewBinary(): ?string
+    {
+        foreach (['/usr/bin/hb-view', '/usr/local/bin/hb-view'] as $path) {
+            if (is_executable($path)) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    private function trimWhitePngToFile(string $sourcePath, string $destinationPath): void
+    {
+        $src = @imagecreatefrompng($sourcePath);
+
+        if ($src === false) {
+            throw new RuntimeException('Could not read generated unit suffix PNG.');
+        }
+
+        $w = imagesx($src);
+        $h = imagesy($src);
+        $minX = $w;
+        $minY = $h;
+        $maxX = 0;
+        $maxY = 0;
+
+        for ($y = 0; $y < $h; $y++) {
+            for ($x = 0; $x < $w; $x++) {
+                $rgb = imagecolorat($src, $x, $y);
+                $r = ($rgb >> 16) & 0xFF;
+                $g = ($rgb >> 8) & 0xFF;
+                $b = $rgb & 0xFF;
+
+                if ($r < 245 || $g < 245 || $b < 245) {
+                    $minX = min($minX, $x);
+                    $minY = min($minY, $y);
+                    $maxX = max($maxX, $x);
+                    $maxY = max($maxY, $y);
+                }
+            }
+        }
+
+        if ($maxX < $minX || $maxY < $minY) {
+            imagedestroy($src);
+            throw new RuntimeException('Generated unit suffix PNG was empty.');
+        }
+
+        $pad = 2;
+        $tw = $maxX - $minX + 1;
+        $th = $maxY - $minY + 1;
+        $dst = imagecreatetruecolor($tw + ($pad * 2), $th + ($pad * 2));
+        imagefill($dst, 0, 0, imagecolorallocate($dst, 255, 255, 255));
+        imagecopy($dst, $src, $pad, $pad, $minX, $minY, $tw, $th);
+        imagedestroy($src);
+        imagepng($dst, $destinationPath, 9);
+        imagedestroy($dst);
+    }
+
+    private function renderUnitSuffixWithGd(string $unit, string $destinationPath): void
+    {
+        $fontFile = $this->fontPath();
+        $fontSize = 96;
+        $text = '/'.$unit;
+        $box = imagettfbbox($fontSize, 0, $fontFile, $text);
+
+        if ($box === false) {
+            throw new RuntimeException('Could not measure custom price unit for stamp.');
+        }
+
+        $textWidth = (int) abs($box[2] - $box[0]);
+        $textHeight = (int) abs($box[7] - $box[1]);
+        $pad = 8;
+        $img = imagecreatetruecolor($textWidth + ($pad * 2), $textHeight + ($pad * 2));
+        imagefill($img, 0, 0, imagecolorallocate($img, 255, 255, 255));
+        imagettftext(
+            $img,
+            $fontSize,
+            0,
+            $pad,
+            $pad + $textHeight,
+            imagecolorallocate($img, 0, 0, 0),
+            $fontFile,
+            $text,
+        );
+        imagepng($img, $destinationPath, 9);
+        imagedestroy($img);
     }
 
     private function frostPanel(\GdImage $canvas, int $x, int $y, int $panelWidth, int $panelHeight): void

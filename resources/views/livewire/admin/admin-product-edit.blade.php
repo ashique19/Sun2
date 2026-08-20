@@ -103,6 +103,26 @@
                     @error('compare_at_price') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                 </div>
                 <div>
+                    <label class="block text-sm font-medium mb-1">Price unit</label>
+                    <div class="flex flex-wrap gap-2 mb-2">
+                        @foreach (\App\Models\Product::PRICE_UNIT_PRESETS as $preset)
+                            <button type="button"
+                                wire:click="$set('price_unit', '{{ $preset }}')"
+                                @class([
+                                    'rounded-full border px-3 py-1 text-sm',
+                                    'border-[#C9A227] bg-[#FAF6EF] font-semibold text-[#C9A227]' => $price_unit === $preset,
+                                    'border-[#E0D6C2] text-[#6B6459] hover:border-[#C9A227] hover:bg-[#FAF6EF]' => $price_unit !== $preset,
+                                ])>
+                                {{ $preset }}
+                            </button>
+                        @endforeach
+                    </div>
+                    <input type="text" wire:model.live="price_unit" maxlength="40" placeholder="পিস"
+                        class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                    <p class="mt-1 text-xs text-[#8C8474]">Shown on priced images as ৳price/unit (e.g. পিস, জোড়া, সেট).</p>
+                    @error('price_unit') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+                </div>
+                <div>
                     <label class="block text-sm font-medium mb-1">Main cost / purchase price (&#2547;)</label>
                     <input type="number" min="0" step="1" wire:model.live="purchase_price"
                         @disabled($hasBomMaterials)

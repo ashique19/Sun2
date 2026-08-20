@@ -5,7 +5,6 @@ namespace App\Livewire\Admin;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\Admin\CustomerAnalyticsService;
-use App\Services\Admin\CustomerDuplicateMergeService;
 use App\Services\Sms\PromotionalSmsService;
 use App\Support\AdminAccess;
 use Illuminate\Database\Eloquent\Builder;
@@ -47,23 +46,6 @@ class AdminUsers extends Component
     public ?string $message = null;
 
     public ?string $error = null;
-
-    public bool $mergeDuplicatesModalOpen = false;
-
-    public bool $mergeDuplicatesRunning = false;
-
-    public int $mergeDuplicatesRemaining = 0;
-
-    public int $mergeDuplicatesMergedGroups = 0;
-
-    public int $mergeDuplicatesDeletedUsers = 0;
-
-    public int $mergeDuplicatesReassignedOrders = 0;
-
-    public ?string $mergeDuplicatesMessage = null;
-
-    /** @var list<string> */
-    public array $mergeDuplicatesSamples = [];
 
     /** @var list<int> */
     public array $selectedCustomerIds = [];
@@ -389,83 +371,6 @@ class AdminUsers extends Component
         }
     }
 
-    public function openMergeDuplicatesModal(CustomerDuplicateMergeService $merger): void
-    {
-        AdminAccess::ensureStaffAdmin();
-
-        if ($this->segment !== 'customers') {
-            return;
-        }
-
-        $this->mergeDuplicatesModalOpen = true;
-        $this->mergeDuplicatesRunning = false;
-        $this->mergeDuplicatesMergedGroups = 0;
-        $this->mergeDuplicatesDeletedUsers = 0;
-        $this->mergeDuplicatesReassignedOrders = 0;
-        $this->mergeDuplicatesSamples = [];
-        $this->mergeDuplicatesRemaining = $merger->duplicateGroupCount();
-        $this->mergeDuplicatesMessage = $this->mergeDuplicatesRemaining === 0
-            ? 'No duplicate customer phones found.'
-            : $this->mergeDuplicatesRemaining.' phone number(s) have more than one customer profile.';
-        $this->js('document.body.classList.add("overflow-hidden")');
-    }
-
-    public function closeMergeDuplicatesModal(): void
-    {
-        $this->mergeDuplicatesModalOpen = false;
-        $this->mergeDuplicatesRunning = false;
-        $this->mergeDuplicatesMessage = null;
-        $this->mergeDuplicatesSamples = [];
-        $this->js('document.body.classList.remove("overflow-hidden")');
-    }
-
-    public function runMergeDuplicatesBatch(CustomerDuplicateMergeService $merger): void
-    {
-        AdminAccess::ensureStaffAdmin();
-
-        if (! $this->mergeDuplicatesModalOpen || $this->segment !== 'customers') {
-            $this->mergeDuplicatesRunning = false;
-
-            return;
-        }
-
-        $this->mergeDuplicatesRunning = true;
-
-        $result = $merger->mergeNextBatch();
-
-        $this->mergeDuplicatesMergedGroups += $result['merged_groups'];
-        $this->mergeDuplicatesDeletedUsers += $result['deleted_users'];
-        $this->mergeDuplicatesReassignedOrders += $result['reassigned_orders'];
-        $this->mergeDuplicatesRemaining = $result['remaining_groups'];
-        $this->mergeDuplicatesSamples = array_slice(array_merge(
-            $this->mergeDuplicatesSamples,
-            $result['samples'],
-        ), 0, 12);
-
-        if ($result['done']) {
-            $this->mergeDuplicatesRunning = false;
-            $this->mergeDuplicatesMessage = $this->mergeDuplicatesMergedGroups === 0
-                ? 'No duplicate customer phones found.'
-                : 'Merged '.$this->mergeDuplicatesMergedGroups.' phone group(s), removed '
-                    .$this->mergeDuplicatesDeletedUsers.' older profile(s), reassigned '
-                    .$this->mergeDuplicatesReassignedOrders.' order(s).';
-            $this->message = $this->mergeDuplicatesMessage;
-
-            return;
-        }
-
-        $this->mergeDuplicatesMessage = 'Merged '.$this->mergeDuplicatesMergedGroups.' group(s) so far. '
-            .$this->mergeDuplicatesRemaining.' left…';
-
-        if (app()->runningUnitTests()) {
-            $this->runMergeDuplicatesBatch($merger);
-
-            return;
-        }
-
-        $this->js('setTimeout(() => $wire.runMergeDuplicatesBatch(), 50)');
-    }
-
     public function toggleActive(int $userId): void
     {
         AdminAccess::ensureStaffAdmin();
@@ -582,6 +487,12 @@ class AdminUsers extends Component
             'segments' => self::SEGMENTS,
             'segmentLabel' => self::SEGMENTS[$this->segment],
             'roleName' => $role,
+            'createLabel' => match ($this->segment) {
+                'moderators' => 'Create Moderator',
+                'resellers' => 'Create Reseller',
+                'admins' => 'Create Admin',
+                default => 'Create Customer',
+            },
             'pageCustomerIds' => $pageIds,
             'allOnPageSelected' => $allOnPageSelected,
             'analyticsRows' => $analyticsRows,

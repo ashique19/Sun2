@@ -2,11 +2,14 @@
 
 namespace App\Livewire\Admin;
 
+use App\Models\Order;
 use App\Models\User;
+use App\Services\Admin\CustomerAnalyticsService;
 use App\Services\Admin\CustomerDuplicateMergeService;
 use App\Services\Sms\PromotionalSmsService;
 use App\Support\AdminAccess;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -25,6 +28,21 @@ class AdminUsers extends Component
 
     #[Url(as: 'city')]
     public string $cityFilter = '';
+
+    #[Url(as: 'city_none')]
+    public bool $cityNoneOnly = false;
+
+    #[Url]
+    public string $ordersMin = '';
+
+    #[Url]
+    public string $ordersMax = '';
+
+    #[Url(as: 'category')]
+    public string $categoryId = '';
+
+    #[Url(as: 'analytics')]
+    public string $analyticsPill = '';
 
     public ?string $message = null;
 
@@ -87,6 +105,12 @@ class AdminUsers extends Component
         $this->resetPage();
         $this->selectedCustomerIds = [];
         $this->closePromoSmsModal();
+        $this->analyticsPill = '';
+        $this->cityFilter = '';
+        $this->cityNoneOnly = false;
+        $this->ordersMin = '';
+        $this->ordersMax = '';
+        $this->categoryId = '';
         $this->message = null;
         $this->error = null;
         $this->js('history.replaceState({}, "", '.json_encode(route('admin.users.'.$segment)).')');
@@ -100,8 +124,109 @@ class AdminUsers extends Component
 
     public function updatedCityFilter(): void
     {
+        $this->cityNoneOnly = false;
         $this->resetPage();
         $this->selectedCustomerIds = [];
+    }
+
+    public function updatedOrdersMin(): void
+    {
+        $this->resetPage();
+        $this->selectedCustomerIds = [];
+    }
+
+    public function updatedOrdersMax(): void
+    {
+        $this->resetPage();
+        $this->selectedCustomerIds = [];
+    }
+
+    public function updatedCategoryId(): void
+    {
+        $this->resetPage();
+        $this->selectedCustomerIds = [];
+    }
+
+    public function toggleAnalyticsPill(string $pill): void
+    {
+        if ($this->segment !== 'customers') {
+            return;
+        }
+
+        if (! in_array($pill, ['city', 'orders', 'category'], true)) {
+            return;
+        }
+
+        $this->analyticsPill = $this->analyticsPill === $pill ? '' : $pill;
+    }
+
+    public function applyAnalyticsFilter(string $pill, string $key): void
+    {
+        if ($this->segment !== 'customers') {
+            return;
+        }
+
+        $this->selectedCustomerIds = [];
+        $this->resetPage();
+        $this->error = null;
+
+        if ($pill === 'city') {
+            $this->ordersMin = '';
+            $this->ordersMax = '';
+            $this->categoryId = '';
+            $this->analyticsPill = 'city';
+
+            if ($key === CustomerAnalyticsService::NO_CITY_KEY) {
+                $this->cityFilter = '';
+                $this->cityNoneOnly = true;
+            } else {
+                $this->cityNoneOnly = false;
+                $this->cityFilter = $key;
+            }
+
+            return;
+        }
+
+        if ($pill === 'orders') {
+            $this->cityFilter = '';
+            $this->cityNoneOnly = false;
+            $this->categoryId = '';
+            $this->analyticsPill = 'orders';
+
+            if ($key === CustomerAnalyticsService::ORDERS_10_PLUS_KEY) {
+                $this->ordersMin = '10';
+                $this->ordersMax = '';
+
+                return;
+            }
+
+            if (ctype_digit($key)) {
+                $this->ordersMin = $key;
+                $this->ordersMax = $key;
+            }
+
+            return;
+        }
+
+        if ($pill === 'category' && ctype_digit($key)) {
+            $this->cityFilter = '';
+            $this->cityNoneOnly = false;
+            $this->ordersMin = '';
+            $this->ordersMax = '';
+            $this->categoryId = $key;
+            $this->analyticsPill = 'category';
+        }
+    }
+
+    public function clearAnalyticsFilters(): void
+    {
+        $this->cityFilter = '';
+        $this->cityNoneOnly = false;
+        $this->ordersMin = '';
+        $this->ordersMax = '';
+        $this->categoryId = '';
+        $this->selectedCustomerIds = [];
+        $this->resetPage();
     }
 
     public function toggleCustomerSelection(int $userId): void
@@ -407,7 +532,7 @@ class AdminUsers extends Component
         ));
     }
 
-    public function render()
+    public function render(CustomerAnalyticsService $analytics)
     {
         $role = match ($this->segment) {
             'moderators' => 'moderator',
@@ -432,11 +557,8 @@ class AdminUsers extends Component
                     }
                 });
             })
-            ->when($this->segment === 'customers' && $this->cityFilter !== '', function (Builder $query) {
-                $term = '%'.$this->cityFilter.'%';
-                $query->where(function (Builder $cityQuery) use ($term) {
-                    $this->applyCityMatch($cityQuery, $term);
-                });
+            ->when($this->segment === 'customers', function (Builder $query) {
+                $this->applyCustomerAnalyticsFilters($query);
             })
             ->orderByDesc('id')
             ->paginate(30);
@@ -445,6 +567,11 @@ class AdminUsers extends Component
         $allOnPageSelected = $pageIds !== []
             && collect($pageIds)->every(fn (int $id): bool => in_array($id, $this->selectedCustomerIds, true));
 
+        $analyticsRows = [];
+        if ($this->segment === 'customers' && in_array($this->analyticsPill, ['city', 'orders', 'category'], true)) {
+            $analyticsRows = $analytics->reportFor($this->analyticsPill);
+        }
+
         return view('livewire.admin.admin-users', [
             'users' => $users,
             'segments' => self::SEGMENTS,
@@ -452,7 +579,93 @@ class AdminUsers extends Component
             'roleName' => $role,
             'pageCustomerIds' => $pageIds,
             'allOnPageSelected' => $allOnPageSelected,
+            'analyticsRows' => $analyticsRows,
+            'activeFilterSummary' => $this->activeFilterSummary(),
         ])->title(self::SEGMENTS[$this->segment]);
+    }
+
+    private function applyCustomerAnalyticsFilters(Builder $query): void
+    {
+        if ($this->cityNoneOnly) {
+            $query->whereDoesntHave('orders', function (Builder $orders) {
+                $orders->where('status', '!=', Order::STATUS_DRAFT)
+                    ->whereNotNull('city')
+                    ->where('city', '!=', '');
+            })->whereDoesntHave('addresses', function (Builder $addresses) {
+                $addresses->where(function (Builder $a) {
+                    $a->where(function (Builder $b) {
+                        $b->whereNotNull('city')->where('city', '!=', '');
+                    })->orWhereHas('city', fn (Builder $c) => $c->whereNotNull('name')->where('name', '!=', ''));
+                });
+            });
+        } elseif ($this->cityFilter !== '') {
+            $term = '%'.$this->cityFilter.'%';
+            $query->where(function (Builder $cityQuery) use ($term) {
+                $this->applyCityMatch($cityQuery, $term);
+            });
+        }
+
+        $ordersMin = $this->ordersMin !== '' && is_numeric($this->ordersMin) ? (int) $this->ordersMin : null;
+        $ordersMax = $this->ordersMax !== '' && is_numeric($this->ordersMax) ? (int) $this->ordersMax : null;
+
+        if ($ordersMin !== null || $ordersMax !== null) {
+            $query->where(function (Builder $q) use ($ordersMin, $ordersMax) {
+                $lifetime = '(select count(*) from orders where orders.user_id = users.id and orders.status != ?)';
+
+                if ($ordersMin !== null) {
+                    $q->whereRaw($lifetime.' >= ?', [Order::STATUS_DRAFT, $ordersMin]);
+                }
+                if ($ordersMax !== null) {
+                    $q->whereRaw($lifetime.' <= ?', [Order::STATUS_DRAFT, $ordersMax]);
+                }
+            });
+        }
+
+        if ($this->categoryId !== '' && ctype_digit($this->categoryId)) {
+            $categoryId = (int) $this->categoryId;
+            $query->whereHas('orders', function (Builder $orders) use ($categoryId) {
+                $orders->where('status', '!=', Order::STATUS_DRAFT)
+                    ->whereHas('items', function (Builder $items) use ($categoryId) {
+                        $items->whereHas('product', fn (Builder $product) => $product->where('category_id', $categoryId));
+                    });
+            });
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function activeFilterSummary(): array
+    {
+        if ($this->segment !== 'customers') {
+            return [];
+        }
+
+        $parts = [];
+
+        if ($this->cityNoneOnly) {
+            $parts[] = 'City: (no city)';
+        } elseif ($this->cityFilter !== '') {
+            $parts[] = 'City: '.$this->cityFilter;
+        }
+
+        if ($this->ordersMin !== '' || $this->ordersMax !== '') {
+            if ($this->ordersMin !== '' && $this->ordersMax !== '' && $this->ordersMin === $this->ordersMax) {
+                $parts[] = 'Orders: '.$this->ordersMin;
+            } elseif ($this->ordersMin !== '' && $this->ordersMax === '') {
+                $parts[] = 'Orders: '.$this->ordersMin.'+';
+            } else {
+                $parts[] = 'Orders: '.($this->ordersMin !== '' ? $this->ordersMin : '0')
+                    .'-'.($this->ordersMax !== '' ? $this->ordersMax : '∞');
+            }
+        }
+
+        if ($this->categoryId !== '' && ctype_digit($this->categoryId)) {
+            $name = DB::table('categories')->where('id', (int) $this->categoryId)->value('name');
+            $parts[] = 'Category: '.($name ?: '#'.$this->categoryId);
+        }
+
+        return $parts;
     }
 
     private function applyCityMatch(Builder $query, string $term): void

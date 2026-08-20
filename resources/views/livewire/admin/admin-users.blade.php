@@ -37,6 +37,64 @@
         <div class="rounded-lg bg-emerald-50 text-emerald-700 text-sm px-4 py-3 mb-4">{{ $message }}</div>
     @endif
 
+    @if ($segment === 'customers')
+        <div class="mb-4 flex flex-wrap gap-2">
+            @foreach ([
+                'city' => 'By city',
+                'orders' => 'By order count',
+                'category' => 'By category',
+            ] as $pillKey => $pillLabel)
+                <button type="button"
+                    wire:click="toggleAnalyticsPill('{{ $pillKey }}')"
+                    class="rounded-full px-4 py-1.5 text-sm border transition {{ $analyticsPill === $pillKey ? 'border-[#C9A227] bg-[#C9A227] text-white font-medium' : 'border-[#E0D6C2] bg-white text-[#6B6459] hover:bg-[#FAF6EF]' }}">
+                    {{ $pillLabel }}
+                </button>
+            @endforeach
+        </div>
+
+        @if ($analyticsPill !== '' && $analyticsRows !== [])
+            <div class="mb-6 rounded-xl border border-[#EFE7D6] bg-white p-4">
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <p class="text-sm font-medium text-[#1E1E1E]">
+                        @if ($analyticsPill === 'city') Customers by city
+                        @elseif ($analyticsPill === 'orders') Customers by lifetime orders
+                        @else Customers by category ordered
+                        @endif
+                    </p>
+                    <p class="text-xs text-[#8C8474]">Click a number to filter the list</p>
+                </div>
+                <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    @foreach ($analyticsRows as $row)
+                        <button type="button"
+                            wire:key="analytics-{{ $analyticsPill }}-{{ $row['key'] }}"
+                            wire:click="applyAnalyticsFilter('{{ $analyticsPill }}', @js($row['key']))"
+                            class="flex items-center justify-between gap-3 rounded-lg border border-[#EFE7D6] bg-[#FAF6EF]/50 px-3 py-2 text-left text-sm hover:border-[#C9A227] hover:bg-[#FAF6EF]">
+                            <span class="min-w-0 truncate text-[#1E1E1E]">{{ $row['label'] }}</span>
+                            <span class="shrink-0 rounded-full bg-white px-2.5 py-0.5 text-sm font-semibold tabular-nums text-[#C9A227] ring-1 ring-[#E0D6C2]">
+                                {{ number_format($row['count']) }}
+                            </span>
+                        </button>
+                    @endforeach
+                </div>
+            </div>
+        @elseif ($analyticsPill !== '')
+            <div class="mb-6 rounded-xl border border-[#EFE7D6] bg-white px-4 py-6 text-center text-sm text-[#8C8474]">
+                No data for this report yet.
+            </div>
+        @endif
+
+        @if ($activeFilterSummary !== [])
+            <div class="mb-4 flex flex-wrap items-center gap-2 text-sm">
+                <span class="text-[#6B6459]">Filtered:</span>
+                @foreach ($activeFilterSummary as $summary)
+                    <span class="rounded-full border border-[#E0D6C2] bg-white px-3 py-1 text-xs font-medium text-[#1E1E1E]">{{ $summary }}</span>
+                @endforeach
+                <button type="button" wire:click="clearAnalyticsFilters"
+                    class="text-xs font-medium text-[#C9A227] hover:underline">Clear filters</button>
+            </div>
+        @endif
+    @endif
+
     <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 mb-6 space-y-3">
         <input type="search" wire:model.live.debounce.300ms="search"
             placeholder="{{ $segment === 'customers' ? 'Search name, phone, email, city…' : 'Search name, phone, email…' }}"

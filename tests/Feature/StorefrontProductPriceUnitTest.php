@@ -28,9 +28,9 @@ class StorefrontProductPriceUnitTest extends TestCase
         ]);
 
         Livewire::test(StorefrontProduct::class, ['product' => $product])
-            ->assertSeeHtml('&#2547; 1,200')
+            ->assertSeeHtml('&#2547; ১,২০০')
             ->assertSeeHtml('line-through')
-            ->assertSeeHtml('&#2547; 500')
+            ->assertSeeHtml('&#2547; ৫০০')
             ->assertSeeHtml('/সেট');
     }
 
@@ -54,7 +54,7 @@ class StorefrontProductPriceUnitTest extends TestCase
 
         $html = view('components.storefront.product-card', ['product' => $product])->render();
 
-        $this->assertStringContainsString('&#2547; 650', $html);
+        $this->assertStringContainsString('&#2547; ৬৫০', $html);
         $this->assertStringContainsString('/পিস', $html);
     }
 
@@ -69,6 +69,6 @@ class StorefrontProductPriceUnitTest extends TestCase
             'is_published' => true,
         ]);
 
-        $this->assertSame('৳ 900/জোড়া (Jhumka Pair)', Seo::productShareTitle($product));
+        $this->assertSame('৳ ৯০০/জোড়া (Jhumka Pair)', Seo::productShareTitle($product));
     }
 }

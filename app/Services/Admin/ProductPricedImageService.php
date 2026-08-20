@@ -3,6 +3,7 @@
 namespace App\Services\Admin;
 
 use App\Models\Product;
+use App\Support\Bangla;
 use App\Support\CleanJpegWriter;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
@@ -28,24 +29,6 @@ class ProductPricedImageService
     public const AUTO_FONT_MAX = 240;
 
     public const AUTO_SIZE_RATIO = 0.20;
-
-    /**
-     * Western → Bangla digit map for stamped price text.
-     *
-     * @var array<string, string>
-     */
-    private const BANGLA_DIGITS = [
-        '0' => '০',
-        '1' => '১',
-        '2' => '২',
-        '3' => '৩',
-        '4' => '৪',
-        '5' => '৫',
-        '6' => '৬',
-        '7' => '৭',
-        '8' => '৮',
-        '9' => '৯',
-    ];
 
     /**
      * Bundled HarfBuzz-shaped "/unit" PNGs (GD cannot shape Bengali).
@@ -440,7 +423,7 @@ class ProductPricedImageService
      */
     public function toBanglaDigits(float|int $amount): string
     {
-        return strtr((string) (int) round($amount), self::BANGLA_DIGITS);
+        return Bangla::digits((string) (int) round($amount));
     }
 
     /**

@@ -31,9 +31,9 @@
 
 <div {{ $attributes }}>
     @if ($hasCompare)
-        <div class="{{ $compareClass }}">&#2547; {{ number_format((float) $product->compare_at_price, 0) }}</div>
+        <div class="{{ $compareClass }}">&#2547; {{ \App\Support\Bangla::money((float) $product->compare_at_price) }}</div>
     @endif
     <p class="{{ $priceClass }}">
-        <span>&#2547; {{ number_format((float) $product->price, 0) }}</span><span class="{{ $unitClass }}">/{{ $unit }}</span>
+        <span>&#2547; {{ \App\Support\Bangla::money((float) $product->price) }}</span><span class="{{ $unitClass }}">/{{ $unit }}</span>
     </p>
 </div>

@@ -456,15 +456,10 @@ class AdminProducts extends Component
         $this->putPriceSkippedIds = [];
         $this->putPriceTotalSaved = 0;
         $this->putPriceRunning = false;
-        $this->putPriceReplaceExisting = $this->selected !== [];
-        $this->putPricePendingIds = $this->putPriceReplaceExisting
-            ? Product::query()
-                ->whereIn('id', array_values(array_unique(array_map('intval', $this->selected))))
-                ->whereHas('images')
-                ->orderByDesc('id')
-                ->pluck('id')
-                ->all()
-            : [];
+        // Always process a fixed ID list and replace existing priced images:
+        // checkbox selection when present, otherwise every product matching the list filters.
+        $this->putPriceReplaceExisting = true;
+        $this->putPricePendingIds = $this->putPriceTargetIds();
         $this->refreshPutPriceBatch();
         $this->js('document.body.classList.add("overflow-hidden")');
     }
@@ -505,11 +500,6 @@ class AdminProducts extends Component
                 continue;
             }
 
-            // Missing-only mode: skip products that already have a priced image.
-            if (! $this->putPriceReplaceExisting && filled($product->priced_image_path)) {
-                continue;
-            }
-
             try {
                 $sourcePath = $product->primaryImagePath();
 
@@ -529,10 +519,7 @@ class AdminProducts extends Component
             }
         }
 
-        if ($this->putPriceReplaceExisting) {
-            $this->putPricePendingIds = array_values(array_diff($this->putPricePendingIds, $batchIds));
-        }
-
+        $this->putPricePendingIds = array_values(array_diff($this->putPricePendingIds, $batchIds));
         $this->putPriceTotalSaved += $saved;
         $this->refreshPutPriceBatch();
 
@@ -555,60 +542,41 @@ class AdminProducts extends Component
         $this->js('setTimeout(() => $wire.applyPutPriceBatch(), 50)');
     }
 
-    private function putPriceCompletionMessage(): string
+    /**
+     * Product IDs for Put price: checkbox selection, or all rows matching list filters.
+     *
+     * @return list<int>
+     */
+    private function putPriceTargetIds(): array
     {
-        if ($this->putPriceReplaceExisting) {
-            return $this->putPriceTotalSaved === 1
-                ? 'Saved 1 priced image for the selection.'
-                : 'Saved '.$this->putPriceTotalSaved.' priced images for the selection.';
+        $query = Product::query()->whereHas('images');
+
+        if ($this->selected !== []) {
+            $query->whereIn('id', array_values(array_unique(array_map('intval', $this->selected))));
+        } else {
+            $this->listFilters()->apply($query);
         }
 
+        return $query
+            ->orderByDesc('id')
+            ->pluck('id')
+            ->all();
+    }
+
+    private function putPriceCompletionMessage(): string
+    {
         return $this->putPriceTotalSaved === 1
-            ? 'Saved 1 priced image. All products with photos now have one.'
-            : 'Saved '.$this->putPriceTotalSaved.' priced images. All products with photos now have one.';
+            ? 'Saved 1 priced image for the selection.'
+            : 'Saved '.$this->putPriceTotalSaved.' priced images for the selection.';
     }
 
     private function putPriceProgressMessage(): string
     {
-        if ($this->putPriceReplaceExisting) {
-            return 'Saved '.$this->putPriceTotalSaved.'. '
-                .$this->putPriceRemaining.' selected left…';
-        }
-
         return 'Saved '.$this->putPriceTotalSaved.'. '
-            .$this->putPriceRemaining.' still need a priced image…';
+            .$this->putPriceRemaining.' selected left…';
     }
 
     private function refreshPutPriceBatch(): void
-    {
-        if ($this->putPriceReplaceExisting) {
-            $this->refreshSelectedPutPriceBatch();
-
-            return;
-        }
-
-        $query = Product::query()
-            ->where(function ($q) {
-                $q->whereNull('priced_image_path')
-                    ->orWhere('priced_image_path', '');
-            })
-            ->whereHas('images')
-            ->when($this->putPriceSkippedIds !== [], function ($q) {
-                $q->whereNotIn('id', $this->putPriceSkippedIds);
-            });
-
-        $this->putPriceRemaining = (clone $query)->count();
-
-        $this->putPriceBatch = $query
-            ->with(['images' => fn ($q) => $q->where('is_admin_only', false)->orderBy('sort_order')->limit(1)])
-            ->orderByDesc('id')
-            ->limit(self::PUT_PRICE_BATCH_SIZE)
-            ->get()
-            ->map(fn (Product $product) => $this->putPriceBatchRow($product))
-            ->all();
-    }
-
-    private function refreshSelectedPutPriceBatch(): void
     {
         $pendingIds = array_values(array_diff($this->putPricePendingIds, $this->putPriceSkippedIds));
         $this->putPricePendingIds = $pendingIds;

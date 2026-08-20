@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Livewire\Admin\AdminProductEdit;
 use App\Livewire\Admin\AdminProducts;
+use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\User;
@@ -580,6 +581,8 @@ class ProductPricedImageTest extends TestCase
             'position' => 'top-right',
             'font' => 40,
         ]);
+        $already->refresh();
+        $alreadyPath = $already->priced_image_path;
 
         Product::query()->create([
             'name' => 'No Photo',
@@ -596,24 +599,27 @@ class ProductPricedImageTest extends TestCase
         $component = Livewire::test(AdminProducts::class)
             ->call('openPutPriceModal')
             ->assertSet('putPriceModalOpen', true)
-            ->assertSet('putPriceRemaining', 12)
-            ->assertCount('putPriceBatch', 10);
+            ->assertSet('putPriceReplaceExisting', true)
+            ->assertSet('putPriceRemaining', 13)
+            ->assertCount('putPriceBatch', 10)
+            ->assertSee('replaces existing priced images');
 
-        $batchIds = collect($component->get('putPriceBatch'))->pluck('id')->all();
-        $this->assertNotContains($already->id, $batchIds);
+        $pendingIds = $component->get('putPricePendingIds');
+        $this->assertContains($already->id, $pendingIds);
 
         $component->call('applyPutPriceBatch')
             ->assertSet('putPriceRemaining', 0)
             ->assertSet('putPriceBatch', [])
-            ->assertSet('putPriceTotalSaved', 12)
+            ->assertSet('putPriceTotalSaved', 13)
             ->assertSet('putPriceRunning', false)
-            ->assertSee('Saved 12 priced images. All products with photos now have one.');
+            ->assertSee('Saved 13 priced images for the selection.');
 
+        $allIds = collect($pending)->pluck('id')->push($already->id);
         $pricedCount = Product::query()
-            ->whereIn('id', collect($pending)->pluck('id'))
+            ->whereIn('id', $allIds)
             ->whereNotNull('priced_image_path')
             ->count();
-        $this->assertSame(12, $pricedCount);
+        $this->assertSame(13, $pricedCount);
 
         foreach ($pending as $product) {
             $product->refresh();
@@ -623,7 +629,9 @@ class ProductPricedImageTest extends TestCase
         }
 
         $already->refresh();
-        $this->assertSame('top-right', $already->priced_image_layout['position']);
+        $this->assertNotNull($already->priced_image_path);
+        $this->assertNotSame($alreadyPath, $already->priced_image_path);
+        $this->assertSame('center', $already->priced_image_layout['position']);
         $this->assertNull(Product::query()->where('slug', 'no-photo-put-price')->value('priced_image_path'));
     }
 
@@ -680,7 +688,7 @@ class ProductPricedImageTest extends TestCase
     }
 
     #[Test]
-    public function put_price_without_selection_still_skips_products_that_already_have_priced_images(): void
+    public function put_price_without_selection_includes_and_replaces_existing_priced_images(): void
     {
         $this->actingAs($this->adminUser());
 
@@ -697,17 +705,57 @@ class ProductPricedImageTest extends TestCase
         Livewire::test(AdminProducts::class)
             ->assertSet('selected', [])
             ->call('openPutPriceModal')
-            ->assertSet('putPriceReplaceExisting', false)
-            ->assertSet('putPriceRemaining', 1)
-            ->assertSee('without a priced image')
+            ->assertSet('putPriceReplaceExisting', true)
+            ->assertSet('putPriceRemaining', 2)
+            ->assertSee('replaces existing priced images')
             ->call('applyPutPriceBatch')
-            ->assertSet('putPriceTotalSaved', 1);
+            ->assertSet('putPriceTotalSaved', 2);
 
         $missing->refresh();
         $this->assertNotNull($missing->priced_image_path);
 
         $already->refresh();
-        $this->assertSame($path, $already->priced_image_path);
-        $this->assertSame('top-left', $already->priced_image_layout['position']);
+        $this->assertNotNull($already->priced_image_path);
+        $this->assertNotSame($path, $already->priced_image_path);
+        $this->assertSame('center', $already->priced_image_layout['position']);
+    }
+
+    #[Test]
+    public function put_price_without_selection_uses_current_list_filters(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $categoryA = Category::query()->create([
+            'name' => 'Rings',
+            'slug' => 'rings-put-price',
+            'is_active' => true,
+        ]);
+        $categoryB = Category::query()->create([
+            'name' => 'Earrings',
+            'slug' => 'earrings-put-price',
+            'is_active' => true,
+        ]);
+
+        $inFilter = $this->productWithPrimaryImage('Ring Match');
+        $inFilter->update(['category_id' => $categoryA->id]);
+
+        $outFilter = $this->productWithPrimaryImage('Earring Other');
+        $outFilter->update(['category_id' => $categoryB->id]);
+
+        Livewire::test(AdminProducts::class)
+            ->set('category', (string) $categoryA->id)
+            ->assertSet('selected', [])
+            ->call('openPutPriceModal')
+            ->assertSet('putPriceRemaining', 1)
+            ->assertCount('putPriceBatch', 1)
+            ->assertSee('Ring Match')
+            ->assertDontSee('Earring Other')
+            ->call('applyPutPriceBatch')
+            ->assertSet('putPriceTotalSaved', 1);
+
+        $inFilter->refresh();
+        $outFilter->refresh();
+        $this->assertNotNull($inFilter->priced_image_path);
+        $this->assertNull($outFilter->priced_image_path);
     }
 }

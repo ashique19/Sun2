@@ -460,22 +460,14 @@
 
                             @if ($putPriceBatch === [])
                                 <p class="text-sm text-[#6B6459]">
-                                    @if ($putPriceReplaceExisting)
-                                        {{ $putPriceTotalSaved > 0
-                                            ? 'Finished pricing the selected products.'
-                                            : 'No selected products with photos to price.' }}
-                                    @else
-                                        Every product with a photo already has a priced image.
-                                    @endif
+                                    {{ $putPriceTotalSaved > 0
+                                        ? 'Finished pricing the selected products.'
+                                        : 'No products with photos to price in the current selection or filters.' }}
                                 </p>
                             @else
                                 <p class="text-sm text-[#6B6459]">
-                                    @if ($putPriceReplaceExisting)
-                                        Showing {{ count($putPriceBatch) }} of {{ $putPriceRemaining }} selected
-                                        (replaces existing priced images).
-                                    @else
-                                        Showing {{ count($putPriceBatch) }} of {{ $putPriceRemaining }} without a priced image.
-                                    @endif
+                                    Showing {{ count($putPriceBatch) }} of {{ $putPriceRemaining }} selected
+                                    (replaces existing priced images).
                                 </p>
                                 <ul class="grid grid-cols-5 gap-2">
                                     @foreach ($putPriceBatch as $row)

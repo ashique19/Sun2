@@ -102,18 +102,13 @@ class User extends Authenticatable
 
     public static function findByPhone(string $phone): ?self
     {
-        $normalized = PhoneNumber::normalize($phone);
-        $display = PhoneNumber::display($phone);
+        $candidates = PhoneNumber::matchCandidates($phone);
 
-        $candidates = array_unique([
-            $phone,
-            $display,
-            $normalized,
-            '88'.$normalized,
-            '+88'.$normalized,
-        ]);
+        if ($candidates === []) {
+            return null;
+        }
 
-        return static::query()->whereIn('phone', $candidates)->first();
+        return static::query()->whereIn('phone', $candidates)->orderByDesc('id')->first();
     }
 
     public static function findByLoginIdentifier(string $identifier): ?self

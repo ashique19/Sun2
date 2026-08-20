@@ -70,7 +70,8 @@ class AdminCustomersOrderCountFilterTest extends TestCase
 
         Livewire::test(AdminUsers::class, ['segment' => 'customers'])
             ->assertSee('Orders')
-            ->assertSee('Lifetime orders from')
+            ->assertDontSee('Lifetime orders from')
+            ->assertSeeHtml('aria-label="Export filtered customers to Excel"')
             ->assertSee('Zero Orders')
             ->assertSee('One Order')
             ->assertSeeHtml('>0</td>')

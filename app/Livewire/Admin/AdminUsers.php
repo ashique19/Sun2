@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\Admin\CustomerAnalyticsService;
 use App\Services\Sms\PromotionalSmsService;
 use App\Support\AdminAccess;
+use App\Support\SimpleXlsxExporter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +16,7 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 #[Layout('components.layouts.admin')]
 class AdminUsers extends Component
@@ -313,6 +315,41 @@ class AdminUsers extends Component
         $this->resetPage();
     }
 
+    public function exportFilteredCustomers(SimpleXlsxExporter $xlsx): StreamedResponse
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->segment !== 'customers') {
+            abort(404);
+        }
+
+        $customers = $this->managedUsersQuery('customers')
+            ->withCount([
+                'orders as orders_count' => fn ($q) => $q->where('status', '!=', Order::STATUS_DRAFT),
+            ])
+            ->orderByDesc('id')
+            ->get(['id', 'name', 'phone', 'email', 'is_active', 'created_at']);
+
+        $headers = ['Name', 'Phone', 'Email', 'Orders', 'Status', 'Joined'];
+        $rows = $customers->map(fn (User $user) => [
+            $user->name,
+            $user->phone,
+            $user->email ?: '',
+            (int) ($user->orders_count ?? 0),
+            $user->is_active ? 'Active' : 'Off',
+            $user->created_at?->format('Y-m-d') ?? '',
+        ])->all();
+
+        $binary = $xlsx->build($headers, $rows);
+        $filename = 'customers-'.now()->format('Y-m-d-His').'.xlsx';
+
+        return response()->streamDownload(function () use ($binary): void {
+            echo $binary;
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
     public function toggleCustomerSelection(int $userId): void
     {
         if ($this->segment !== 'customers') {
@@ -548,29 +585,11 @@ class AdminUsers extends Component
             default => 'customers',
         };
 
-        $users = User::query()
-            ->role($role)
+        $users = $this->managedUsersQuery($role)
             ->when($this->segment === 'customers', function (Builder $query) {
                 $query->withCount([
                     'orders as orders_count' => fn ($q) => $q->where('status', '!=', Order::STATUS_DRAFT),
                 ]);
-            })
-            ->when($this->search !== '', function (Builder $query) {
-                $term = '%'.$this->search.'%';
-                $query->where(function (Builder $q) use ($term) {
-                    $q->where('name', 'like', $term)
-                        ->orWhere('phone', 'like', $term)
-                        ->orWhere('email', 'like', $term);
-
-                    if ($this->segment === 'customers') {
-                        $q->orWhere(function (Builder $cityQuery) use ($term) {
-                            $this->applyCityMatch($cityQuery, $term);
-                        });
-                    }
-                });
-            })
-            ->when($this->segment === 'customers', function (Builder $query) {
-                $this->applyCustomerAnalyticsFilters($query);
             })
             ->orderByDesc('id')
             ->paginate(30);
@@ -604,6 +623,29 @@ class AdminUsers extends Component
             },
             'activeFilterSummary' => $this->activeFilterSummary(),
         ])->title(self::SEGMENTS[$this->segment]);
+    }
+
+    private function managedUsersQuery(string $role): Builder
+    {
+        return User::query()
+            ->role($role)
+            ->when($this->search !== '', function (Builder $query) {
+                $term = '%'.$this->search.'%';
+                $query->where(function (Builder $q) use ($term) {
+                    $q->where('name', 'like', $term)
+                        ->orWhere('phone', 'like', $term)
+                        ->orWhere('email', 'like', $term);
+
+                    if ($this->segment === 'customers') {
+                        $q->orWhere(function (Builder $cityQuery) use ($term) {
+                            $this->applyCityMatch($cityQuery, $term);
+                        });
+                    }
+                });
+            })
+            ->when($this->segment === 'customers', function (Builder $query) {
+                $this->applyCustomerAnalyticsFilters($query);
+            });
     }
 
     /**

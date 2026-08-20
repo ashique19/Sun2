@@ -223,9 +223,9 @@ class AdminCouriersDiffOrdersTest extends TestCase
 
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
-        $courier->update(['balance' => 0]);
 
-        // Book and API both 0 → Diff 0, not clickable
+        // No delivered cash received → expected_api 0; API 0 → Diff 0
+        // (book may be non-zero from factory defaults; receivable/expected_api stay 0)
         Livewire::test(AdminCouriers::class)
             ->call('loadApiBalances')
             ->assertDontSeeHtml('wire:click="openDiffOrders('.$courier->id.')"')

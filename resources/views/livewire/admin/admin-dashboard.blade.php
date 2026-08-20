@@ -95,7 +95,7 @@
             wire:navigate
             class="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[#EFE7D6] bg-white px-3 py-2.5 transition hover:border-[#C9A227]/50 hover:bg-[#FAF6EF]/60"
             data-steadfast-expected-api>
-            <p class="min-w-0 truncate text-xs text-[#8C8474]" title="Book balance on courier ledger — should match live Steadfast wallet">
+            <p class="min-w-0 truncate text-xs text-[#8C8474]" title="Receivable from courier (collected − courier charge − COD charge − withdrawals)">
                 <span class="font-medium text-[#6B6459]">Steadfast</span>
                 · API balance should be
             </p>

@@ -10,10 +10,10 @@
                 <span class="tabular-nums font-medium text-[#6B6459]">&#2547; {{ number_format($totalPending ?? 0, 0) }}</span>
             </p>
             <p class="text-xs text-[#8C8474] mt-1">
-                Receivable = cash received − courier charge − COD % − withdrawals
+                Receivable = net owed from delivered/settled parcels − courier charge − COD charge − withdrawals
                 (cancelled with collected 0 still subtracts courier charge; COD % is 0).
-                Pending = COD still with courier on dispatched parcels.
-                Expected API = book balance (should match live Steadfast wallet after Refresh).
+                Pending = COD still with courier on undelivered (dispatched) parcels.
+                Expected API = receivable (net owed after courier charge, COD charge, and withdrawals).
                 API = live Steadfast wallet (refresh manually).
             </p>
             @if ($apiBalanceError)
@@ -106,30 +106,30 @@
                                     <span class="text-[#8C8474]">…</span>
                                 @elseif ($apiBalance !== null)
                                     <div>&#2547; {{ number_format($apiBalance, 0) }}</div>
-                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Book balance — should match live Steadfast wallet">
+                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Receivable = collected − courier charge − COD charge − withdrawals">
                                         Should be &#2547; {{ number_format($expectedApi, 0) }}
                                     </div>
                                     @if (abs($apiDiff) < 0.5)
                                         <div class="text-[11px] mt-0.5 text-emerald-700"
-                                            title="API − book balance">
+                                            title="API − receivable">
                                             Diff {{ $apiDiff > 0 ? '+' : ($apiDiff < 0 ? '−' : '') }}&#2547; {{ number_format(abs($apiDiff), 0) }}
                                         </div>
                                     @else
                                         <button type="button"
                                             wire:click="openDiffOrders({{ $courier->id }})"
-                                            title="API − book balance. Open orders that explain this Diff."
+                                            title="API − receivable. Open orders that explain this Diff."
                                             class="mt-0.5 text-[11px] font-semibold text-amber-700 underline decoration-amber-300 underline-offset-2 hover:text-amber-900">
                                             Diff {{ $apiDiff > 0 ? '+' : '−' }}&#2547; {{ number_format(abs($apiDiff), 0) }}
                                         </button>
                                     @endif
                                 @elseif (! $apiBalancesLoaded && $courier->slug && in_array(strtolower((string) $courier->slug), $apiSlugs, true))
                                     <div class="text-[#8C8474]">Tap Refresh API</div>
-                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Book balance — should match live Steadfast wallet">
+                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Receivable = collected − courier charge − COD charge − withdrawals">
                                         Should be &#2547; {{ number_format($expectedApi, 0) }}
                                     </div>
                                 @elseif ($courier->slug && in_array(strtolower((string) $courier->slug), $apiSlugs, true))
                                     <div class="text-[#8C8474]" title="{{ $apiBalanceError ?: 'Unavailable' }}">—</div>
-                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Book balance — should match live Steadfast wallet">
+                                    <div class="text-[11px] text-[#8C8474] mt-0.5" title="Receivable = collected − courier charge − COD charge − withdrawals">
                                         Should be &#2547; {{ number_format($expectedApi, 0) }}
                                     </div>
                                 @else

@@ -220,12 +220,11 @@ class CourierBalanceService
     /**
      * Admin-facing balance breakdown for a courier.
      *
-     * - pending: COD still with courier on dispatched parcels (in process)
-     * - receivable: net remittance for delivered/cancelled/returned parcels after courier fees
-     *   and COD %, minus withdrawals (cancelled with collected 0 contributes −courier_charge)
-     * - book: running ledger on couriers.balance (dispatch credits − returns − fees − withdrawals)
-     * - expected_api: book — should match the live Steadfast wallet; the order-sum receivable
-     *   column can diverge when remittances were taken without matching withdraw entries
+     * - pending: COD still with courier on dispatched parcels (in process / undelivered)
+     * - receivable: net owed from delivered/settled parcels after courier charge & COD charge,
+     *   minus withdrawals (cancelled with collected 0 contributes −courier_charge)
+     * - book: gross COD ledger on couriers.balance (dispatch credits − returns − fees − withdrawals)
+     * - expected_api: same as receivable — what Steadfast should still owe after remittances
      *
      * Uses OrderTotalCalculator::codCharge() directly — never Order::codCharge()/moneyTotals(),
      * which would eager-load items + adjustments for every delivered order.
@@ -316,7 +315,7 @@ class CourierBalanceService
                 'receivable' => $receivable,
                 'book' => $book,
                 'withdrawn' => round($withdrawn, 2),
-                'expected_api' => $book,
+                'expected_api' => $receivable,
             ];
         }
 

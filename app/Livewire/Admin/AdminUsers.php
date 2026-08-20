@@ -326,7 +326,7 @@ class AdminUsers extends Component
 
         $token = (string) Str::uuid();
 
-        $payload = [
+        Cache::put(CustomerExportService::cacheKey($token), [
             'user_id' => (int) auth()->id(),
             'search' => $this->search,
             'cityFilter' => $this->cityFilter,
@@ -334,22 +334,10 @@ class AdminUsers extends Component
             'ordersMin' => $this->ordersMin,
             'ordersMax' => $this->ordersMax,
             'categoryId' => $this->categoryId,
-        ];
-
-        // #region agent log
-        $cacheKey = CustomerExportService::cacheKey($token);
-        $exportUrl = route('admin.users.customers.export', ['token' => $token]);
-        file_put_contents('/opt/cursor/logs/debug.log', json_encode(['hypothesisId' => 'B,D', 'location' => 'AdminUsers.php:exportFilteredCustomers', 'message' => 'caching export filters before redirect', 'data' => ['authId' => auth()->id(), 'token' => $token, 'cacheKey' => $cacheKey, 'cacheDriver' => config('cache.default'), 'filters' => $payload, 'exportUrl' => $exportUrl, 'segment' => $this->segment], 'timestamp' => (int) (microtime(true) * 1000)])."\n", FILE_APPEND);
-        // #endregion
-
-        Cache::put($cacheKey, $payload, now()->addMinutes(5));
-
-        // #region agent log
-        file_put_contents('/opt/cursor/logs/debug.log', json_encode(['hypothesisId' => 'B', 'location' => 'AdminUsers.php:exportFilteredCustomers:afterPut', 'message' => 'cache put completed; verifying read-back', 'data' => ['cacheHas' => Cache::has($cacheKey), 'cachePeekUserId' => Cache::get($cacheKey)['user_id'] ?? null], 'timestamp' => (int) (microtime(true) * 1000)])."\n", FILE_APPEND);
-        // #endregion
+        ], now()->addMinutes(5));
 
         // Full-page download avoids Livewire base64-embedding the XLSX (empty/black error modal on large sets).
-        return $this->redirect($exportUrl, navigate: false);
+        return $this->redirect(route('admin.users.customers.export', ['token' => $token]), navigate: false);
     }
 
     public function toggleCustomerSelection(int $userId): void

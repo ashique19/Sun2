@@ -543,6 +543,11 @@ class AdminUsers extends Component
 
         $users = User::query()
             ->role($role)
+            ->when($this->segment === 'customers', function (Builder $query) {
+                $query->withCount([
+                    'orders as orders_count' => fn ($q) => $q->where('status', '!=', Order::STATUS_DRAFT),
+                ]);
+            })
             ->when($this->search !== '', function (Builder $query) {
                 $term = '%'.$this->search.'%';
                 $query->where(function (Builder $q) use ($term) {
@@ -605,8 +610,12 @@ class AdminUsers extends Component
             });
         }
 
-        $ordersMin = $this->ordersMin !== '' && is_numeric($this->ordersMin) ? (int) $this->ordersMin : null;
-        $ordersMax = $this->ordersMax !== '' && is_numeric($this->ordersMax) ? (int) $this->ordersMax : null;
+        $ordersMin = $this->normalizedOrderBound($this->ordersMin);
+        $ordersMax = $this->normalizedOrderBound($this->ordersMax);
+
+        if ($ordersMin !== null && $ordersMax !== null && $ordersMin > $ordersMax) {
+            [$ordersMin, $ordersMax] = [$ordersMax, $ordersMin];
+        }
 
         if ($ordersMin !== null || $ordersMax !== null) {
             $query->where(function (Builder $q) use ($ordersMin, $ordersMax) {
@@ -680,6 +689,17 @@ class AdminUsers extends Component
                     });
             });
         });
+    }
+
+    private function normalizedOrderBound(string $value): ?int
+    {
+        $trimmed = trim($value);
+
+        if ($trimmed === '' || ! is_numeric($trimmed)) {
+            return null;
+        }
+
+        return max(0, (int) $trimmed);
     }
 
     private function findManagedUser(int $userId): ?User

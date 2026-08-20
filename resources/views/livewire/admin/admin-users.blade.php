@@ -106,6 +106,16 @@
                     <input type="search" wire:model.live.debounce.300ms="cityFilter" placeholder="e.g. Dhaka"
                         class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
                 </label>
+                <label class="block w-28">
+                    <span class="mb-1 block text-xs font-medium text-[#6B6459]">Lifetime orders from</span>
+                    <input type="number" min="0" inputmode="numeric" wire:model.live.debounce.300ms="ordersMin" placeholder="0"
+                        class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                </label>
+                <label class="block w-28">
+                    <span class="mb-1 block text-xs font-medium text-[#6B6459]">to</span>
+                    <input type="number" min="0" inputmode="numeric" wire:model.live.debounce.300ms="ordersMax" placeholder="∞"
+                        class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                </label>
             </div>
         @endif
     </div>
@@ -143,6 +153,9 @@
                         <th class="px-4 py-3 font-medium">Name</th>
                         <th class="px-4 py-3 font-medium">Phone</th>
                         <th class="px-4 py-3 font-medium">Email</th>
+                        @if ($segment === 'customers')
+                            <th class="px-4 py-3 font-medium">Orders</th>
+                        @endif
                         <th class="px-4 py-3 font-medium">Status</th>
                         <th class="px-4 py-3 font-medium">Joined</th>
                         <th class="px-4 py-3 font-medium"></th>
@@ -169,6 +182,9 @@
                             </td>
                             <td class="px-4 py-3 tabular-nums">{{ $user->phone }}</td>
                             <td class="px-4 py-3 text-[#6B6459]">{{ $user->email ?: '—' }}</td>
+                            @if ($segment === 'customers')
+                                <td class="px-4 py-3 tabular-nums">{{ $user->orders_count ?? 0 }}</td>
+                            @endif
                             <td class="px-4 py-3">
                                 <button type="button" wire:click="toggleActive({{ $user->id }})"
                                     @disabled((int) $user->id === (int) auth()->id())
@@ -192,7 +208,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ $segment === 'customers' ? 7 : 6 }}" class="px-4 py-8 text-center text-[#8C8474]">
+                            <td colspan="{{ $segment === 'customers' ? 8 : 6 }}" class="px-4 py-8 text-center text-[#8C8474]">
                                 No {{ strtolower($segmentLabel) }} yet.
                                 @if ($segment === 'resellers')
                                     <a href="{{ route('admin.users.create', ['role' => 'reseller']) }}" wire:navigate class="text-[#C9A227] hover:underline">Create one</a>.

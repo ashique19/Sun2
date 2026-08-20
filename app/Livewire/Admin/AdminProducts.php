@@ -90,6 +90,14 @@ class AdminProducts extends Component
 
     public bool $bulkAiModalOpen = false;
 
+    public bool $shareCartModalOpen = false;
+
+    /** @var list<array{id: int, name: string, price: string, thumb: ?string}> */
+    public array $shareCartRows = [];
+
+    /** @var array<int, int|string> */
+    public array $shareCartQuantities = [];
+
     public bool $bulkAiRunning = false;
 
     public ?int $bulkAiPromptGroupId = null;
@@ -163,6 +171,7 @@ class AdminProducts extends Component
         $this->selected = [];
         $this->closeBulkStock();
         $this->closeBulkCategory();
+        $this->closeShareCartModal();
     }
 
     public function openBulkStock(): void
@@ -280,7 +289,7 @@ class AdminProducts extends Component
         return redirect()->route('admin.social-posts.create', ['products' => $productsParam]);
     }
 
-    public function shareSelectedCart(SharedCartService $sharedCarts): void
+    public function openShareCartModal(): void
     {
         AdminAccess::ensureStaffAdmin();
 
@@ -288,9 +297,72 @@ class AdminProducts extends Component
             return;
         }
 
-        $share = $sharedCarts->createFromProductIds($this->selected, auth()->id());
+        $this->closeBulkCategory();
+        $this->closeBulkStock();
+
+        $products = Product::query()
+            ->whereIn('id', $this->selected)
+            ->where('is_published', true)
+            ->with(['images' => fn ($q) => $q->where('is_admin_only', false)->orderByDesc('is_primary')->orderBy('sort_order')->limit(1)])
+            ->orderBy('name')
+            ->get(['id', 'name', 'price']);
+
+        if ($products->isEmpty()) {
+            $this->addError('selected', 'No published products were found in the selection.');
+
+            return;
+        }
+
+        $this->shareCartRows = $products
+            ->map(fn (Product $product) => [
+                'id' => (int) $product->id,
+                'name' => (string) $product->name,
+                'price' => number_format((float) $product->price, 0),
+                'thumb' => $product->primaryImagePath(),
+            ])
+            ->values()
+            ->all();
+
+        $this->shareCartQuantities = $products
+            ->mapWithKeys(fn (Product $product) => [(int) $product->id => 1])
+            ->all();
+
+        $this->resetValidation(['shareCartQuantities', 'shareCartQuantities.*']);
+        $this->shareCartModalOpen = true;
+    }
+
+    public function closeShareCartModal(): void
+    {
+        $this->shareCartModalOpen = false;
+        $this->shareCartRows = [];
+        $this->shareCartQuantities = [];
+        $this->resetValidation(['shareCartQuantities', 'shareCartQuantities.*']);
+    }
+
+    public function confirmShareCart(SharedCartService $sharedCarts): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->shareCartRows === []) {
+            $this->closeShareCartModal();
+
+            return;
+        }
+
+        $this->validate([
+            'shareCartQuantities' => ['required', 'array', 'min:1'],
+            'shareCartQuantities.*' => ['required', 'integer', 'min:1', 'max:999'],
+        ]);
+
+        $productIds = collect($this->shareCartRows)->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $quantities = collect($this->shareCartQuantities)
+            ->mapWithKeys(fn ($quantity, $productId) => [(int) $productId => (int) $quantity])
+            ->all();
+
+        $share = $sharedCarts->createFromProductIds($productIds, auth()->id(), $quantities);
         $url = route('share.cart', $share->token);
 
+        $this->closeShareCartModal();
         $this->js('window.open('.json_encode($url).', "_blank")');
     }
 

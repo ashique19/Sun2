@@ -56,6 +56,7 @@ class AdminInboxQuickRepliesTest extends TestCase
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->assertSee('Hi')
+            ->set('replyText', 'Existing draft')
             ->call('insertQuickReply', 0)
             ->assertSet('replyText', 'Hello there');
     }

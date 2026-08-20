@@ -249,11 +249,12 @@ class AdminInboxOrderMappingTest extends TestCase
     }
 
     #[Test]
-    public function quick_reply_chip_inserts_body_into_composer(): void
+    public function quick_reply_chip_replaces_composer_text(): void
     {
         config([
             'channels.inbox.quick_replies' => [
                 ['label' => 'Hi', 'body' => 'Hello from chip'],
+                ['label' => 'Bye', 'body' => 'Thanks, goodbye'],
             ],
         ]);
 
@@ -263,9 +264,10 @@ class AdminInboxOrderMappingTest extends TestCase
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->assertSee('Hi')
+            ->set('replyText', 'Draft already typed')
             ->call('insertQuickReply', 0)
             ->assertSet('replyText', 'Hello from chip')
-            ->call('insertQuickReply', 0)
-            ->assertSet('replyText', "Hello from chip\nHello from chip");
+            ->call('insertQuickReply', 1)
+            ->assertSet('replyText', 'Thanks, goodbye');
     }
 }

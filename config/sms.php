@@ -11,11 +11,14 @@ return [
         'sid' => env('SMS_SSL_WIRELESS_SID'),
     ],
 
-    // OTP-only: checkout and password-reset codes use transactional type T on MiMSMS.
+    // OTP: checkout and password-reset codes use transactional type T on MiMSMS.
+    // Promotional: admin customer campaigns use type P (optional CampaignId).
     'mimsms' => [
         'api_url' => env('SMS_MIMSMS_URL', 'https://api.mimsms.com/api/V2/SMS'),
         'username' => env('SMS_MIMSMS_USERNAME'),
         'api_key' => env('SMS_MIMSMS_API_KEY'),
         'sender_name' => env('SMS_MIMSMS_SENDER_NAME', env('SMS_FROM', 'Sundoritoma')),
+        'promotional_transaction_type' => env('SMS_MIMSMS_PROMO_TYPE', 'P'),
+        'promotional_campaign_id' => env('SMS_MIMSMS_PROMO_CAMPAIGN_ID'),
     ],
 ];

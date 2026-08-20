@@ -4,7 +4,9 @@ namespace App\Livewire\Admin;
 
 use App\Models\User;
 use App\Services\Admin\CustomerDuplicateMergeService;
+use App\Services\Sms\PromotionalSmsService;
 use App\Support\AdminAccess;
+use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -20,6 +22,9 @@ class AdminUsers extends Component
 
     #[Url]
     public string $search = '';
+
+    #[Url(as: 'city')]
+    public string $cityFilter = '';
 
     public ?string $message = null;
 
@@ -41,6 +46,17 @@ class AdminUsers extends Component
 
     /** @var list<string> */
     public array $mergeDuplicatesSamples = [];
+
+    /** @var list<int> */
+    public array $selectedCustomerIds = [];
+
+    public bool $promoSmsModalOpen = false;
+
+    public string $promoSmsMessage = '';
+
+    public string $promoSmsCampaignId = '';
+
+    public bool $promoSmsSending = false;
 
     public const SEGMENTS = [
         'customers' => 'Customers',
@@ -69,6 +85,8 @@ class AdminUsers extends Component
 
         $this->segment = $segment;
         $this->resetPage();
+        $this->selectedCustomerIds = [];
+        $this->closePromoSmsModal();
         $this->message = null;
         $this->error = null;
         $this->js('history.replaceState({}, "", '.json_encode(route('admin.users.'.$segment)).')');
@@ -77,6 +95,169 @@ class AdminUsers extends Component
     public function updatedSearch(): void
     {
         $this->resetPage();
+        $this->selectedCustomerIds = [];
+    }
+
+    public function updatedCityFilter(): void
+    {
+        $this->resetPage();
+        $this->selectedCustomerIds = [];
+    }
+
+    public function toggleCustomerSelection(int $userId): void
+    {
+        if ($this->segment !== 'customers') {
+            return;
+        }
+
+        if (in_array($userId, $this->selectedCustomerIds, true)) {
+            $this->selectedCustomerIds = array_values(array_filter(
+                $this->selectedCustomerIds,
+                fn (int $id): bool => $id !== $userId,
+            ));
+
+            return;
+        }
+
+        $this->selectedCustomerIds[] = $userId;
+    }
+
+    /**
+     * @param  list<int>  $pageIds
+     */
+    public function selectAllOnPage(array $pageIds): void
+    {
+        if ($this->segment !== 'customers') {
+            return;
+        }
+
+        $pageIds = array_values(array_unique(array_map('intval', $pageIds)));
+        $this->selectedCustomerIds = array_values(array_unique(array_merge(
+            $this->selectedCustomerIds,
+            $pageIds,
+        )));
+    }
+
+    /**
+     * @param  list<int>  $pageIds
+     */
+    public function toggleSelectAllOnPage(array $pageIds): void
+    {
+        if ($this->segment !== 'customers') {
+            return;
+        }
+
+        $pageIds = array_values(array_unique(array_map('intval', $pageIds)));
+
+        if ($pageIds === []) {
+            return;
+        }
+
+        $allOnPageSelected = collect($pageIds)->every(
+            fn (int $id): bool => in_array($id, $this->selectedCustomerIds, true),
+        );
+
+        if ($allOnPageSelected) {
+            $this->selectedCustomerIds = array_values(array_filter(
+                $this->selectedCustomerIds,
+                fn (int $id): bool => ! in_array($id, $pageIds, true),
+            ));
+
+            return;
+        }
+
+        $this->selectAllOnPage($pageIds);
+    }
+
+    public function selectNone(): void
+    {
+        $this->selectedCustomerIds = [];
+    }
+
+    public function openPromoSmsModal(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->segment !== 'customers' || $this->selectedCustomerIds === []) {
+            $this->error = 'Select at least one customer to send promotional SMS.';
+
+            return;
+        }
+
+        $this->promoSmsModalOpen = true;
+        $this->promoSmsSending = false;
+        $this->promoSmsMessage = '';
+        $this->promoSmsCampaignId = (string) (config('sms.mimsms.promotional_campaign_id') ?? '');
+        $this->error = null;
+        $this->js('document.body.classList.add("overflow-hidden")');
+    }
+
+    public function closePromoSmsModal(): void
+    {
+        $this->promoSmsModalOpen = false;
+        $this->promoSmsSending = false;
+        $this->promoSmsMessage = '';
+        $this->promoSmsCampaignId = '';
+        $this->js('document.body.classList.remove("overflow-hidden")');
+    }
+
+    public function sendPromoSms(PromotionalSmsService $promotionalSms): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->segment !== 'customers' || ! $this->promoSmsModalOpen) {
+            return;
+        }
+
+        $this->validate([
+            'promoSmsMessage' => ['required', 'string', 'min:3', 'max:1000'],
+            'promoSmsCampaignId' => ['nullable', 'string', 'max:100'],
+            'selectedCustomerIds' => ['required', 'array', 'min:1'],
+            'selectedCustomerIds.*' => ['integer'],
+        ], [
+            'promoSmsMessage.required' => 'Enter the promotional SMS message.',
+            'selectedCustomerIds.required' => 'Select at least one customer.',
+            'selectedCustomerIds.min' => 'Select at least one customer.',
+        ]);
+
+        $this->promoSmsSending = true;
+        $this->error = null;
+        $this->message = null;
+
+        $customers = User::query()
+            ->role('customers')
+            ->whereIn('id', $this->selectedCustomerIds)
+            ->orderBy('id')
+            ->get(['id', 'name', 'phone']);
+
+        $campaignId = trim($this->promoSmsCampaignId) !== '' ? trim($this->promoSmsCampaignId) : null;
+
+        $result = $promotionalSms->sendToCustomers(
+            $customers,
+            trim($this->promoSmsMessage),
+            $campaignId,
+        );
+
+        $this->promoSmsSending = false;
+
+        $parts = ['Sent '.$result['sent'].' promotional SMS'];
+        if ($result['skipped'] > 0) {
+            $parts[] = $result['skipped'].' skipped (no phone)';
+        }
+        if ($result['failed'] > 0) {
+            $parts[] = $result['failed'].' failed';
+        }
+
+        $this->message = implode('; ', $parts).'.';
+
+        if ($result['errors'] !== []) {
+            $this->error = implode(' ', $result['errors']);
+        }
+
+        if ($result['sent'] > 0) {
+            $this->selectedCustomerIds = [];
+            $this->closePromoSmsModal();
+        }
     }
 
     public function openMergeDuplicatesModal(CustomerDuplicateMergeService $merger): void
@@ -216,6 +397,10 @@ class AdminUsers extends Component
 
         $user->delete();
         $this->message = 'User deleted.';
+        $this->selectedCustomerIds = array_values(array_filter(
+            $this->selectedCustomerIds,
+            fn (int $id): bool => $id !== $userId,
+        ));
     }
 
     public function render()
@@ -229,23 +414,55 @@ class AdminUsers extends Component
 
         $users = User::query()
             ->role($role)
-            ->when($this->search !== '', function ($query) {
+            ->when($this->search !== '', function (Builder $query) {
                 $term = '%'.$this->search.'%';
-                $query->where(function ($q) use ($term) {
+                $query->where(function (Builder $q) use ($term) {
                     $q->where('name', 'like', $term)
                         ->orWhere('phone', 'like', $term)
                         ->orWhere('email', 'like', $term);
+
+                    if ($this->segment === 'customers') {
+                        $q->orWhere(function (Builder $cityQuery) use ($term) {
+                            $this->applyCityMatch($cityQuery, $term);
+                        });
+                    }
+                });
+            })
+            ->when($this->segment === 'customers' && $this->cityFilter !== '', function (Builder $query) {
+                $term = '%'.$this->cityFilter.'%';
+                $query->where(function (Builder $cityQuery) use ($term) {
+                    $this->applyCityMatch($cityQuery, $term);
                 });
             })
             ->orderByDesc('id')
             ->paginate(30);
+
+        $pageIds = $users->getCollection()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $allOnPageSelected = $pageIds !== []
+            && collect($pageIds)->every(fn (int $id): bool => in_array($id, $this->selectedCustomerIds, true));
 
         return view('livewire.admin.admin-users', [
             'users' => $users,
             'segments' => self::SEGMENTS,
             'segmentLabel' => self::SEGMENTS[$this->segment],
             'roleName' => $role,
+            'pageCustomerIds' => $pageIds,
+            'allOnPageSelected' => $allOnPageSelected,
         ])->title(self::SEGMENTS[$this->segment]);
+    }
+
+    private function applyCityMatch(Builder $query, string $term): void
+    {
+        $query->whereHas('orders', function (Builder $orders) use ($term) {
+            $orders->where('city', 'like', $term);
+        })->orWhereHas('addresses', function (Builder $addresses) use ($term) {
+            $addresses->where(function (Builder $a) use ($term) {
+                $a->where('city', 'like', $term)
+                    ->orWhereHas('city', function (Builder $city) use ($term) {
+                        $city->where('name', 'like', $term);
+                    });
+            });
+        });
     }
 
     private function findManagedUser(int $userId): ?User

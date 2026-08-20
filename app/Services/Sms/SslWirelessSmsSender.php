@@ -10,6 +10,16 @@ class SslWirelessSmsSender implements SmsSender
 {
     public function send(string $phone, string $message): void
     {
+        $this->dispatch($phone, $message);
+    }
+
+    public function sendPromotional(string $phone, string $message, ?string $campaignId = null): void
+    {
+        $this->dispatch($phone, $message);
+    }
+
+    private function dispatch(string $phone, string $message): void
+    {
         $config = config('sms.ssl_wireless');
 
         if (! $config['api_token'] || ! $config['sid']) {

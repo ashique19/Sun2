@@ -14,4 +14,13 @@ class LogSmsSender implements SmsSender
             'message' => $message,
         ]);
     }
+
+    public function sendPromotional(string $phone, string $message, ?string $campaignId = null): void
+    {
+        Log::info('Promotional SMS sent', [
+            'phone' => $phone,
+            'message' => $message,
+            'campaign_id' => $campaignId,
+        ]);
+    }
 }

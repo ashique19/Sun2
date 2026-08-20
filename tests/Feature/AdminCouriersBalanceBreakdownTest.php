@@ -102,9 +102,9 @@ class AdminCouriersBalanceBreakdownTest extends TestCase
         $this->assertSame(810.0, $summary['receivable']);
         $this->assertSame(200.0, $summary['withdrawn']);
 
-        // Expected API = receivable only (810), not pending COD on dispatched parcels
+        // Expected API = book balance (matches live Steadfast wallet)
         $this->assertSame(1880.0, $summary['book']);
-        $this->assertSame(810.0, $summary['expected_api']);
+        $this->assertSame(1880.0, $summary['expected_api']);
     }
 
     #[Test]
@@ -119,7 +119,7 @@ class AdminCouriersBalanceBreakdownTest extends TestCase
             ->assertSee('API balance')
             ->assertSee('Receivable = cash received − courier charge − COD % − withdrawals')
             ->assertSee('Pending = COD still with courier on dispatched parcels')
-            ->assertSee('Expected API = receivable (book balance owed by courier after withdrawals)')
+            ->assertSee('Expected API = book balance (should match live Steadfast wallet after Refresh)')
             ->assertSee('Should be');
     }
 }

@@ -65,12 +65,12 @@ class AdminDashboardSteadfastBalanceTest extends TestCase
             'placed_at' => now(),
         ]);
 
-        // cash received 1080 − courier charge 60 − COD% 10 = 1010
+        // cash received 1080 − courier charge 60 − COD% 10 = 1010 order receivable; book = 1880
         Livewire::test(AdminDashboard::class)
             ->assertSeeHtml('data-steadfast-expected-api')
             ->assertSee('Steadfast')
             ->assertSee('API balance should be')
-            ->assertSeeHtml('&#2547; 1,010')
+            ->assertSeeHtml('&#2547; 1,880')
             ->assertSeeHtml(route('admin.couriers'));
     }
 

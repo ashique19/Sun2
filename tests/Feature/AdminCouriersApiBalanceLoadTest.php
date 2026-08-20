@@ -146,15 +146,14 @@ class AdminCouriersApiBalanceLoadTest extends TestCase
             'placed_at' => now(),
         ]);
 
-        // Expected API = 1080 − 60 courier − 10 COD% = 1010 (dispatched pending is excluded)
-        // actual API 700 → diff −310
+        // Expected API = 1010 receivable + 500 pending = 1510; actual API 700 → diff −810
         Livewire::test(AdminCouriers::class)
             ->assertSee('Should be')
-            ->assertSee('1,010')
+            ->assertSee('1,510')
             ->call('loadApiBalances')
             ->assertSeeHtml('&#2547; 700')
-            ->assertSeeHtml('Should be &#2547; 1,010')
-            ->assertSeeHtml('Diff −&#2547; 310');
+            ->assertSeeHtml('Should be &#2547; 1,510')
+            ->assertSeeHtml('Diff −&#2547; 810');
     }
 
     #[Test]

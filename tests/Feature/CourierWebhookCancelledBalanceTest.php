@@ -137,7 +137,7 @@ class CourierWebhookCancelledBalanceTest extends TestCase
         $this->assertSame(0.0, $summary['pending']);
         // Receivable includes −60 cancel fee
         $this->assertSame(-60.0, $summary['receivable']);
-        // expected_api matches receivable (cash received 0 − courier charge 60)
+        // expected_api matches receivable + pending (cash received 0 − courier charge 60)
         $this->assertSame(-60.0, $summary['expected_api']);
     }
 

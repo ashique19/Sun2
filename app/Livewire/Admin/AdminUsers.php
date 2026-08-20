@@ -8,6 +8,7 @@ use App\Services\Admin\CustomerAnalyticsService;
 use App\Services\Sms\PromotionalSmsService;
 use App\Support\AdminAccess;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
@@ -42,6 +43,22 @@ class AdminUsers extends Component
 
     #[Url(as: 'analytics')]
     public string $analyticsPill = '';
+
+    public bool $analyticsModalOpen = false;
+
+    public bool $analyticsMinimized = false;
+
+    public bool $analyticsLoading = false;
+
+    public string $analyticsReportSearch = '';
+
+    public bool $analyticsShowAllRows = false;
+
+    /** @var array<string, list<array{key: string, label: string, count: int}>> */
+    public array $analyticsCache = [];
+
+    /** @var list<array{key: string, label: string, count: int}> */
+    public array $analyticsRows = [];
 
     public ?string $message = null;
 
@@ -87,7 +104,7 @@ class AdminUsers extends Component
         $this->resetPage();
         $this->selectedCustomerIds = [];
         $this->closePromoSmsModal();
-        $this->analyticsPill = '';
+        $this->closeAnalyticsModal(clearCache: true);
         $this->cityFilter = '';
         $this->cityNoneOnly = false;
         $this->ordersMin = '';
@@ -129,7 +146,7 @@ class AdminUsers extends Component
         $this->selectedCustomerIds = [];
     }
 
-    public function toggleAnalyticsPill(string $pill): void
+    public function openAnalyticsReport(string $pill): void
     {
         if ($this->segment !== 'customers') {
             return;
@@ -139,7 +156,86 @@ class AdminUsers extends Component
             return;
         }
 
-        $this->analyticsPill = $this->analyticsPill === $pill ? '' : $pill;
+        $this->analyticsPill = $pill;
+        $this->analyticsModalOpen = true;
+        $this->analyticsMinimized = false;
+        $this->analyticsReportSearch = '';
+        $this->analyticsShowAllRows = false;
+        $this->error = null;
+
+        if (isset($this->analyticsCache[$pill])) {
+            $this->analyticsRows = $this->analyticsCache[$pill];
+            $this->analyticsLoading = false;
+
+            return;
+        }
+
+        $this->analyticsRows = [];
+        $this->analyticsLoading = true;
+
+        if (app()->runningUnitTests()) {
+            $this->loadAnalyticsReport();
+
+            return;
+        }
+
+        $this->js('requestAnimationFrame(() => $wire.loadAnalyticsReport())');
+    }
+
+    public function loadAnalyticsReport(?CustomerAnalyticsService $analytics = null): void
+    {
+        if ($this->segment !== 'customers' || ! in_array($this->analyticsPill, ['city', 'orders', 'category'], true)) {
+            $this->analyticsLoading = false;
+
+            return;
+        }
+
+        $analytics ??= app(CustomerAnalyticsService::class);
+        $rows = $analytics->reportFor($this->analyticsPill);
+        $this->analyticsCache[$this->analyticsPill] = $rows;
+        $this->analyticsRows = $rows;
+        $this->analyticsLoading = false;
+    }
+
+    public function minimizeAnalyticsModal(): void
+    {
+        if (! $this->analyticsModalOpen) {
+            return;
+        }
+
+        $this->analyticsModalOpen = false;
+        $this->analyticsMinimized = true;
+    }
+
+    public function restoreAnalyticsModal(): void
+    {
+        if ($this->analyticsPill === '' || ! isset($this->analyticsCache[$this->analyticsPill])) {
+            if ($this->analyticsPill !== '') {
+                $this->openAnalyticsReport($this->analyticsPill);
+            }
+
+            return;
+        }
+
+        $this->analyticsRows = $this->analyticsCache[$this->analyticsPill];
+        $this->analyticsLoading = false;
+        $this->analyticsMinimized = false;
+        $this->analyticsModalOpen = true;
+    }
+
+    public function closeAnalyticsModal(bool $clearCache = false): void
+    {
+        $this->analyticsModalOpen = false;
+        $this->analyticsMinimized = false;
+        $this->analyticsLoading = false;
+        $this->analyticsReportSearch = '';
+        $this->analyticsShowAllRows = false;
+        $this->analyticsRows = [];
+
+        if ($clearCache) {
+            $this->analyticsCache = [];
+            $this->analyticsPill = '';
+        }
     }
 
     public function applyAnalyticsFilter(string $pill, string $key): void
@@ -166,6 +262,8 @@ class AdminUsers extends Component
                 $this->cityFilter = $key;
             }
 
+            $this->minimizeAnalyticsModal();
+
             return;
         }
 
@@ -178,6 +276,7 @@ class AdminUsers extends Component
             if ($key === CustomerAnalyticsService::ORDERS_10_PLUS_KEY) {
                 $this->ordersMin = '10';
                 $this->ordersMax = '';
+                $this->minimizeAnalyticsModal();
 
                 return;
             }
@@ -186,6 +285,8 @@ class AdminUsers extends Component
                 $this->ordersMin = $key;
                 $this->ordersMax = $key;
             }
+
+            $this->minimizeAnalyticsModal();
 
             return;
         }
@@ -197,6 +298,7 @@ class AdminUsers extends Component
             $this->ordersMax = '';
             $this->categoryId = $key;
             $this->analyticsPill = 'category';
+            $this->minimizeAnalyticsModal();
         }
     }
 
@@ -437,7 +539,7 @@ class AdminUsers extends Component
         ));
     }
 
-    public function render(CustomerAnalyticsService $analytics)
+    public function render()
     {
         $role = match ($this->segment) {
             'moderators' => 'moderator',
@@ -477,10 +579,7 @@ class AdminUsers extends Component
         $allOnPageSelected = $pageIds !== []
             && collect($pageIds)->every(fn (int $id): bool => in_array($id, $this->selectedCustomerIds, true));
 
-        $analyticsRows = [];
-        if ($this->segment === 'customers' && in_array($this->analyticsPill, ['city', 'orders', 'category'], true)) {
-            $analyticsRows = $analytics->reportFor($this->analyticsPill);
-        }
+        $visibleAnalyticsRows = $this->visibleAnalyticsRows();
 
         return view('livewire.admin.admin-users', [
             'users' => $users,
@@ -495,9 +594,44 @@ class AdminUsers extends Component
             },
             'pageCustomerIds' => $pageIds,
             'allOnPageSelected' => $allOnPageSelected,
-            'analyticsRows' => $analyticsRows,
+            'visibleAnalyticsRows' => $visibleAnalyticsRows,
+            'analyticsFilteredTotal' => $this->filteredAnalyticsRows()->count(),
+            'analyticsTitle' => match ($this->analyticsPill) {
+                'city' => 'Customers by city',
+                'orders' => 'Customers by lifetime orders',
+                'category' => 'Customers by category ordered',
+                default => 'Customer report',
+            },
             'activeFilterSummary' => $this->activeFilterSummary(),
         ])->title(self::SEGMENTS[$this->segment]);
+    }
+
+    /**
+     * @return Collection<int, array{key: string, label: string, count: int}>
+     */
+    private function filteredAnalyticsRows()
+    {
+        $term = mb_strtolower(trim($this->analyticsReportSearch));
+
+        return collect($this->analyticsRows)
+            ->when($term !== '', fn ($rows) => $rows->filter(
+                fn (array $row) => str_contains(mb_strtolower($row['label']), $term),
+            ))
+            ->values();
+    }
+
+    /**
+     * @return list<array{key: string, label: string, count: int}>
+     */
+    private function visibleAnalyticsRows(): array
+    {
+        $rows = $this->filteredAnalyticsRows();
+
+        if (! $this->analyticsShowAllRows && $this->analyticsReportSearch === '') {
+            $rows = $rows->take(20);
+        }
+
+        return $rows->all();
     }
 
     private function applyCustomerAnalyticsFilters(Builder $query): void

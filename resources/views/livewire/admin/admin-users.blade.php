@@ -31,50 +31,21 @@
     @endif
 
     @if ($segment === 'customers')
-        <div class="mb-4 flex flex-wrap gap-2">
+        <div class="mb-4 flex flex-wrap items-center gap-2">
             @foreach ([
                 'city' => 'By city',
                 'orders' => 'By order count',
                 'category' => 'By category',
             ] as $pillKey => $pillLabel)
                 <button type="button"
-                    wire:click="toggleAnalyticsPill('{{ $pillKey }}')"
-                    class="rounded-full px-4 py-1.5 text-sm border transition {{ $analyticsPill === $pillKey ? 'border-[#C9A227] bg-[#C9A227] text-white font-medium' : 'border-[#E0D6C2] bg-white text-[#6B6459] hover:bg-[#FAF6EF]' }}">
+                    wire:click="openAnalyticsReport('{{ $pillKey }}')"
+                    wire:loading.attr="disabled"
+                    wire:target="openAnalyticsReport('{{ $pillKey }}'), loadAnalyticsReport"
+                    class="rounded-full px-4 py-1.5 text-sm border transition disabled:opacity-60 {{ ($analyticsModalOpen || $analyticsMinimized) && $analyticsPill === $pillKey ? 'border-[#C9A227] bg-[#C9A227] text-white font-medium' : 'border-[#E0D6C2] bg-white text-[#6B6459] hover:bg-[#FAF6EF]' }}">
                     {{ $pillLabel }}
                 </button>
             @endforeach
         </div>
-
-        @if ($analyticsPill !== '' && $analyticsRows !== [])
-            <div class="mb-6 rounded-xl border border-[#EFE7D6] bg-white p-4">
-                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <p class="text-sm font-medium text-[#1E1E1E]">
-                        @if ($analyticsPill === 'city') Customers by city
-                        @elseif ($analyticsPill === 'orders') Customers by lifetime orders
-                        @else Customers by category ordered
-                        @endif
-                    </p>
-                    <p class="text-xs text-[#8C8474]">Click a number to filter the list</p>
-                </div>
-                <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    @foreach ($analyticsRows as $row)
-                        <button type="button"
-                            wire:key="analytics-{{ $analyticsPill }}-{{ $row['key'] }}"
-                            wire:click="applyAnalyticsFilter('{{ $analyticsPill }}', @js($row['key']))"
-                            class="flex items-center justify-between gap-3 rounded-lg border border-[#EFE7D6] bg-[#FAF6EF]/50 px-3 py-2 text-left text-sm hover:border-[#C9A227] hover:bg-[#FAF6EF]">
-                            <span class="min-w-0 truncate text-[#1E1E1E]">{{ $row['label'] }}</span>
-                            <span class="shrink-0 rounded-full bg-white px-2.5 py-0.5 text-sm font-semibold tabular-nums text-[#C9A227] ring-1 ring-[#E0D6C2]">
-                                {{ number_format($row['count']) }}
-                            </span>
-                        </button>
-                    @endforeach
-                </div>
-            </div>
-        @elseif ($analyticsPill !== '')
-            <div class="mb-6 rounded-xl border border-[#EFE7D6] bg-white px-4 py-6 text-center text-sm text-[#8C8474]">
-                No data for this report yet.
-            </div>
-        @endif
 
         @if ($activeFilterSummary !== [])
             <div class="mb-4 flex flex-wrap items-center gap-2 text-sm">
@@ -277,6 +248,109 @@
                     </button>
                 </div>
             </div>
+        </div>
+    @endif
+
+    @if ($segment === 'customers' && $analyticsModalOpen)
+        <div class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+            wire:click.self="minimizeAnalyticsModal"
+            wire:key="analytics-report-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="{{ $analyticsTitle }}">
+            <div class="flex max-h-[min(90dvh,40rem)] w-full max-w-xl flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+                wire:click.stop>
+                <div class="flex shrink-0 items-center justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
+                    <div class="min-w-0">
+                        <h2 class="truncate font-semibold text-lg">{{ $analyticsTitle }}</h2>
+                        <p class="mt-0.5 text-xs text-[#8C8474]">
+                            @if ($analyticsLoading)
+                                Building report…
+                            @else
+                                Click a count to filter the customers list
+                            @endif
+                        </p>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-2">
+                        <button type="button" wire:click="minimizeAnalyticsModal"
+                            class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#E0D6C2] text-[#1E1E1E] hover:bg-[#FAF6EF]"
+                            title="Minimize"
+                            aria-label="Minimize report">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-4 w-4" aria-hidden="true">
+                                <path stroke-linecap="round" d="M6 12h12" />
+                            </svg>
+                        </button>
+                        <button type="button" wire:click="closeAnalyticsModal"
+                            class="rounded-full border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
+                            Close
+                        </button>
+                    </div>
+                </div>
+
+                <div class="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+                    @if ($analyticsLoading)
+                        <div class="flex flex-col items-center justify-center gap-3 py-12 text-sm text-[#6B6459]" wire:key="analytics-loading">
+                            <span class="inline-block h-8 w-8 animate-spin rounded-full border-2 border-[#E0D6C2] border-t-[#C9A227]" aria-hidden="true"></span>
+                            <p class="font-medium text-[#1E1E1E]">Generating report</p>
+                            <p class="text-xs text-[#8C8474]">Counting customers — this stays open until ready.</p>
+                            <div class="mt-2 h-1.5 w-48 overflow-hidden rounded-full bg-[#EFE7D6]">
+                                <div class="h-full w-1/2 animate-pulse rounded-full bg-[#C9A227]"></div>
+                            </div>
+                        </div>
+                    @else
+                        @if (count($analyticsRows) > 8)
+                            <label class="mb-3 block">
+                                <span class="sr-only">Search report</span>
+                                <input type="search" wire:model.live.debounce.200ms="analyticsReportSearch"
+                                    placeholder="Search in report…"
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                            </label>
+                        @endif
+
+                        @if ($visibleAnalyticsRows === [])
+                            <p class="py-10 text-center text-sm text-[#8C8474]">
+                                {{ $analyticsReportSearch !== '' ? 'No matches in this report.' : 'No data for this report yet.' }}
+                            </p>
+                        @else
+                            <div class="space-y-2">
+                                @foreach ($visibleAnalyticsRows as $row)
+                                    <button type="button"
+                                        wire:key="analytics-row-{{ $analyticsPill }}-{{ $row['key'] }}"
+                                        wire:click="applyAnalyticsFilter('{{ $analyticsPill }}', @js($row['key']))"
+                                        class="flex w-full items-center justify-between gap-3 rounded-lg border border-[#EFE7D6] bg-[#FAF6EF]/50 px-3 py-2.5 text-left text-sm hover:border-[#C9A227] hover:bg-[#FAF6EF]">
+                                        <span class="min-w-0 truncate text-[#1E1E1E]">{{ $row['label'] }}</span>
+                                        <span class="shrink-0 rounded-full bg-white px-2.5 py-0.5 text-sm font-semibold tabular-nums text-[#C9A227] ring-1 ring-[#E0D6C2]">
+                                            {{ number_format($row['count']) }}
+                                        </span>
+                                    </button>
+                                @endforeach
+                            </div>
+
+                            @if ($analyticsReportSearch === '' && ! $analyticsShowAllRows && $analyticsFilteredTotal > count($visibleAnalyticsRows))
+                                <button type="button"
+                                    wire:click="$set('analyticsShowAllRows', true)"
+                                    class="mt-3 w-full rounded-lg border border-dashed border-[#E0D6C2] px-3 py-2 text-sm font-medium text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                                    Show all {{ number_format($analyticsFilteredTotal) }}
+                                </button>
+                            @endif
+                        @endif
+                    @endif
+                </div>
+            </div>
+        </div>
+    @endif
+
+    @if ($segment === 'customers' && $analyticsMinimized && $analyticsPill !== '')
+        <div class="fixed bottom-4 right-4 z-[70]" wire:key="analytics-minimized-dock">
+            <button type="button"
+                wire:click="restoreAnalyticsModal"
+                class="flex items-center gap-2 rounded-full border border-[#E0D6C2] bg-white px-4 py-2.5 text-sm font-medium text-[#1E1E1E] shadow-lg hover:border-[#C9A227]">
+                <span class="truncate max-w-[12rem]">{{ $analyticsTitle }}</span>
+                <span class="rounded-full bg-[#FAF6EF] px-2 py-0.5 text-xs tabular-nums text-[#6B6459]">
+                    {{ number_format(count($analyticsCache[$analyticsPill] ?? [])) }}
+                </span>
+                <span class="text-[#C9A227]" aria-hidden="true">↗</span>
+            </button>
         </div>
     @endif
 </div>

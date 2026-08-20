@@ -61,7 +61,7 @@ class AdminCustomersAnalyticsPillsTest extends TestCase
         ]);
     }
 
-    public function test_city_analytics_pill_shows_counts_and_filters_list(): void
+    public function test_city_analytics_modal_shows_counts_and_filters_list(): void
     {
         $admin = $this->adminUser();
         $dhaka = $this->customer('Dhaka Buyer', '01710000001');
@@ -74,13 +74,18 @@ class AdminCustomersAnalyticsPillsTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(AdminUsers::class, ['segment' => 'customers'])
-            ->call('toggleAnalyticsPill', 'city')
+            ->call('openAnalyticsReport', 'city')
+            ->assertSet('analyticsModalOpen', true)
+            ->assertSet('analyticsLoading', false)
             ->assertSet('analyticsPill', 'city')
+            ->assertSee('Customers by city')
             ->assertSee('Dhaka')
             ->assertSee('Chittagong')
             ->assertSee('(no city)')
             ->call('applyAnalyticsFilter', 'city', 'Dhaka')
             ->assertSet('cityFilter', 'Dhaka')
+            ->assertSet('analyticsMinimized', true)
+            ->assertSet('analyticsModalOpen', false)
             ->assertSee('Dhaka Buyer')
             ->assertDontSee('CTG Buyer')
             ->assertDontSee('No City Buyer');
@@ -89,7 +94,7 @@ class AdminCustomersAnalyticsPillsTest extends TestCase
     public function test_order_count_analytics_filters_customers(): void
     {
         $admin = $this->adminUser();
-        $zero = $this->customer('Zero Orders', '01720000001');
+        $this->customer('Zero Orders', '01720000001');
         $one = $this->customer('One Order', '01720000002');
         $two = $this->customer('Two Orders', '01720000003');
 
@@ -100,7 +105,7 @@ class AdminCustomersAnalyticsPillsTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(AdminUsers::class, ['segment' => 'customers'])
-            ->call('toggleAnalyticsPill', 'orders')
+            ->call('openAnalyticsReport', 'orders')
             ->assertSee('0 orders')
             ->assertSee('1 order')
             ->assertSee('2 orders')
@@ -159,13 +164,36 @@ class AdminCustomersAnalyticsPillsTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(AdminUsers::class, ['segment' => 'customers'])
-            ->call('toggleAnalyticsPill', 'category')
+            ->call('openAnalyticsReport', 'category')
             ->assertSee('Saree')
             ->assertSee('Jewelry')
             ->call('applyAnalyticsFilter', 'category', (string) $saree->id)
             ->assertSet('categoryId', (string) $saree->id)
             ->assertSee('Saree Buyer')
             ->assertDontSee('Other Buyer');
+    }
+
+    public function test_analytics_modal_minimizes_and_restores_from_cache(): void
+    {
+        $admin = $this->adminUser();
+        $this->orderFor($this->customer('Cached City', '01750000001'), 'Dhaka');
+
+        $this->actingAs($admin);
+
+        Livewire::test(AdminUsers::class, ['segment' => 'customers'])
+            ->call('openAnalyticsReport', 'city')
+            ->assertSet('analyticsModalOpen', true)
+            ->assertSet('analyticsLoading', false)
+            ->assertSee('Dhaka')
+            ->call('minimizeAnalyticsModal')
+            ->assertSet('analyticsModalOpen', false)
+            ->assertSet('analyticsMinimized', true)
+            ->assertSee('Customers by city')
+            ->call('restoreAnalyticsModal')
+            ->assertSet('analyticsModalOpen', true)
+            ->assertSet('analyticsMinimized', false)
+            ->assertSet('analyticsLoading', false)
+            ->assertSee('Dhaka');
     }
 
     public function test_analytics_service_reports_match_counts(): void

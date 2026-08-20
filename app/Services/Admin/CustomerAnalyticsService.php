@@ -17,45 +17,54 @@ class CustomerAnalyticsService
      */
     public function byCity(): array
     {
-        $labels = DB::table('orders')
+        /** @var array<string, array{label: string, users: array<int, true>}> $buckets */
+        $buckets = [];
+
+        $orderRows = DB::table('orders')
             ->whereIn('user_id', $this->customerUserIdsSubquery())
             ->where('status', '!=', Order::STATUS_DRAFT)
+            ->whereNotNull('user_id')
             ->whereNotNull('city')
             ->where('city', '!=', '')
+            ->select('user_id', 'city')
             ->distinct()
-            ->orderBy('city')
-            ->pluck('city')
-            ->map(fn ($city) => trim((string) $city))
-            ->filter()
-            ->values();
+            ->get();
 
-        $addressLabels = DB::table('addresses')
+        foreach ($orderRows as $row) {
+            $label = trim((string) $row->city);
+            if ($label === '') {
+                continue;
+            }
+            $key = mb_strtolower($label);
+            $buckets[$key]['label'] ??= $label;
+            $buckets[$key]['users'][(int) $row->user_id] = true;
+        }
+
+        $addressRows = DB::table('addresses')
             ->leftJoin('cities', 'cities.id', '=', 'addresses.city_id')
             ->whereIn('addresses.user_id', $this->customerUserIdsSubquery())
-            ->selectRaw('cities.name as city_name, addresses.city as city_text')
-            ->get()
-            ->map(function ($row) {
-                $fromRelation = trim((string) ($row->city_name ?? ''));
-                if ($fromRelation !== '') {
-                    return $fromRelation;
-                }
+            ->select('addresses.user_id', 'cities.name as city_name', 'addresses.city as city_text')
+            ->get();
 
-                return trim((string) ($row->city_text ?? ''));
-            })
-            ->filter()
-            ->values();
-
-        $uniqueLabels = $labels->merge($addressLabels)
-            ->unique(fn (string $label) => mb_strtolower($label))
-            ->sort()
-            ->values();
+        foreach ($addressRows as $row) {
+            $label = trim((string) ($row->city_name ?? ''));
+            if ($label === '') {
+                $label = trim((string) ($row->city_text ?? ''));
+            }
+            if ($label === '') {
+                continue;
+            }
+            $key = mb_strtolower($label);
+            $buckets[$key]['label'] ??= $label;
+            $buckets[$key]['users'][(int) $row->user_id] = true;
+        }
 
         $rows = [];
-        foreach ($uniqueLabels as $label) {
+        foreach ($buckets as $bucket) {
             $rows[] = [
-                'key' => $label,
-                'label' => $label,
-                'count' => $this->customerCountForCity($label),
+                'key' => $bucket['label'],
+                'label' => $bucket['label'],
+                'count' => count($bucket['users']),
             ];
         }
 
@@ -176,26 +185,6 @@ class CustomerAnalyticsService
             ),
             default => [],
         };
-    }
-
-    public function customerCountForCity(string $city): int
-    {
-        $term = '%'.$city.'%';
-
-        return User::query()
-            ->role('customers')
-            ->where(function ($query) use ($term) {
-                $query->whereHas('orders', function ($orders) use ($term) {
-                    $orders->where('status', '!=', Order::STATUS_DRAFT)
-                        ->where('city', 'like', $term);
-                })->orWhereHas('addresses', function ($addresses) use ($term) {
-                    $addresses->where(function ($a) use ($term) {
-                        $a->where('city', 'like', $term)
-                            ->orWhereHas('city', fn ($c) => $c->where('name', 'like', $term));
-                    });
-                });
-            })
-            ->count();
     }
 
     public function customerCountWithNoCity(): int

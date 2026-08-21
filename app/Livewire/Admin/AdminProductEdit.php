@@ -1010,6 +1010,11 @@ class AdminProductEdit extends Component
         return $this->aiCandidateDirectory().DIRECTORY_SEPARATOR.$id.'.json';
     }
 
+    public function dismissMessage(): void
+    {
+        $this->message = null;
+    }
+
     public function save(): void
     {
         $existingPrice = $this->product?->price;

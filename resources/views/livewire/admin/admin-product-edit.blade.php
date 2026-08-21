@@ -36,11 +36,28 @@
     </div>
 
     @if ($message)
-        <div class="rounded-lg bg-emerald-50 text-emerald-700 text-sm px-4 py-3 mb-4">{{ $message }}</div>
+        <div
+            wire:key="product-edit-toast-{{ md5($message) }}"
+            x-data="{ show: true }"
+            x-show="show"
+            x-transition.opacity.duration.200ms
+            x-init="setTimeout(() => { show = false; $wire.dismissMessage() }, 3500)"
+            @class([
+                'fixed left-1/2 z-[55] w-[min(24rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border px-3 py-2.5 text-center text-sm shadow-lg',
+                'bottom-24 md:bottom-6',
+                str_starts_with((string) $message, 'Warning:')
+                    ? 'border-amber-200 bg-amber-50 text-amber-950'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-900',
+            ])
+            role="status"
+            data-product-edit-toast
+        >
+            {{ $message }}
+        </div>
     @endif
 
-    <form @submit.prevent="submitProduct()" class="space-y-6">
-        <div class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-4">
+    <form @submit.prevent="submitProduct()" class="flex flex-col gap-6 pb-24 md:pb-0" data-product-edit-form>
+        <div class="order-2 rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-4 md:order-1" data-product-edit-details>
             <h2 class="font-semibold text-lg">Product details</h2>
             <div class="grid sm:grid-cols-2 gap-4 max-w-4xl">
                 <div class="sm:col-span-2">
@@ -224,7 +241,7 @@
             </div>
         </div>
 
-        <section class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-5">
+        <section class="order-3 rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-5 md:order-2" data-product-edit-costs>
             <div>
                 <h2 class="font-semibold text-lg">Cost breakdown (BOM)</h2>
                 <p class="mt-1 text-xs text-[#8C8474]">
@@ -339,12 +356,12 @@
             @endif
         </section>
 
-        <section class="rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-6">
+        <section class="order-1 rounded-xl border border-[#EFE7D6] bg-white p-6 space-y-6 md:order-3" data-product-edit-images>
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <h2 class="font-semibold text-lg">Product images</h2>
                     <p class="text-xs text-[#8C8474] mt-1">
-                        Choose images below, then click <strong>{{ $product ? 'Save Product' : 'Create Product' }}</strong> at the bottom to save them with the product.
+                        Choose images below, then tap <strong>{{ $product ? 'Save Product' : 'Create Product' }}</strong> to save them with the product.
                     </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
@@ -797,21 +814,26 @@
             </div>
         </section>
 
-        <div class="rounded-xl border border-[#EFE7D6] bg-white p-6 flex flex-wrap items-center gap-3">
-            <button type="submit" class="rounded-full bg-[#C9A227] px-8 py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f]" :disabled="uploading">
-                <span x-show="!uploading">{{ $product ? 'Save Product' : 'Create Product' }}</span>
-                <span x-show="uploading" x-cloak>Saving…</span>
-            </button>
-            @if ($product)
-                <button type="button"
-                    wire:click="delete"
-                    wire:confirm="Delete this product? Order history will keep line snapshots, but the product and its images will be removed."
-                    class="rounded-full border border-rose-300 px-6 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50"
-                    :disabled="uploading">
-                    Delete
+        <div
+            class="fixed inset-x-0 bottom-0 z-40 border-t border-[#E7DFCF] bg-white/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-6px_20px_rgba(0,0,0,0.06)] backdrop-blur md:static md:z-auto md:order-4 md:rounded-xl md:border md:border-[#EFE7D6] md:bg-white md:p-6 md:shadow-none md:backdrop-blur-none"
+            data-product-edit-actions
+        >
+            <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-3 md:mx-0 md:max-w-none">
+                <button type="submit" class="rounded-full bg-[#C9A227] px-8 py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f]" :disabled="uploading">
+                    <span x-show="!uploading">{{ $product ? 'Save Product' : 'Create Product' }}</span>
+                    <span x-show="uploading" x-cloak>Saving…</span>
                 </button>
-            @endif
-            <p x-show="uploadError" x-text="uploadError" class="text-xs text-rose-600" x-cloak></p>
+                @if ($product)
+                    <button type="button"
+                        wire:click="delete"
+                        wire:confirm="Delete this product? Order history will keep line snapshots, but the product and its images will be removed."
+                        class="rounded-full border border-rose-300 px-6 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+                        :disabled="uploading">
+                        Delete
+                    </button>
+                @endif
+                <p x-show="uploadError" x-text="uploadError" class="text-xs text-rose-600" x-cloak></p>
+            </div>
         </div>
     </form>
 

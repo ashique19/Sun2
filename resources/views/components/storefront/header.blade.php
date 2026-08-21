@@ -20,61 +20,61 @@
         <form action="{{ route('search') }}" method="get" class="flex-1 flex justify-center min-w-0 max-w-sm sm:max-w-md">
             <input type="search" name="q" value="{{ $query }}"
                 placeholder="{{ __('storefront.search_placeholder') }}"
-                class="w-full max-w-[14rem] sm:max-w-xs md:max-w-sm rounded-full border border-[#E0D6C2] bg-white px-3.5 py-1.5 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                class="w-full max-w-[14rem] sm:max-w-xs md:max-w-sm rounded-full border border-[#E0D6C2] bg-white px-3.5 py-1.5 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
         </form>
 
         <div class="flex items-center gap-2 sm:gap-3 text-[#1E1E1E] shrink-0 ml-auto">
             <a href="{{ route('home') }}#collection" wire:navigate
-                class="text-sm text-[#6B6459] hover:text-[#C9A227] transition hidden md:inline">
+                class="text-sm text-[#6B6459] hover:text-[#7A6114] transition hidden md:inline">
                 {{ __('storefront.categories') }}
             </a>
             @if (auth()->user()?->canAccessAdmin())
                 <a href="{{ route('admin.dashboard') }}" wire:navigate
-                    class="text-sm font-medium text-[#C9A227] hover:underline">
+                    class="text-sm font-medium text-[#7A6114] hover:underline">
                     {{ __('storefront.admin') }}
                 </a>
             @endif
             @auth
-                <a href="{{ route('account.wishlist') }}" wire:navigate class="relative inline-flex hover:text-[#C9A227] transition" title="{{ __('storefront.wishlist') }}" aria-label="{{ __('storefront.wishlist') }}">
+                <a href="{{ route('account.wishlist') }}" wire:navigate class="relative inline-flex hover:text-[#7A6114] transition" title="{{ __('storefront.wishlist') }}" aria-label="{{ __('storefront.wishlist') }}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20s-7-4.35-7-9.2A3.8 3.8 0 0 1 12 7.5a3.8 3.8 0 0 1 7 3.3C19 15.65 12 20 12 20Z"/>
                     </svg>
                     @if ($wishlistCount > 0)
-                        <span class="absolute -top-2 -right-2 min-w-[1.1rem] h-[1.1rem] rounded-full bg-[#C9A227] text-white text-[10px] font-semibold flex items-center justify-center px-1">
+                        <span class="absolute -top-2 -right-2 min-w-[1.1rem] h-[1.1rem] rounded-full bg-[#8F7218] text-white text-[10px] font-semibold flex items-center justify-center px-1">
                             {{ $wishlistCount > 99 ? '99+' : $wishlistCount }}
                         </span>
                     @endif
                 </a>
                 <a href="{{ route('account') }}" wire:navigate
-                    class="text-sm text-[#6B6459] hover:text-[#C9A227] transition max-w-[8rem] truncate"
+                    class="text-sm text-[#6B6459] hover:text-[#7A6114] transition max-w-[8rem] truncate"
                     title="{{ auth()->user()->name }}">
                     {{ auth()->user()->name }}
                 </a>
                 <a href="{{ route('account.orders') }}" wire:navigate
-                    class="text-sm text-[#6B6459] hover:text-[#C9A227] transition hidden md:inline"
+                    class="text-sm text-[#6B6459] hover:text-[#7A6114] transition hidden md:inline"
                     title="{{ __('storefront.orders') }}">
                     {{ __('storefront.orders') }}
                 </a>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
-                    <button type="submit" class="text-sm text-[#6B6459] hover:text-[#C9A227] transition">{{ __('storefront.logout') }}</button>
+                    <button type="submit" class="text-sm text-[#6B6459] hover:text-[#7A6114] transition">{{ __('storefront.logout') }}</button>
                 </form>
             @else
-                <a href="{{ route('login') }}" wire:navigate class="text-sm text-[#6B6459] hover:text-[#C9A227] transition">{{ __('storefront.login') }}</a>
+                <a href="{{ route('login') }}" wire:navigate class="text-sm text-[#6B6459] hover:text-[#7A6114] transition">{{ __('storefront.login') }}</a>
                 <a href="{{ route('register') }}" wire:navigate
-                    class="rounded-full border border-[#C9A227] px-3 py-1 text-xs font-medium text-[#C9A227] hover:bg-[#FAF6EF] transition">
+                    class="rounded-full border border-[#C9A227] px-3 py-1 text-xs font-medium text-[#7A6114] hover:bg-[#FAF6EF] transition">
                     {{ __('storefront.sign_up') }}
                 </a>
             @endauth
 
-            <a href="{{ route('cart') }}" wire:navigate class="relative hover:text-[#C9A227] transition" title="{{ __('storefront.cart') }}" aria-label="{{ __('storefront.cart') }}">
+            <a href="{{ route('cart') }}" wire:navigate class="relative hover:text-[#7A6114] transition" title="{{ __('storefront.cart') }}" aria-label="{{ __('storefront.cart') }}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M3 5h2l1.2 9.2a2 2 0 0 0 2 1.8h8.4a2 2 0 0 0 2-1.7L20 8H7"/>
                     <circle cx="10" cy="20" r="1.25" fill="currentColor"/>
                     <circle cx="17" cy="20" r="1.25" fill="currentColor"/>
                 </svg>
                 @if ($cartCount > 0)
-                    <span class="absolute -top-2 -right-2 min-w-[1.1rem] h-[1.1rem] rounded-full bg-[#C9A227] text-white text-[10px] font-semibold flex items-center justify-center px-1">
+                    <span class="absolute -top-2 -right-2 min-w-[1.1rem] h-[1.1rem] rounded-full bg-[#8F7218] text-white text-[10px] font-semibold flex items-center justify-center px-1">
                         {{ $cartCount > 99 ? '99+' : $cartCount }}
                     </span>
                 @endif
@@ -94,27 +94,27 @@
 
             <div class="flex items-center gap-2 text-[#1E1E1E] shrink-0 ml-auto">
                 <a href="{{ route('account.wishlist') }}" wire:navigate
-                    class="relative inline-flex h-10 w-10 shrink-0 items-center justify-center text-[#1E1E1E] hover:text-[#C9A227]"
+                    class="relative inline-flex h-10 w-10 shrink-0 items-center justify-center text-[#1E1E1E] hover:text-[#7A6114]"
                     title="{{ __('storefront.save') }}"
                     aria-label="{{ __('storefront.save') }}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20s-7-4.35-7-9.2A3.8 3.8 0 0 1 12 7.5a3.8 3.8 0 0 1 7 3.3C19 15.65 12 20 12 20Z"/>
                     </svg>
                     @if ($wishlistCount > 0)
-                        <span class="absolute top-0.5 right-0.5 min-w-[1.1rem] h-[1.1rem] rounded-full bg-[#C9A227] text-white text-[10px] font-semibold flex items-center justify-center px-1">
+                        <span class="absolute top-0.5 right-0.5 min-w-[1.1rem] h-[1.1rem] rounded-full bg-[#8F7218] text-white text-[10px] font-semibold flex items-center justify-center px-1">
                             {{ $wishlistCount > 99 ? '99+' : $wishlistCount }}
                         </span>
                     @endif
                 </a>
 
-                <a href="{{ route('cart') }}" wire:navigate class="relative inline-flex h-10 w-10 shrink-0 items-center justify-center text-[#1E1E1E] hover:text-[#C9A227]" title="{{ __('storefront.cart') }}" aria-label="{{ __('storefront.cart') }}">
+                <a href="{{ route('cart') }}" wire:navigate class="relative inline-flex h-10 w-10 shrink-0 items-center justify-center text-[#1E1E1E] hover:text-[#7A6114]" title="{{ __('storefront.cart') }}" aria-label="{{ __('storefront.cart') }}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M3 5h2l1.2 9.2a2 2 0 0 0 2 1.8h8.4a2 2 0 0 0 2-1.7L20 8H7"/>
                         <circle cx="10" cy="20" r="1.25" fill="currentColor"/>
                         <circle cx="17" cy="20" r="1.25" fill="currentColor"/>
                     </svg>
                     @if ($cartCount > 0)
-                        <span class="absolute top-0.5 right-0.5 min-w-[1.1rem] h-[1.1rem] rounded-full bg-[#C9A227] text-white text-[10px] font-semibold flex items-center justify-center px-1">
+                        <span class="absolute top-0.5 right-0.5 min-w-[1.1rem] h-[1.1rem] rounded-full bg-[#8F7218] text-white text-[10px] font-semibold flex items-center justify-center px-1">
                             {{ $cartCount > 99 ? '99+' : $cartCount }}
                         </span>
                     @endif
@@ -135,7 +135,7 @@
         <form action="{{ route('search') }}" method="get" class="w-full">
             <input type="search" name="q" value="{{ $query }}"
                 placeholder="{{ __('storefront.search_placeholder') }}"
-                class="w-full rounded-full border border-[#E0D6C2] bg-white px-3.5 py-1 text-sm leading-tight focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                class="w-full rounded-full border border-[#E0D6C2] bg-white px-3.5 py-1 text-sm leading-tight focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
         </form>
     </div>
 </header>
@@ -149,7 +149,7 @@
     <aside class="mobile-nav-drawer__panel">
         <div class="flex items-center justify-between gap-3 border-b border-[#E7DFCF] px-4 py-4">
             <div class="min-w-0">
-                <p class="text-xs font-semibold uppercase tracking-wide text-[#8C8474]">{{ __('storefront.menu') }}</p>
+                <p class="text-xs font-semibold uppercase tracking-wide text-[#5C564C]">{{ __('storefront.menu') }}</p>
                 <p class="truncate font-medium text-[#1E1E1E]">
                     @auth{{ auth()->user()->name }}@else Sundoritoma @endauth
                 </p>
@@ -164,10 +164,10 @@
         </div>
 
         <nav class="flex-1 overflow-y-auto px-3 py-3 text-sm">
-            <p class="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">{{ __('storefront.shop') }}</p>
+            <p class="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-[#5C564C]">{{ __('storefront.shop') }}</p>
             <a href="{{ route('home') }}" wire:navigate
                 onclick="document.getElementById('mobile-nav-toggle').checked = false"
-                class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('home') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('home') ? 'bg-[#FAF6EF] font-semibold text-[#7A6114]' : '' }}">
                 {{ __('storefront.home') }}
             </a>
             <a href="{{ route('home') }}#collection" wire:navigate
@@ -177,27 +177,27 @@
             </a>
             <a href="{{ route('search') }}" wire:navigate
                 onclick="document.getElementById('mobile-nav-toggle').checked = false"
-                class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('search') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('search') ? 'bg-[#FAF6EF] font-semibold text-[#7A6114]' : '' }}">
                 {{ __('storefront.search') }}
             </a>
             <a href="{{ route('cart') }}" wire:navigate
                 onclick="document.getElementById('mobile-nav-toggle').checked = false"
-                class="flex items-center justify-between rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('cart') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                class="flex items-center justify-between rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('cart') ? 'bg-[#FAF6EF] font-semibold text-[#7A6114]' : '' }}">
                 <span>{{ __('storefront.cart') }}</span>
                 @if ($cartCount > 0)
-                    <span class="rounded-full bg-[#C9A227] px-2 py-0.5 text-[10px] font-semibold text-white">{{ $cartCount > 99 ? '99+' : $cartCount }}</span>
+                    <span class="rounded-full bg-[#8F7218] px-2 py-0.5 text-[10px] font-semibold text-white">{{ $cartCount > 99 ? '99+' : $cartCount }}</span>
                 @endif
             </a>
             <a href="{{ config('seo.whatsapp_url') }}" target="_blank" rel="noopener noreferrer"
-                class="block rounded-xl px-4 py-3.5 font-semibold text-[#C9A227] hover:bg-[#FAF6EF]">
+                class="block rounded-xl px-4 py-3.5 font-semibold text-[#7A6114] hover:bg-[#FAF6EF]">
                 {{ __('storefront.whatsapp') }} — {{ config('seo.whatsapp_display') }}
             </a>
 
-            <p class="px-4 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">{{ __('storefront.account_section') }}</p>
+            <p class="px-4 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-[#5C564C]">{{ __('storefront.account_section') }}</p>
             @if (auth()->user()?->canAccessAdmin())
                 <a href="{{ route('admin.dashboard') }}" wire:navigate
                     onclick="document.getElementById('mobile-nav-toggle').checked = false"
-                    class="mb-2 block rounded-xl bg-[#C9A227] px-4 py-3.5 font-semibold text-white">
+                    class="mb-2 block rounded-xl bg-[#8F7218] px-4 py-3.5 font-semibold text-white">
                     {{ __('storefront.admin_panel') }}
                 </a>
             @endif
@@ -205,30 +205,30 @@
             @auth
                 <a href="{{ route('account') }}" wire:navigate
                     onclick="document.getElementById('mobile-nav-toggle').checked = false"
-                    class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('account') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                    class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('account') ? 'bg-[#FAF6EF] font-semibold text-[#7A6114]' : '' }}">
                     {{ __('storefront.overview') }}
                 </a>
                 <a href="{{ route('account.profile') }}" wire:navigate
                     onclick="document.getElementById('mobile-nav-toggle').checked = false"
-                    class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('account.profile') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                    class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('account.profile') ? 'bg-[#FAF6EF] font-semibold text-[#7A6114]' : '' }}">
                     {{ __('storefront.profile') }}
                 </a>
                 <a href="{{ route('account.orders') }}" wire:navigate
                     onclick="document.getElementById('mobile-nav-toggle').checked = false"
-                    class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('account.orders*') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                    class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('account.orders*') ? 'bg-[#FAF6EF] font-semibold text-[#7A6114]' : '' }}">
                     {{ __('storefront.orders') }}
                 </a>
                 <a href="{{ route('account.wishlist') }}" wire:navigate
                     onclick="document.getElementById('mobile-nav-toggle').checked = false"
-                    class="flex items-center justify-between rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('account.wishlist') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                    class="flex items-center justify-between rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('account.wishlist') ? 'bg-[#FAF6EF] font-semibold text-[#7A6114]' : '' }}">
                     <span>{{ __('storefront.wishlist') }}</span>
                     @if ($wishlistCount > 0)
-                        <span class="rounded-full bg-[#C9A227] px-2 py-0.5 text-[10px] font-semibold text-white">{{ $wishlistCount > 99 ? '99+' : $wishlistCount }}</span>
+                        <span class="rounded-full bg-[#8F7218] px-2 py-0.5 text-[10px] font-semibold text-white">{{ $wishlistCount > 99 ? '99+' : $wishlistCount }}</span>
                     @endif
                 </a>
                 <a href="{{ route('account.password') }}" wire:navigate
                     onclick="document.getElementById('mobile-nav-toggle').checked = false"
-                    class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('account.password') ? 'bg-[#FAF6EF] font-semibold text-[#C9A227]' : '' }}">
+                    class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('account.password') ? 'bg-[#FAF6EF] font-semibold text-[#7A6114]' : '' }}">
                     {{ __('storefront.change_password') }}
                 </a>
             @else
@@ -239,7 +239,7 @@
                 </a>
                 <a href="{{ route('register') }}" wire:navigate
                     onclick="document.getElementById('mobile-nav-toggle').checked = false"
-                    class="block rounded-xl px-4 py-3.5 font-semibold text-[#C9A227] hover:bg-[#FAF6EF]">
+                    class="block rounded-xl px-4 py-3.5 font-semibold text-[#7A6114] hover:bg-[#FAF6EF]">
                     {{ __('storefront.sign_up') }}
                 </a>
             @endauth

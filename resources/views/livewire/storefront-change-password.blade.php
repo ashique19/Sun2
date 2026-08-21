@@ -22,7 +22,7 @@
                         <div>
                             <label class="block text-sm font-medium mb-1">{{ __('storefront.current_password') }}</label>
                             <input type="password" wire:model="current_password"
-                                class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                             @error('current_password') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                         </div>
                     @endif
@@ -30,16 +30,16 @@
                     <div>
                         <label class="block text-sm font-medium mb-1">{{ __('storefront.new_password') }}</label>
                         <input type="password" wire:model="password"
-                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                         @error('password') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                     </div>
                     <div>
                         <label class="block text-sm font-medium mb-1">{{ __('storefront.confirm_new_password') }}</label>
                         <input type="password" wire:model="password_confirmation"
-                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                     </div>
                     <button type="submit"
-                        class="rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white hover:bg-[#b8931f] transition">
+                        class="rounded-full bg-[#8F7218] px-8 py-3 text-sm font-semibold text-white hover:bg-[#7A6114] transition">
                         {{ $needsPassword ? __('storefront.set_password_btn') : __('storefront.update_password') }}
                     </button>
                 </form>

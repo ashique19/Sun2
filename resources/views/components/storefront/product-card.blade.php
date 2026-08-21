@@ -13,15 +13,15 @@
             class="aspect-square w-full object-cover bg-[#F1EADB] group-hover:scale-[1.02] transition-transform duration-300"
         />
     @else
-        <div class="aspect-square bg-[#F1EADB] flex items-center justify-center text-4xl text-[#C9A227]">
+        <div class="aspect-square bg-[#F1EADB] flex items-center justify-center text-4xl text-[#7A6114]">
             &#9670;
         </div>
     @endif
     <div class="p-4">
         @if ($product->category)
-            <p class="text-[10px] uppercase tracking-wider text-[#C9A227] mb-1">{{ $product->category->name }}</p>
+            <p class="text-[10px] uppercase tracking-wider text-[#7A6114] mb-1">{{ $product->category->name }}</p>
         @endif
-        <h3 class="font-medium text-sm leading-snug line-clamp-2 group-hover:text-[#C9A227] transition">{{ $product->name }}</h3>
+        <h3 class="font-medium text-sm leading-snug line-clamp-2 group-hover:text-[#7A6114] transition">{{ $product->name }}</h3>
         <div class="mt-2">
             <x-storefront.product-price :product="$product" />
         </div>

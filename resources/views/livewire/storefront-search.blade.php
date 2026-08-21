@@ -7,7 +7,7 @@
                 {{ __('storefront.search_products') }}
             @endif
         </h1>
-        <p class="text-sm text-[#8C8474] mb-8">{{ __('storefront.products_found', ['count' => $products->total()]) }}</p>
+        <p class="text-sm text-[#5C564C] mb-8">{{ __('storefront.products_found', ['count' => $products->total()]) }}</p>
 
         @if ($products->isEmpty())
             <div class="rounded-xl border border-dashed border-[#D8CDB6] p-10 text-center text-[#6B6459]">
@@ -17,10 +17,10 @@
                     <p>{{ __('storefront.search_no_match') }}</p>
                 @endif
                 <div class="mt-6 flex flex-wrap items-center justify-center gap-4 text-sm">
-                    <a href="{{ route('home') }}#collection" wire:navigate class="text-[#C9A227] hover:underline">
+                    <a href="{{ route('home') }}#collection" wire:navigate class="text-[#7A6114] hover:underline">
                         {{ __('storefront.popular_categories') }}
                     </a>
-                    <a href="{{ route('search') }}" wire:navigate class="text-[#C9A227] hover:underline">
+                    <a href="{{ route('search') }}" wire:navigate class="text-[#7A6114] hover:underline">
                         {{ __('storefront.view_all') }}
                     </a>
                 </div>

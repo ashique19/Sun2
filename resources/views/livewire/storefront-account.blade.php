@@ -21,17 +21,17 @@
                             <div>
                                 <label class="block text-sm font-medium mb-1">{{ __('storefront.new_password') }}</label>
                                 <input type="password" wire:model="password"
-                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                                 @error('password') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                             </div>
                             <div>
                                 <label class="block text-sm font-medium mb-1">{{ __('storefront.confirm_new_password') }}</label>
                                 <input type="password" wire:model="password_confirmation"
-                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                             </div>
                             <div class="sm:col-span-2">
                                 <button type="submit"
-                                    class="rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white hover:bg-[#b8931f] transition">
+                                    class="rounded-full bg-[#8F7218] px-8 py-3 text-sm font-semibold text-white hover:bg-[#7A6114] transition">
                                     {{ __('storefront.set_password_btn') }}
                                 </button>
                             </div>
@@ -44,14 +44,14 @@
                 <div class="rounded-xl border border-[#EFE7D6] bg-white overflow-hidden">
                     <div class="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-[#E7DFCF]">
                         <h2 class="font-semibold text-lg">{{ __('storefront.active_orders') }}</h2>
-                        <a href="{{ route('account.orders') }}" wire:navigate class="text-sm text-[#C9A227] hover:underline">
+                        <a href="{{ route('account.orders') }}" wire:navigate class="text-sm text-[#7A6114] hover:underline">
                             {{ __('storefront.view_all_orders') }}
                         </a>
                     </div>
                     @if ($activeOrders->isEmpty())
                         <div class="p-6 text-sm text-[#6B6459]">
                             {{ __('storefront.no_active_orders') }}
-                            <a href="{{ route('home') }}" wire:navigate class="inline-block mt-4 text-[#C9A227] hover:underline">{{ __('storefront.start_shopping') }}</a>
+                            <a href="{{ route('home') }}" wire:navigate class="inline-block mt-4 text-[#7A6114] hover:underline">{{ __('storefront.start_shopping') }}</a>
                         </div>
                     @else
                         <div class="divide-y divide-[#E7DFCF]">

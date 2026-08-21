@@ -1,12 +1,12 @@
 <x-storefront.shell>
     <div class="mx-auto max-w-6xl px-4 py-8">
         <h1 class="font-serif text-3xl font-semibold mb-2">{{ __('storefront.checkout') }}</h1>
-        <p class="text-sm text-[#8C8474] mb-8">{{ __('storefront.checkout_subtitle') }}</p>
+        <p class="text-sm text-[#5C564C] mb-8">{{ __('storefront.checkout_subtitle') }}</p>
 
         <div class="mb-8 flex items-center gap-3 text-sm">
-            <span class="{{ $step === 'details' ? 'font-semibold text-[#C9A227]' : 'text-[#8C8474]' }}">{{ __('storefront.step_details') }}</span>
+            <span class="{{ $step === 'details' ? 'font-semibold text-[#7A6114]' : 'text-[#5C564C]' }}">{{ __('storefront.step_details') }}</span>
             <span class="text-[#D8CDB6]">→</span>
-            <span class="{{ $step === 'otp' ? 'font-semibold text-[#C9A227]' : 'text-[#8C8474]' }}">{{ __('storefront.step_otp') }}</span>
+            <span class="{{ $step === 'otp' ? 'font-semibold text-[#7A6114]' : 'text-[#5C564C]' }}">{{ __('storefront.step_otp') }}</span>
         </div>
 
         <div class="grid lg:grid-cols-3 gap-8 items-start">
@@ -18,7 +18,7 @@
                         @if ($loginRequiredForRole)
                             <div class="rounded-lg bg-rose-50 text-rose-700 text-sm px-4 py-3 space-y-2">
                                 <p class="font-bold">{{ __('storefront.checkout_staff_phone_blocked', ['role' => $loginRequiredForRole]) }}</p>
-                                <a href="{{ route('login') }}" wire:navigate class="inline-block font-semibold text-[#C9A227] hover:underline">
+                                <a href="{{ route('login') }}" wire:navigate class="inline-block font-semibold text-[#7A6114] hover:underline">
                                     {{ __('storefront.log_in_link') }}
                                 </a>
                             </div>
@@ -30,25 +30,25 @@
                             <div class="sm:col-span-2">
                                 <label class="block text-sm font-medium mb-1">{{ __('storefront.full_name') }}</label>
                                 <input type="text" wire:model="name"
-                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                                 @error('name') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                             </div>
                             <div>
                                 <label class="block text-sm font-medium mb-1">{{ __('storefront.mobile_for_otp') }}</label>
                                 <input type="tel" wire:model="phone" placeholder="01XXXXXXXXX"
-                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                                 @error('phone') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                             </div>
                             <div>
                                 <label class="block text-sm font-medium mb-1">{{ __('storefront.email_optional') }}</label>
                                 <input type="email" wire:model="email"
-                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                                 @error('email') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                             </div>
                             <div class="sm:col-span-2">
                                 <label class="block text-sm font-medium mb-1">{{ __('storefront.delivery_address') }}</label>
                                 <textarea wire:model.live.debounce.400ms="address" rows="2"
-                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"></textarea>
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]"></textarea>
                                 @if ($addressLocationHint)
                                     <p class="text-xs text-emerald-700 mt-1">{{ $addressLocationHint }}</p>
                                 @endif
@@ -57,7 +57,7 @@
                             <div>
                                 <label class="block text-sm font-medium mb-1">{{ __('storefront.city') }}</label>
                                 <select wire:model.live="cityId"
-                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                                     <option value="">{{ __('storefront.select_city') }}</option>
                                     @foreach ($cities as $city)
                                         <option value="{{ $city->id }}">{{ $city->name }}</option>
@@ -71,7 +71,7 @@
                             <div>
                                 <label class="block text-sm font-medium mb-1">{{ __('storefront.area') }}</label>
                                 <select wire:model.live="areaId" @disabled(! $cityId)
-                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227] disabled:bg-[#FAF6EF] disabled:text-[#8C8474]">
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218] disabled:bg-[#FAF6EF] disabled:text-[#5C564C]">
                                     <option value="">{{ __('storefront.select_area') }}</option>
                                     @foreach ($areas as $area)
                                         <option value="{{ $area->id }}">{{ $area->name }}</option>
@@ -82,13 +82,13 @@
                             <div class="sm:col-span-2">
                                 <label class="block text-sm font-medium mb-1">{{ __('storefront.order_note_optional') }}</label>
                                 <textarea wire:model="customerNote" rows="2"
-                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"></textarea>
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]"></textarea>
                             </div>
                             <div class="sm:col-span-2">
                                 <label class="block text-sm font-medium mb-1">{{ __('storefront.reseller_ref_label') }}</label>
                                 <input type="text" wire:model="resellerRef"
                                     placeholder="{{ __('storefront.reseller_ref_placeholder') }}"
-                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                                 @error('resellerRef') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                             </div>
                         </div>
@@ -97,9 +97,9 @@
                             <h3 class="font-medium mb-3">{{ __('storefront.discount_coupon') }}</h3>
                             <div class="flex flex-wrap gap-2">
                                 <input type="text" wire:model="couponCode" placeholder="{{ __('storefront.enter_coupon') }}"
-                                    class="flex-1 min-w-[10rem] rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm uppercase focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                    class="flex-1 min-w-[10rem] rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm uppercase focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                                 <button type="button" wire:click="applyCoupon"
-                                    class="rounded-full border border-[#C9A227] px-5 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]">
+                                    class="rounded-full border border-[#C9A227] px-5 py-2 text-sm font-medium text-[#7A6114] hover:bg-[#FAF6EF]">
                                     {{ __('storefront.apply') }}
                                 </button>
                             </div>
@@ -117,7 +117,7 @@
                                                     @endif
                                                 </div>
                                                 <button type="button" wire:click="removeCoupon('{{ $result['code'] }}')"
-                                                    class="shrink-0 text-xs text-[#8C8474] hover:underline">
+                                                    class="shrink-0 text-xs text-[#5C564C] hover:underline">
                                                     {{ __('storefront.coupon_remove') }}
                                                 </button>
                                             </li>
@@ -135,7 +135,7 @@
                         </div>
 
                         <button type="submit"
-                            class="w-full sm:w-auto rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white hover:bg-[#b8931f] transition">
+                            class="w-full sm:w-auto rounded-full bg-[#8F7218] px-8 py-3 text-sm font-semibold text-white hover:bg-[#7A6114] transition">
                             {{ __('storefront.send_otp_continue') }}
                         </button>
                     </form>
@@ -145,7 +145,7 @@
                         <p class="text-sm text-[#6B6459] mb-6">
                             {{ __('storefront.otp_sent_to', ['phone' => $phone]) }}
                             @if (app()->hasDebugModeEnabled())
-                                <span class="block mt-1 text-xs text-[#8C8474]">Debug: OTP <strong>123456</strong></span>
+                                <span class="block mt-1 text-xs text-[#5C564C]">Debug: OTP <strong>123456</strong></span>
                             @endif
                         </p>
 
@@ -157,7 +157,7 @@
                             <div>
                                 <label class="block text-sm font-medium mb-1">{{ __('storefront.enter_otp') }}</label>
                                 <input type="text" wire:model="otp" maxlength="6" inputmode="numeric" autocomplete="one-time-code"
-                                    class="w-full max-w-xs tracking-[0.4em] text-center text-lg rounded-lg border border-[#E0D6C2] px-4 py-3 focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                    class="w-full max-w-xs tracking-[0.4em] text-center text-lg rounded-lg border border-[#E0D6C2] px-4 py-3 focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                                 @error('otp') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                             </div>
 
@@ -172,14 +172,14 @@
 
                             <div class="flex flex-wrap gap-3">
                                 <button type="submit"
-                                    class="rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white hover:bg-[#b8931f] transition">
+                                    class="rounded-full bg-[#8F7218] px-8 py-3 text-sm font-semibold text-white hover:bg-[#7A6114] transition">
                                     {{ __('storefront.verify_place_order') }}
                                 </button>
                                 <button type="button" wire:click="resendOtp"
                                     class="rounded-full border border-[#E0D6C2] px-6 py-3 text-sm hover:bg-[#FAF6EF]">
                                     {{ __('storefront.resend_otp') }}
                                 </button>
-                                <button type="button" wire:click="backToDetails" class="text-sm text-[#8C8474] hover:underline">
+                                <button type="button" wire:click="backToDetails" class="text-sm text-[#5C564C] hover:underline">
                                     {{ __('storefront.edit_details') }}
                                 </button>
                             </div>

@@ -11,21 +11,21 @@
         && (float) $product->compare_at_price > (float) $product->price;
 
     $compareClass = match ($size) {
-        'lg' => 'text-lg text-[#8C8474] line-through',
-        'sm' => 'text-xs text-[#8C8474] line-through',
-        default => 'text-xs text-[#8C8474] line-through',
+        'lg' => 'text-lg text-[#5C564C] line-through',
+        'sm' => 'text-xs text-[#5C564C] line-through',
+        default => 'text-xs text-[#5C564C] line-through',
     };
 
     $priceClass = match ($size) {
         'lg' => 'text-2xl font-semibold text-[#1E1E1E]',
-        'sm' => 'text-sm text-[#8C8474]',
+        'sm' => 'text-sm text-[#5C564C]',
         default => 'font-semibold text-[#1E1E1E]',
     };
 
     $unitClass = match ($size) {
         'lg' => 'font-normal text-[#6B6459]',
-        'sm' => 'font-normal text-[#8C8474]',
-        default => 'font-normal text-[#8C8474]',
+        'sm' => 'font-normal text-[#5C564C]',
+        default => 'font-normal text-[#5C564C]',
     };
 @endphp
 

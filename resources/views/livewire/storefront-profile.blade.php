@@ -16,19 +16,19 @@
                     <div>
                         <label class="block text-sm font-medium mb-1">{{ __('storefront.full_name') }}</label>
                         <input type="text" wire:model="name"
-                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                         @error('name') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                     </div>
                     <div>
                         <label class="block text-sm font-medium mb-1">{{ __('storefront.mobile') }}</label>
                         <input type="tel" wire:model="phone" placeholder="01XXXXXXXXX"
-                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                         @error('phone') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <label class="block text-sm font-medium mb-1">{{ __('storefront.email_label') }} <span class="text-[#8C8474] font-normal">({{ __('storefront.optional') }})</span></label>
+                        <label class="block text-sm font-medium mb-1">{{ __('storefront.email_label') }} <span class="text-[#5C564C] font-normal">({{ __('storefront.optional') }})</span></label>
                         <input type="email" wire:model="email"
-                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                            class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                         @error('email') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                     </div>
 
@@ -38,14 +38,14 @@
                             <div>
                                 <label class="block text-sm font-medium mb-1">{{ __('storefront.address') }}</label>
                                 <textarea wire:model="address" rows="2"
-                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"></textarea>
+                                    class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]"></textarea>
                                 @error('address') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                             </div>
                             <div class="grid sm:grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium mb-1">{{ __('storefront.city') }}</label>
                                     <select wire:model.live="cityId"
-                                        class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                        class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
                                         <option value="">{{ __('storefront.select_city') }}</option>
                                         @foreach ($cities as $city)
                                             <option value="{{ $city->id }}">{{ $city->name }}</option>
@@ -56,7 +56,7 @@
                                 <div>
                                     <label class="block text-sm font-medium mb-1">{{ __('storefront.area') }}</label>
                                     <select wire:model="areaId" @disabled(! $cityId)
-                                        class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227] disabled:bg-[#FAF6EF] disabled:text-[#8C8474]">
+                                        class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218] disabled:bg-[#FAF6EF] disabled:text-[#5C564C]">
                                         <option value="">{{ __('storefront.select_area') }}</option>
                                         @foreach ($areas as $area)
                                             <option value="{{ $area->id }}">{{ $area->name }}</option>
@@ -69,7 +69,7 @@
                     </div>
 
                     <button type="submit"
-                        class="rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white hover:bg-[#b8931f] transition">
+                        class="rounded-full bg-[#8F7218] px-8 py-3 text-sm font-semibold text-white hover:bg-[#7A6114] transition">
                         {{ __('storefront.save_profile') }}
                     </button>
                 </form>

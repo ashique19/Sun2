@@ -137,7 +137,7 @@
         flex-shrink: 0;
         width: 1rem;
         height: 1rem;
-        color: #8c8474;
+        color: #5c564c;
         transition: transform 0.15s ease;
     }
 
@@ -179,11 +179,11 @@
     .admin-courier-box__empty {
         margin: 0;
         font-size: 0.75rem;
-        color: #8c8474;
+        color: #5c564c;
     }
 
     .admin-order-placed-by {
-        color: #8c8474;
+        color: #5c564c;
     }
 
     .admin-order-placed-by--customer {
@@ -297,12 +297,12 @@ body:has(.mobile-nav-toggle:checked) {
 }
 
 .storefront-bottom-nav__link.is-active {
-    color: #c9a227;
+    color: #7a6114;
     font-weight: 600;
 }
 
 .storefront-bottom-nav__link:hover {
-    color: #c9a227;
+    color: #7a6114;
 }
 
 .storefront-bottom-nav__link svg {
@@ -346,16 +346,16 @@ body:has(.mobile-nav-toggle:checked) {
 }
 
 .storefront-account-nav__pill.is-active {
-    border-color: #c9a227;
-    background: #c9a227;
+    border-color: #7a6114;
+    background: #8f7218;
     color: #ffffff;
     font-weight: 600;
 }
 
 .storefront-account-nav__pill:hover:not(.is-active) {
-    border-color: #c9a227;
+    border-color: #7a6114;
     background: #faf6ef;
-    color: #c9a227;
+    color: #7a6114;
 }
 
 .storefront-account-nav__sidebar {
@@ -381,7 +381,7 @@ body:has(.mobile-nav-toggle:checked) {
 .storefront-account-nav__sidebar-link.is-active {
     background: #faf6ef;
     font-weight: 600;
-    color: #c9a227;
+    color: #7a6114;
 }
 
 .storefront-account-nav__sidebar-link:hover:not(.is-active) {

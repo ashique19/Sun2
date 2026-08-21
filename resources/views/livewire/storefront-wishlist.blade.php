@@ -1,7 +1,7 @@
 <x-storefront.shell>
     <div class="mx-auto max-w-6xl px-4 py-8">
         <h1 class="font-serif text-3xl font-semibold mb-2">{{ __('storefront.wishlist') }}</h1>
-        <p class="text-sm text-[#8C8474] mb-8">{{ __('storefront.saved_items', ['count' => $items->count()]) }}</p>
+        <p class="text-sm text-[#5C564C] mb-8">{{ __('storefront.saved_items', ['count' => $items->count()]) }}</p>
 
         @if ($message)
             <div class="rounded-lg bg-emerald-50 text-emerald-700 text-sm px-4 py-3 mb-6">{{ $message }}</div>
@@ -11,7 +11,7 @@
             <div class="rounded-xl border border-[#EFE7D6] bg-white p-10 text-center">
                 <p class="text-[#6B6459] mb-4">{{ __('storefront.wishlist_empty') }}</p>
                 <a href="{{ route('home') }}" wire:navigate
-                    class="inline-block rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white hover:bg-[#b8931f]">
+                    class="inline-block rounded-full bg-[#8F7218] px-8 py-3 text-sm font-semibold text-white hover:bg-[#7A6114]">
                     {{ __('storefront.browse_products') }}
                 </a>
             </div>
@@ -33,13 +33,13 @@
                             </div>
                         </a>
                         <div class="p-4">
-                            <a href="{{ route('product.show', $product) }}" wire:navigate class="font-medium line-clamp-2 hover:text-[#C9A227]">{{ $product->name }}</a>
+                            <a href="{{ route('product.show', $product) }}" wire:navigate class="font-medium line-clamp-2 hover:text-[#7A6114]">{{ $product->name }}</a>
                             <div class="mt-1">
                                 <x-storefront.product-price :product="$product" />
                             </div>
                             <div class="mt-4 flex gap-2">
                                 <button type="button" wire:click="addToCart({{ $product->id }})"
-                                    class="flex-1 rounded-full bg-[#C9A227] px-4 py-2 text-xs font-semibold text-white hover:bg-[#b8931f]">
+                                    class="flex-1 rounded-full bg-[#8F7218] px-4 py-2 text-xs font-semibold text-white hover:bg-[#7A6114]">
                                     {{ __('storefront.add_to_cart') }}
                                 </button>
                                 <button type="button" wire:click="remove({{ $product->id }})"

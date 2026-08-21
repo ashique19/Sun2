@@ -6,7 +6,7 @@
             <div class="rounded-xl border border-dashed border-[#D8CDB6] p-10 text-center">
                 <p class="text-[#6B6459] mb-4">{{ __('storefront.cart_empty') }}</p>
                 <a href="{{ route('home') }}#collection" wire:navigate
-                   class="inline-block rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white hover:bg-[#b8931f] transition">
+                   class="inline-block rounded-full bg-[#8F7218] px-8 py-3 text-sm font-semibold text-white hover:bg-[#7A6114] transition">
                     {{ __('storefront.continue_shopping') }}
                 </a>
             </div>
@@ -20,7 +20,7 @@
                                 <img src="{{ $image }}" alt="" class="w-20 h-20 rounded-lg object-cover bg-[#F1EADB] shrink-0">
                             @endif
                             <div class="flex-1 min-w-0">
-                                <a href="{{ route('product.show', $product) }}" wire:navigate class="font-medium hover:text-[#C9A227] line-clamp-2">{{ $product->name }}</a>
+                                <a href="{{ route('product.show', $product) }}" wire:navigate class="font-medium hover:text-[#7A6114] line-clamp-2">{{ $product->name }}</a>
                                 <div class="mt-1">
                                     <x-storefront.product-price :product="$product" size="sm" />
                                 </div>
@@ -44,13 +44,13 @@
                         <span class="text-[#6B6459]">{{ __('storefront.subtotal') }}</span>
                         <span>&#2547; {{ number_format($subtotal, 0) }}</span>
                     </div>
-                    <p class="text-xs text-[#8C8474] mb-4">{{ __('storefront.delivery_discounts_checkout') }}</p>
+                    <p class="text-xs text-[#5C564C] mb-4">{{ __('storefront.delivery_discounts_checkout') }}</p>
                     <div class="border-t border-[#E7DFCF] pt-4 flex justify-between font-semibold text-lg mb-6">
                         <span>{{ __('storefront.estimated') }}</span>
                         <span>&#2547; {{ number_format($subtotal, 0) }}</span>
                     </div>
                     <a href="{{ route('checkout') }}" wire:navigate
-                        class="block w-full text-center rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white hover:bg-[#b8931f] transition">
+                        class="block w-full text-center rounded-full bg-[#8F7218] px-8 py-3 text-sm font-semibold text-white hover:bg-[#7A6114] transition">
                         {{ __('storefront.proceed_checkout') }}
                     </a>
                 </div>

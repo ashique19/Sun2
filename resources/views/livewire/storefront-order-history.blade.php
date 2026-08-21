@@ -12,7 +12,7 @@
                     @if ($orders->isEmpty())
                         <div class="p-6 text-sm text-[#6B6459]">
                             {{ __('storefront.no_orders_yet') }}
-                            <a href="{{ route('home') }}" wire:navigate class="text-[#C9A227] hover:underline">{{ __('storefront.browse_products') }}</a>
+                            <a href="{{ route('home') }}" wire:navigate class="text-[#7A6114] hover:underline">{{ __('storefront.browse_products') }}</a>
                         </div>
                     @else
                         <div class="divide-y divide-[#E7DFCF]">

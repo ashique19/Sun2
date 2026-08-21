@@ -4,7 +4,7 @@
         <h1 class="font-serif text-3xl font-semibold mb-2">{{ __('storefront.order_confirmed') }}</h1>
         <p class="text-[#6B6459] mb-1">{{ __('storefront.thank_you', ['name' => $order->name]) }}</p>
         <p class="text-[#6B6459] mb-8">{{ __('storefront.order_placed', ['number' => $order->order_number]) }}</p>
-        <p class="text-sm text-[#8C8474] mb-8">
+        <p class="text-sm text-[#5C564C] mb-8">
             @auth
                 {{ __('storefront.track_order_hint') }}
             @else
@@ -14,15 +14,15 @@
 
         <div class="rounded-xl border border-[#EFE7D6] bg-white p-6 text-left text-sm space-y-3 mb-8">
             <div class="flex justify-between">
-                <span class="text-[#8C8474]">{{ __('storefront.payment') }}</span>
+                <span class="text-[#5C564C]">{{ __('storefront.payment') }}</span>
                 <span>{{ __('storefront.payment_cod_amount', ['amount' => number_format($order->total, 0)]) }}</span>
             </div>
             <div class="flex justify-between">
-                <span class="text-[#8C8474]">{{ __('storefront.mobile') }}</span>
+                <span class="text-[#5C564C]">{{ __('storefront.mobile') }}</span>
                 <span>{{ $order->phone }}</span>
             </div>
             <div class="flex justify-between gap-4">
-                <span class="text-[#8C8474] shrink-0">{{ __('storefront.address') }}</span>
+                <span class="text-[#5C564C] shrink-0">{{ __('storefront.address') }}</span>
                 <span class="text-right">{{ $order->address }}@if($order->area), {{ $order->area }}@endif, {{ $order->city }}</span>
             </div>
             <div class="border-t border-[#E7DFCF] pt-3 space-y-2">
@@ -46,11 +46,11 @@
             </a>
             @auth
                 <a href="{{ route('account.orders.show', $order) }}" wire:navigate
-                   class="inline-block rounded-full bg-[#C9A227] px-8 py-3 text-sm font-semibold text-white hover:bg-[#b8931f] transition">
+                   class="inline-block rounded-full bg-[#8F7218] px-8 py-3 text-sm font-semibold text-white hover:bg-[#7A6114] transition">
                     {{ __('storefront.track_order_btn') }}
                 </a>
                 <a href="{{ route('account') }}" wire:navigate
-                   class="inline-block rounded-full border border-[#C9A227] px-8 py-3 text-sm font-semibold text-[#C9A227] hover:bg-[#FAF6EF] transition">
+                   class="inline-block rounded-full border border-[#C9A227] px-8 py-3 text-sm font-semibold text-[#7A6114] hover:bg-[#FAF6EF] transition">
                     {{ __('storefront.go_to_dashboard_btn') }}
                 </a>
             @endauth

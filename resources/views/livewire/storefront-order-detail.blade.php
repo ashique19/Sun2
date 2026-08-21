@@ -2,7 +2,7 @@
     <div class="mx-auto max-w-6xl px-4 py-8">
         <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
             <h1 class="font-serif text-3xl font-semibold">{{ __('storefront.order_number', ['number' => $order->order_number]) }}</h1>
-            <a href="{{ route('account.orders') }}" wire:navigate class="text-sm text-[#C9A227] hover:underline">&larr; {{ __('storefront.back_to_orders') }}</a>
+            <a href="{{ route('account.orders') }}" wire:navigate class="text-sm text-[#7A6114] hover:underline">&larr; {{ __('storefront.back_to_orders') }}</a>
         </div>
 
         <div class="grid lg:grid-cols-4 gap-4 lg:gap-8 items-start">
@@ -13,23 +13,23 @@
             <div class="lg:col-span-3 space-y-6">
                 <div class="rounded-xl border border-[#EFE7D6] bg-white p-6 text-sm space-y-3">
                     <div class="flex justify-between items-center gap-3">
-                        <span class="text-[#8C8474]">{{ __('storefront.status') }}</span>
+                        <span class="text-[#5C564C]">{{ __('storefront.status') }}</span>
                         <x-storefront.order-status-badge :order="$order" />
                     </div>
                     <div class="flex justify-between">
-                        <span class="text-[#8C8474]">{{ __('storefront.placed') }}</span>
+                        <span class="text-[#5C564C]">{{ __('storefront.placed') }}</span>
                         <span>{{ $order->placed_at?->format('d M Y, h:i A') }}</span>
                     </div>
                     <div class="flex justify-between">
-                        <span class="text-[#8C8474]">{{ __('storefront.payment') }}</span>
+                        <span class="text-[#5C564C]">{{ __('storefront.payment') }}</span>
                         <span class="uppercase">{{ $order->payment_method }} — {{ ucfirst($order->payment_status) }}</span>
                     </div>
                     <div class="flex justify-between">
-                        <span class="text-[#8C8474]">{{ __('storefront.mobile') }}</span>
+                        <span class="text-[#5C564C]">{{ __('storefront.mobile') }}</span>
                         <span>{{ $order->phone }}</span>
                     </div>
                     <div class="flex justify-between gap-4">
-                        <span class="text-[#8C8474] shrink-0">{{ __('storefront.delivery') }}</span>
+                        <span class="text-[#5C564C] shrink-0">{{ __('storefront.delivery') }}</span>
                         <span class="text-right">{{ $order->address }}@if($order->area), {{ $order->area }}@endif, {{ $order->city }}</span>
                     </div>
                 </div>
@@ -52,7 +52,7 @@
                                     <x-order-product-thumb :item="$item" size="md" />
                                     <div class="min-w-0">
                                         <p class="font-medium truncate">{{ $item->displayName() }}</p>
-                                        <p class="text-[#8C8474] {{ $item->quantity > 1 ? 'text-rose-600 font-medium' : '' }}">
+                                        <p class="text-[#5C564C] {{ $item->quantity > 1 ? 'text-rose-600 font-medium' : '' }}">
                                             {{ __('storefront.qty') }}: {{ $item->quantity }}
                                         </p>
                                     </div>
@@ -72,7 +72,7 @@
                                     <span class="text-[#6B6459]">
                                         {{ __('storefront.subtotal') }}
                                         @if ($itemCount > 0)
-                                            <span class="text-[#8C8474]">({{ __('storefront.item_count', ['count' => $itemCount]) }})</span>
+                                            <span class="text-[#5C564C]">({{ __('storefront.item_count', ['count' => $itemCount]) }})</span>
                                         @endif
                                     </span>
                                     <span>&#2547; {{ number_format($order->subtotal, 0) }}</span>

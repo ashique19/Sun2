@@ -17,11 +17,11 @@
     <x-seo.json-ld :data="\App\Support\JsonLd::productBreadcrumb($product)" />
 
     <div class="mx-auto max-w-6xl px-4 py-8 pb-24 lg:pb-0">
-        <nav class="text-xs text-[#8C8474] mb-4" aria-label="Breadcrumb">
-            <a href="{{ route('home') }}" wire:navigate class="hover:text-[#C9A227]">{{ __('storefront.breadcrumb_home') }}</a>
+        <nav class="text-xs text-[#5C564C] mb-4" aria-label="Breadcrumb">
+            <a href="{{ route('home') }}" wire:navigate class="hover:text-[#7A6114]">{{ __('storefront.breadcrumb_home') }}</a>
             @if ($product->category)
                 <span class="mx-2">/</span>
-                <a href="{{ route('category.show', $product->category) }}" wire:navigate class="hover:text-[#C9A227]">{{ $product->category->name }}</a>
+                <a href="{{ route('category.show', $product->category) }}" wire:navigate class="hover:text-[#7A6114]">{{ $product->category->name }}</a>
             @endif
             <span class="mx-2">/</span>
             <span class="text-[#1E1E1E] line-clamp-1">{{ $product->name }}</span>
@@ -33,7 +33,7 @@
                     @if ($activeUrl)
                         <img src="{{ $activeUrl }}" alt="{{ $product->name }}" class="w-full h-full object-cover" fetchpriority="high">
                     @else
-                        <div class="w-full h-full bg-[#F1EADB] flex items-center justify-center text-5xl text-[#C9A227]">&#9670;</div>
+                        <div class="w-full h-full bg-[#F1EADB] flex items-center justify-center text-5xl text-[#7A6114]">&#9670;</div>
                     @endif
                 </div>
                 @if ($images->count() > 1)
@@ -52,7 +52,7 @@
 
             <div>
                 @if ($product->category)
-                    <p class="text-xs uppercase tracking-wider text-[#C9A227] mb-2">{{ $product->category->name }}</p>
+                    <p class="text-xs uppercase tracking-wider text-[#7A6114] mb-2">{{ $product->category->name }}</p>
                 @endif
                 <h1 class="font-serif text-3xl font-semibold leading-tight">{{ $product->name }}</h1>
 
@@ -62,7 +62,7 @@
 
                 @if ($product->review_count > 0)
                     <div class="mt-2 flex items-center gap-2 text-sm text-[#6B6459]">
-                        <span class="text-[#C9A227]">
+                        <span class="text-[#7A6114]">
                             @for ($i = 1; $i <= 5; $i++)
                                 {{ $i <= round($product->rating_avg) ? '★' : '☆' }}
                             @endfor
@@ -96,13 +96,13 @@
                     </div>
                     <button type="button" wire:click="addToCart"
                         @disabled(! $product->isInStock())
-                        class="flex-1 min-w-[10rem] rounded-full bg-[#C9A227] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#b8931f] transition disabled:opacity-50 disabled:cursor-not-allowed">
+                        class="flex-1 min-w-[10rem] rounded-full bg-[#8F7218] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#7A6114] transition disabled:opacity-50 disabled:cursor-not-allowed">
                         {{ __('storefront.add_to_cart') }}
                     </button>
                     <button type="button" wire:click="toggleWishlist"
                         class="inline-flex items-center gap-2 rounded-full border border-[#E0D6C2] bg-white px-4 py-3 text-sm hover:bg-[#FAF6EF] transition"
                         title="{{ $isWishlisted ? __('storefront.saved') : __('storefront.save') }}">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="{{ $isWishlisted ? 'currentColor' : 'none' }}" aria-hidden="true" class="{{ $isWishlisted ? 'text-[#C9A227]' : 'text-[#6B6459]' }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="{{ $isWishlisted ? 'currentColor' : 'none' }}" aria-hidden="true" class="{{ $isWishlisted ? 'text-[#7A6114]' : 'text-[#6B6459]' }}">
                             <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20s-7-4.35-7-9.2A3.8 3.8 0 0 1 12 7.5a3.8 3.8 0 0 1 7 3.3C19 15.65 12 20 12 20Z"/>
                         </svg>
                         <span class="hidden sm:inline">{{ $isWishlisted ? __('storefront.saved') : __('storefront.save') }}</span>
@@ -172,14 +172,14 @@
             <div>
                 <h2 class="font-serif text-2xl font-semibold mb-6">{{ __('storefront.customer_reviews') }}</h2>
                 @if ($product->approvedReviews->isEmpty())
-                    <p class="text-sm text-[#8C8474]">{{ __('storefront.no_reviews') }}</p>
+                    <p class="text-sm text-[#5C564C]">{{ __('storefront.no_reviews') }}</p>
                 @else
                     <div class="space-y-4">
                         @foreach ($product->approvedReviews as $review)
                             <div class="rounded-xl border border-[#EFE7D6] bg-white p-5">
                                 <div class="flex items-center justify-between gap-2 mb-2">
                                     <span class="font-medium text-sm">{{ $review->user?->name ?? __('storefront.account') }}</span>
-                                    <span class="text-[#C9A227] text-sm">
+                                    <span class="text-[#7A6114] text-sm">
                                         @for ($i = 1; $i <= 5; $i++){{ $i <= $review->rating ? '★' : '☆' }}@endfor
                                     </span>
                                 </div>
@@ -220,13 +220,13 @@
                             <textarea wire:model="reviewBody" rows="4" class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm"></textarea>
                             @error('reviewBody') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                         </div>
-                        <button type="submit" class="rounded-full bg-[#C9A227] px-8 py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f]">
+                        <button type="submit" class="rounded-full bg-[#8F7218] px-8 py-2.5 text-sm font-semibold text-white hover:bg-[#7A6114]">
                             {{ __('storefront.submit_review') }}
                         </button>
                     </form>
                 @else
                     <p class="text-sm text-[#6B6459]">
-                        <a href="{{ route('login') }}" wire:navigate class="text-[#C9A227] hover:underline">{{ __('storefront.login') }}</a>
+                        <a href="{{ route('login') }}" wire:navigate class="text-[#7A6114] hover:underline">{{ __('storefront.login') }}</a>
                         — {{ __('storefront.login_to_review') }}
                     </p>
                 @endauth

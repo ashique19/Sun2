@@ -66,7 +66,7 @@
                         :href="productUrl"
                         @if ($linkTarget) target="{{ $linkTarget }}" @endif
                         @if ($linkTarget === '_blank') rel="noopener" @endif
-                        class="inline-flex items-center gap-2 rounded-full bg-[#C9A227] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f] transition"
+                        class="inline-flex items-center gap-2 rounded-full bg-[#8F7218] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#7A6114] transition"
                     >
                         {{ $linkLabel }}
                         @if ($showExternalIcon)

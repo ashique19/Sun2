@@ -53,7 +53,7 @@
         <span>&#2547; {{ number_format($pricing->total, 0) }}</span>
     </div>
     @unless ($compact)
-        <p class="mt-4 text-xs text-[#8C8474] leading-relaxed">
+        <p class="mt-4 text-xs text-[#5C564C] leading-relaxed">
             @if ($selectedArea)
                 {{ __('storefront.delivery_for_area', [
                     'area' => $selectedArea->name,

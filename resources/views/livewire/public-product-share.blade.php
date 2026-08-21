@@ -4,7 +4,7 @@
             <img src="/img/settings/logo.png" alt="Sundoritoma" class="h-10 w-auto object-contain">
             <span class="font-serif text-lg font-semibold truncate">Sundoritoma</span>
         </a>
-        <a href="{{ config('seo.whatsapp_url') }}" target="_blank" rel="noopener noreferrer" class="shrink-0 text-sm font-medium text-[#C9A227] hover:underline">
+        <a href="{{ config('seo.whatsapp_url') }}" target="_blank" rel="noopener noreferrer" class="shrink-0 text-sm font-medium text-[#7A6114] hover:underline">
             {{ __('storefront.helpline_label') }}: {{ config('seo.whatsapp_display') }}
         </a>
     </header>
@@ -15,11 +15,11 @@
             <p class="mt-2 text-sm text-[#6B6459]">{{ __('storefront.share_expired_body') }}</p>
             <div class="mt-6 flex flex-wrap items-center justify-center gap-3">
                 <a href="{{ route('home') }}"
-                   class="inline-block rounded-full bg-[#C9A227] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f]">
+                   class="inline-block rounded-full bg-[#8F7218] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#7A6114]">
                     {{ __('storefront.go_home') }}
                 </a>
                 <a href="{{ config('seo.whatsapp_url') }}" target="_blank" rel="noopener noreferrer"
-                   class="inline-block rounded-full border border-[#C9A227] px-6 py-2.5 text-sm font-semibold text-[#C9A227] hover:bg-[#FAF6EF]">
+                   class="inline-block rounded-full border border-[#C9A227] px-6 py-2.5 text-sm font-semibold text-[#7A6114] hover:bg-[#FAF6EF]">
                     {{ __('storefront.call_us') }}
                 </a>
             </div>
@@ -29,7 +29,7 @@
             <h1 class="font-serif text-2xl font-semibold">{{ __('storefront.share_title') }}</h1>
             <p class="mt-1 text-sm text-[#6B6459]">{{ __('storefront.share_purpose') }}</p>
             @if ($share?->expires_at)
-                <p class="mt-1 text-sm text-[#8C8474]">
+                <p class="mt-1 text-sm text-[#5C564C]">
                     {{ __('storefront.share_valid_until', ['date' => $share->expires_at->timezone('Asia/Dhaka')->format('d M Y, h:i A')]) }}
                 </p>
             @endif
@@ -37,14 +37,14 @@
 
         @if ($items === [])
             <div class="rounded-xl border border-[#EFE7D6] bg-white p-8 text-center">
-                <p class="text-sm text-[#8C8474]">{{ __('storefront.share_empty') }}</p>
+                <p class="text-sm text-[#5C564C]">{{ __('storefront.share_empty') }}</p>
                 <div class="mt-6 flex flex-wrap items-center justify-center gap-3">
                     <a href="{{ route('home') }}"
-                       class="inline-block rounded-full bg-[#C9A227] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f]">
+                       class="inline-block rounded-full bg-[#8F7218] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#7A6114]">
                         {{ __('storefront.go_home') }}
                     </a>
                     <a href="{{ config('seo.whatsapp_url') }}" target="_blank" rel="noopener noreferrer"
-                       class="inline-block rounded-full border border-[#C9A227] px-6 py-2.5 text-sm font-semibold text-[#C9A227] hover:bg-[#FAF6EF]">
+                       class="inline-block rounded-full border border-[#C9A227] px-6 py-2.5 text-sm font-semibold text-[#7A6114] hover:bg-[#FAF6EF]">
                         {{ __('storefront.call_us') }}
                     </a>
                 </div>
@@ -86,7 +86,7 @@
                                     loading="lazy"
                                     decoding="async">
                             @else
-                                <div class="flex h-full w-full items-center justify-center text-[10px] text-[#8C8474]">
+                                <div class="flex h-full w-full items-center justify-center text-[10px] text-[#5C564C]">
                                     {{ __('storefront.share_no_img') }}
                                 </div>
                             @endif

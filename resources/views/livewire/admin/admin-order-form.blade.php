@@ -71,6 +71,44 @@
                                 <p class="text-xs text-[#8C8474] mt-2">{{ $steadfastStatsError }}</p>
                             @endif
 
+                            @if (config('pathao.scrap'))
+                                <div wire:loading.flex wire:target="loadPathaoStats" class="mt-3 items-center gap-2 text-xs text-[#8C8474]">
+                                    <svg class="h-3.5 w-3.5 animate-spin text-[#C9A227]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                                    </svg>
+                                    <span>Checking Pathao…</span>
+                                </div>
+
+                                <div wire:loading.remove wire:target="loadPathaoStats">
+                                    @if ($pathaoStats)
+                                        <div class="mt-3 rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2 text-xs">
+                                            <p class="font-medium text-[#1E1E1E]">
+                                                Pathao:
+                                                @if (($pathaoStats['data_type'] ?? '') === 'rating' || ! empty($pathaoStats['customer_rating']))
+                                                    {{ $pathaoStats['label'] ?? 'Rating available' }}
+                                                @else
+                                                    delivery success {{ $pathaoStats['success_ratio'] ?? 0 }}%
+                                                @endif
+                                            </p>
+                                            @if (($pathaoStats['data_type'] ?? '') !== 'rating' && ($pathaoStats['total_parcels'] ?? null) !== null)
+                                                <p class="text-[#6B6459] mt-1">
+                                                    Delivered {{ $pathaoStats['total_delivered'] ?? 0 }}
+                                                    / {{ $pathaoStats['total_parcels'] ?? 0 }}
+                                                    @if (($pathaoStats['total_cancelled'] ?? 0) > 0)
+                                                        &middot; Cancelled {{ $pathaoStats['total_cancelled'] }}
+                                                    @endif
+                                                </p>
+                                            @elseif (! empty($pathaoStats['customer_rating']) && ($pathaoStats['success_ratio'] ?? null) !== null)
+                                                <p class="text-[#6B6459] mt-1">Est. success {{ $pathaoStats['success_ratio'] }}%</p>
+                                            @endif
+                                        </div>
+                                    @elseif ($pathaoStatsError && \App\Support\PhoneNumber::isValidDisplayMobile($phone))
+                                        <p class="text-xs text-[#8C8474] mt-2">Pathao: {{ $pathaoStatsError }}</p>
+                                    @endif
+                                </div>
+                            @endif
+
                             @if ($previousOrderCount > 0)
                                 <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
                                     <span class="text-[#6B6459]">

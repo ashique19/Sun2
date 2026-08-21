@@ -14,6 +14,7 @@ use App\Services\Admin\CustomerLookupService;
 use App\Services\Admin\OrderPasteParser;
 use App\Services\Admin\ProductImageHashService;
 use App\Services\Admin\ProductImageService;
+use App\Services\Couriers\PathaoMerchantSuccessClient;
 use App\Services\Locations\LocationAliasLearner;
 use App\Services\Orders\OrderTotalCalculator;
 use App\Services\Storefront\AddressLocationGuesser;
@@ -114,6 +115,13 @@ class AdminOrderForm extends Component
     public ?array $steadfastStats = null;
 
     public ?string $steadfastStatsError = null;
+
+    public ?array $pathaoStats = null;
+
+    public ?string $pathaoStatsError = null;
+
+    /** Phone the in-flight Pathao request was started for (ignore stale responses). */
+    public string $pathaoStatsForPhone = '';
 
     public bool $showOrderHistoryModal = false;
 
@@ -393,6 +401,7 @@ class AdminOrderForm extends Component
             ->all();
         $this->steadfastStats = $result['steadfast'];
         $this->steadfastStatsError = $result['steadfast_error'];
+        $this->queuePathaoStatsLookup();
 
         // Prefer pasted customer fields; fill gaps from last order.
         if ($result['last_order']) {
@@ -427,6 +436,70 @@ class AdminOrderForm extends Component
         }
 
         $this->refreshDeliveryCharge();
+    }
+
+    public function loadPathaoStats(?PathaoMerchantSuccessClient $pathao = null): void
+    {
+        $pathao ??= app(PathaoMerchantSuccessClient::class);
+
+        if (! $pathao->isScrapConfigured()) {
+            $this->pathaoStats = null;
+            $this->pathaoStatsError = null;
+            $this->pathaoStatsForPhone = '';
+
+            return;
+        }
+
+        if (! PhoneNumber::isValidDisplayMobile($this->phone)) {
+            $this->pathaoStats = null;
+            $this->pathaoStatsError = null;
+            $this->pathaoStatsForPhone = '';
+
+            return;
+        }
+
+        $requestedPhone = PhoneNumber::display($this->phone);
+        $this->pathaoStatsForPhone = $requestedPhone;
+        $this->pathaoStats = null;
+        $this->pathaoStatsError = null;
+
+        try {
+            $stats = $pathao->successCheck($requestedPhone);
+        } catch (\Throwable $e) {
+            if ($this->pathaoStatsForPhone !== $requestedPhone || PhoneNumber::display($this->phone) !== $requestedPhone) {
+                return;
+            }
+
+            $this->pathaoStats = null;
+            $this->pathaoStatsError = $e->getMessage();
+
+            return;
+        }
+
+        if ($this->pathaoStatsForPhone !== $requestedPhone || PhoneNumber::display($this->phone) !== $requestedPhone) {
+            return;
+        }
+
+        $this->pathaoStats = $stats;
+        $this->pathaoStatsError = null;
+    }
+
+    private function queuePathaoStatsLookup(): void
+    {
+        $this->pathaoStats = null;
+        $this->pathaoStatsError = null;
+        $this->pathaoStatsForPhone = '';
+
+        if (! app(PathaoMerchantSuccessClient::class)->isScrapConfigured()) {
+            return;
+        }
+
+        if (! PhoneNumber::isValidDisplayMobile($this->phone)) {
+            return;
+        }
+
+        // Separate Livewire request so customer lookup / Steadfast stay snappy.
+        $this->js('queueMicrotask(() => $wire.loadPathaoStats())');
     }
 
     /**

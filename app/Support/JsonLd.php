@@ -103,7 +103,19 @@ class JsonLd
             $data['category'] = $product->category->name;
         }
 
-        if ($product->review_count > 0 && $product->rating_avg !== null) {
+        $reviews = self::approvedReviewsForSchema($product);
+
+        if ($reviews !== []) {
+            $data['aggregateRating'] = [
+                '@type' => 'AggregateRating',
+                'ratingValue' => number_format((float) $product->rating_avg, 1, '.', ''),
+                'reviewCount' => max((int) $product->review_count, count($reviews)),
+                'bestRating' => '5',
+                'worstRating' => '1',
+            ];
+            $data['review'] = $reviews;
+        } elseif ($product->review_count > 0 && $product->rating_avg !== null) {
+            // Aggregates exist but review rows were not loaded / unavailable.
             $data['aggregateRating'] = [
                 '@type' => 'AggregateRating',
                 'ratingValue' => number_format((float) $product->rating_avg, 1, '.', ''),
@@ -114,6 +126,57 @@ class JsonLd
         }
 
         return $data;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function approvedReviewsForSchema(Product $product): array
+    {
+        if ((int) $product->review_count <= 0) {
+            return [];
+        }
+
+        if (! $product->relationLoaded('approvedReviews')) {
+            $product->load(['approvedReviews.user']);
+        } elseif ($product->approvedReviews->isNotEmpty()
+            && ! $product->approvedReviews->first()?->relationLoaded('user')) {
+            $product->approvedReviews->load('user');
+        }
+
+        return $product->approvedReviews
+            ->filter(fn ($review) => filled($review->body) && (int) $review->rating >= 1)
+            ->take(10)
+            ->map(function ($review): array {
+                $entry = [
+                    '@type' => 'Review',
+                    'author' => [
+                        '@type' => 'Person',
+                        'name' => filled($review->user?->name)
+                            ? (string) $review->user->name
+                            : 'Customer',
+                    ],
+                    'reviewRating' => [
+                        '@type' => 'Rating',
+                        'ratingValue' => (string) (int) $review->rating,
+                        'bestRating' => '5',
+                        'worstRating' => '1',
+                    ],
+                    'reviewBody' => (string) $review->body,
+                ];
+
+                if ($review->created_at) {
+                    $entry['datePublished'] = $review->created_at->toDateString();
+                }
+
+                if (filled($review->title)) {
+                    $entry['name'] = (string) $review->title;
+                }
+
+                return $entry;
+            })
+            ->values()
+            ->all();
     }
 
     /**

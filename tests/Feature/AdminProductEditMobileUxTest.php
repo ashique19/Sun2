@@ -45,6 +45,8 @@ class AdminProductEditMobileUxTest extends TestCase
             ->assertSeeHtml('data-product-edit-actions')
             ->assertSeeHtml('fixed inset-x-0 bottom-0')
             ->assertSeeHtml('md:static')
+            ->assertSeeHtml('flex-[2]')
+            ->assertSeeHtml('flex-1 rounded-full border border-rose-300')
             ->assertSee('Save Product')
             ->assertSee('Delete');
     }

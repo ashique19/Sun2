@@ -818,8 +818,14 @@
             class="fixed inset-x-0 bottom-0 z-40 border-t border-[#E7DFCF] bg-white/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-6px_20px_rgba(0,0,0,0.06)] backdrop-blur md:static md:z-auto md:order-4 md:rounded-xl md:border md:border-[#EFE7D6] md:bg-white md:p-6 md:shadow-none md:backdrop-blur-none"
             data-product-edit-actions
         >
-            <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-3 md:mx-0 md:max-w-none">
-                <button type="submit" class="rounded-full bg-[#C9A227] px-8 py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f]" :disabled="uploading">
+            <div class="mx-auto flex max-w-6xl items-center gap-2 md:mx-0 md:max-w-none md:flex-wrap md:gap-3">
+                <button type="submit"
+                    @class([
+                        'rounded-full bg-[#C9A227] py-2.5 text-sm font-semibold text-white hover:bg-[#b8931f]',
+                        'min-w-0 flex-[2] px-3 md:flex-none md:px-8' => (bool) $product,
+                        'w-full px-8 md:w-auto' => ! $product,
+                    ])
+                    :disabled="uploading">
                     <span x-show="!uploading">{{ $product ? 'Save Product' : 'Create Product' }}</span>
                     <span x-show="uploading" x-cloak>Saving…</span>
                 </button>
@@ -827,12 +833,12 @@
                     <button type="button"
                         wire:click="delete"
                         wire:confirm="Delete this product? Order history will keep line snapshots, but the product and its images will be removed."
-                        class="rounded-full border border-rose-300 px-6 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+                        class="min-w-0 flex-1 rounded-full border border-rose-300 px-3 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 md:flex-none md:px-6"
                         :disabled="uploading">
                         Delete
                     </button>
                 @endif
-                <p x-show="uploadError" x-text="uploadError" class="text-xs text-rose-600" x-cloak></p>
+                <p x-show="uploadError" x-text="uploadError" class="basis-full text-xs text-rose-600 md:basis-auto" x-cloak></p>
             </div>
         </div>
     </form>

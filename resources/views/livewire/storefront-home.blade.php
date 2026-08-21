@@ -43,8 +43,7 @@
         </section>
     @else
         <div class="mx-auto max-w-6xl px-4 pt-10 text-center sm:text-left">
-            <img src="/img/settings/logo.svg"
-                onerror="this.onerror=null;this.src='/img/settings/logo.png'"
+            <img src="/img/settings/logo.png"
                 alt="Sundoritoma"
                 class="mx-auto sm:mx-0 h-16 w-auto object-contain mb-4"
                 width="192"

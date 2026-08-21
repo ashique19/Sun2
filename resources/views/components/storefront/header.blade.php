@@ -11,8 +11,7 @@
     {{-- Desktop / tablet --}}
     <div class="mx-auto max-w-6xl px-4 py-3 sm:py-4 hidden sm:flex items-center gap-3 sm:gap-4">
         <a href="{{ route('home') }}" wire:navigate class="flex items-center shrink-0 min-w-[9.5rem] sm:min-w-[12rem] md:min-w-[14rem]" aria-label="Sundoritoma">
-            <img src="/img/settings/logo.svg"
-                 onerror="this.onerror=null;this.src='/img/settings/logo.png'"
+            <img src="/img/settings/logo.png"
                  alt="Sundoritoma"
                  class="h-14 sm:h-16 md:h-[4.75rem] w-auto max-w-[12rem] sm:max-w-[16rem] md:max-w-[18rem] object-contain object-left"
                  width="288" height="76"
@@ -88,8 +87,7 @@
     <div class="mx-auto max-w-6xl px-4 py-3 space-y-2 sm:hidden">
         <div class="flex items-center gap-3">
             <a href="{{ route('home') }}" wire:navigate class="flex items-center shrink-0 min-w-[9.5rem]" aria-label="Sundoritoma">
-                <img src="/img/settings/logo.svg"
-                     onerror="this.onerror=null;this.src='/img/settings/logo.png'"
+                <img src="/img/settings/logo.png"
                      alt="Sundoritoma"
                      class="h-14 w-auto max-w-[12rem] object-contain object-left"
                      width="192" height="56"

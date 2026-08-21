@@ -57,7 +57,7 @@ class StorefrontHome extends Component
                 'seoDescription' => Seo::description(null),
                 'seoCanonical' => route('home'),
                 'seoType' => 'website',
-                'seoImage' => $heroPreload ?: '/img/settings/logo.svg',
+                'seoImage' => $heroPreload ?: '/img/settings/logo.png',
                 'seoJsonLd' => [JsonLd::website()],
                 'seoPreloadImage' => $heroPreload,
                 'seoPreloadImageSrcset' => $heroPreloadSrcset,

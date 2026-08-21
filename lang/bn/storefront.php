@@ -88,6 +88,9 @@ return [
     'review_thanks' => 'ধন্যবাদ! অনুমোদনের পর রিভিউ দেখা যাবে।',
 
     'breadcrumb_home' => 'হোম',
+    'product_navigation' => 'পণ্য নেভিগেশন',
+    'previous_product' => 'আগের পণ্য',
+    'next_product' => 'পরের পণ্য',
     'shopping_cart' => 'শপিং কার্ট',
     'cart_empty' => 'আপনার কার্ট খালি।',
     'continue_shopping' => 'কেনাকাটা চালিয়ে যান',

@@ -27,7 +27,9 @@
             <span class="text-[#1E1E1E] line-clamp-1">{{ $product->name }}</span>
         </nav>
 
-        <div class="grid lg:grid-cols-2 gap-10">
+        <x-storefront.product-neighbor-nav :product="$product" />
+
+        <div class="grid lg:grid-cols-2 gap-10 mt-6">
             <div>
                 <div class="rounded-xl overflow-hidden bg-white border border-[#EFE7D6] aspect-square">
                     @if ($activeUrl)

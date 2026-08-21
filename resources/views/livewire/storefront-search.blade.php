@@ -20,7 +20,7 @@
                     <a href="{{ route('home') }}#collection" wire:navigate class="text-[#7A6114] hover:underline">
                         {{ __('storefront.popular_categories') }}
                     </a>
-                    <a href="{{ route('search') }}" wire:navigate class="text-[#7A6114] hover:underline">
+                    <a href="{{ route('shop') }}" wire:navigate class="text-[#7A6114] hover:underline">
                         {{ __('storefront.view_all') }}
                     </a>
                 </div>

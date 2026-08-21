@@ -19,7 +19,7 @@
                  decoding="async">
         </a>
 
-        <form action="{{ route('search') }}" method="get" class="flex-1 flex justify-center min-w-0 max-w-sm sm:max-w-md">
+        <form action="{{ route('shop') }}" method="get" class="flex-1 flex justify-center min-w-0 max-w-sm sm:max-w-md">
             <input type="search" name="q" value="{{ $query }}"
                 placeholder="{{ __('storefront.search_placeholder') }}"
                 class="w-full max-w-[14rem] sm:max-w-xs md:max-w-sm rounded-full border border-[#E0D6C2] bg-white px-3.5 py-1.5 text-sm focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
@@ -136,7 +136,7 @@
             </div>
         </div>
 
-        <form action="{{ route('search') }}" method="get" class="w-full">
+        <form action="{{ route('shop') }}" method="get" class="w-full">
             <input type="search" name="q" value="{{ $query }}"
                 placeholder="{{ __('storefront.search_placeholder') }}"
                 class="w-full rounded-full border border-[#E0D6C2] bg-white px-3.5 py-1 text-sm leading-tight focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
@@ -179,10 +179,10 @@
                 class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF]">
                 {{ __('storefront.categories') }}
             </a>
-            <a href="{{ route('search') }}" wire:navigate
+            <a href="{{ route('shop') }}" wire:navigate
                 onclick="document.getElementById('mobile-nav-toggle').checked = false"
-                class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('search') ? 'bg-[#FAF6EF] font-semibold text-[#7A6114]' : '' }}">
-                {{ __('storefront.search') }}
+                class="block rounded-xl px-4 py-3.5 text-[#1E1E1E] hover:bg-[#FAF6EF] {{ request()->routeIs('shop') ? 'bg-[#FAF6EF] font-semibold text-[#7A6114]' : '' }}">
+                {{ __('storefront.shop_all') }}
             </a>
             <a href="{{ route('cart') }}" wire:navigate
                 onclick="document.getElementById('mobile-nav-toggle').checked = false"

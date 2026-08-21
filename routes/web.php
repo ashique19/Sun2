@@ -81,6 +81,7 @@ use App\Livewire\StorefrontProfile;
 use App\Livewire\StorefrontRegister;
 use App\Livewire\StorefrontResetPassword;
 use App\Livewire\StorefrontSearch;
+use App\Livewire\StorefrontShop;
 use App\Livewire\StorefrontSocialPostShow;
 use App\Livewire\StorefrontWishlist;
 use App\Models\Order;
@@ -104,6 +105,7 @@ Route::get('/internal/messenger/sync-conversations', MessengerConversationSyncCo
 Route::get('/', StorefrontHome::class)->name('home');
 Route::get('/category/{category:slug}', StorefrontCategory::class)->name('category.show');
 Route::get('/product/{product:slug}', StorefrontProduct::class)->name('product.show');
+Route::get('/shop', StorefrontShop::class)->name('shop');
 Route::get('/search', StorefrontSearch::class)->name('search');
 Route::get('/cart', StorefrontCart::class)->name('cart');
 Route::get('/checkout', StorefrontCheckout::class)->name('checkout');

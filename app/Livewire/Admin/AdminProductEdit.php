@@ -47,6 +47,10 @@ class AdminProductEdit extends Component
 
     public string $sku = '';
 
+    public string $meta_title = '';
+
+    public string $meta_description = '';
+
     public string $description = '';
 
     public string $description_bn = '';
@@ -146,6 +150,8 @@ class AdminProductEdit extends Component
         $this->name = $product->name;
         $this->slug = $product->slug;
         $this->sku = (string) ($product->sku ?? '');
+        $this->meta_title = (string) ($product->meta_title ?? '');
+        $this->meta_description = (string) ($product->meta_description ?? '');
         $this->description = (string) ($product->description ?? '');
         $this->description_bn = (string) ($product->description_bn ?? '');
         $this->price = (string) (int) round((float) $product->price);
@@ -1239,6 +1245,8 @@ class AdminProductEdit extends Component
             'name' => ['required', 'string', 'max:255'],
             'slug' => ['required', 'string', 'max:255', $slugUnique],
             'sku' => ['nullable', 'string', 'max:64'],
+            'meta_title' => ['nullable', 'string', 'max:255'],
+            'meta_description' => ['nullable', 'string', 'max:500'],
             'description' => ['nullable', 'string'],
             'description_bn' => ['nullable', 'string'],
             'price' => ['required', 'numeric', 'min:0'],
@@ -1272,6 +1280,12 @@ class AdminProductEdit extends Component
             : null;
         $validated['price_unit'] = trim((string) ($validated['price_unit'] ?? '')) ?: 'পিস';
         $validated['sku'] = $validated['sku'] !== '' ? $validated['sku'] : null;
+        $validated['meta_title'] = isset($validated['meta_title']) && trim((string) $validated['meta_title']) !== ''
+            ? trim((string) $validated['meta_title'])
+            : null;
+        $validated['meta_description'] = isset($validated['meta_description']) && trim((string) $validated['meta_description']) !== ''
+            ? trim((string) $validated['meta_description'])
+            : null;
         $en = ProductDescriptionHtml::sanitize($validated['description'] ?? '');
         $bn = ProductDescriptionHtml::sanitize($validated['description_bn'] ?? '');
         $validated['description'] = $en !== '' ? $en : null;

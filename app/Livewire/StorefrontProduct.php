@@ -135,7 +135,25 @@ class StorefrontProduct extends Component
 
         $shareTitle = Seo::productShareTitle($this->product);
 
-        return view('livewire.storefront-product')
+        $relatedProducts = collect();
+        if ($this->product->category_id) {
+            $relatedProducts = Product::query()
+                ->with([
+                    'category:id,name,slug',
+                    'listingImage',
+                ])
+                ->published()
+                ->where('category_id', $this->product->category_id)
+                ->where('id', '!=', $this->product->id)
+                ->orderBy('display_order')
+                ->orderByDesc('id')
+                ->limit(8)
+                ->get();
+        }
+
+        return view('livewire.storefront-product', [
+            'relatedProducts' => $relatedProducts,
+        ])
             ->title($this->title())
             ->layoutData([
                 'seoOgTitle' => $shareTitle,

@@ -27,7 +27,8 @@ class JsonLd
     }
 
     /**
-     * Sitewide WebSite entity (no SearchAction: /search is noindex + robots-disallowed).
+     * Sitewide WebSite entity. SearchAction targets the indexable /shop hub
+     * (query/facet URLs on /shop stay noindex; legacy /search remains robots-disallowed).
      */
     public static function website(): array
     {
@@ -44,6 +45,14 @@ class JsonLd
                     '@type' => 'ImageObject',
                     'url' => Seo::absoluteUrl('/img/settings/logo.png'),
                 ],
+            ],
+            'potentialAction' => [
+                '@type' => 'SearchAction',
+                'target' => [
+                    '@type' => 'EntryPoint',
+                    'urlTemplate' => route('shop').'?q={search_term_string}',
+                ],
+                'query-input' => 'required name=search_term_string',
             ],
         ];
     }

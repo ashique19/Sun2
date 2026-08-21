@@ -57,6 +57,20 @@
                     <label class="block text-sm font-medium mb-1">SKU</label>
                     <input type="text" wire:model.live="sku" class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
                 </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-sm font-medium mb-1">SEO title</label>
+                    <input type="text" wire:model="meta_title" maxlength="255"
+                        placeholder="Optional — defaults to product name"
+                        class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                    @error('meta_title') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-sm font-medium mb-1">SEO description</label>
+                    <textarea wire:model="meta_description" rows="3" maxlength="500"
+                        placeholder="Optional — used for search snippets and social previews"
+                        class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm"></textarea>
+                    @error('meta_description') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
+                </div>
                 <div>
                     <label class="block text-sm font-medium mb-1">Category</label>
                     <div class="flex flex-wrap items-center gap-2">

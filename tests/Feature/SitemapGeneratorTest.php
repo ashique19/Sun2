@@ -88,8 +88,8 @@ class SitemapGeneratorTest extends TestCase
         $run = $sitemaps->runToCompletion($sitemaps->start('test', force: true));
 
         $this->assertSame('completed', $run->status);
-        // home + 1 active category + 1 page + 1 published product
-        $this->assertSame(4, (int) $run->urls_written);
+        // home + shop + 1 active category + 1 page + 1 published product
+        $this->assertSame(5, (int) $run->urls_written);
 
         $index = $this->get('/sitemap.xml');
         $index->assertOk();
@@ -102,6 +102,7 @@ class SitemapGeneratorTest extends TestCase
         $pagesXml = $pages->getContent();
 
         $this->assertStringContainsString(route('home'), $pagesXml);
+        $this->assertStringContainsString(route('shop'), $pagesXml);
         $this->assertStringContainsString(route('category.show', $activeCategory), $pagesXml);
         $this->assertStringContainsString(route('page.show', $page), $pagesXml);
         $this->assertStringNotContainsString('hidden-category', $pagesXml);

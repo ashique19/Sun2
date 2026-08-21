@@ -62,7 +62,7 @@
     <section id="collection" class="mx-auto max-w-6xl px-4 py-12">
         <div class="flex items-end justify-between gap-4 mb-6">
             <h2 class="font-serif text-2xl font-semibold">{{ __('storefront.shop_by_category') }}</h2>
-            <a href="{{ route('search') }}" wire:navigate class="text-sm text-[#7A6114] hover:underline">{{ __('storefront.view_all_products') }}</a>
+            <a href="{{ route('shop') }}" wire:navigate class="text-sm text-[#7A6114] hover:underline">{{ __('storefront.view_all_products') }}</a>
         </div>
 
         @if ($categories->isEmpty())

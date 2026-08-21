@@ -10,7 +10,7 @@
             <h4 class="font-semibold mb-3">{{ __('storefront.shop') }}</h4>
             <ul class="space-y-2 text-[#6B6459]">
                 <li><a href="{{ route('home') }}#collection" wire:navigate class="hover:text-[#7A6114]">{{ __('storefront.categories') }}</a></li>
-                <li><a href="{{ route('search') }}" wire:navigate class="hover:text-[#7A6114]">{{ __('storefront.search_products') }}</a></li>
+                <li><a href="{{ route('shop') }}" wire:navigate class="hover:text-[#7A6114]">{{ __('storefront.shop_all') }}</a></li>
                 <li><a href="{{ route('cart') }}" wire:navigate class="hover:text-[#7A6114]">{{ __('storefront.shopping_cart') }}</a></li>
             </ul>
         </div>

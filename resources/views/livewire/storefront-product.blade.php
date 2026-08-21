@@ -168,6 +168,17 @@
             </div>
         </div>
 
+        @if ($relatedProducts->isNotEmpty())
+            <section class="mt-16" aria-labelledby="related-products-heading">
+                <h2 id="related-products-heading" class="font-serif text-2xl font-semibold mb-6">{{ __('storefront.related_products') }}</h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-5">
+                    @foreach ($relatedProducts as $related)
+                        <x-storefront.product-card :product="$related" />
+                    @endforeach
+                </div>
+            </section>
+        @endif
+
         <div class="mt-16 grid lg:grid-cols-2 gap-10">
             <div>
                 <h2 class="font-serif text-2xl font-semibold mb-6">{{ __('storefront.customer_reviews') }}</h2>

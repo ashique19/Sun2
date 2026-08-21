@@ -213,6 +213,13 @@ class SitemapRebuildService
             'priority' => '1.0',
         ];
 
+        $urls[] = [
+            'loc' => route('shop'),
+            'lastmod' => now()->toAtomString(),
+            'changefreq' => 'daily',
+            'priority' => '0.9',
+        ];
+
         Category::query()
             ->where('is_active', true)
             ->orderBy('id')

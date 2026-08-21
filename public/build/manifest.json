@@ -1,10 +1,7 @@
 {
-  "_cropper-D8EYC47y.js": {
-    "file": "assets/cropper-D8EYC47y.js",
+  "_cropper-Cc-iPK7Z.js": {
+    "file": "assets/cropper-Cc-iPK7Z.js",
     "name": "cropper",
-    "imports": [
-      "_rolldown-runtime-Bh1tDfsg.js"
-    ],
     "css": [
       "assets/cropper-cx_wrqbx.css"
     ]
@@ -65,10 +62,6 @@
     "file": "assets/instrument-sans-600-normal-DMks36a2.woff",
     "src": "_instrument-sans-600-normal-DMks36a2.woff"
   },
-  "_rolldown-runtime-Bh1tDfsg.js": {
-    "file": "assets/rolldown-runtime-Bh1tDfsg.js",
-    "name": "rolldown-runtime"
-  },
   "resources/css/app.css": {
     "file": "assets/app-CTGemIqI.css",
     "name": "app",
@@ -79,13 +72,12 @@
     "isEntry": true
   },
   "resources/js/admin-product-images.js": {
-    "file": "assets/admin-product-images-kWqLLgUF.js",
+    "file": "assets/admin-product-images-RxrddLTP.js",
     "name": "admin-product-images",
     "src": "resources/js/admin-product-images.js",
     "isEntry": true,
     "imports": [
-      "_rolldown-runtime-Bh1tDfsg.js",
-      "_cropper-D8EYC47y.js"
+      "_cropper-Cc-iPK7Z.js"
     ]
   },
   "resources/js/admin-rich-text-editor.js": {
@@ -95,35 +87,30 @@
     "isEntry": true
   },
   "resources/js/app.js": {
-    "file": "assets/app-DXK6Bx7K.js",
+    "file": "assets/app-BcOrZhY7.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true,
-    "imports": [
-      "_rolldown-runtime-Bh1tDfsg.js"
-    ],
     "css": [
       "assets/app-CTGemIqI.css"
     ]
   },
   "resources/js/inbox-image-edit.js": {
-    "file": "assets/inbox-image-edit-wSPlZgqQ.js",
+    "file": "assets/inbox-image-edit-C7yAtbvo.js",
     "name": "inbox-image-edit",
     "src": "resources/js/inbox-image-edit.js",
     "isEntry": true,
     "imports": [
-      "_rolldown-runtime-Bh1tDfsg.js",
-      "_cropper-D8EYC47y.js"
+      "_cropper-Cc-iPK7Z.js"
     ]
   },
   "resources/js/inbox-product-crop.js": {
-    "file": "assets/inbox-product-crop-35TkeTD4.js",
+    "file": "assets/inbox-product-crop-fgamY-Ep.js",
     "name": "inbox-product-crop",
     "src": "resources/js/inbox-product-crop.js",
     "isEntry": true,
     "imports": [
-      "_rolldown-runtime-Bh1tDfsg.js",
-      "_cropper-D8EYC47y.js"
+      "_cropper-Cc-iPK7Z.js"
     ]
   }
 }

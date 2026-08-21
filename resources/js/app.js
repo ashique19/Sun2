@@ -51,9 +51,9 @@ window.sunCopyText = async function sunCopyText(text, feedbackEl) {
 };
 
 /**
- * Echo exposes an expressive API for subscribing to channels and listening
- * for events that are broadcast by Laravel. Echo and event broadcasting
- * allow your team to quickly build robust real-time web applications.
+ * Echo/Pusher are only needed when Reverb is configured (admin inbox).
+ * Dynamic import keeps laravel-echo + pusher-js out of the default storefront chunk.
  */
-
-import './echo';
+if (import.meta.env.VITE_REVERB_APP_KEY) {
+    import('./echo');
+}

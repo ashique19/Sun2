@@ -44,12 +44,17 @@
     <link rel="icon" type="image/png" href="/img/settings/favicon.png">
     <x-google-analytics />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @isset($seoPreloadImage)
+        <link rel="preload" as="image" href="{{ $seoPreloadImage }}" fetchpriority="high"
+            @isset($seoPreloadImageSrcset) imagesrcset="{{ $seoPreloadImageSrcset }}" imagesizes="100vw" @endisset>
+    @endisset
     <x-seo.json-ld :data="\App\Support\JsonLd::organization()" />
     @isset($seoJsonLd)
         @foreach ((array) $seoJsonLd as $jsonLdBlock)
             <x-seo.json-ld :data="$jsonLdBlock" />
         @endforeach
     @endisset
+    @stack('head')
 </head>
 <body class="min-h-screen bg-[#FAF6EF] text-[#1E1E1E]">
     {{ $slot }}

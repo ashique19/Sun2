@@ -86,6 +86,8 @@ class StorefrontAssets
 
     /**
      * Build a responsive srcset for listing/thumb images.
+     * Only includes variants that resolve to distinct files — never advertise the
+     * same full-size legacy image as 200w/400w/800w ( inflates payloads ).
      *
      * @param  array<string, int>  $widths  variant => CSS pixel width hint
      */
@@ -100,22 +102,83 @@ class StorefrontAssets
         }
 
         $parts = [];
+        $seenUrls = [];
 
         foreach ($widths as $variant => $width) {
-            $url = self::variantUrl($pathOrUrl, (string) $variant);
+            $url = self::exactVariantUrl($pathOrUrl, (string) $variant);
 
-            if ($url) {
-                $parts[] = $url.' '.(int) $width.'w';
+            if (! $url || isset($seenUrls[$url])) {
+                continue;
+            }
+
+            $seenUrls[$url] = true;
+            $parts[] = $url.' '.(int) $width.'w';
+        }
+
+        // A single URL is not a useful srcset; callers already set src=.
+        return count($parts) >= 2 ? implode(', ', $parts) : null;
+    }
+
+    /**
+     * Resolve a sized sibling only — no fallback to the unsuffixed original.
+     */
+    public static function exactVariantUrl(?string $pathOrUrl, string $variant = 'md'): ?string
+    {
+        if (! $pathOrUrl) {
+            return null;
+        }
+
+        $variant = strtolower($variant);
+
+        if (! in_array($variant, ['xs', 'sm', 'md', 'lg'], true)) {
+            $variant = 'md';
+        }
+
+        $path = self::toRelativePath($pathOrUrl);
+
+        if (! $path) {
+            return null;
+        }
+
+        if (preg_match('/_(xs|sm|md|lg)(\.[a-zA-Z0-9]+)$/i', $path)) {
+            $candidate = preg_replace('/_(xs|sm|md|lg)(\.[a-zA-Z0-9]+)$/i', '_'.$variant.'$2', $path);
+        } else {
+            $candidate = preg_replace('/(\.[a-zA-Z0-9]+)$/i', '_'.$variant.'$1', $path);
+        }
+
+        if (! is_string($candidate) || $candidate === '') {
+            return null;
+        }
+
+        if (preg_match('#^img/order/(.+)$#i', $candidate, $matches)) {
+            $thumbCandidate = 'img/thumb/'.$matches[1];
+            if (is_file(public_path($thumbCandidate))) {
+                return asset($thumbCandidate);
             }
         }
 
-        return $parts === [] ? null : implode(', ', $parts);
+        if (is_file(public_path($candidate))) {
+            return asset($candidate);
+        }
+
+        // CDN may host generated siblings even when local disk does not.
+        if (! is_file(public_path($path))) {
+            return self::CDN_BASE.$candidate;
+        }
+
+        return null;
     }
 
     public static function variantUrl(?string $pathOrUrl, string $variant = 'md'): ?string
     {
         if (! $pathOrUrl) {
             return null;
+        }
+
+        $exact = self::exactVariantUrl($pathOrUrl, $variant);
+
+        if ($exact) {
+            return $exact;
         }
 
         $variant = strtolower($variant);
@@ -134,12 +197,6 @@ class StorefrontAssets
 
         if (preg_match('/_(xs|sm|md|lg)(\.[a-zA-Z0-9]+)$/i', $path)) {
             $path = preg_replace('/_(xs|sm|md|lg)(\.[a-zA-Z0-9]+)$/i', '_'.$variant.'$2', $path);
-        } else {
-            $sibling = preg_replace('/(\.[a-zA-Z0-9]+)$/i', '_'.$variant.'$1', $path);
-
-            if (is_string($sibling) && is_file(public_path($sibling))) {
-                return asset($sibling);
-            }
         }
 
         // Order line snapshots are usually _xs-only; product thumbs live under img/thumb.
@@ -155,7 +212,11 @@ class StorefrontAssets
             return asset($original);
         }
 
-        return self::CDN_BASE.$path;
+        if (is_file(public_path($original))) {
+            return asset($original);
+        }
+
+        return self::CDN_BASE.($path ?: $original);
     }
 
     public static function toRelativePath(string $pathOrUrl): ?string

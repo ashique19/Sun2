@@ -87,22 +87,49 @@ class StorefrontAssetsTest extends TestCase
     }
 
     #[Test]
-    public function variant_url_falls_back_to_original_local_file_when_sibling_is_missing(): void
+    public function srcset_omits_duplicate_full_size_when_variants_are_missing(): void
     {
-        $relative = 'img/categories/999003/only-master.jpg';
+        $relative = 'img/categories/999004/only-master.jpg';
         $absolute = public_path($relative);
         File::ensureDirectoryExists(dirname($absolute));
         File::put($absolute, 'master-bytes');
 
         try {
-            $url = StorefrontAssets::smallUrl('/'.$relative);
-
-            $this->assertNotNull($url);
-            $this->assertStringNotContainsString('sundoritoma.com', $url);
-            $this->assertStringContainsString($relative, $url);
+            $this->assertNull(StorefrontAssets::srcset('/'.$relative));
+            $this->assertNull(StorefrontAssets::exactVariantUrl('/'.$relative, 'sm'));
+            $this->assertStringContainsString($relative, (string) StorefrontAssets::smallUrl('/'.$relative));
         } finally {
             @unlink($absolute);
             @rmdir(dirname($absolute));
+        }
+    }
+
+    #[Test]
+    public function srcset_lists_distinct_local_variants_only(): void
+    {
+        $master = 'img/categories/999005/cat.jpg';
+        $sm = 'img/categories/999005/cat_sm.jpg';
+        $md = 'img/categories/999005/cat_md.jpg';
+        File::ensureDirectoryExists(dirname(public_path($master)));
+        File::put(public_path($master), 'master');
+        File::put(public_path($sm), 'sm');
+        File::put(public_path($md), 'md');
+
+        try {
+            $srcset = StorefrontAssets::srcset('/'.$master, [
+                'sm' => 400,
+                'md' => 800,
+            ]);
+
+            $this->assertNotNull($srcset);
+            $this->assertStringContainsString($sm.' 400w', $srcset);
+            $this->assertStringContainsString($md.' 800w', $srcset);
+            $this->assertStringNotContainsString($master.' ', $srcset);
+        } finally {
+            @unlink(public_path($master));
+            @unlink(public_path($sm));
+            @unlink(public_path($md));
+            @rmdir(dirname(public_path($master)));
         }
     }
 }

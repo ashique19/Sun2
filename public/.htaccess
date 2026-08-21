@@ -23,3 +23,26 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+# Long-cache hashed Vite build assets and static images (PageSpeed / CDN-friendly).
+<IfModule mod_headers.c>
+    <IfModule mod_expires.c>
+        ExpiresActive On
+        ExpiresByType text/css "access plus 1 year"
+        ExpiresByType application/javascript "access plus 1 year"
+        ExpiresByType image/jpeg "access plus 30 days"
+        ExpiresByType image/png "access plus 30 days"
+        ExpiresByType image/webp "access plus 30 days"
+        ExpiresByType image/svg+xml "access plus 30 days"
+        ExpiresByType image/x-icon "access plus 30 days"
+        ExpiresByType font/woff2 "access plus 1 year"
+    </IfModule>
+
+    <FilesMatch "\.(?:css|js|woff2)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+
+    <FilesMatch "\.(?:jpg|jpeg|png|gif|webp|svg|ico)$">
+        Header set Cache-Control "public, max-age=2592000"
+    </FilesMatch>
+</IfModule>

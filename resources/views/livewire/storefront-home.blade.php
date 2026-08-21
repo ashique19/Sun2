@@ -1,17 +1,28 @@
 <x-storefront.shell>
     @if ($heroSlides->isNotEmpty())
-        @php $slide = $heroSlides->first(); @endphp
+        @php
+            $slide = $heroSlides->first();
+            $heroSrc = \App\Support\StorefrontAssets::mediumUrl($slide->image)
+                ?? \App\Support\StorefrontAssets::url($slide->image);
+            $heroSrcset = \App\Support\StorefrontAssets::srcset($slide->image, [
+                'xs' => 480,
+                'sm' => 800,
+                'md' => 1200,
+            ]);
+        @endphp
         <section class="relative overflow-hidden bg-[#1E1E1E]">
             <div class="relative w-full min-h-[220px] sm:min-h-[280px] md:min-h-[420px] max-h-[520px]">
                 <div class="absolute inset-0">
-                    @if ($image = \App\Support\StorefrontAssets::mediumUrl($slide->image) ?? \App\Support\StorefrontAssets::url($slide->image))
+                    @if ($heroSrc)
                         <img
-                            src="{{ $image }}"
+                            src="{{ $heroSrc }}"
+                            @if ($heroSrcset) srcset="{{ $heroSrcset }}" sizes="100vw" @endif
                             alt="{{ $slide->title }}"
                             class="h-full w-full object-cover"
                             width="1200"
                             height="520"
                             fetchpriority="high"
+                            decoding="async"
                         >
                     @endif
                     <div class="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent"></div>
@@ -32,7 +43,13 @@
         </section>
     @else
         <div class="mx-auto max-w-6xl px-4 pt-10 text-center sm:text-left">
-            <img src="/img/settings/logo.png" alt="Sundoritoma" class="mx-auto sm:mx-0 h-16 w-auto object-contain mb-4" width="192" height="64">
+            <img src="/img/settings/logo.svg"
+                onerror="this.onerror=null;this.src='/img/settings/logo.png'"
+                alt="Sundoritoma"
+                class="mx-auto sm:mx-0 h-16 w-auto object-contain mb-4"
+                width="192"
+                height="64"
+                decoding="async">
             <h1 class="font-serif text-3xl md:text-4xl font-semibold">{{ __('storefront.handmade_jewellery') }}</h1>
             <p class="mt-2 text-[#6B6459] max-w-2xl mx-auto sm:mx-0">{{ __('storefront.handmade_tagline') }}</p>
             <a href="#collection"

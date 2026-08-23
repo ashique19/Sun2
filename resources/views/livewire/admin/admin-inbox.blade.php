@@ -1085,7 +1085,7 @@
                             @if ($mappingMessage->isImageAttachment())
                                 <div
                                     wire:ignore
-                                    x-data="inboxProductCrop(@js(route('admin.inbox.media', $mappingMessage)))"
+                                    x-data="inboxProductCrop(@js(route('admin.inbox.media', $mappingMessage)), @js(route('admin.inbox.crop-suggestion', $mappingMessage)))"
                                     class="rounded-xl border border-[#E7DFCF] bg-[#FAF6EF] p-3"
                                 >
                                     <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Crop chat image</p>
@@ -1104,6 +1104,13 @@
                                         <button type="button" @click="rotate(-90)" class="rounded-full border border-[#E0D6C2] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6B6459]">↺</button>
                                         <button type="button" @click="rotate(90)" class="rounded-full border border-[#E0D6C2] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6B6459]">↻</button>
                                         <button type="button" @click="resetCrop()" class="rounded-full border border-[#E0D6C2] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6B6459]">Reset</button>
+                                        <button type="button"
+                                            x-show="suggestion"
+                                            x-cloak
+                                            @click="applyAutoCrop()"
+                                            class="rounded-full border border-[#E0D6C2] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6B6459]">
+                                            Auto-detect
+                                        </button>
                                         <button type="button"
                                             @click="findMatch()"
                                             :disabled="busy"

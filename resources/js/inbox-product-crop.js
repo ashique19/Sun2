@@ -2,11 +2,14 @@ import Cropper from 'cropperjs';
 import 'cropperjs/dist/cropper.css';
 
 const registerInboxProductCrop = () => {
-    Alpine.data('inboxProductCrop', (imageUrl) => ({
+    Alpine.data('inboxProductCrop', (imageUrl, suggestionUrl = null) => ({
         cropper: null,
         busy: false,
         error: null,
         imageUrl,
+        suggestionUrl,
+        suggestion: null,
+        suggestionApplied: false,
 
         init() {
             this.$nextTick(() => this.boot());
@@ -18,7 +21,11 @@ const registerInboxProductCrop = () => {
                 return;
             }
 
-            const start = () => this.initCropper();
+            const start = () => {
+                this.initCropper();
+                this.loadSuggestion();
+            };
+
             if (image.complete && image.naturalWidth > 0) {
                 start();
             } else {
@@ -46,7 +53,62 @@ const registerInboxProductCrop = () => {
 
             this.$nextTick(() => {
                 this.cropper?.resize();
+                this.applySuggestionIfReady();
             });
+        },
+
+        async loadSuggestion() {
+            if (! this.suggestionUrl) {
+                return;
+            }
+
+            try {
+                const response = await fetch(this.suggestionUrl, {
+                    headers: {
+                        Accept: 'application/json',
+                    },
+                    credentials: 'same-origin',
+                });
+
+                if (! response.ok) {
+                    return;
+                }
+
+                const payload = await response.json();
+                this.suggestion = payload?.suggestion ?? null;
+                this.applySuggestionIfReady();
+            } catch {
+                // Staff can still crop manually when auto-detect is unavailable.
+            }
+        },
+
+        applySuggestionIfReady() {
+            if (! this.cropper || ! this.suggestion || this.suggestionApplied) {
+                return;
+            }
+
+            const image = this.$refs.cropImage;
+            if (! image?.naturalWidth || ! image?.naturalHeight) {
+                return;
+            }
+
+            this.cropper.setData({
+                x: this.suggestion.left * image.naturalWidth,
+                y: this.suggestion.top * image.naturalHeight,
+                width: this.suggestion.width * image.naturalWidth,
+                height: this.suggestion.height * image.naturalHeight,
+            });
+
+            this.suggestionApplied = true;
+        },
+
+        applyAutoCrop() {
+            if (! this.suggestion) {
+                return;
+            }
+
+            this.suggestionApplied = false;
+            this.applySuggestionIfReady();
         },
 
         destroyCropper() {
@@ -62,6 +124,7 @@ const registerInboxProductCrop = () => {
 
         resetCrop() {
             this.cropper?.reset();
+            this.suggestionApplied = false;
         },
 
         async findMatch() {

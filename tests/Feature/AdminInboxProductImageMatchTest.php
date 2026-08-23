@@ -402,4 +402,68 @@ class AdminInboxProductImageMatchTest extends TestCase
             Order::query()->find($conversation->fresh()->draft_order_id)?->items()->first()?->product_id,
         );
     }
+
+    #[Test]
+    public function crop_suggestion_endpoint_returns_trim_bounds_for_screenshot(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $catalog = imagecreatetruecolor(200, 200);
+        $a = imagecolorallocate($catalog, 200, 40, 60);
+        $b = imagecolorallocate($catalog, 40, 90, 200);
+        for ($y = 0; $y < 200; $y++) {
+            for ($x = 0; $x < 200; $x++) {
+                imagesetpixel($catalog, $x, $y, (((int) ($x / 10)) % 2) === 0 ? $a : $b);
+            }
+        }
+
+        $screenshot = imagecreatetruecolor(400, 400);
+        $chrome = imagecolorallocate($screenshot, 30, 30, 30);
+        imagefill($screenshot, 0, 0, $chrome);
+        imagecopy($screenshot, $catalog, 100, 100, 0, 0, 200, 200);
+        imagedestroy($catalog);
+
+        $relativeDir = 'img/inbox-tests';
+        $absoluteDir = public_path($relativeDir);
+        if (! is_dir($absoluteDir)) {
+            mkdir($absoluteDir, 0775, true);
+        }
+        $relativePath = $relativeDir.'/crop-suggestion-'.uniqid().'.png';
+        $absolutePath = public_path($relativePath);
+        imagepng($screenshot, $absolutePath);
+        imagedestroy($screenshot);
+
+        $conversation = $this->conversation();
+        $message = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => null,
+            'media_url' => '/'.$relativePath,
+            'media_mime' => 'image/png',
+            'raw_payload' => [
+                'message' => [
+                    'attachments' => [
+                        ['type' => 'image', 'payload' => ['url' => '/'.$relativePath]],
+                    ],
+                ],
+            ],
+            'sent_at' => now(),
+        ]);
+
+        $response = $this->getJson(route('admin.inbox.crop-suggestion', $message));
+
+        $response->assertOk()
+            ->assertJsonPath('suggestion.strategy', 'trim')
+            ->assertJsonStructure([
+                'suggestion' => ['left', 'top', 'width', 'height', 'strategy'],
+            ]);
+
+        $suggestion = $response->json('suggestion');
+        $this->assertEqualsWithDelta(0.25, $suggestion['left'], 0.02);
+        $this->assertEqualsWithDelta(0.25, $suggestion['top'], 0.02);
+        $this->assertEqualsWithDelta(0.5, $suggestion['width'], 0.02);
+        $this->assertEqualsWithDelta(0.5, $suggestion['height'], 0.02);
+
+        @unlink($absolutePath);
+    }
 }

@@ -30,12 +30,7 @@ class ChannelMessageImageMatchService
             return null;
         }
 
-        $url = trim((string) ($message->media_url ?? ''));
-        if ($url === '') {
-            return null;
-        }
-
-        $downloaded = $this->downloadMediaBytes($url, $message->media_mime);
+        $downloaded = $this->downloadInboundImageBytes($message);
         if ($downloaded === null) {
             return null;
         }
@@ -77,6 +72,24 @@ class ChannelMessageImageMatchService
             'match_percent' => (float) $top['match_percent'],
             'strategy' => (string) ($top['strategy'] ?? 'full'),
         ];
+    }
+
+    /**
+     * @return array{bytes: string, mime: string}|null
+     */
+    public function downloadInboundImageBytes(ChannelMessage $message): ?array
+    {
+        if ($message->direction !== ChannelMessage::DIRECTION_INBOUND
+            || ! $message->isImageAttachment()) {
+            return null;
+        }
+
+        $url = trim((string) ($message->media_url ?? ''));
+        if ($url === '') {
+            return null;
+        }
+
+        return $this->downloadMediaBytes($url, $message->media_mime);
     }
 
     /**

@@ -246,4 +246,29 @@ class ProductImageHashCenterCropTest extends TestCase
         $this->assertSame($product->id, $matches[0]['product_id']);
         $this->assertGreaterThanOrEqual(ProductImageHashService::AUTO_MATCH_PERCENT, $matches[0]['match_percent']);
     }
+
+    #[Test]
+    public function suggest_screenshot_crop_fractions_trims_uniform_chrome(): void
+    {
+        $hasher = app(ProductImageHashService::class);
+        [, $screenshotBytes] = $this->catalogAndScreenshotBytes();
+
+        $suggestion = $hasher->suggestScreenshotCropFractions($screenshotBytes);
+
+        $this->assertNotNull($suggestion);
+        $this->assertSame('trim', $suggestion['strategy']);
+        $this->assertEqualsWithDelta(0.25, $suggestion['left'], 0.02);
+        $this->assertEqualsWithDelta(0.25, $suggestion['top'], 0.02);
+        $this->assertEqualsWithDelta(0.5, $suggestion['width'], 0.02);
+        $this->assertEqualsWithDelta(0.5, $suggestion['height'], 0.02);
+    }
+
+    #[Test]
+    public function suggest_screenshot_crop_fractions_returns_null_without_chrome(): void
+    {
+        $hasher = app(ProductImageHashService::class);
+        [$catalogBytes] = $this->catalogAndScreenshotBytes();
+
+        $this->assertNull($hasher->suggestScreenshotCropFractions($catalogBytes));
+    }
 }

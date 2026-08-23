@@ -441,10 +441,55 @@ class ProductImageHashService
     }
 
     /**
-     * Remove uniform screenshot chrome (status bars, messenger margins, etc.) by
-     * scanning rows/columns with low gray variance. Returns null when no trim helps.
+     * Suggest a crop box for inbox screenshot tagging as fractions of the image size.
+     *
+     * @return array{left: float, top: float, width: float, height: float, strategy: string}|null
      */
-    private function trimScreenshotChromeCopy(\GdImage $image): ?\GdImage
+    public function suggestScreenshotCropFractions(string $binary): ?array
+    {
+        $image = @imagecreatefromstring($binary);
+
+        if ($image === false) {
+            return null;
+        }
+
+        try {
+            $image = $this->downscaleForHash($image);
+            $width = imagesx($image);
+            $height = imagesy($image);
+
+            if ($width < 8 || $height < 8) {
+                return null;
+            }
+
+            $bounds = $this->detectScreenshotContentBounds($image);
+
+            if ($bounds === null) {
+                return null;
+            }
+
+            [$left, $top, $right, $bottom] = $bounds;
+            $cropWidth = $right - $left + 1;
+            $cropHeight = $bottom - $top + 1;
+
+            return [
+                'left' => round($left / $width, 4),
+                'top' => round($top / $height, 4),
+                'width' => round($cropWidth / $width, 4),
+                'height' => round($cropHeight / $height, 4),
+                'strategy' => 'trim',
+            ];
+        } finally {
+            imagedestroy($image);
+        }
+    }
+
+    /**
+     * Pixel bounds [left, top, right, bottom] inclusive of content after trimming chrome.
+     *
+     * @return array{0:int,1:int,2:int,3:int}|null
+     */
+    private function detectScreenshotContentBounds(\GdImage $image): ?array
     {
         $width = imagesx($image);
         $height = imagesy($image);
@@ -501,6 +546,25 @@ class ProductImageHashService
             || $cropHeight < max(8, (int) round($height * self::TRIM_MIN_CONTENT_FRACTION))) {
             return null;
         }
+
+        return [$left, $top, $right, $bottom];
+    }
+
+    /**
+     * Remove uniform screenshot chrome (status bars, messenger margins, etc.) by
+     * scanning rows/columns with low gray variance. Returns null when no trim helps.
+     */
+    private function trimScreenshotChromeCopy(\GdImage $image): ?\GdImage
+    {
+        $bounds = $this->detectScreenshotContentBounds($image);
+
+        if ($bounds === null) {
+            return null;
+        }
+
+        [$left, $top, $right, $bottom] = $bounds;
+        $cropWidth = $right - $left + 1;
+        $cropHeight = $bottom - $top + 1;
 
         $cropped = imagecreatetruecolor($cropWidth, $cropHeight);
         if ($cropped === false) {

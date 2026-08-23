@@ -256,11 +256,134 @@ class ProductImageHashCenterCropTest extends TestCase
         $suggestion = $hasher->suggestScreenshotCropFractions($screenshotBytes);
 
         $this->assertNotNull($suggestion);
-        $this->assertSame('trim', $suggestion['strategy']);
+        $this->assertContains($suggestion['strategy'], ['trim', 'photo_panel']);
         $this->assertEqualsWithDelta(0.25, $suggestion['left'], 0.02);
         $this->assertEqualsWithDelta(0.25, $suggestion['top'], 0.02);
         $this->assertEqualsWithDelta(0.5, $suggestion['width'], 0.02);
         $this->assertEqualsWithDelta(0.5, $suggestion['height'], 0.02);
+    }
+
+    #[Test]
+    public function suggest_screenshot_crop_fractions_isolates_facebook_photo_panel(): void
+    {
+        $hasher = app(ProductImageHashService::class);
+        $screenshotBytes = $this->facebookViewerScreenshotBytes();
+
+        $suggestion = $hasher->suggestScreenshotCropFractions($screenshotBytes);
+
+        $this->assertNotNull($suggestion);
+        $this->assertSame('photo_panel', $suggestion['strategy']);
+        $this->assertEqualsWithDelta(0.15, $suggestion['top'], 0.04);
+        $this->assertLessThan(0.68, $suggestion['top'] + $suggestion['height']);
+        $this->assertGreaterThan(0.45, $suggestion['height']);
+        $this->assertEqualsWithDelta(0.9, $suggestion['width'], 0.05);
+    }
+
+    #[Test]
+    public function facebook_photo_panel_trim_improves_catalog_match_over_full_frame(): void
+    {
+        $hasher = app(ProductImageHashService::class);
+
+        $catalog = imagecreatetruecolor(180, 180);
+        $this->paintStripes($catalog, 0, 0, 180, 180);
+        $catalogBytes = $this->pngBytes($catalog);
+
+        $screenshotBytes = $this->facebookViewerScreenshotBytes($catalogBytes);
+        $catalogHash = $hasher->hashBinary($catalogBytes);
+
+        $fullPercent = $hasher->matchPercent($catalogHash, $hasher->hashBinary($screenshotBytes));
+        $this->assertLessThan(80.0, $fullPercent);
+
+        $suggestion = $hasher->suggestScreenshotCropFractions($screenshotBytes);
+        $this->assertNotNull($suggestion);
+        $this->assertSame('photo_panel', $suggestion['strategy']);
+
+        $image = imagecreatefromstring($screenshotBytes);
+        $this->assertNotFalse($image);
+        $width = imagesx($image);
+        $height = imagesy($image);
+        $left = (int) round($suggestion['left'] * $width);
+        $top = (int) round($suggestion['top'] * $height);
+        $cropWidth = max(1, (int) round($suggestion['width'] * $width));
+        $cropHeight = max(1, (int) round($suggestion['height'] * $height));
+        $cropped = imagecreatetruecolor($cropWidth, $cropHeight);
+        imagecopy($cropped, $image, 0, 0, $left, $top, $cropWidth, $cropHeight);
+        imagedestroy($image);
+
+        $trimHash = $hasher->hashBinary($this->pngBytes($cropped));
+        imagedestroy($cropped);
+
+        $trimPercent = $hasher->matchPercent($catalogHash, $trimHash);
+        $this->assertGreaterThan($fullPercent, $trimPercent);
+    }
+
+    /**
+     * Portrait Facebook photo viewer: black letterboxing, bright product panel, dark UI overlay.
+     */
+    private function facebookViewerScreenshotBytes(?string $catalogBytes = null): string
+    {
+        $width = 480;
+        $height = 960;
+
+        $screenshot = imagecreatetruecolor($width, $height);
+        $black = imagecolorallocate($screenshot, 8, 8, 10);
+        imagefill($screenshot, 0, 0, $black);
+
+        $photoTop = (int) round($height * 0.15);
+        $photoBottom = (int) round($height * 0.65);
+        $photoLeft = (int) round($width * 0.05);
+        $photoRight = (int) round($width * 0.95);
+        $photoWidth = $photoRight - $photoLeft;
+        $photoHeight = $photoBottom - $photoTop;
+
+        if ($catalogBytes !== null) {
+            $catalog = imagecreatefromstring($catalogBytes);
+            imagecopyresampled(
+                $screenshot,
+                $catalog,
+                $photoLeft,
+                $photoTop,
+                0,
+                0,
+                $photoWidth,
+                $photoHeight,
+                imagesx($catalog),
+                imagesy($catalog),
+            );
+            imagedestroy($catalog);
+        } else {
+            $gold = imagecolorallocate($screenshot, 196, 154, 72);
+            $maroon = imagecolorallocate($screenshot, 120, 24, 48);
+            for ($y = $photoTop; $y < $photoBottom; $y++) {
+                for ($x = $photoLeft; $x < $photoRight; $x++) {
+                    imagesetpixel($screenshot, $x, $y, (($x + $y) % 24) < 12 ? $gold : $maroon);
+                }
+            }
+        }
+
+        $overlayTop = (int) round($height * 0.66);
+        $overlayBottom = (int) round($height * 0.9);
+        for ($y = $overlayTop; $y < $overlayBottom; $y++) {
+            for ($x = 0; $x < $width; $x++) {
+                $base = 18 + (($x + $y) % 7);
+                $noise = (($x * 17 + $y * 13) % 5) * 8;
+                $color = imagecolorallocate($screenshot, $base + $noise, $base + 2, $base + 4);
+                imagesetpixel($screenshot, $x, $y, $color);
+            }
+        }
+
+        // Simulate white text / blue button noise in the overlay band.
+        $white = imagecolorallocate($screenshot, 235, 235, 235);
+        $blue = imagecolorallocate($screenshot, 24, 119, 242);
+        imagefilledrectangle($screenshot, 24, $overlayTop + 40, $width - 24, $overlayTop + 88, $blue);
+        imagestring($screenshot, 4, 28, $overlayTop + 12, 'Sundoritoma', $white);
+
+        ob_start();
+        imagepng($screenshot);
+        $bytes = (string) ob_get_clean();
+        imagedestroy($screenshot);
+
+        return $bytes;
     }
 
     #[Test]

@@ -40,6 +40,17 @@ class ProductImageHashService
     public const CHROME_LINE_STD_THRESHOLD = 10.0;
 
     /**
+     * Mean luminance below this (with low variance) is treated as dark letterboxing.
+     */
+    public const CHROME_DARK_MEAN_THRESHOLD = 28.0;
+
+    /**
+     * Minimum fraction of a row/column that must be brighter than {@see CHROME_DARK_MEAN_THRESHOLD}
+     * to count as embedded photo content (vs. a dark Facebook overlay band).
+     */
+    public const PHOTO_ROW_BRIGHT_FRACTION = 0.42;
+
+    /**
      * After trimming, keep at least this fraction of the original width/height.
      */
     public const TRIM_MIN_CONTENT_FRACTION = 0.15;
@@ -477,7 +488,7 @@ class ProductImageHashService
                 'top' => round($top / $height, 4),
                 'width' => round($cropWidth / $width, 4),
                 'height' => round($cropHeight / $height, 4),
-                'strategy' => 'trim',
+                'strategy' => $bounds[4] ?? 'trim',
             ];
         } finally {
             imagedestroy($image);
@@ -485,9 +496,9 @@ class ProductImageHashService
     }
 
     /**
-     * Pixel bounds [left, top, right, bottom] inclusive of content after trimming chrome.
+     * Pixel bounds [left, top, right, bottom, strategy] for screenshot product content.
      *
-     * @return array{0:int,1:int,2:int,3:int}|null
+     * @return array{0:int,1:int,2:int,3:int,4:string}|null
      */
     private function detectScreenshotContentBounds(\GdImage $image): ?array
     {
@@ -498,25 +509,108 @@ class ProductImageHashService
             return null;
         }
 
-        $top = 0;
-        for ($y = 0; $y < $height; $y++) {
-            if ($this->rowGrayStdDev($image, $y) >= self::CHROME_LINE_STD_THRESHOLD) {
-                $top = $y;
-                break;
-            }
+        $candidates = array_filter([
+            $this->detectBrightPhotoPanelBounds($image),
+            $this->detectUniformChromeBounds($image),
+        ]);
+
+        if ($candidates === []) {
+            return null;
         }
 
-        $bottom = $height - 1;
-        for ($y = $height - 1; $y >= $top; $y--) {
-            if ($this->rowGrayStdDev($image, $y) >= self::CHROME_LINE_STD_THRESHOLD) {
-                $bottom = $y;
-                break;
-            }
+        usort($candidates, function (array $a, array $b) use ($image, $width, $height): int {
+            $areaA = ($a[2] - $a[0] + 1) * ($a[3] - $a[1] + 1);
+            $areaB = ($b[2] - $b[0] + 1) * ($b[3] - $b[1] + 1);
+            $fullArea = $width * $height;
+
+            // Prefer tighter crops that still contain a meaningful photo panel.
+            $minArea = max(64, (int) round($fullArea * self::TRIM_MIN_CONTENT_FRACTION));
+            $scoreA = $this->boundsQualityScore($image, $a, $areaA, $fullArea, $minArea);
+            $scoreB = $this->boundsQualityScore($image, $b, $areaB, $fullArea, $minArea);
+
+            return $scoreB <=> $scoreA;
+        });
+
+        return $candidates[0];
+    }
+
+    /**
+     * Facebook / gallery viewer screenshots: find the bright embedded photo between
+     * dark letterboxing and the lower UI overlay (profile row, Send message, etc.).
+     *
+     * @return array{0:int,1:int,2:int,3:int,4:string}|null
+     */
+    private function detectBrightPhotoPanelBounds(\GdImage $image): ?array
+    {
+        $width = imagesx($image);
+        $height = imagesy($image);
+
+        $rowMeans = [];
+        $rowBrightFractions = [];
+
+        for ($y = 0; $y < $height; $y++) {
+            [$mean, , $brightFraction] = $this->rowGrayStats($image, $y);
+            $rowMeans[$y] = $mean;
+            $rowBrightFractions[$y] = $brightFraction;
         }
+
+        $sortedMeans = $rowMeans;
+        sort($sortedMeans);
+        $p25 = $this->percentile($sortedMeans, 0.25);
+        $p75 = $this->percentile($sortedMeans, 0.75);
+        $meanThreshold = max(
+            self::CHROME_DARK_MEAN_THRESHOLD + 8,
+            $p25 + (($p75 - $p25) * 0.5),
+        );
+
+        $isPhotoRow = static function (int $y) use ($rowMeans, $rowBrightFractions, $meanThreshold): bool {
+            return $rowBrightFractions[$y] >= self::PHOTO_ROW_BRIGHT_FRACTION
+                || ($rowMeans[$y] >= $meanThreshold && $rowBrightFractions[$y] >= 0.28);
+        };
+
+        $run = $this->longestContiguousRun($isPhotoRow, $height);
+
+        if ($run === null || $run['length'] < max(8, (int) round($height * 0.12))) {
+            return null;
+        }
+
+        if (! $this->hasLetterboxChrome($image, $run['start'], $run['end'])) {
+            return null;
+        }
+
+        $top = $run['start'];
+        $bottom = $run['end'];
+
+        $segmentMeans = array_slice($rowMeans, $top, $bottom - $top + 1, true);
+        $peakMean = max($segmentMeans);
+        $dropThreshold = max(self::CHROME_DARK_MEAN_THRESHOLD + 12, $peakMean * 0.62);
+
+        while ($bottom > $top && $rowMeans[$bottom] < $dropThreshold) {
+            $bottom--;
+        }
+
+        $colMeans = [];
+        $colBrightFractions = [];
+
+        for ($x = 0; $x < $width; $x++) {
+            [$mean, , $brightFraction] = $this->columnGrayStats($image, $x, $top, $bottom);
+            $colMeans[$x] = $mean;
+            $colBrightFractions[$x] = $brightFraction;
+        }
+
+        $sortedColMeans = $colMeans;
+        sort($sortedColMeans);
+        $colP25 = $this->percentile($sortedColMeans, 0.25);
+        $colP75 = $this->percentile($sortedColMeans, 0.75);
+        $colThreshold = max(
+            self::CHROME_DARK_MEAN_THRESHOLD + 8,
+            $colP25 + (($colP75 - $colP25) * 0.45),
+        );
 
         $left = 0;
         for ($x = 0; $x < $width; $x++) {
-            if ($this->columnGrayStdDev($image, $x) >= self::CHROME_LINE_STD_THRESHOLD) {
+            if ($colBrightFractions[$x] >= self::PHOTO_ROW_BRIGHT_FRACTION
+                || ($colMeans[$x] >= $colThreshold && $colBrightFractions[$x] >= 0.28)) {
                 $left = $x;
                 break;
             }
@@ -524,30 +618,260 @@ class ProductImageHashService
 
         $right = $width - 1;
         for ($x = $width - 1; $x >= $left; $x--) {
-            if ($this->columnGrayStdDev($image, $x) >= self::CHROME_LINE_STD_THRESHOLD) {
+            if ($colBrightFractions[$x] >= self::PHOTO_ROW_BRIGHT_FRACTION
+                || ($colMeans[$x] >= $colThreshold && $colBrightFractions[$x] >= 0.28)) {
                 $right = $x;
                 break;
             }
         }
 
-        $cropWidth = $right - $left + 1;
-        $cropHeight = $bottom - $top + 1;
+        if ($left >= $right || $top >= $bottom) {
+            return null;
+        }
+
+        if (! $this->boundsAreValid($image, $left, $top, $right, $bottom)) {
+            return null;
+        }
+
+        return [$left, $top, $right, $bottom, 'photo_panel'];
+    }
+
+    private function hasLetterboxChrome(\GdImage $image, int $panelTop, int $panelBottom): bool
+    {
+        $height = imagesy($image);
+        $darkRowsAbove = 0;
+        $darkRowsBelow = 0;
+
+        for ($y = 0; $y < $panelTop; $y++) {
+            [$mean, , $brightFraction] = $this->rowGrayStats($image, $y);
+            if ($mean <= self::CHROME_DARK_MEAN_THRESHOLD && $brightFraction < 0.2) {
+                $darkRowsAbove++;
+            }
+        }
+
+        for ($y = $panelBottom + 1; $y < $height; $y++) {
+            [$mean, , $brightFraction] = $this->rowGrayStats($image, $y);
+            if ($mean <= self::CHROME_DARK_MEAN_THRESHOLD + 6 && $brightFraction < 0.35) {
+                $darkRowsBelow++;
+            }
+        }
+
+        $minBand = max(3, (int) round($height * 0.04));
+
+        return $darkRowsAbove >= $minBand || $darkRowsBelow >= $minBand;
+    }
+
+    /**
+     * Trim uniform dark / low-variance chrome bands (status bar, black margins).
+     *
+     * @return array{0:int,1:int,2:int,3:int,4:string}|null
+     */
+    private function detectUniformChromeBounds(\GdImage $image): ?array
+    {
+        $width = imagesx($image);
+        $height = imagesy($image);
+
+        if ($width < 8 || $height < 8) {
+            return null;
+        }
+
+        $top = 0;
+        for ($y = 0; $y < $height; $y++) {
+            if (! $this->isUniformChromeLine($image, $y, true)) {
+                $top = $y;
+                break;
+            }
+        }
+
+        $bottom = $height - 1;
+        for ($y = $height - 1; $y >= $top; $y--) {
+            if (! $this->isUniformChromeLine($image, $y, true)) {
+                $bottom = $y;
+                break;
+            }
+        }
+
+        $left = 0;
+        for ($x = 0; $x < $width; $x++) {
+            if (! $this->isUniformChromeLine($image, $x, false)) {
+                $left = $x;
+                break;
+            }
+        }
+
+        $right = $width - 1;
+        for ($x = $width - 1; $x >= $left; $x--) {
+            if (! $this->isUniformChromeLine($image, $x, false)) {
+                $right = $x;
+                break;
+            }
+        }
 
         $trimmedAny = $top > 0
             || $bottom < ($height - 1)
             || $left > 0
             || $right < ($width - 1);
 
-        if (! $trimmedAny) {
+        if (! $trimmedAny || ! $this->boundsAreValid($image, $left, $top, $right, $bottom)) {
             return null;
         }
 
-        if ($cropWidth < max(8, (int) round($width * self::TRIM_MIN_CONTENT_FRACTION))
-            || $cropHeight < max(8, (int) round($height * self::TRIM_MIN_CONTENT_FRACTION))) {
-            return null;
+        return [$left, $top, $right, $bottom, 'trim'];
+    }
+
+    private function boundsAreValid(\GdImage $image, int $left, int $top, int $right, int $bottom): bool
+    {
+        $width = imagesx($image);
+        $height = imagesy($image);
+        $cropWidth = $right - $left + 1;
+        $cropHeight = $bottom - $top + 1;
+
+        return $cropWidth >= max(8, (int) round($width * self::TRIM_MIN_CONTENT_FRACTION))
+            && $cropHeight >= max(8, (int) round($height * self::TRIM_MIN_CONTENT_FRACTION));
+    }
+
+    /**
+     * @param  array{0:int,1:int,2:int,3:int,4:string}  $bounds
+     */
+    private function boundsQualityScore(\GdImage $image, array $bounds, int $area, int $fullArea, int $minArea): float
+    {
+        if ($area < $minArea) {
+            return -1.0;
         }
 
-        return [$left, $top, $right, $bottom];
+        [$left, $top, $right, $bottom, $strategy] = $bounds;
+        $meanSum = 0.0;
+        $count = 0;
+
+        for ($y = $top; $y <= $bottom; $y++) {
+            [$mean] = $this->rowGrayStats($image, $y);
+            $meanSum += $mean;
+            $count++;
+        }
+
+        $avgMean = $count > 0 ? $meanSum / $count : 0.0;
+        $tightness = 1 - ($area / $fullArea);
+        $strategyBonus = $strategy === 'photo_panel' ? 0.12 : 0.0;
+
+        return ($avgMean / 255) + $tightness + $strategyBonus;
+    }
+
+    private function isUniformChromeLine(\GdImage $image, int $index, bool $isRow): bool
+    {
+        if ($isRow) {
+            [, $std] = $this->rowGrayStats($image, $index);
+        } else {
+            [, $std] = $this->columnGrayStats($image, $index);
+        }
+
+        return $std < self::CHROME_LINE_STD_THRESHOLD;
+    }
+
+    /**
+     * @param  callable(int): bool  $predicate
+     * @return array{start:int,end:int,length:int}|null
+     */
+    private function longestContiguousRun(callable $predicate, int $length): ?array
+    {
+        $best = null;
+        $start = null;
+
+        for ($i = 0; $i < $length; $i++) {
+            if ($predicate($i)) {
+                if ($start === null) {
+                    $start = $i;
+                }
+
+                continue;
+            }
+
+            if ($start !== null) {
+                $runLength = $i - $start;
+                if ($best === null || $runLength > $best['length']) {
+                    $best = ['start' => $start, 'end' => $i - 1, 'length' => $runLength];
+                }
+                $start = null;
+            }
+        }
+
+        if ($start !== null) {
+            $runLength = $length - $start;
+            if ($best === null || $runLength > $best['length']) {
+                $best = ['start' => $start, 'end' => $length - 1, 'length' => $runLength];
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * @param  list<float>  $sortedValues
+     */
+    private function percentile(array $sortedValues, float $percentile): float
+    {
+        $count = count($sortedValues);
+        if ($count === 0) {
+            return 0.0;
+        }
+
+        $index = (int) floor(($count - 1) * $percentile);
+
+        return $sortedValues[$index];
+    }
+
+    /**
+     * @return array{0: float, 1: float, 2: float} mean, std-dev, bright-pixel fraction
+     */
+    private function rowGrayStats(\GdImage $image, int $y): array
+    {
+        $width = imagesx($image);
+        $sum = 0.0;
+        $sumSq = 0.0;
+        $bright = 0;
+
+        for ($x = 0; $x < $width; $x++) {
+            $gray = $this->grayAt($image, $x, $y);
+            $sum += $gray;
+            $sumSq += $gray * $gray;
+
+            if ($gray > self::CHROME_DARK_MEAN_THRESHOLD) {
+                $bright++;
+            }
+        }
+
+        $mean = $sum / $width;
+        $variance = ($sumSq / $width) - ($mean * $mean);
+
+        return [$mean, sqrt(max(0.0, $variance)), $bright / $width];
+    }
+
+    /**
+     * @return array{0: float, 1: float, 2: float} mean, std-dev, bright-pixel fraction
+     */
+    private function columnGrayStats(\GdImage $image, int $x, ?int $yStart = null, ?int $yEnd = null): array
+    {
+        $height = imagesy($image);
+        $yStart = $yStart ?? 0;
+        $yEnd = $yEnd ?? ($height - 1);
+        $span = max(1, $yEnd - $yStart + 1);
+        $sum = 0.0;
+        $sumSq = 0.0;
+        $bright = 0;
+
+        for ($y = $yStart; $y <= $yEnd; $y++) {
+            $gray = $this->grayAt($image, $x, $y);
+            $sum += $gray;
+            $sumSq += $gray * $gray;
+
+            if ($gray > self::CHROME_DARK_MEAN_THRESHOLD) {
+                $bright++;
+            }
+        }
+
+        $mean = $sum / $span;
+        $variance = ($sumSq / $span) - ($mean * $mean);
+
+        return [$mean, sqrt(max(0.0, $variance)), $bright / $span];
     }
 
     /**

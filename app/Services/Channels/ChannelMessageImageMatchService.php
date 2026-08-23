@@ -19,7 +19,7 @@ class ChannelMessageImageMatchService
 
     /**
      * Best published catalog match at or above the auto threshold (90%).
-     * Uses full-frame first, then center-crop fallbacks for screenshots.
+     * Tries full-frame first, then screenshot photo-panel / chrome-trim, then center crops.
      *
      * @return array{product_id: int, name: string, match_percent: float, strategy: string}|null
      */
@@ -41,7 +41,6 @@ class ChannelMessageImageMatchService
         }
 
         try {
-            // Plan A: full-frame. Plan B: center crops (70/50/40%) vs catalog crops.
             $top = $this->hasher->findBestAutoMatchFromBinary($downloaded['bytes']);
         } catch (Throwable $e) {
             Log::debug('Inbox inbound image hash failed.', [
@@ -70,8 +69,46 @@ class ChannelMessageImageMatchService
             'product_id' => $productId,
             'name' => (string) $top['name'],
             'match_percent' => (float) $top['match_percent'],
-            'strategy' => (string) ($top['strategy'] ?? 'full'),
+            'strategy' => (string) ($top['strategy'] ?? 'query_full_vs_catalog_full'),
         ];
+    }
+
+    /**
+     * Manual staff search fallback for screenshot-heavy inbound photos.
+     *
+     * @return list<array{product_id:int,name:string,sku:?string,price:float,stock_quantity:int,image_url:?string,match_percent:float,distance:int}>
+     */
+    public function screenshotFallbackMatches(ChannelMessage $message, int $limit = ProductImageHashService::TOP_MATCHES): array
+    {
+        if ($message->direction !== ChannelMessage::DIRECTION_INBOUND
+            || ! $message->isImageAttachment()) {
+            return [];
+        }
+
+        $downloaded = $this->downloadInboundImageBytes($message);
+        if ($downloaded === null) {
+            return [];
+        }
+
+        $minBytes = max(1, (int) config('channels.ai_draft.image_min_bytes', 5000));
+        if (strlen($downloaded['bytes']) < $minBytes) {
+            return [];
+        }
+
+        try {
+            return $this->hasher->findTopMatchesFromBinary(
+                $downloaded['bytes'],
+                $limit,
+                ProductImageHashService::MIN_MATCH_PERCENT,
+            );
+        } catch (Throwable $e) {
+            Log::debug('Inbox screenshot fallback image match failed.', [
+                'message_id' => $message->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
     }
 
     /**

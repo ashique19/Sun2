@@ -411,6 +411,10 @@ class AdminInbox extends Component
                 $this->updatedMappingProductSearch();
             }
 
+            if ($message->isImageAttachment()) {
+                $this->runScreenshotFallbackImageMatch($message);
+            }
+
             return;
         }
 
@@ -1629,6 +1633,19 @@ class AdminInbox extends Component
     {
         $this->mappingCroppedImage = null;
         $this->mappingImageMatches = [];
+        $this->mappingImageMatchError = null;
+    }
+
+    private function runScreenshotFallbackImageMatch(ChannelMessage $message): void
+    {
+        $matches = app(ChannelMessageImageMatchService::class)
+            ->screenshotFallbackMatches($message);
+
+        if ($matches === []) {
+            return;
+        }
+
+        $this->mappingImageMatches = $matches;
         $this->mappingImageMatchError = null;
     }
 

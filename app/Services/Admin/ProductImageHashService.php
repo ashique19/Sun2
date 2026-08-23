@@ -183,13 +183,23 @@ class ProductImageHashService
         $image = $this->downscaleForHash($image);
 
         try {
+            $best = null;
+
             foreach ($this->queryHashesFromImage($image) as $candidate) {
                 $matches = $this->findTopMatches($candidate['hash'], 1, self::AUTO_MATCH_PERCENT);
                 $top = $matches[0] ?? null;
 
-                if ($top !== null && (float) $top['match_percent'] >= self::AUTO_MATCH_PERCENT) {
-                    return $top + ['strategy' => $candidate['strategy']];
+                if ($top === null) {
+                    continue;
                 }
+
+                if ($best === null || (float) $top['match_percent'] > (float) $best['match_percent']) {
+                    $best = $top + ['strategy' => $candidate['strategy']];
+                }
+            }
+
+            if ($best !== null && (float) $best['match_percent'] >= self::AUTO_MATCH_PERCENT) {
+                return $best;
             }
         } finally {
             imagedestroy($image);
@@ -245,18 +255,49 @@ class ProductImageHashService
         $candidates = [
             [
                 'hash' => $this->hashGdImageCopy($image),
-                'strategy' => 'full',
+                'strategy' => 'query_full_vs_catalog_full',
             ],
         ];
 
-        try {
-            $trimmed = $this->trimScreenshotChromeCopy($image);
+        $seenBounds = [];
 
-            if ($trimmed !== null) {
-                $candidates[] = [
-                    'hash' => $this->hashGdImage($trimmed),
-                    'strategy' => 'query_trim_chrome_vs_catalog_full',
-                ];
+        try {
+            $panelBounds = $this->detectBrightPhotoPanelBounds($image);
+
+            if ($panelBounds !== null) {
+                $hash = $this->hashFromBounds($image, $panelBounds);
+
+                if ($hash !== null) {
+                    $seenBounds[] = $this->boundsKey($panelBounds);
+                    $candidates[] = [
+                        'hash' => $hash,
+                        'strategy' => 'query_photo_panel_vs_catalog_full',
+                    ];
+                }
+            }
+        } catch (Throwable $e) {
+            Log::debug('Screenshot photo-panel hash failed.', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        try {
+            $trimBounds = $this->detectUniformChromeBounds($image);
+
+            if ($trimBounds !== null) {
+                $boundsKey = $this->boundsKey($trimBounds);
+
+                if (! in_array($boundsKey, $seenBounds, true)) {
+                    $hash = $this->hashFromBounds($image, $trimBounds);
+
+                    if ($hash !== null) {
+                        $seenBounds[] = $boundsKey;
+                        $candidates[] = [
+                            'hash' => $hash,
+                            'strategy' => 'query_trim_chrome_vs_catalog_full',
+                        ];
+                    }
+                }
             }
         } catch (Throwable $e) {
             Log::debug('Screenshot chrome trim failed.', [
@@ -280,6 +321,33 @@ class ProductImageHashService
         }
 
         return $candidates;
+    }
+
+    /**
+     * @param  array{0:int,1:int,2:int,3:int,4:string}  $bounds
+     */
+    private function hashFromBounds(\GdImage $image, array $bounds): ?string
+    {
+        [$left, $top, $right, $bottom] = $bounds;
+        $cropWidth = $right - $left + 1;
+        $cropHeight = $bottom - $top + 1;
+
+        $cropped = imagecreatetruecolor($cropWidth, $cropHeight);
+        if ($cropped === false) {
+            throw new RuntimeException('Could not allocate crop buffer.');
+        }
+
+        imagecopy($cropped, $image, 0, 0, $left, $top, $cropWidth, $cropHeight);
+
+        return $this->hashGdImage($cropped);
+    }
+
+    /**
+     * @param  array{0:int,1:int,2:int,3:int,4:string}  $bounds
+     */
+    private function boundsKey(array $bounds): string
+    {
+        return implode(':', array_slice($bounds, 0, 4));
     }
 
     private function scaleLabel(float $scale): string

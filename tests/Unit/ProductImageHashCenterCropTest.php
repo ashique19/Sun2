@@ -120,8 +120,9 @@ class ProductImageHashCenterCropTest extends TestCase
         $this->assertGreaterThanOrEqual(ProductImageHashService::AUTO_MATCH_PERCENT, $match['match_percent']);
         $this->assertTrue(
             str_contains($match['strategy'], 'trim')
-            || str_contains($match['strategy'], 'center'),
-            'Expected trim or center-crop strategy, got: '.$match['strategy'],
+            || str_contains($match['strategy'], 'center')
+            || str_contains($match['strategy'], 'photo_panel'),
+            'Expected trim, photo-panel, or center-crop strategy, got: '.$match['strategy'],
         );
         $this->assertStringContainsString('catalog_full', $match['strategy']);
     }
@@ -209,7 +210,11 @@ class ProductImageHashCenterCropTest extends TestCase
         $this->assertNotNull($match);
         $this->assertSame($product->id, $match['product_id']);
         $this->assertGreaterThanOrEqual(ProductImageHashService::AUTO_MATCH_PERCENT, $match['match_percent']);
-        $this->assertStringContainsString('trim', $match['strategy']);
+        $this->assertTrue(
+            str_contains($match['strategy'], 'trim')
+            || str_contains($match['strategy'], 'photo_panel'),
+            'Expected trim or photo-panel strategy, got: '.$match['strategy'],
+        );
     }
 
     #[Test]

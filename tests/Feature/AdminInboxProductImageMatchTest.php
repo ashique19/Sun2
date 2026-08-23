@@ -466,4 +466,73 @@ class AdminInboxProductImageMatchTest extends TestCase
 
         @unlink($absolutePath);
     }
+
+    #[Test]
+    public function screenshot_fallback_matches_use_panel_trim_for_chrome_screenshots(): void
+    {
+        config(['channels.ai_draft.image_min_bytes' => 100]);
+
+        $hasher = app(ProductImageHashService::class);
+        [$catalogBytes, $screenshotBytes] = $this->catalogAndScreenshotBytes();
+
+        $relativeDir = 'img/inbox-tests';
+        $absoluteDir = public_path($relativeDir);
+        if (! is_dir($absoluteDir)) {
+            mkdir($absoluteDir, 0775, true);
+        }
+        $relativePath = $relativeDir.'/map-fallback-'.uniqid().'.png';
+        file_put_contents(public_path($relativePath), $screenshotBytes);
+
+        $product = $this->productWithHash($hasher->hashBinary($catalogBytes));
+
+        $message = ChannelMessage::query()->create([
+            'channel_conversation_id' => $this->conversation()->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => null,
+            'media_url' => '/'.$relativePath,
+            'media_mime' => 'image/png',
+            'sent_at' => now(),
+        ]);
+
+        $matches = app(\App\Services\Channels\ChannelMessageImageMatchService::class)
+            ->screenshotFallbackMatches($message);
+
+        $this->assertNotEmpty($matches);
+        $this->assertSame($product->id, $matches[0]['product_id']);
+        $this->assertGreaterThanOrEqual(ProductImageHashService::MIN_MATCH_PERCENT, $matches[0]['match_percent']);
+
+        @unlink(public_path($relativePath));
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function catalogAndScreenshotBytes(): array
+    {
+        $catalog = imagecreatetruecolor(200, 200);
+        $a = imagecolorallocate($catalog, 200, 40, 60);
+        $b = imagecolorallocate($catalog, 40, 90, 200);
+        for ($y = 0; $y < 200; $y++) {
+            for ($x = 0; $x < 200; $x++) {
+                imagesetpixel($catalog, $x, $y, (((int) ($x / 10)) % 2) === 0 ? $a : $b);
+            }
+        }
+
+        $screenshot = imagecreatetruecolor(400, 400);
+        $chrome = imagecolorallocate($screenshot, 30, 30, 30);
+        imagefill($screenshot, 0, 0, $chrome);
+        imagecopy($screenshot, $catalog, 100, 100, 0, 0, 200, 200);
+
+        ob_start();
+        imagepng($catalog);
+        $catalogBytes = (string) ob_get_clean();
+        imagedestroy($catalog);
+
+        ob_start();
+        imagepng($screenshot);
+        $screenshotBytes = (string) ob_get_clean();
+        imagedestroy($screenshot);
+
+        return [$catalogBytes, $screenshotBytes];
+    }
 }

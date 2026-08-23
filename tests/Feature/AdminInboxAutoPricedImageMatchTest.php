@@ -590,7 +590,11 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
 
         $state = $component->get('inboundImageMatchState')[(string) $inbound->id] ?? [];
         $this->assertSame($product->id, $state['product_id'] ?? null);
-        $this->assertStringContainsString('center', (string) ($state['strategy'] ?? ''));
+        $strategy = (string) ($state['strategy'] ?? '');
+        $this->assertTrue(
+            str_contains($strategy, 'trim') || str_contains($strategy, 'center'),
+            'Expected trim or center-crop strategy, got: '.$strategy,
+        );
         $this->assertSame($product->id, $inbound->fresh()->matched_product_id);
     }
 

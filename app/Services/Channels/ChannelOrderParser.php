@@ -566,8 +566,7 @@ class ChannelOrderParser
             }
 
             try {
-                $hash = $this->imageHasher->hashBinary($bytes);
-                $matches = $this->imageHasher->findTopMatches($hash, ProductImageHashService::TOP_MATCHES, $minPercent);
+                $matches = $this->imageHasher->findTopMatchesFromBinary($bytes, ProductImageHashService::TOP_MATCHES, $minPercent);
                 $matches = $this->filterPublishedMatches($matches);
 
                 foreach ($matches as $match) {

@@ -118,7 +118,11 @@ class ProductImageHashCenterCropTest extends TestCase
         $this->assertNotNull($match);
         $this->assertSame($product->id, $match['product_id']);
         $this->assertGreaterThanOrEqual(ProductImageHashService::AUTO_MATCH_PERCENT, $match['match_percent']);
-        $this->assertStringContainsString('center', $match['strategy']);
+        $this->assertTrue(
+            str_contains($match['strategy'], 'trim')
+            || str_contains($match['strategy'], 'center'),
+            'Expected trim or center-crop strategy, got: '.$match['strategy'],
+        );
         $this->assertStringContainsString('catalog_full', $match['strategy']);
     }
 
@@ -151,6 +155,95 @@ class ProductImageHashCenterCropTest extends TestCase
 
         $this->assertNotNull($match);
         $this->assertSame($product->id, $match['product_id']);
-        $this->assertStringContainsString('query_center_', $match['strategy']);
+        $this->assertStringContainsString('query_', $match['strategy']);
+    }
+
+    #[Test]
+    public function chrome_trim_matches_asymmetric_phone_screenshot(): void
+    {
+        $hasher = app(ProductImageHashService::class);
+
+        $catalog = imagecreatetruecolor(180, 180);
+        $this->paintStripes($catalog, 0, 0, 180, 180);
+        $catalogBytes = $this->pngBytes($catalog);
+
+        $screenshot = imagecreatetruecolor(480, 640);
+        $chrome = imagecolorallocate($screenshot, 12, 12, 16);
+        imagefill($screenshot, 0, 0, $chrome);
+
+        $catalogImage = imagecreatefromstring($catalogBytes);
+        imagecopy($screenshot, $catalogImage, 36, 132, 0, 0, 180, 180);
+        imagedestroy($catalogImage);
+
+        ob_start();
+        imagepng($screenshot);
+        $screenshotBytes = (string) ob_get_clean();
+        imagedestroy($screenshot);
+
+        $product = Product::query()->create([
+            'name' => 'Trim Match Earring',
+            'slug' => 'trim-match-earring-'.uniqid(),
+            'price' => 1800,
+            'purchase_price' => 700,
+            'stock_quantity' => 2,
+            'is_published' => true,
+        ]);
+
+        ProductImage::query()->create([
+            'product_id' => $product->id,
+            'path' => '/img/products/missing/trim-match.png',
+            'alt' => $product->name,
+            'is_primary' => true,
+            'sort_order' => 0,
+            'perceptual_hash' => $hasher->hashBinary($catalogBytes),
+        ]);
+
+        $fullPercent = $hasher->matchPercent(
+            $hasher->hashBinary($catalogBytes),
+            $hasher->hashBinary($screenshotBytes),
+        );
+        $this->assertLessThan(ProductImageHashService::AUTO_MATCH_PERCENT, $fullPercent);
+
+        $match = $hasher->findBestAutoMatchFromBinary($screenshotBytes);
+
+        $this->assertNotNull($match);
+        $this->assertSame($product->id, $match['product_id']);
+        $this->assertGreaterThanOrEqual(ProductImageHashService::AUTO_MATCH_PERCENT, $match['match_percent']);
+        $this->assertStringContainsString('trim', $match['strategy']);
+    }
+
+    #[Test]
+    public function find_top_matches_from_binary_uses_trim_for_screenshots(): void
+    {
+        $hasher = app(ProductImageHashService::class);
+        [$catalogBytes, $screenshotBytes] = $this->catalogAndScreenshotBytes();
+
+        $product = Product::query()->create([
+            'name' => 'Top Match From Binary',
+            'slug' => 'top-match-from-binary-'.uniqid(),
+            'price' => 900,
+            'purchase_price' => 300,
+            'stock_quantity' => 1,
+            'is_published' => true,
+        ]);
+
+        ProductImage::query()->create([
+            'product_id' => $product->id,
+            'path' => '/img/products/missing/top-match.png',
+            'alt' => $product->name,
+            'is_primary' => true,
+            'sort_order' => 0,
+            'perceptual_hash' => $hasher->hashBinary($catalogBytes),
+        ]);
+
+        $matches = $hasher->findTopMatchesFromBinary(
+            $screenshotBytes,
+            1,
+            ProductImageHashService::AUTO_MATCH_PERCENT,
+        );
+
+        $this->assertCount(1, $matches);
+        $this->assertSame($product->id, $matches[0]['product_id']);
+        $this->assertGreaterThanOrEqual(ProductImageHashService::AUTO_MATCH_PERCENT, $matches[0]['match_percent']);
     }
 }

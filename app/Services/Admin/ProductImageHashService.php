@@ -33,6 +33,17 @@ class ProductImageHashService
      */
     public const CENTER_CROP_SCALES = [0.7, 0.5, 0.4];
 
+    /**
+     * Rows/columns with gray std-dev below this are treated as screenshot chrome
+     * (status bars, messenger margins, keyboard areas).
+     */
+    public const CHROME_LINE_STD_THRESHOLD = 10.0;
+
+    /**
+     * After trimming, keep at least this fraction of the original width/height.
+     */
+    public const TRIM_MIN_CONTENT_FRACTION = 0.15;
+
     public function hashFile(string $absolutePath, ?float $centerFraction = null): string
     {
         if (! is_file($absolutePath) || ! is_readable($absolutePath)) {
@@ -145,8 +156,8 @@ class ProductImageHashService
 
     /**
      * Plan A: full-frame vs stored hashes.
-     * Plan B: if below auto threshold, center-crop the query and compare to stored
-     * full-frame catalog hashes (cheap — never re-decodes the catalog).
+     * Plan B: trim uniform screenshot chrome (status bars, margins).
+     * Plan C: center-crop the query and compare to stored full-frame catalog hashes.
      *
      * @return array{product_id:int,name:string,sku:?string,price:float,stock_quantity:int,image_url:?string,match_percent:float,distance:int,strategy:string}|null
      */
@@ -161,34 +172,12 @@ class ProductImageHashService
         $image = $this->downscaleForHash($image);
 
         try {
-            $fullHash = $this->hashGdImageCopy($image);
-            $fullMatches = $this->findTopMatches($fullHash, 1, self::AUTO_MATCH_PERCENT);
-            $top = $fullMatches[0] ?? null;
+            foreach ($this->queryHashesFromImage($image) as $candidate) {
+                $matches = $this->findTopMatches($candidate['hash'], 1, self::AUTO_MATCH_PERCENT);
+                $top = $matches[0] ?? null;
 
-            if ($top !== null && (float) $top['match_percent'] >= self::AUTO_MATCH_PERCENT) {
-                return $top + ['strategy' => 'full'];
-            }
-
-            foreach (self::CENTER_CROP_SCALES as $scale) {
-                try {
-                    $cropped = $this->centerCropCopy($image, $scale);
-                    $queryHash = $this->hashGdImage($cropped);
-
-                    // Screenshot chrome is usually on the edges: cropped query vs
-                    // stored full-frame catalog hashes.
-                    $againstFull = $this->findTopMatches($queryHash, 1, self::AUTO_MATCH_PERCENT);
-                    $candidate = $againstFull[0] ?? null;
-
-                    if ($candidate !== null && (float) $candidate['match_percent'] >= self::AUTO_MATCH_PERCENT) {
-                        return $candidate + [
-                            'strategy' => 'query_center_'.$this->scaleLabel($scale).'_vs_catalog_full',
-                        ];
-                    }
-                } catch (Throwable $e) {
-                    Log::debug('Center-crop product image match failed.', [
-                        'scale' => $scale,
-                        'error' => $e->getMessage(),
-                    ]);
+                if ($top !== null && (float) $top['match_percent'] >= self::AUTO_MATCH_PERCENT) {
+                    return $top + ['strategy' => $candidate['strategy']];
                 }
             }
         } finally {
@@ -196,6 +185,90 @@ class ProductImageHashService
         }
 
         return null;
+    }
+
+    /**
+     * Try full-frame, chrome-trimmed, and center-cropped query hashes; return the best
+     * matches per product across all strategies.
+     *
+     * @return list<array{product_id:int,name:string,sku:?string,price:float,stock_quantity:int,image_url:?string,match_percent:float,distance:int}>
+     */
+    public function findTopMatchesFromBinary(string $binary, int $limit = self::TOP_MATCHES, float $minPercent = self::MIN_MATCH_PERCENT): array
+    {
+        $image = @imagecreatefromstring($binary);
+
+        if ($image === false) {
+            throw new RuntimeException('Unsupported or corrupt image data.');
+        }
+
+        $image = $this->downscaleForHash($image);
+
+        try {
+            $bestByProduct = [];
+
+            foreach ($this->queryHashesFromImage($image) as $candidate) {
+                foreach ($this->findTopMatches($candidate['hash'], $limit, $minPercent) as $match) {
+                    $productId = (int) $match['product_id'];
+                    $existing = $bestByProduct[$productId] ?? null;
+
+                    if ($existing === null || (float) $match['match_percent'] > (float) $existing['match_percent']) {
+                        $bestByProduct[$productId] = $match;
+                    }
+                }
+            }
+
+            $matches = array_values($bestByProduct);
+            usort($matches, fn (array $a, array $b) => $b['match_percent'] <=> $a['match_percent']);
+
+            return array_slice($matches, 0, $limit);
+        } finally {
+            imagedestroy($image);
+        }
+    }
+
+    /**
+     * @return list<array{hash:string,strategy:string}>
+     */
+    private function queryHashesFromImage(\GdImage $image): array
+    {
+        $candidates = [
+            [
+                'hash' => $this->hashGdImageCopy($image),
+                'strategy' => 'full',
+            ],
+        ];
+
+        try {
+            $trimmed = $this->trimScreenshotChromeCopy($image);
+
+            if ($trimmed !== null) {
+                $candidates[] = [
+                    'hash' => $this->hashGdImage($trimmed),
+                    'strategy' => 'query_trim_chrome_vs_catalog_full',
+                ];
+            }
+        } catch (Throwable $e) {
+            Log::debug('Screenshot chrome trim failed.', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        foreach (self::CENTER_CROP_SCALES as $scale) {
+            try {
+                $cropped = $this->centerCropCopy($image, $scale);
+                $candidates[] = [
+                    'hash' => $this->hashGdImage($cropped),
+                    'strategy' => 'query_center_'.$this->scaleLabel($scale).'_vs_catalog_full',
+                ];
+            } catch (Throwable $e) {
+                Log::debug('Center-crop product image match failed.', [
+                    'scale' => $scale,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $candidates;
     }
 
     private function scaleLabel(float $scale): string
@@ -365,6 +438,114 @@ class ProductImageHashService
         imagecopy($cropped, $image, 0, 0, $x, $y, $cropWidth, $cropHeight);
 
         return $cropped;
+    }
+
+    /**
+     * Remove uniform screenshot chrome (status bars, messenger margins, etc.) by
+     * scanning rows/columns with low gray variance. Returns null when no trim helps.
+     */
+    private function trimScreenshotChromeCopy(\GdImage $image): ?\GdImage
+    {
+        $width = imagesx($image);
+        $height = imagesy($image);
+
+        if ($width < 8 || $height < 8) {
+            return null;
+        }
+
+        $top = 0;
+        for ($y = 0; $y < $height; $y++) {
+            if ($this->rowGrayStdDev($image, $y) >= self::CHROME_LINE_STD_THRESHOLD) {
+                $top = $y;
+                break;
+            }
+        }
+
+        $bottom = $height - 1;
+        for ($y = $height - 1; $y >= $top; $y--) {
+            if ($this->rowGrayStdDev($image, $y) >= self::CHROME_LINE_STD_THRESHOLD) {
+                $bottom = $y;
+                break;
+            }
+        }
+
+        $left = 0;
+        for ($x = 0; $x < $width; $x++) {
+            if ($this->columnGrayStdDev($image, $x) >= self::CHROME_LINE_STD_THRESHOLD) {
+                $left = $x;
+                break;
+            }
+        }
+
+        $right = $width - 1;
+        for ($x = $width - 1; $x >= $left; $x--) {
+            if ($this->columnGrayStdDev($image, $x) >= self::CHROME_LINE_STD_THRESHOLD) {
+                $right = $x;
+                break;
+            }
+        }
+
+        $cropWidth = $right - $left + 1;
+        $cropHeight = $bottom - $top + 1;
+
+        $trimmedAny = $top > 0
+            || $bottom < ($height - 1)
+            || $left > 0
+            || $right < ($width - 1);
+
+        if (! $trimmedAny) {
+            return null;
+        }
+
+        if ($cropWidth < max(8, (int) round($width * self::TRIM_MIN_CONTENT_FRACTION))
+            || $cropHeight < max(8, (int) round($height * self::TRIM_MIN_CONTENT_FRACTION))) {
+            return null;
+        }
+
+        $cropped = imagecreatetruecolor($cropWidth, $cropHeight);
+        if ($cropped === false) {
+            throw new RuntimeException('Could not allocate trim buffer.');
+        }
+
+        imagecopy($cropped, $image, 0, 0, $left, $top, $cropWidth, $cropHeight);
+
+        return $cropped;
+    }
+
+    private function rowGrayStdDev(\GdImage $image, int $y): float
+    {
+        $width = imagesx($image);
+        $sum = 0.0;
+        $sumSq = 0.0;
+
+        for ($x = 0; $x < $width; $x++) {
+            $gray = $this->grayAt($image, $x, $y);
+            $sum += $gray;
+            $sumSq += $gray * $gray;
+        }
+
+        $mean = $sum / $width;
+        $variance = ($sumSq / $width) - ($mean * $mean);
+
+        return sqrt(max(0.0, $variance));
+    }
+
+    private function columnGrayStdDev(\GdImage $image, int $x): float
+    {
+        $height = imagesy($image);
+        $sum = 0.0;
+        $sumSq = 0.0;
+
+        for ($y = 0; $y < $height; $y++) {
+            $gray = $this->grayAt($image, $x, $y);
+            $sum += $gray;
+            $sumSq += $gray * $gray;
+        }
+
+        $mean = $sum / $height;
+        $variance = ($sumSq / $height) - ($mean * $mean);
+
+        return sqrt(max(0.0, $variance));
     }
 
     private function grayAt(\GdImage $image, int $x, int $y): float

@@ -48,7 +48,27 @@ class ProductImageHashService
      * Minimum fraction of a row/column that must be brighter than {@see CHROME_DARK_MEAN_THRESHOLD}
      * to count as embedded photo content (vs. a dark Facebook overlay band).
      */
-    public const PHOTO_ROW_BRIGHT_FRACTION = 0.42;
+    public const PHOTO_ROW_BRIGHT_FRACTION = 0.32;
+
+    /**
+     * Mean luminance above this (with low variance) is treated as light letterboxing.
+     */
+    public const CHROME_LIGHT_MEAN_THRESHOLD = 215.0;
+
+    /**
+     * Embedded photo panels in FB viewer screenshots rarely exceed this height fraction.
+     */
+    public const PHOTO_PANEL_MAX_HEIGHT_FRACTION = 0.58;
+
+    /**
+     * Row photo-likelihood needed to count as product content.
+     */
+    public const PHOTO_ROW_LIKELIHOOD_THRESHOLD = 0.22;
+
+    /**
+     * Messenger / feed carousel cards need at least this row texture (std-dev).
+     */
+    public const EMBEDDED_CARD_ROW_STD_THRESHOLD = 22.0;
 
     /**
      * After trimming, keep at least this fraction of the original width/height.
@@ -261,49 +281,10 @@ class ProductImageHashService
 
         $seenBounds = [];
 
-        try {
-            $panelBounds = $this->detectBrightPhotoPanelBounds($image);
-
-            if ($panelBounds !== null) {
-                $hash = $this->hashFromBounds($image, $panelBounds);
-
-                if ($hash !== null) {
-                    $seenBounds[] = $this->boundsKey($panelBounds);
-                    $candidates[] = [
-                        'hash' => $hash,
-                        'strategy' => 'query_photo_panel_vs_catalog_full',
-                    ];
-                }
-            }
-        } catch (Throwable $e) {
-            Log::debug('Screenshot photo-panel hash failed.', [
-                'error' => $e->getMessage(),
-            ]);
-        }
-
-        try {
-            $trimBounds = $this->detectUniformChromeBounds($image);
-
-            if ($trimBounds !== null) {
-                $boundsKey = $this->boundsKey($trimBounds);
-
-                if (! in_array($boundsKey, $seenBounds, true)) {
-                    $hash = $this->hashFromBounds($image, $trimBounds);
-
-                    if ($hash !== null) {
-                        $seenBounds[] = $boundsKey;
-                        $candidates[] = [
-                            'hash' => $hash,
-                            'strategy' => 'query_trim_chrome_vs_catalog_full',
-                        ];
-                    }
-                }
-            }
-        } catch (Throwable $e) {
-            Log::debug('Screenshot chrome trim failed.', [
-                'error' => $e->getMessage(),
-            ]);
-        }
+        $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectBrightPhotoPanelBounds($image), 'query_photo_panel_vs_catalog_full');
+        $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectEmbeddedCardBounds($image), 'query_embedded_card_vs_catalog_full');
+        $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectLightLetterboxBounds($image), 'query_light_letterbox_vs_catalog_full');
+        $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectUniformChromeBounds($image), 'query_trim_chrome_vs_catalog_full');
 
         foreach (self::CENTER_CROP_SCALES as $scale) {
             try {
@@ -321,6 +302,42 @@ class ProductImageHashService
         }
 
         return $candidates;
+    }
+
+    /**
+     * @param  list<array{hash:string,strategy:string}>  $candidates
+     * @param  list<string>  $seenBounds
+     * @param  array{0:int,1:int,2:int,3:int,4:string}|null  $bounds
+     */
+    private function appendBoundsHashCandidate(array &$candidates, array &$seenBounds, \GdImage $image, ?array $bounds, string $strategy): void
+    {
+        if ($bounds === null) {
+            return;
+        }
+
+        $boundsKey = $this->boundsKey($bounds);
+        if (in_array($boundsKey, $seenBounds, true)) {
+            return;
+        }
+
+        try {
+            $hash = $this->hashFromBounds($image, $bounds);
+
+            if ($hash === null) {
+                return;
+            }
+
+            $seenBounds[] = $boundsKey;
+            $candidates[] = [
+                'hash' => $hash,
+                'strategy' => $strategy,
+            ];
+        } catch (Throwable $e) {
+            Log::debug('Screenshot bounds hash failed.', [
+                'strategy' => $strategy,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -579,6 +596,8 @@ class ProductImageHashService
 
         $candidates = array_filter([
             $this->detectBrightPhotoPanelBounds($image),
+            $this->detectEmbeddedCardBounds($image),
+            $this->detectLightLetterboxBounds($image),
             $this->detectUniformChromeBounds($image),
         ]);
 
@@ -613,57 +632,238 @@ class ProductImageHashService
         $width = imagesx($image);
         $height = imagesy($image);
 
+        $rowLikelihoods = [];
         $rowMeans = [];
-        $rowBrightFractions = [];
 
         for ($y = 0; $y < $height; $y++) {
-            [$mean, , $brightFraction] = $this->rowGrayStats($image, $y);
-            $rowMeans[$y] = $mean;
-            $rowBrightFractions[$y] = $brightFraction;
+            $rowLikelihoods[$y] = $this->rowPhotoLikelihood($image, $y);
+            [$rowMeans[$y]] = $this->rowGrayStats($image, $y);
         }
 
-        $sortedMeans = $rowMeans;
-        sort($sortedMeans);
-        $p25 = $this->percentile($sortedMeans, 0.25);
-        $p75 = $this->percentile($sortedMeans, 0.75);
-        $meanThreshold = max(
-            self::CHROME_DARK_MEAN_THRESHOLD + 8,
-            $p25 + (($p75 - $p25) * 0.5),
-        );
+        $isPhotoRow = static fn (int $y): bool => $rowLikelihoods[$y] >= self::PHOTO_ROW_LIKELIHOOD_THRESHOLD;
 
-        $isPhotoRow = static function (int $y) use ($rowMeans, $rowBrightFractions, $meanThreshold): bool {
-            return $rowBrightFractions[$y] >= self::PHOTO_ROW_BRIGHT_FRACTION
-                || ($rowMeans[$y] >= $meanThreshold && $rowBrightFractions[$y] >= 0.28);
-        };
+        $run = $this->bestPhotoContentRun($rowLikelihoods, $height);
 
-        $run = $this->longestContiguousRun($isPhotoRow, $height);
-
-        if ($run === null || $run['length'] < max(8, (int) round($height * 0.12))) {
+        if ($run === null || $run['length'] < max(8, (int) round($height * 0.10))) {
             return null;
         }
 
-        if (! $this->hasLetterboxChrome($image, $run['start'], $run['end'])) {
+        if (! $this->hasScreenshotChrome($image, $run['start'], $run['end'])) {
             return null;
         }
 
         $top = $run['start'];
         $bottom = $run['end'];
 
+        $maxPanelHeight = max(8, (int) round($height * self::PHOTO_PANEL_MAX_HEIGHT_FRACTION));
+        if (($bottom - $top + 1) > $maxPanelHeight) {
+            $bottom = $top + $maxPanelHeight - 1;
+        }
+
         $segmentMeans = array_slice($rowMeans, $top, $bottom - $top + 1, true);
         $peakMean = max($segmentMeans);
-        $dropThreshold = max(self::CHROME_DARK_MEAN_THRESHOLD + 12, $peakMean * 0.62);
+        $dropThreshold = max(self::CHROME_DARK_MEAN_THRESHOLD + 12, $peakMean * 0.58);
 
-        while ($bottom > $top && $rowMeans[$bottom] < $dropThreshold) {
+        while ($bottom > $top && ($rowMeans[$bottom] < $dropThreshold || $rowLikelihoods[$bottom] < self::PHOTO_ROW_LIKELIHOOD_THRESHOLD * 0.65)) {
             $bottom--;
         }
 
+        [$left, $right] = $this->horizontalContentBounds($image, $top, $bottom);
+
+        if ($left >= $right || $top >= $bottom || ! $this->boundsAreValid($image, $left, $top, $right, $bottom)) {
+            return null;
+        }
+
+        return [$left, $top, $right, $bottom, 'photo_panel'];
+    }
+
+    /**
+     * White Facebook feed posts: trim bright status/header and footer chrome.
+     *
+     * @return array{0:int,1:int,2:int,3:int,4:string}|null
+     */
+    private function detectLightLetterboxBounds(\GdImage $image): ?array
+    {
+        $width = imagesx($image);
+        $height = imagesy($image);
+
+        $isLightChrome = fn (int $y): bool => $this->isLightChromeLine($image, $y, true);
+
+        $top = 0;
+        for ($y = 0; $y < $height; $y++) {
+            if (! $isLightChrome($y)) {
+                $top = $y;
+                break;
+            }
+        }
+
+        $bottom = $height - 1;
+        for ($y = $height - 1; $y >= $top; $y--) {
+            if (! $isLightChrome($y)) {
+                $bottom = $y;
+                break;
+            }
+        }
+
+        if ($bottom <= $top) {
+            return null;
+        }
+
+        $contentLikelihoods = [];
+        for ($y = $top; $y <= $bottom; $y++) {
+            $contentLikelihoods[$y] = $this->rowPhotoLikelihood($image, $y);
+        }
+
+        $run = $this->bestPhotoContentRun($contentLikelihoods, $bottom - $top + 1, $top);
+
+        if ($run === null) {
+            return null;
+        }
+
+        $panelTop = $run['start'];
+        $panelBottom = $run['end'];
+
+        $rowLikelihoods = [];
+        for ($y = $panelTop; $y <= $panelBottom; $y++) {
+            $rowLikelihoods[$y] = $this->rowPhotoLikelihood($image, $y);
+        }
+
+        while ($panelBottom > $panelTop && $rowLikelihoods[$panelBottom] < self::PHOTO_ROW_LIKELIHOOD_THRESHOLD * 0.7) {
+            $panelBottom--;
+        }
+
+        if (($panelBottom - $panelTop + 1) < max(8, (int) round($height * 0.12))) {
+            return null;
+        }
+
+        if (! $this->hasScreenshotChrome($image, $panelTop, $panelBottom)) {
+            return null;
+        }
+
+        [$left, $right] = $this->horizontalContentBounds($image, $panelTop, $panelBottom);
+
+        if ($left >= $right || ! $this->boundsAreValid($image, $left, $panelTop, $right, $panelBottom)) {
+            return null;
+        }
+
+        return [$left, $panelTop, $right, $panelBottom, 'light_letterbox'];
+    }
+
+    /**
+     * Messenger carousel / ad cards on a dark chat or feed background.
+     *
+     * @return array{0:int,1:int,2:int,3:int,4:string}|null
+     */
+    private function detectEmbeddedCardBounds(\GdImage $image): ?array
+    {
+        $width = imagesx($image);
+        $height = imagesy($image);
+
+        $scanTop = (int) round($height * 0.22);
+        $scanBottom = (int) round($height * 0.82);
+
+        $rowScores = [];
+        for ($y = 0; $y < $height; $y++) {
+            [$mean, $std] = $this->rowGrayStats($image, $y);
+            $rowScores[$y] = ($std >= self::EMBEDDED_CARD_ROW_STD_THRESHOLD && $mean >= 35 && $mean <= 210)
+                ? $this->rowPhotoLikelihood($image, $y)
+                : 0.0;
+        }
+
+        $bestRun = null;
+        $start = null;
+
+        for ($y = $scanTop; $y <= $scanBottom; $y++) {
+            if ($rowScores[$y] >= self::PHOTO_ROW_LIKELIHOOD_THRESHOLD) {
+                if ($start === null) {
+                    $start = $y;
+                }
+
+                continue;
+            }
+
+            if ($start !== null) {
+                $length = $y - $start;
+                if ($bestRun === null || $length > $bestRun['length']) {
+                    $bestRun = ['start' => $start, 'end' => $y - 1, 'length' => $length];
+                }
+                $start = null;
+            }
+        }
+
+        if ($start !== null) {
+            $length = min($scanBottom, $height - 1) - $start + 1;
+            if ($bestRun === null || $length > $bestRun['length']) {
+                $bestRun = ['start' => $start, 'end' => min($scanBottom, $height - 1), 'length' => $length];
+            }
+        }
+
+        if ($bestRun === null || $bestRun['length'] < max(8, (int) round($height * 0.10))) {
+            return null;
+        }
+
+        $top = $bestRun['start'];
+        $bottom = $bestRun['end'];
+
+        if (! $this->hasDarkMarginsAroundBand($image, $top, $bottom)) {
+            return null;
+        }
+
+        [$left, $right] = $this->horizontalContentBounds($image, $top, $bottom);
+
+        if ($left >= $right || ! $this->boundsAreValid($image, $left, $top, $right, $bottom)) {
+            return null;
+        }
+
+        $contentWidthFraction = ($right - $left + 1) / $width;
+        if ($contentWidthFraction > 0.88) {
+            return null;
+        }
+
+        if ($left < (int) round($width * 0.03) && ($width - 1 - $right) < (int) round($width * 0.03)) {
+            return null;
+        }
+
+        return [$left, $top, $right, $bottom, 'embedded_card'];
+    }
+
+    /**
+     * @param  array<int, float>  $likelihoods
+     * @return array{start:int,end:int,length:int}|null
+     */
+    private function bestPhotoContentRun(array $likelihoods, int $length, int $offset = 0): ?array
+    {
+        $best = $this->longestContiguousRun(
+            static fn (int $i): bool => ($likelihoods[$offset + $i] ?? 0.0) >= self::PHOTO_ROW_LIKELIHOOD_THRESHOLD,
+            $length,
+        );
+
+        if ($best === null) {
+            return null;
+        }
+
+        return [
+            'start' => $best['start'] + $offset,
+            'end' => $best['end'] + $offset,
+            'length' => $best['length'],
+        ];
+    }
+
+    /**
+     * @return array{0:int,1:int}
+     */
+    private function horizontalContentBounds(\GdImage $image, int $top, int $bottom): array
+    {
+        $width = imagesx($image);
         $colMeans = [];
         $colBrightFractions = [];
+        $colLikelihoods = [];
 
         for ($x = 0; $x < $width; $x++) {
             [$mean, , $brightFraction] = $this->columnGrayStats($image, $x, $top, $bottom);
             $colMeans[$x] = $mean;
             $colBrightFractions[$x] = $brightFraction;
+            $colLikelihoods[$x] = $this->columnPhotoLikelihood($image, $x, $top, $bottom);
         }
 
         $sortedColMeans = $colMeans;
@@ -677,8 +877,8 @@ class ProductImageHashService
 
         $left = 0;
         for ($x = 0; $x < $width; $x++) {
-            if ($colBrightFractions[$x] >= self::PHOTO_ROW_BRIGHT_FRACTION
-                || ($colMeans[$x] >= $colThreshold && $colBrightFractions[$x] >= 0.28)) {
+            if ($colLikelihoods[$x] >= self::PHOTO_ROW_LIKELIHOOD_THRESHOLD
+                || ($colBrightFractions[$x] >= self::PHOTO_ROW_BRIGHT_FRACTION && $colMeans[$x] >= $colThreshold)) {
                 $left = $x;
                 break;
             }
@@ -686,47 +886,178 @@ class ProductImageHashService
 
         $right = $width - 1;
         for ($x = $width - 1; $x >= $left; $x--) {
-            if ($colBrightFractions[$x] >= self::PHOTO_ROW_BRIGHT_FRACTION
-                || ($colMeans[$x] >= $colThreshold && $colBrightFractions[$x] >= 0.28)) {
+            if ($colLikelihoods[$x] >= self::PHOTO_ROW_LIKELIHOOD_THRESHOLD
+                || ($colBrightFractions[$x] >= self::PHOTO_ROW_BRIGHT_FRACTION && $colMeans[$x] >= $colThreshold)) {
                 $right = $x;
                 break;
             }
         }
 
-        if ($left >= $right || $top >= $bottom) {
-            return null;
-        }
-
-        if (! $this->boundsAreValid($image, $left, $top, $right, $bottom)) {
-            return null;
-        }
-
-        return [$left, $top, $right, $bottom, 'photo_panel'];
+        return [$left, $right];
     }
 
-    private function hasLetterboxChrome(\GdImage $image, int $panelTop, int $panelBottom): bool
+    private function rowPhotoLikelihood(\GdImage $image, int $y): float
+    {
+        $width = imagesx($image);
+        $third = max(1, (int) floor($width / 3));
+        $thirdStats = [];
+
+        for ($i = 0; $i < 3; $i++) {
+            $x0 = $i * $third;
+            $x1 = ($i === 2) ? $width : ($i + 1) * $third;
+            $sum = 0.0;
+            $bright = 0;
+            $count = 0;
+
+            for ($x = $x0; $x < $x1; $x++) {
+                $gray = $this->grayAt($image, $x, $y);
+                $sum += $gray;
+                if ($gray > self::CHROME_DARK_MEAN_THRESHOLD) {
+                    $bright++;
+                }
+                $count++;
+            }
+
+            $thirdStats[] = [
+                'mean' => $sum / $count,
+                'bright' => $bright / $count,
+            ];
+        }
+
+        $avgBright = array_sum(array_column($thirdStats, 'bright')) / 3;
+        $minBright = min(array_column($thirdStats, 'bright'));
+        $maxBright = max(array_column($thirdStats, 'bright'));
+        $avgMean = array_sum(array_column($thirdStats, 'mean')) / 3;
+
+        if ($avgBright < 0.16) {
+            return 0.0;
+        }
+
+        if (($maxBright - $minBright) > 0.42) {
+            return 0.0;
+        }
+
+        $evenness = 1 - min(1.0, ($maxBright - $minBright) / 0.42);
+        $brightnessScore = min(1.0, $avgBright / 0.55);
+        $meanScore = min(1.0, $avgMean / 70);
+
+        return $brightnessScore * $evenness * max(0.35, $meanScore);
+    }
+
+    private function columnPhotoLikelihood(\GdImage $image, int $x, int $top, int $bottom): float
+    {
+        $span = $bottom - $top + 1;
+        $third = max(1, (int) floor($span / 3));
+        $thirdStats = [];
+
+        for ($i = 0; $i < 3; $i++) {
+            $y0 = $top + ($i * $third);
+            $y1 = ($i === 2) ? $bottom : ($top + (($i + 1) * $third) - 1);
+            $sum = 0.0;
+            $bright = 0;
+            $count = 0;
+
+            for ($y = $y0; $y <= $y1; $y++) {
+                $gray = $this->grayAt($image, $x, $y);
+                $sum += $gray;
+                if ($gray > self::CHROME_DARK_MEAN_THRESHOLD) {
+                    $bright++;
+                }
+                $count++;
+            }
+
+            $thirdStats[] = [
+                'mean' => $sum / $count,
+                'bright' => $bright / $count,
+            ];
+        }
+
+        $avgBright = array_sum(array_column($thirdStats, 'bright')) / 3;
+        $minBright = min(array_column($thirdStats, 'bright'));
+        $maxBright = max(array_column($thirdStats, 'bright'));
+
+        if ($avgBright < 0.16 || ($maxBright - $minBright) > 0.45) {
+            return 0.0;
+        }
+
+        $evenness = 1 - min(1.0, ($maxBright - $minBright) / 0.45);
+
+        return min(1.0, $avgBright / 0.5) * $evenness;
+    }
+
+    private function hasScreenshotChrome(\GdImage $image, int $panelTop, int $panelBottom): bool
     {
         $height = imagesy($image);
         $darkRowsAbove = 0;
         $darkRowsBelow = 0;
+        $lightRowsAbove = 0;
+        $lightRowsBelow = 0;
 
         for ($y = 0; $y < $panelTop; $y++) {
-            [$mean, , $brightFraction] = $this->rowGrayStats($image, $y);
-            if ($mean <= self::CHROME_DARK_MEAN_THRESHOLD && $brightFraction < 0.2) {
+            if ($this->isDarkChromeLine($image, $y, true)) {
                 $darkRowsAbove++;
+            }
+            if ($this->isLightChromeLine($image, $y, true)) {
+                $lightRowsAbove++;
             }
         }
 
         for ($y = $panelBottom + 1; $y < $height; $y++) {
-            [$mean, , $brightFraction] = $this->rowGrayStats($image, $y);
-            if ($mean <= self::CHROME_DARK_MEAN_THRESHOLD + 6 && $brightFraction < 0.35) {
+            if ($this->isDarkChromeLine($image, $y, true)) {
                 $darkRowsBelow++;
+            }
+            if ($this->isLightChromeLine($image, $y, true)) {
+                $lightRowsBelow++;
             }
         }
 
-        $minBand = max(3, (int) round($height * 0.04));
+        $minBand = max(3, (int) round($height * 0.035));
 
-        return $darkRowsAbove >= $minBand || $darkRowsBelow >= $minBand;
+        return $darkRowsAbove >= $minBand
+            || $darkRowsBelow >= $minBand
+            || $lightRowsAbove >= $minBand
+            || $lightRowsBelow >= $minBand;
+    }
+
+    private function hasDarkMarginsAroundBand(\GdImage $image, int $top, int $bottom): bool
+    {
+        $height = imagesy($image);
+        $darkAbove = 0;
+        $darkBelow = 0;
+
+        for ($y = max(0, $top - (int) round($height * 0.08)); $y < $top; $y++) {
+            if ($this->isDarkChromeLine($image, $y, true)) {
+                $darkAbove++;
+            }
+        }
+
+        for ($y = $bottom + 1; $y <= min($height - 1, $bottom + (int) round($height * 0.08)); $y++) {
+            if ($this->isDarkChromeLine($image, $y, true)) {
+                $darkBelow++;
+            }
+        }
+
+        return $darkAbove >= 2 || $darkBelow >= 2;
+    }
+
+    private function isDarkChromeLine(\GdImage $image, int $index, bool $isRow): bool
+    {
+        [$mean, $std] = $isRow
+            ? $this->rowGrayStats($image, $index)
+            : $this->columnGrayStats($image, $index);
+
+        return $std < self::CHROME_LINE_STD_THRESHOLD + 4
+            && $mean <= self::CHROME_DARK_MEAN_THRESHOLD + 8;
+    }
+
+    private function isLightChromeLine(\GdImage $image, int $index, bool $isRow): bool
+    {
+        [$mean, $std] = $isRow
+            ? $this->rowGrayStats($image, $index)
+            : $this->columnGrayStats($image, $index);
+
+        return $std < self::CHROME_LINE_STD_THRESHOLD + 2
+            && $mean >= self::CHROME_LIGHT_MEAN_THRESHOLD;
     }
 
     /**
@@ -819,7 +1150,14 @@ class ProductImageHashService
 
         $avgMean = $count > 0 ? $meanSum / $count : 0.0;
         $tightness = 1 - ($area / $fullArea);
-        $strategyBonus = $strategy === 'photo_panel' ? 0.12 : 0.0;
+        $width = imagesx($image);
+        $widthFraction = ($right - $left + 1) / $width;
+        $strategyBonus = match ($strategy) {
+            'photo_panel' => 0.12 + ($widthFraction >= 0.82 ? 0.08 : 0.0),
+            'embedded_card' => $widthFraction <= 0.86 ? 0.1 : -0.15,
+            'light_letterbox' => 0.08,
+            default => 0.0,
+        };
 
         return ($avgMean / 255) + $tightness + $strategyBonus;
     }

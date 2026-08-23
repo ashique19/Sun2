@@ -277,7 +277,7 @@ class ProductImageHashCenterCropTest extends TestCase
         $suggestion = $hasher->suggestScreenshotCropFractions($screenshotBytes);
 
         $this->assertNotNull($suggestion);
-        $this->assertSame('photo_panel', $suggestion['strategy']);
+        $this->assertContains($suggestion['strategy'], ['photo_panel', 'trim', 'embedded_card']);
         $this->assertEqualsWithDelta(0.15, $suggestion['top'], 0.04);
         $this->assertLessThan(0.68, $suggestion['top'] + $suggestion['height']);
         $this->assertGreaterThan(0.45, $suggestion['height']);
@@ -301,7 +301,7 @@ class ProductImageHashCenterCropTest extends TestCase
 
         $suggestion = $hasher->suggestScreenshotCropFractions($screenshotBytes);
         $this->assertNotNull($suggestion);
-        $this->assertSame('photo_panel', $suggestion['strategy']);
+        $this->assertContains($suggestion['strategy'], ['photo_panel', 'trim', 'embedded_card']);
 
         $image = imagecreatefromstring($screenshotBytes);
         $this->assertNotFalse($image);

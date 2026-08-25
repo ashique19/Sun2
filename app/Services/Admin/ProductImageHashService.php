@@ -187,12 +187,12 @@ class ProductImageHashService
 
     /**
      * Plan A: full-frame vs stored hashes.
-     * Plan B: trim uniform screenshot chrome (status bars, margins).
-     * Plan C: center-crop the query and compare to stored full-frame catalog hashes.
+     * Plan B: optional Gemini subject crop, photo-panel / chrome-trim, center crops.
      *
+     * @param  array{left: float, top: float, width: float, height: float}|null  $subjectFractions
      * @return array{product_id:int,name:string,sku:?string,price:float,stock_quantity:int,image_url:?string,match_percent:float,distance:int,strategy:string}|null
      */
-    public function findBestAutoMatchFromBinary(string $binary): ?array
+    public function findBestAutoMatchFromBinary(string $binary, ?array $subjectFractions = null): ?array
     {
         $image = @imagecreatefromstring($binary);
 
@@ -205,7 +205,7 @@ class ProductImageHashService
         try {
             $best = null;
 
-            foreach ($this->queryHashesFromImage($image) as $candidate) {
+            foreach ($this->queryHashesFromImage($image, $subjectFractions) as $candidate) {
                 $matches = $this->findTopMatches($candidate['hash'], 1, self::AUTO_MATCH_PERCENT);
                 $top = $matches[0] ?? null;
 
@@ -232,9 +232,10 @@ class ProductImageHashService
      * Try full-frame, chrome-trimmed, and center-cropped query hashes; return the best
      * matches per product across all strategies.
      *
+     * @param  array{left: float, top: float, width: float, height: float}|null  $subjectFractions
      * @return list<array{product_id:int,name:string,sku:?string,price:float,stock_quantity:int,image_url:?string,match_percent:float,distance:int}>
      */
-    public function findTopMatchesFromBinary(string $binary, int $limit = self::TOP_MATCHES, float $minPercent = self::MIN_MATCH_PERCENT): array
+    public function findTopMatchesFromBinary(string $binary, int $limit = self::TOP_MATCHES, float $minPercent = self::MIN_MATCH_PERCENT, ?array $subjectFractions = null): array
     {
         $image = @imagecreatefromstring($binary);
 
@@ -247,7 +248,7 @@ class ProductImageHashService
         try {
             $bestByProduct = [];
 
-            foreach ($this->queryHashesFromImage($image) as $candidate) {
+            foreach ($this->queryHashesFromImage($image, $subjectFractions) as $candidate) {
                 foreach ($this->findTopMatches($candidate['hash'], $limit, $minPercent) as $match) {
                     $productId = (int) $match['product_id'];
                     $existing = $bestByProduct[$productId] ?? null;
@@ -268,9 +269,41 @@ class ProductImageHashService
     }
 
     /**
+     * Prefer a vision subject box when heuristics leave too much UI chrome.
+     *
+     * @param  array{left: float, top: float, width: float, height: float, strategy: string}|null  $heuristic
+     * @param  array{left: float, top: float, width: float, height: float, strategy: string}|null  $subject
+     * @return array{left: float, top: float, width: float, height: float, strategy: string}|null
+     */
+    public function preferCropSuggestion(?array $heuristic, ?array $subject): ?array
+    {
+        if ($subject === null) {
+            return $heuristic;
+        }
+
+        if ($heuristic === null) {
+            return $subject;
+        }
+
+        $heuristicBottom = (float) $heuristic['top'] + (float) $heuristic['height'];
+        $subjectBottom = (float) $subject['top'] + (float) $subject['height'];
+
+        if ($heuristicBottom > 0.70 || (float) $heuristic['height'] > (float) $subject['height'] * 1.25) {
+            return $subject;
+        }
+
+        if ($subjectBottom < $heuristicBottom && (float) $subject['height'] >= 0.12) {
+            return $subject;
+        }
+
+        return $heuristic;
+    }
+
+    /**
+     * @param  array{left: float, top: float, width: float, height: float}|null  $subjectFractions
      * @return list<array{hash:string,strategy:string}>
      */
-    private function queryHashesFromImage(\GdImage $image): array
+    private function queryHashesFromImage(\GdImage $image, ?array $subjectFractions = null): array
     {
         $candidates = [
             [
@@ -280,6 +313,16 @@ class ProductImageHashService
         ];
 
         $seenBounds = [];
+
+        if ($subjectFractions !== null) {
+            $this->appendBoundsHashCandidate(
+                $candidates,
+                $seenBounds,
+                $image,
+                $this->boundsFromFractions($image, $subjectFractions, 'subject_vision'),
+                'query_subject_vision_vs_catalog_full',
+            );
+        }
 
         $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectBrightPhotoPanelBounds($image), 'query_photo_panel_vs_catalog_full');
         $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectEmbeddedCardBounds($image), 'query_embedded_card_vs_catalog_full');
@@ -302,6 +345,27 @@ class ProductImageHashService
         }
 
         return $candidates;
+    }
+
+    /**
+     * @param  array{left: float, top: float, width: float, height: float}  $fractions
+     * @return array{0:int,1:int,2:int,3:int,4:string}|null
+     */
+    private function boundsFromFractions(\GdImage $image, array $fractions, string $strategy): ?array
+    {
+        $width = imagesx($image);
+        $height = imagesy($image);
+
+        $left = (int) max(0, min($width - 1, (int) floor(((float) $fractions['left']) * $width)));
+        $top = (int) max(0, min($height - 1, (int) floor(((float) $fractions['top']) * $height)));
+        $right = (int) max($left, min($width - 1, (int) floor((((float) $fractions['left']) + (float) $fractions['width']) * $width) - 1));
+        $bottom = (int) max($top, min($height - 1, (int) floor((((float) $fractions['top']) + (float) $fractions['height']) * $height) - 1));
+
+        if (! $this->boundsAreValid($image, $left, $top, $right, $bottom)) {
+            return null;
+        }
+
+        return [$left, $top, $right, $bottom, $strategy];
     }
 
     /**

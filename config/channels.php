@@ -41,6 +41,13 @@ return [
 
         // Skip tiny attachments (stickers / emoji) below this many bytes.
         'image_min_bytes' => (int) env('CHANNEL_AI_DRAFT_IMAGE_MIN_BYTES', 5000),
+
+        // Use Gemini vision to locate the product subject when chrome heuristics
+        // miss or still include Facebook/Messenger UI in the crop box.
+        'image_subject_detect' => filter_var(
+            env('CHANNEL_AI_DRAFT_IMAGE_SUBJECT_DETECT', true),
+            FILTER_VALIDATE_BOOL,
+        ),
     ],
 
     /*

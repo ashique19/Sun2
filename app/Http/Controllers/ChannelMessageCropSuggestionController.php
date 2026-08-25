@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ChannelMessage;
 use App\Services\Admin\ProductImageHashService;
+use App\Services\Admin\ScreenshotSubjectDetector;
 use App\Services\Channels\ChannelMessageImageMatchService;
 use App\Support\AdminAccess;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +18,7 @@ class ChannelMessageCropSuggestionController extends Controller
         ChannelMessage $message,
         ChannelMessageImageMatchService $media,
         ProductImageHashService $hasher,
+        ScreenshotSubjectDetector $subjects,
     ): JsonResponse {
         AdminAccess::ensureStaffAdmin();
 
@@ -30,10 +32,18 @@ class ChannelMessageCropSuggestionController extends Controller
             return response()->json(['suggestion' => null]);
         }
 
-        $suggestion = $hasher->suggestScreenshotCropFractions($downloaded['bytes']);
+        $heuristic = $hasher->suggestScreenshotCropFractions($downloaded['bytes']);
+        $subject = null;
+
+        if ($subjects->shouldRefine($heuristic)) {
+            $subject = $subjects->detectCropFractions(
+                $downloaded['bytes'],
+                $downloaded['mime'] ?? $message->media_mime,
+            );
+        }
 
         return response()->json([
-            'suggestion' => $suggestion,
+            'suggestion' => $hasher->preferCropSuggestion($heuristic, $subject),
         ]);
     }
 }

@@ -5,6 +5,7 @@ namespace App\Services\Channels;
 use App\Models\ChannelMessage;
 use App\Models\Product;
 use App\Services\Admin\ProductImageHashService;
+use App\Services\Admin\ScreenshotSubjectDetector;
 use App\Services\Facebook\FacebookPageTokenService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -15,11 +16,12 @@ class ChannelMessageImageMatchService
     public function __construct(
         private ProductImageHashService $hasher,
         private FacebookPageTokenService $tokens,
+        private ScreenshotSubjectDetector $subjects,
     ) {}
 
     /**
      * Best published catalog match at or above the auto threshold (90%).
-     * Tries full-frame first, then screenshot photo-panel / chrome-trim, then center crops.
+     * Tries heuristics first, then Gemini subject crop when configured.
      *
      * @return array{product_id: int, name: string, match_percent: float, strategy: string}|null
      */
@@ -42,6 +44,17 @@ class ChannelMessageImageMatchService
 
         try {
             $top = $this->hasher->findBestAutoMatchFromBinary($downloaded['bytes']);
+
+            if ($top === null || (float) $top['match_percent'] < ProductImageHashService::AUTO_MATCH_PERCENT) {
+                $subject = $this->subjects->detectCropFractions(
+                    $downloaded['bytes'],
+                    $downloaded['mime'] ?? $message->media_mime,
+                );
+
+                if ($subject !== null) {
+                    $top = $this->hasher->findBestAutoMatchFromBinary($downloaded['bytes'], $subject);
+                }
+            }
         } catch (Throwable $e) {
             Log::debug('Inbox inbound image hash failed.', [
                 'message_id' => $message->id,
@@ -96,10 +109,31 @@ class ChannelMessageImageMatchService
         }
 
         try {
+            $matches = $this->hasher->findTopMatchesFromBinary(
+                $downloaded['bytes'],
+                $limit,
+                ProductImageHashService::MIN_MATCH_PERCENT,
+            );
+
+            $topPercent = (float) ($matches[0]['match_percent'] ?? 0);
+            if ($topPercent >= ProductImageHashService::AUTO_MATCH_PERCENT) {
+                return $matches;
+            }
+
+            $subject = $this->subjects->detectCropFractions(
+                $downloaded['bytes'],
+                $downloaded['mime'] ?? $message->media_mime,
+            );
+
+            if ($subject === null) {
+                return $matches;
+            }
+
             return $this->hasher->findTopMatchesFromBinary(
                 $downloaded['bytes'],
                 $limit,
                 ProductImageHashService::MIN_MATCH_PERCENT,
+                $subject,
             );
         } catch (Throwable $e) {
             Log::debug('Inbox screenshot fallback image match failed.', [

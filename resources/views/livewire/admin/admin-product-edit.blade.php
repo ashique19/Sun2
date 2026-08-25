@@ -673,88 +673,82 @@
                                             </div>
                                             <div class="flex min-h-[280px] items-center justify-center bg-[#FAF6EF] px-4 py-4">
                                                 <template x-if="savedPreviewUrl">
-                                                    <div class="relative inline-block max-h-[46vh] max-w-full" data-text-overlay-stage>
+                                                    <div class="relative inline-block max-h-[46vh] max-w-full touch-none p-8 sm:p-4" data-text-overlay-stage>
                                                         <img :src="savedPreviewUrl" alt="Edited image preview"
                                                             @load="onPreviewImageLoad($event)"
-                                                            class="block max-h-[46vh] max-w-full rounded-lg border border-[#E0D6C2] object-contain shadow-sm">
+                                                            class="pointer-events-none block max-h-[46vh] max-w-full rounded-lg border border-[#E0D6C2] object-contain shadow-sm"
+                                                            draggable="false">
                                                         <div
                                                             x-show="overlayText.trim() !== ''"
                                                             x-cloak
-                                                            class="absolute z-10 cursor-move select-none rounded-sm shadow-sm outline outline-1 outline-[#C9A227]/70"
+                                                            class="absolute z-10 cursor-move select-none touch-none rounded-sm shadow-sm outline outline-1 outline-[#C9A227]/70"
+                                                            :class="{ 'ring-2 ring-[#C9A227]/40': overlayGestureActive('text-drag') || overlayGestureActive('text-resize') }"
                                                             :style="overlayTextBoxStyle()"
                                                             @pointerdown="startOverlayTextDrag($event)"
-                                                            @pointermove="moveOverlayTextDrag($event)"
-                                                            @pointerup="endOverlayTextDrag($event)"
-                                                            @pointercancel="endOverlayTextDrag($event)"
                                                             title="Drag to move · resize from the corner handle"
                                                             role="slider"
                                                             aria-label="Overlay text position"
                                                         >
-                                                            <span x-text="overlayText.trim()"></span>
+                                                            <span class="pointer-events-none" x-text="overlayText.trim()"></span>
                                                             <button type="button"
-                                                                class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-[#C9A227] bg-white shadow"
+                                                                class="absolute left-full top-full z-30 ml-1 mt-1 flex h-10 w-10 touch-none cursor-nwse-resize items-center justify-center sm:ml-0.5 sm:mt-0.5 sm:h-7 sm:w-7"
                                                                 aria-label="Resize overlay text"
                                                                 title="Drag to resize"
-                                                                @pointerdown.stop="startOverlayTextResize($event)"
-                                                                @pointermove="moveOverlayTextResize($event)"
-                                                                @pointerup="endOverlayTextResize($event)"
-                                                                @pointercancel="endOverlayTextResize($event)"
-                                                            ></button>
+                                                                @pointerdown.stop.prevent="startOverlayTextResize($event)"
+                                                            >
+                                                                <span class="pointer-events-none h-4 w-4 rounded-sm border-2 border-[#C9A227] bg-white shadow sm:h-3 sm:w-3 sm:border"></span>
+                                                            </button>
                                                         </div>
                                                         <div
                                                             x-show="overlayLogoEnabled"
                                                             x-cloak
-                                                            class="absolute z-10 cursor-move select-none outline outline-1 outline-[#C9A227]/70"
+                                                            class="absolute z-10 cursor-move select-none touch-none outline outline-1 outline-[#C9A227]/70"
+                                                            :class="{ 'ring-2 ring-[#C9A227]/40': overlayGestureActive('logo-drag') || overlayGestureActive('logo-resize') }"
                                                             :style="overlayLogoBoxStyle()"
                                                             @pointerdown="startOverlayLogoDrag($event)"
-                                                            @pointermove="moveOverlayLogoDrag($event)"
-                                                            @pointerup="endOverlayLogoDrag($event)"
-                                                            @pointercancel="endOverlayLogoDrag($event)"
                                                             title="Drag to move · resize from the corner handle"
                                                             role="slider"
                                                             aria-label="Logo position"
                                                         >
                                                             <img :src="logoUrl" alt="" class="pointer-events-none h-full w-full object-contain" draggable="false">
                                                             <button type="button"
-                                                                class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-[#C9A227] bg-white shadow"
+                                                                class="absolute left-full top-full z-30 ml-1 mt-1 flex h-10 w-10 touch-none cursor-nwse-resize items-center justify-center sm:ml-0.5 sm:mt-0.5 sm:h-7 sm:w-7"
                                                                 aria-label="Resize logo"
                                                                 title="Drag to resize"
-                                                                @pointerdown.stop="startOverlayLogoResize($event)"
-                                                                @pointermove="moveOverlayLogoResize($event)"
-                                                                @pointerup="endOverlayLogoResize($event)"
-                                                                @pointercancel="endOverlayLogoResize($event)"
-                                                            ></button>
+                                                                @pointerdown.stop.prevent="startOverlayLogoResize($event)"
+                                                            >
+                                                                <span class="pointer-events-none h-4 w-4 rounded-sm border-2 border-[#C9A227] bg-white shadow sm:h-3 sm:w-3 sm:border"></span>
+                                                            </button>
                                                         </div>
                                                         <div
                                                             x-show="overlayImageUrl"
                                                             x-cloak
-                                                            class="absolute z-20 cursor-move select-none outline outline-1 outline-[#C9A227]/70"
+                                                            class="absolute z-20 cursor-move select-none touch-none outline outline-1 outline-[#C9A227]/70"
+                                                            :class="{ 'ring-2 ring-[#C9A227]/40': overlayGestureActive('image-drag') || overlayGestureActive('image-resize') }"
                                                             :style="overlayImageBoxStyle()"
                                                             @pointerdown="startOverlayImageDrag($event)"
-                                                            @pointermove="moveOverlayImageDrag($event)"
-                                                            @pointerup="endOverlayImageDrag($event)"
-                                                            @pointercancel="endOverlayImageDrag($event)"
                                                             title="Drag to move · resize from the corner · remove with ×"
                                                             role="slider"
                                                             aria-label="Image overlay position"
                                                         >
                                                             <img :src="overlayImageUrl" alt="" class="pointer-events-none h-full w-full object-contain" draggable="false">
                                                             <button type="button"
-                                                                class="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full border border-rose-300 bg-white text-xs font-bold leading-none text-rose-700 shadow"
+                                                                class="absolute bottom-full left-full z-30 mb-1 ml-1 flex h-10 w-10 touch-none items-center justify-center sm:mb-0.5 sm:ml-0.5 sm:h-7 sm:w-7"
                                                                 aria-label="Remove image overlay"
                                                                 title="Remove overlay"
                                                                 @pointerdown.stop.prevent
                                                                 @click.stop="clearOverlayImage()"
-                                                            >×</button>
+                                                            >
+                                                                <span class="pointer-events-none flex h-6 w-6 items-center justify-center rounded-full border border-rose-300 bg-white text-sm font-bold leading-none text-rose-700 shadow sm:h-5 sm:w-5 sm:text-xs">×</span>
+                                                            </button>
                                                             <button type="button"
-                                                                class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-[#C9A227] bg-white shadow"
+                                                                class="absolute left-full top-full z-30 ml-1 mt-1 flex h-10 w-10 touch-none cursor-nwse-resize items-center justify-center sm:ml-0.5 sm:mt-0.5 sm:h-7 sm:w-7"
                                                                 aria-label="Resize image overlay"
                                                                 title="Drag to resize"
-                                                                @pointerdown.stop="startOverlayImageResize($event)"
-                                                                @pointermove="moveOverlayImageResize($event)"
-                                                                @pointerup="endOverlayImageResize($event)"
-                                                                @pointercancel="endOverlayImageResize($event)"
-                                                            ></button>
+                                                                @pointerdown.stop.prevent="startOverlayImageResize($event)"
+                                                            >
+                                                                <span class="pointer-events-none h-4 w-4 rounded-sm border-2 border-[#C9A227] bg-white shadow sm:h-3 sm:w-3 sm:border"></span>
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 </template>
@@ -762,7 +756,7 @@
                                             </div>
                                             <p class="border-t border-[#EFE7D6] px-4 py-2 text-[11px] text-[#8C8474]"
                                                 x-show="overlayText.trim() !== '' || overlayLogoEnabled || overlayImageUrl" x-cloak>
-                                                Drag overlays on the preview to move. Corner handle resizes · × removes the uploaded image overlay.
+                                                Drag overlays to move (finger stays under the grab point). Large corner handles resize · × removes the uploaded image.
                                             </p>
                                         </div>
                                     </div>
@@ -1424,36 +1418,33 @@
                         <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4">
                             @if ($pricedPrimaryUrl)
                                 <div class="overflow-hidden rounded-xl border border-[#EFE7D6] bg-[#FAF6EF]">
-                                    <div class="relative inline-block w-full" data-priced-stamp-stage>
+                                    <div class="relative inline-block w-full touch-none p-8 sm:p-4" data-priced-stamp-stage>
                                         <img src="{{ $pricedPrimaryUrl }}" alt="Primary product image"
                                             @load="onStageImageLoad($event)"
-                                            class="block w-full object-contain">
+                                            class="pointer-events-none block w-full object-contain"
+                                            draggable="false">
                                         <div
-                                            class="absolute z-10 cursor-move select-none rounded-sm shadow-sm outline outline-1 outline-[#C9A227]/70"
+                                            class="absolute z-10 cursor-move select-none touch-none rounded-sm shadow-sm outline outline-1 outline-[#C9A227]/70"
                                             :style="stampBoxStyle()"
                                             @pointerdown="startDrag($event)"
-                                            @pointermove="moveDrag($event)"
-                                            @pointerup="endDrag($event)"
-                                            @pointercancel="endDrag($event)"
                                             title="Drag to move · resize from the corner handle"
                                             role="slider"
                                             aria-label="Price stamp position"
                                         >
-                                            <p x-show="compareLine" x-cloak class="relative leading-none">
+                                            <p x-show="compareLine" x-cloak class="pointer-events-none relative leading-none">
                                                 <span x-text="compareLine" class="line-through decoration-2"></span>
                                             </p>
-                                            <p class="leading-none">
+                                            <p class="pointer-events-none leading-none">
                                                 <span x-text="priceLine"></span><span x-text="unitLabel" class="ml-0.5"></span>
                                             </p>
                                             <button type="button"
-                                                class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-[#C9A227] bg-white shadow"
+                                                class="absolute left-full top-full z-30 ml-1 mt-1 flex h-10 w-10 touch-none cursor-nwse-resize items-center justify-center sm:ml-0.5 sm:mt-0.5 sm:h-7 sm:w-7"
                                                 aria-label="Resize price stamp"
                                                 title="Drag to resize"
-                                                @pointerdown.stop="startResize($event)"
-                                                @pointermove="moveResize($event)"
-                                                @pointerup="endResize($event)"
-                                                @pointercancel="endResize($event)"
-                                            ></button>
+                                                @pointerdown.stop.prevent="startResize($event)"
+                                            >
+                                                <span class="pointer-events-none h-4 w-4 rounded-sm border-2 border-[#C9A227] bg-white shadow sm:h-3 sm:w-3 sm:border"></span>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

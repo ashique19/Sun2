@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Livewire\Admin\AdminProductEdit;
 use App\Models\Product;
+use App\Models\ProductImage;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -138,6 +139,9 @@ class AdminProductEditImageModalTest extends TestCase
             ->assertSeeHtml('snapOverlayTextPosition')
             ->assertSeeHtml('startOverlayTextDrag')
             ->assertSeeHtml('startOverlayTextResize')
+            ->assertSeeHtml('snapOverlayLogoPosition')
+            ->assertSeeHtml('startOverlayLogoDrag')
+            ->assertSeeHtml('startOverlayLogoResize')
             ->assertSeeHtml('data-text-overlay-stage')
             ->assertSeeHtml('min="12" max="200"')
             ->assertDontSeeHtml('name="overlay-text-position"')
@@ -149,9 +153,87 @@ class AdminProductEditImageModalTest extends TestCase
         $this->assertStringContainsString("case 'center':", $source);
         $this->assertStringContainsString('overlayTextX', $source);
         $this->assertStringContainsString('overlayTextY', $source);
+        $this->assertStringContainsString('overlayLogoX', $source);
+        $this->assertStringContainsString('overlayLogoY', $source);
         $this->assertStringContainsString('snapOverlayTextPosition', $source);
+        $this->assertStringContainsString('snapOverlayLogoPosition', $source);
         $this->assertStringContainsString('startOverlayTextDrag', $source);
+        $this->assertStringContainsString('startOverlayLogoDrag', $source);
         $this->assertStringContainsString('startOverlayTextResize', $source);
+        $this->assertStringContainsString('startOverlayLogoResize', $source);
         $this->assertStringContainsString('includeText: false', $source);
+        $this->assertStringContainsString('includeLogo: false', $source);
+        $this->assertStringContainsString('includeOverlayImage: false', $source);
+        $this->assertStringContainsString('onOverlayImageSelected', $source);
+        $this->assertStringContainsString('clearOverlayImage', $source);
+        $this->assertStringContainsString('startOverlayImageDrag', $source);
+        $this->assertStringContainsString('startOverlayImageResize', $source);
+        $this->assertStringContainsString('drawOverlayImage', $source);
+        $this->assertStringContainsString('pricedImageStampEditor', $source);
+    }
+
+    #[Test]
+    public function saved_image_edit_modal_exposes_image_overlay_upload_controls(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $product = Product::query()->create([
+            'name' => 'Necklace Set',
+            'slug' => 'necklace-set',
+            'price' => 2500,
+            'is_published' => true,
+        ]);
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->assertSeeHtml('data-overlay-image-controls')
+            ->assertSeeHtml('Put image overlay')
+            ->assertSeeHtml('onOverlayImageSelected($event)')
+            ->assertSeeHtml('clearOverlayImage()')
+            ->assertSeeHtml('startOverlayImageDrag($event)')
+            ->assertSeeHtml('startOverlayImageResize($event)')
+            ->assertSeeHtml('Remove image overlay')
+            ->assertSeeHtml('accept="image/jpeg,image/png,image/webp,image/gif"');
+    }
+
+    #[Test]
+    public function priced_image_modal_exposes_drag_resize_stamp_preview(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $product = Product::query()->create([
+            'name' => 'Necklace Set',
+            'slug' => 'necklace-set',
+            'price' => 2500,
+            'is_published' => true,
+        ]);
+
+        $relativeDir = 'img/products/'.$product->id;
+        $absoluteDir = public_path($relativeDir);
+        if (! is_dir($absoluteDir)) {
+            mkdir($absoluteDir, 0775, true);
+        }
+        $absolute = $absoluteDir.'/primary.jpg';
+        $image = imagecreatetruecolor(320, 320);
+        imagefilledrectangle($image, 0, 0, 319, 319, imagecolorallocate($image, 40, 100, 60));
+        imagejpeg($image, $absolute, 90);
+        imagedestroy($image);
+
+        ProductImage::query()->create([
+            'product_id' => $product->id,
+            'path' => '/'.$relativeDir.'/primary.jpg',
+            'alt' => 'Necklace',
+            'is_primary' => true,
+            'sort_order' => 0,
+        ]);
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product->fresh(['images'])])
+            ->call('openPricedImageModal')
+            ->assertSet('showPricedImageModal', true)
+            ->assertSeeHtml('pricedImageStampEditor')
+            ->assertSeeHtml('data-priced-stamp-stage')
+            ->assertSeeHtml('startDrag($event)')
+            ->assertSeeHtml('startResize($event)')
+            ->assertSeeHtml("snap('center')")
+            ->assertSee('Drag the price stamp');
     }
 }

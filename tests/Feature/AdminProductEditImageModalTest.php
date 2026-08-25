@@ -135,6 +135,11 @@ class AdminProductEditImageModalTest extends TestCase
             ->assertSeeHtml(':aria-label="option.label"')
             ->assertSeeHtml(':aria-label="`Logo ${option.label}`"')
             ->assertSeeHtml('option.icon.x')
+            ->assertSeeHtml('snapOverlayTextPosition')
+            ->assertSeeHtml('startOverlayTextDrag')
+            ->assertSeeHtml('startOverlayTextResize')
+            ->assertSeeHtml('data-text-overlay-stage')
+            ->assertSeeHtml('min="12" max="200"')
             ->assertDontSeeHtml('name="overlay-text-position"')
             ->assertDontSeeHtml('name="overlay-logo-position"');
 
@@ -142,5 +147,11 @@ class AdminProductEditImageModalTest extends TestCase
         $this->assertIsString($source);
         $this->assertStringContainsString("value: 'center'", $source);
         $this->assertStringContainsString("case 'center':", $source);
+        $this->assertStringContainsString('overlayTextX', $source);
+        $this->assertStringContainsString('overlayTextY', $source);
+        $this->assertStringContainsString('snapOverlayTextPosition', $source);
+        $this->assertStringContainsString('startOverlayTextDrag', $source);
+        $this->assertStringContainsString('startOverlayTextResize', $source);
+        $this->assertStringContainsString('includeText: false', $source);
     }
 }

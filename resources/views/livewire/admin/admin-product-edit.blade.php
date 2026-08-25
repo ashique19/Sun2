@@ -701,12 +701,37 @@
                                                                 @pointercancel="endOverlayTextResize($event)"
                                                             ></button>
                                                         </div>
+                                                        <div
+                                                            x-show="overlayLogoEnabled"
+                                                            x-cloak
+                                                            class="absolute z-10 cursor-move select-none outline outline-1 outline-[#C9A227]/70"
+                                                            :style="overlayLogoBoxStyle()"
+                                                            @pointerdown="startOverlayLogoDrag($event)"
+                                                            @pointermove="moveOverlayLogoDrag($event)"
+                                                            @pointerup="endOverlayLogoDrag($event)"
+                                                            @pointercancel="endOverlayLogoDrag($event)"
+                                                            title="Drag to move · resize from the corner handle"
+                                                            role="slider"
+                                                            aria-label="Logo position"
+                                                        >
+                                                            <img :src="logoUrl" alt="" class="pointer-events-none h-full w-full object-contain" draggable="false">
+                                                            <button type="button"
+                                                                class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-[#C9A227] bg-white shadow"
+                                                                aria-label="Resize logo"
+                                                                title="Drag to resize"
+                                                                @pointerdown.stop="startOverlayLogoResize($event)"
+                                                                @pointermove="moveOverlayLogoResize($event)"
+                                                                @pointerup="endOverlayLogoResize($event)"
+                                                                @pointercancel="endOverlayLogoResize($event)"
+                                                            ></button>
+                                                        </div>
                                                     </div>
                                                 </template>
                                                 <p x-show="! savedPreviewUrl" class="text-sm text-[#8C8474]" x-cloak>Preview will appear here.</p>
                                             </div>
-                                            <p class="border-t border-[#EFE7D6] px-4 py-2 text-[11px] text-[#8C8474]" x-show="overlayText.trim() !== ''" x-cloak>
-                                                Drag the text on the preview to move it. Drag the corner handle to resize.
+                                            <p class="border-t border-[#EFE7D6] px-4 py-2 text-[11px] text-[#8C8474]"
+                                                x-show="overlayText.trim() !== '' || overlayLogoEnabled" x-cloak>
+                                                Drag text or logo on the preview to move. Drag a corner handle to resize.
                                             </p>
                                         </div>
                                     </div>
@@ -805,11 +830,12 @@
                                                         class="w-full accent-[#C9A227] disabled:opacity-60">
                                                 </div>
                                                 <div>
+                                                    <p class="mb-1 text-[11px] text-[#8C8474]">Snap position</p>
                                                     <div class="flex gap-1.5" role="group" aria-label="Logo position"
                                                         :class="{ 'opacity-60': ! overlayLogoEnabled }">
                                                         <template x-for="option in overlayPositions()" :key="`logo-${option.value}`">
                                                             <button type="button"
-                                                                @click="overlayLogoPosition = option.value"
+                                                                @click="snapOverlayLogoPosition(option.value)"
                                                                 :title="option.label"
                                                                 :aria-label="`Logo ${option.label}`"
                                                                 :aria-pressed="overlayLogoPosition === option.value ? 'true' : 'false'"
@@ -1186,12 +1212,35 @@
     @teleport('body')
         <div wire:key="priced-image-modal-host">
             @if ($showPricedImageModal)
+                @php
+                    $pricedPrimaryPath = $product?->primaryImagePath();
+                    $pricedPrimaryUrl = $pricedPrimaryPath
+                        ? \App\Support\StorefrontAssets::url($pricedPrimaryPath)
+                        : null;
+                    $pricedCompareLine = ($product?->compare_at_price !== null
+                        && (float) $product->compare_at_price > (float) $product->price)
+                        ? \App\Support\Bangla::digits((string) (int) round((float) $product->compare_at_price))
+                        : '';
+                    $pricedSaleLine = '৳'.\App\Support\Bangla::digits((string) (int) round((float) ($product?->price ?? 0)));
+                    $pricedUnitLabel = '/'.($product?->priceUnitLabel() ?? 'পিস');
+                    $pricedStampConfig = [
+                        'primaryUrl' => $pricedPrimaryUrl,
+                        'priceLine' => $pricedSaleLine,
+                        'compareLine' => $pricedCompareLine,
+                        'unitLabel' => $pricedUnitLabel,
+                        'x' => (float) $pricedImageX,
+                        'y' => (float) $pricedImageY,
+                        'font' => (int) $pricedImageFont,
+                        'position' => $pricedImagePosition,
+                    ];
+                @endphp
                 <div class="fixed inset-0 z-[80] flex items-stretch justify-center bg-black/50 sm:items-center sm:p-4"
                     wire:click.self="closePricedImageModal"
                     wire:key="priced-image-modal"
                     role="dialog"
                     aria-modal="true"
-                    aria-label="Priced image controls">
+                    aria-label="Priced image controls"
+                    x-data="pricedImageStampEditor(@js($pricedStampConfig))">
                     <div class="flex h-dvh w-full max-w-4xl flex-col overflow-hidden bg-white shadow-xl sm:h-auto sm:max-h-[min(90dvh,42rem)] sm:rounded-xl"
                         wire:click.stop>
                         <div class="flex shrink-0 items-center justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
@@ -1212,14 +1261,14 @@
                                     'center' => 'Center',
                                 ] as $value => $label)
                                     <button type="button"
-                                        wire:click="$set('pricedImagePosition', '{{ $value }}')"
+                                        @click="snap('{{ $value }}')"
                                         title="{{ $label }}"
                                         aria-label="{{ $label }}"
-                                        aria-pressed="{{ $pricedImagePosition === $value ? 'true' : 'false' }}"
-                                        class="inline-flex h-10 flex-1 items-center justify-center rounded-lg border transition
-                                            {{ $pricedImagePosition === $value
-                                                ? 'border-[#1E1E1E] bg-[#1E1E1E] text-white'
-                                                : 'border-[#E0D6C2] bg-white text-[#1E1E1E] hover:bg-[#FAF6EF]' }}">
+                                        :aria-pressed="stampPosition === '{{ $value }}' ? 'true' : 'false'"
+                                        class="inline-flex h-10 flex-1 items-center justify-center rounded-lg border transition"
+                                        :class="stampPosition === '{{ $value }}'
+                                            ? 'border-[#1E1E1E] bg-[#1E1E1E] text-white'
+                                            : 'border-[#E0D6C2] bg-white text-[#1E1E1E] hover:bg-[#FAF6EF]'">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
                                             <rect x="2.5" y="2.5" width="15" height="15" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.45"/>
                                             @switch($value)
@@ -1248,13 +1297,16 @@
                                     min="{{ \App\Services\Admin\ProductPricedImageService::FONT_MIN }}"
                                     max="{{ \App\Services\Admin\ProductPricedImageService::FONT_MAX }}"
                                     step="4"
-                                    wire:model="pricedImageFont"
+                                    x-model.number="stampFont"
+                                    @change="syncToWire()"
+                                    @input="stampFont = Number($event.target.value)"
                                     aria-label="Text size in pixels"
                                     class="min-w-0 flex-1">
                                 <input type="number"
                                     min="{{ \App\Services\Admin\ProductPricedImageService::FONT_MIN }}"
                                     max="{{ \App\Services\Admin\ProductPricedImageService::FONT_MAX }}"
-                                    wire:model="pricedImageFont"
+                                    x-model.number="stampFont"
+                                    @change="syncToWire()"
                                     aria-label="Text size in pixels"
                                     class="w-20 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums">
                             </div>
@@ -1267,9 +1319,17 @@
                             @error('pricedImageFont')
                                 <p class="text-xs text-rose-600">{{ $message }}</p>
                             @enderror
+                            @error('pricedImageX')
+                                <p class="text-xs text-rose-600">{{ $message }}</p>
+                            @enderror
+                            @error('pricedImageY')
+                                <p class="text-xs text-rose-600">{{ $message }}</p>
+                            @enderror
                             <div class="flex flex-wrap items-center gap-2">
-                                <button type="button" wire:click="generatePricedImage"
+                                <button type="button"
+                                    @click="syncAndGenerate()"
                                     wire:loading.attr="disabled"
+                                    wire:target="generatePricedImage"
                                     class="rounded-full bg-[#1E1E1E] px-5 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-60">
                                     <span wire:loading.remove wire:target="generatePricedImage">
                                         {{ $product?->priced_image_path ? 'Save & rebuild' : 'Save & generate' }}
@@ -1291,13 +1351,54 @@
                         </div>
 
                         <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4">
-                            @if ($product?->priced_image_path)
+                            @if ($pricedPrimaryUrl)
                                 <div class="overflow-hidden rounded-xl border border-[#EFE7D6] bg-[#FAF6EF]">
-                                    <img src="{{ \App\Support\StorefrontAssets::url($product->priced_image_path) }}" alt="Priced image preview" class="w-full object-contain">
+                                    <div class="relative inline-block w-full" data-priced-stamp-stage>
+                                        <img src="{{ $pricedPrimaryUrl }}" alt="Primary product image"
+                                            @load="onStageImageLoad($event)"
+                                            class="block w-full object-contain">
+                                        <div
+                                            class="absolute z-10 cursor-move select-none rounded-sm shadow-sm outline outline-1 outline-[#C9A227]/70"
+                                            :style="stampBoxStyle()"
+                                            @pointerdown="startDrag($event)"
+                                            @pointermove="moveDrag($event)"
+                                            @pointerup="endDrag($event)"
+                                            @pointercancel="endDrag($event)"
+                                            title="Drag to move · resize from the corner handle"
+                                            role="slider"
+                                            aria-label="Price stamp position"
+                                        >
+                                            <p x-show="compareLine" x-cloak class="relative leading-none">
+                                                <span x-text="compareLine" class="line-through decoration-2"></span>
+                                            </p>
+                                            <p class="leading-none">
+                                                <span x-text="priceLine"></span><span x-text="unitLabel" class="ml-0.5"></span>
+                                            </p>
+                                            <button type="button"
+                                                class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-[#C9A227] bg-white shadow"
+                                                aria-label="Resize price stamp"
+                                                title="Drag to resize"
+                                                @pointerdown.stop="startResize($event)"
+                                                @pointermove="moveResize($event)"
+                                                @pointerup="endResize($event)"
+                                                @pointercancel="endResize($event)"
+                                            ></button>
+                                        </div>
+                                    </div>
                                 </div>
+                                <p class="text-xs text-[#8C8474]">
+                                    Drag the price stamp to place it. Drag the corner handle to resize. Snap buttons jump to corners.
+                                </p>
                             @else
                                 <div class="rounded-xl border border-dashed border-[#E0D6C2] bg-[#FAF6EF] px-4 py-12 text-center text-sm text-[#8C8474]">
-                                    Generate once to preview the priced image here.
+                                    Add a primary product image first to place the price stamp.
+                                </div>
+                            @endif
+                            @if ($product?->priced_image_path)
+                                <div class="overflow-hidden rounded-xl border border-[#EFE7D6] bg-[#FAF6EF]">
+                                    <p class="border-b border-[#EFE7D6] px-3 py-2 text-[11px] text-[#8C8474]">Last generated</p>
+                                    <img src="{{ \App\Support\StorefrontAssets::url($product->priced_image_path) }}?v={{ $product->updated_at?->timestamp }}"
+                                        alt="Priced image preview" class="w-full object-contain">
                                 </div>
                             @endif
                             <p class="text-xs text-[#8C8474]">Uses the primary product image and current price / regular price. Rebuild after changing photo or price.</p>

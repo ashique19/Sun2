@@ -75,6 +75,8 @@ class AdminProductImageEditTest extends TestCase
             ->assertSeeHtml('overlayLogoPosition')
             ->assertSeeHtml('snapOverlayTextPosition')
             ->assertSeeHtml('data-text-overlay-stage')
+            ->assertSeeHtml('snapOverlayLogoPosition')
+            ->assertSeeHtml('startOverlayLogoDrag')
             ->assertSeeHtml('saveSavedEdit()')
             ->assertSeeHtml('wire:ignore')
             ->assertDontSeeHtml('x-show="savedEditorOpen"');

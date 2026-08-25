@@ -202,6 +202,8 @@ class ProductPricedImageTest extends TestCase
             ->assertDontSee('Text size (px)')
             ->assertDontSee('writes the position, text size, and priced image')
             ->assertSee('Close')
+            ->assertSee('Drag the price stamp')
+            ->assertSeeHtml('data-priced-stamp-stage')
             ->assertDontSee('X position')
             ->assertDontSee('Y position')
             ->set('pricedImagePosition', 'bottom-left')
@@ -213,7 +215,34 @@ class ProductPricedImageTest extends TestCase
         $product->refresh();
         $this->assertSame('bottom-left', $product->priced_image_layout['position']);
         $this->assertSame(80, $product->priced_image_layout['font']);
+        $this->assertEqualsWithDelta(0.12, $product->priced_image_layout['x'], 0.001);
+        $this->assertEqualsWithDelta(0.88, $product->priced_image_layout['y'], 0.001);
         $this->assertNotNull($product->priced_image_path);
+    }
+
+    #[Test]
+    public function edit_modal_can_place_stamp_with_custom_normalized_coords(): void
+    {
+        $this->actingAs($this->adminUser());
+        $product = $this->productWithPrimaryImage();
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->call('openPricedImageModal')
+            ->set('pricedImagePosition', 'custom')
+            ->set('pricedImageX', 0.35)
+            ->set('pricedImageY', 0.72)
+            ->set('pricedImageFont', 60)
+            ->call('generatePricedImage')
+            ->assertHasNoErrors()
+            ->assertSet('message', 'Priced image saved.');
+
+        $product->refresh();
+        $this->assertSame('custom', $product->priced_image_layout['position']);
+        $this->assertSame(60, $product->priced_image_layout['font']);
+        $this->assertEqualsWithDelta(0.35, $product->priced_image_layout['x'], 0.001);
+        $this->assertEqualsWithDelta(0.72, $product->priced_image_layout['y'], 0.001);
+        $this->assertNotNull($product->priced_image_path);
+        $this->assertFileExists(public_path(ltrim($product->priced_image_path, '/')));
     }
 
     #[Test]

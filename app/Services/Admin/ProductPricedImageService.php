@@ -18,6 +18,7 @@ class ProductPricedImageService
         'bottom-left',
         'bottom-right',
         'center',
+        'custom',
     ];
 
     public const FONT_MIN = 28;
@@ -91,7 +92,7 @@ class ProductPricedImageService
     /**
      * Centered overlay sized so the stamp panel is ~20% of the primary image width.
      *
-     * @return array{position: string, font: int}
+     * @return array{position: string, font: int, x?: float, y?: float}
      */
     public function autoFillLayout(string $sourcePath, Product $product): array
     {
@@ -120,6 +121,8 @@ class ProductPricedImageService
         return [
             'position' => 'center',
             'font' => $bestFont,
+            'x' => 0.5,
+            'y' => 0.5,
         ];
     }
 
@@ -148,18 +151,29 @@ class ProductPricedImageService
     }
 
     /**
+     * Approximate center (0–1) for a named corner / center snap.
+     *
+     * @return array{0: float, 1: float}
+     */
+    public function centerForPosition(string $position): array
+    {
+        return match ($position) {
+            'top-right' => [0.88, 0.12],
+            'bottom-left' => [0.12, 0.88],
+            'bottom-right' => [0.88, 0.88],
+            'center' => [0.5, 0.5],
+            'custom' => [0.5, 0.5],
+            default => [0.12, 0.12],
+        };
+    }
+
+    /**
      * @param  array<string, mixed>  $layout
-     * @return array{position: string, font: int}
+     * @return array{position: string, font: int, x?: float, y?: float}
      */
     public function normalizeLayout(array $layout): array
     {
         $defaults = $this->defaultLayout();
-
-        $position = $layout['position'] ?? null;
-
-        if (! is_string($position) || ! in_array($position, self::POSITIONS, true)) {
-            $position = $this->guessPositionFromLegacyCoordinates($layout) ?? $defaults['position'];
-        }
 
         $font = (int) ($layout['font'] ?? $defaults['font']);
 
@@ -174,10 +188,62 @@ class ProductPricedImageService
             };
         }
 
-        return [
+        $font = min(self::AUTO_FONT_MAX, max(self::FONT_MIN, $font));
+        $normalizedCenter = $this->extractNormalizedCenter($layout);
+
+        $position = $layout['position'] ?? null;
+
+        if (! is_string($position) || ! in_array($position, self::POSITIONS, true)) {
+            if ($normalizedCenter !== null) {
+                $position = 'custom';
+            } else {
+                $position = $this->guessPositionFromLegacyCoordinates($layout) ?? $defaults['position'];
+            }
+        }
+
+        $result = [
             'position' => $position,
-            'font' => min(self::AUTO_FONT_MAX, max(self::FONT_MIN, $font)),
+            'font' => $font,
         ];
+
+        if ($normalizedCenter !== null) {
+            $result['x'] = $normalizedCenter[0];
+            $result['y'] = $normalizedCenter[1];
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param  array<string, mixed>  $layout
+     * @return array{0: float, 1: float}|null
+     */
+    private function extractNormalizedCenter(array $layout): ?array
+    {
+        if (! array_key_exists('x', $layout) || ! array_key_exists('y', $layout)) {
+            return null;
+        }
+
+        $x = (float) $layout['x'];
+        $y = (float) $layout['y'];
+
+        // Pixel legacy offsets (e.g. 24, 200) sit outside the unit square.
+        if ($x < 0 || $x > 1 || $y < 0 || $y > 1) {
+            return null;
+        }
+
+        $position = $layout['position'] ?? null;
+
+        if (is_string($position) && in_array($position, self::POSITIONS, true)) {
+            return [round($x, 4), round($y, 4)];
+        }
+
+        // No position key: fractional values are normalized centers; whole 0/1 stay legacy.
+        if ($x != (int) $x || $y != (int) $y) {
+            return [round($x, 4), round($y, 4)];
+        }
+
+        return null;
     }
 
     public function deleteLocalFile(?string $path): void
@@ -218,7 +284,7 @@ class ProductPricedImageService
 
     /**
      * @param  array<string, mixed>|null  $layout
-     * @return array{position: string, font: int}
+     * @return array{position: string, font: int, x?: float, y?: float}
      */
     private function resolveLayout(Product $product, string $source, ?array $layout): array
     {
@@ -260,7 +326,7 @@ class ProductPricedImageService
     }
 
     /**
-     * @param  array{position: string, font: int}  $layout
+     * @param  array{position: string, font: int, x?: float, y?: float}  $layout
      */
     private function compose(string $source, string $destination, Product $product, array $layout): void
     {
@@ -310,7 +376,7 @@ class ProductPricedImageService
         $panelWhite = imagecolorallocatealpha($canvas, 255, 255, 255, 45);
         $black = imagecolorallocate($canvas, 0, 0, 0);
 
-        [$x, $y] = $this->panelOrigin($layout['position'], $width, $height, $panelWidth, $panelHeight, $margin);
+        [$x, $y] = $this->panelOrigin($layout, $width, $height, $panelWidth, $panelHeight, $margin);
 
         $this->frostPanel($canvas, $x, $y, $panelWidth, $panelHeight);
         imagefilledrectangle($canvas, $x, $y, $x + $panelWidth, $y + $panelHeight, $panelWhite);
@@ -713,18 +779,34 @@ class ProductPricedImageService
     }
 
     /**
+     * @param  array{position: string, font: int, x?: float, y?: float}  $layout
      * @return array{0: int, 1: int}
      */
-    private function panelOrigin(string $position, int $imageWidth, int $imageHeight, int $panelWidth, int $panelHeight, int $margin): array
+    private function panelOrigin(array $layout, int $imageWidth, int $imageHeight, int $panelWidth, int $panelHeight, int $margin): array
     {
-        $maxX = max($margin, $imageWidth - $panelWidth - $margin);
-        $maxY = max($margin, $imageHeight - $panelHeight - $margin);
+        $maxX = max(0, $imageWidth - $panelWidth);
+        $maxY = max(0, $imageHeight - $panelHeight);
 
-        return match ($position) {
-            'top-right' => [$maxX, $margin],
-            'bottom-left' => [$margin, $maxY],
-            'bottom-right' => [$maxX, $maxY],
-            'center' => [
+        if (array_key_exists('x', $layout) && array_key_exists('y', $layout)) {
+            $centerX = ((float) $layout['x']) * $imageWidth;
+            $centerY = ((float) $layout['y']) * $imageHeight;
+            $x = (int) round($centerX - ($panelWidth / 2));
+            $y = (int) round($centerY - ($panelHeight / 2));
+
+            return [
+                max(0, min($maxX, $x)),
+                max(0, min($maxY, $y)),
+            ];
+        }
+
+        $snapMaxX = max($margin, $imageWidth - $panelWidth - $margin);
+        $snapMaxY = max($margin, $imageHeight - $panelHeight - $margin);
+
+        return match ($layout['position']) {
+            'top-right' => [$snapMaxX, $margin],
+            'bottom-left' => [$margin, $snapMaxY],
+            'bottom-right' => [$snapMaxX, $snapMaxY],
+            'center', 'custom' => [
                 (int) max($margin, round(($imageWidth - $panelWidth) / 2)),
                 (int) max($margin, round(($imageHeight - $panelHeight) / 2)),
             ],

@@ -49,6 +49,11 @@ const registerProductImageAlpineData = () => {
         overlayLogoEnabled: false,
         overlayLogoSize: 22,
         overlayLogoPosition: 'top-right',
+        /** Normalized center of the logo (0–1 of canvas). */
+        overlayLogoX: 0.88,
+        overlayLogoY: 0.12,
+        overlayLogoDrag: null,
+        overlayLogoResize: null,
         logoUrl: '/img/settings/logo.png',
         logoImage: null,
         _savedOverlayUnwatch: null,
@@ -555,10 +560,15 @@ const registerProductImageAlpineData = () => {
             this.overlayLogoEnabled = false;
             this.overlayLogoSize = 22;
             this.overlayLogoPosition = 'top-right';
+            this.overlayLogoX = 0.88;
+            this.overlayLogoY = 0.12;
+            this.overlayLogoDrag = null;
+            this.overlayLogoResize = null;
             this.savedEditorOpen = true;
             this.preloadLogo();
             this.bindSavedOverlayWatchers();
             this.snapOverlayTextPosition('bottom-left');
+            this.snapOverlayLogoPosition('top-right');
 
             this.$nextTick(() => {
                 afterPaint(() => {
@@ -574,14 +584,9 @@ const registerProductImageAlpineData = () => {
                 this._savedOverlayUnwatch = null;
             }
 
+            // Logo/text live on HTML overlays — only tone adjustments need a canvas rebuild.
             this._savedOverlayUnwatch = this.$watch(
-                () => [
-                    this.editBrightness,
-                    this.editRedTone,
-                    this.overlayLogoEnabled,
-                    this.overlayLogoSize,
-                    this.overlayLogoPosition,
-                ].join('|'),
+                () => [this.editBrightness, this.editRedTone].join('|'),
                 () => {
                     if (this.savedCropper) {
                         this.schedulePreview();
@@ -787,8 +792,11 @@ const registerProductImageAlpineData = () => {
             }
 
             try {
-                // Preview omits text so the HTML overlay can be dragged/resized freely.
-                const output = await this.composeEditedCanvas(720, { includeText: false });
+                // Preview omits text/logo so the HTML overlays can be dragged/resized freely.
+                const output = await this.composeEditedCanvas(720, {
+                    includeText: false,
+                    includeLogo: false,
+                });
 
                 if (! output || ! this.savedEditorOpen) {
                     if (this.savedEditorOpen && ! this.savedPreviewUrl) {
@@ -851,6 +859,33 @@ const registerProductImageAlpineData = () => {
             const origin = this.cornerOrigin(position, width, height, approxWidth, approxHeight, pad);
             this.overlayTextX = this.clamp01((origin.x + approxWidth / 2) / width);
             this.overlayTextY = this.clamp01((origin.y + approxHeight / 2) / height);
+        },
+
+        snapOverlayLogoPosition(position) {
+            this.overlayLogoPosition = position;
+            const width = Math.max(1, this.previewNaturalWidth || 1600);
+            const height = Math.max(1, this.previewNaturalHeight || 1600);
+            const size = this.measureLogoSize(width);
+            const pad = Math.round(Math.min(width, height) * 0.03);
+            const origin = this.cornerOrigin(position, width, height, size.width, size.height, pad);
+            this.overlayLogoX = this.clamp01((origin.x + size.width / 2) / width);
+            this.overlayLogoY = this.clamp01((origin.y + size.height / 2) / height);
+        },
+
+        measureLogoSize(canvasWidth) {
+            const logo = this.logoImage;
+            const naturalW = Math.max(1, logo?.naturalWidth || 200);
+            const naturalH = Math.max(1, logo?.naturalHeight || 80);
+            const targetWidth = Math.max(
+                24,
+                Math.round(Math.max(1, canvasWidth) * (Math.max(8, Math.min(60, Number(this.overlayLogoSize) || 22)) / 100)),
+            );
+            const scale = targetWidth / naturalW;
+
+            return {
+                width: targetWidth,
+                height: Math.max(12, Math.round(naturalH * scale)),
+            };
         },
 
         clamp01(value) {
@@ -1032,6 +1067,105 @@ const registerProductImageAlpineData = () => {
             this.overlayTextResize = null;
         },
 
+        overlayLogoBoxStyle() {
+            if (! this.overlayLogoEnabled) {
+                return { display: 'none' };
+            }
+
+            const natural = Math.max(1, this.previewNaturalWidth || 1600);
+            const display = Math.max(1, this.previewDisplayWidth || natural);
+            const size = this.measureLogoSize(natural);
+            const scale = display / natural;
+            const widthPx = Math.max(16, size.width * scale);
+            const heightPx = Math.max(10, size.height * scale);
+
+            return {
+                left: `${this.clamp01(this.overlayLogoX) * 100}%`,
+                top: `${this.clamp01(this.overlayLogoY) * 100}%`,
+                transform: 'translate(-50%, -50%)',
+                width: `${widthPx}px`,
+                height: `${heightPx}px`,
+            };
+        },
+
+        startOverlayLogoDrag(event) {
+            if (this.savedSaving || ! this.overlayLogoEnabled) {
+                return;
+            }
+
+            const stage = event.currentTarget?.closest?.('[data-text-overlay-stage]');
+
+            if (! stage) {
+                return;
+            }
+
+            const rect = stage.getBoundingClientRect();
+            event.preventDefault();
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            this.overlayLogoDrag = {
+                pointerId: event.pointerId,
+                stageLeft: rect.left,
+                stageTop: rect.top,
+                stageWidth: Math.max(1, rect.width),
+                stageHeight: Math.max(1, rect.height),
+            };
+            this.overlayLogoPosition = 'custom';
+        },
+
+        moveOverlayLogoDrag(event) {
+            if (! this.overlayLogoDrag || event.pointerId !== this.overlayLogoDrag.pointerId) {
+                return;
+            }
+
+            const { stageLeft, stageTop, stageWidth, stageHeight } = this.overlayLogoDrag;
+            this.overlayLogoX = this.clamp01((event.clientX - stageLeft) / stageWidth);
+            this.overlayLogoY = this.clamp01((event.clientY - stageTop) / stageHeight);
+        },
+
+        endOverlayLogoDrag(event) {
+            if (! this.overlayLogoDrag || event.pointerId !== this.overlayLogoDrag.pointerId) {
+                return;
+            }
+
+            this.overlayLogoDrag = null;
+        },
+
+        startOverlayLogoResize(event) {
+            if (this.savedSaving || ! this.overlayLogoEnabled) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            this.overlayLogoResize = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                startSize: Number(this.overlayLogoSize) || 22,
+            };
+            this.overlayLogoPosition = 'custom';
+        },
+
+        moveOverlayLogoResize(event) {
+            if (! this.overlayLogoResize || event.pointerId !== this.overlayLogoResize.pointerId) {
+                return;
+            }
+
+            const dx = event.clientX - this.overlayLogoResize.startX;
+            const dy = event.clientY - this.overlayLogoResize.startY;
+            const delta = Math.round((dx + dy) / 8);
+            this.overlayLogoSize = Math.max(8, Math.min(50, this.overlayLogoResize.startSize + delta));
+        },
+
+        endOverlayLogoResize(event) {
+            if (! this.overlayLogoResize || event.pointerId !== this.overlayLogoResize.pointerId) {
+                return;
+            }
+
+            this.overlayLogoResize = null;
+        },
+
         async drawLogoOverlay(context, canvas) {
             if (! this.overlayLogoEnabled) {
                 return;
@@ -1045,23 +1179,18 @@ const registerProductImageAlpineData = () => {
                 throw new Error('Could not load the brand logo for overlay.');
             }
 
-            const targetWidth = Math.max(
-                24,
-                Math.round(canvas.width * (Math.max(8, Math.min(60, Number(this.overlayLogoSize) || 22)) / 100)),
-            );
-            const scale = targetWidth / logo.naturalWidth;
-            const targetHeight = Math.max(12, Math.round(logo.naturalHeight * scale));
-            const pad = Math.round(Math.min(canvas.width, canvas.height) * 0.03);
-            const origin = this.cornerOrigin(
-                this.overlayLogoPosition,
-                canvas.width,
-                canvas.height,
-                targetWidth,
-                targetHeight,
-                pad,
-            );
+            const size = this.measureLogoSize(canvas.width);
+            const targetWidth = size.width;
+            const targetHeight = size.height;
+            const edgePad = Math.round(Math.min(canvas.width, canvas.height) * 0.02);
+            const centerX = this.clamp01(this.overlayLogoX) * canvas.width;
+            const centerY = this.clamp01(this.overlayLogoY) * canvas.height;
+            let x = Math.round(centerX - targetWidth / 2);
+            let y = Math.round(centerY - targetHeight / 2);
+            x = Math.max(edgePad, Math.min(canvas.width - targetWidth - edgePad, x));
+            y = Math.max(edgePad, Math.min(canvas.height - targetHeight - edgePad, y));
 
-            context.drawImage(logo, origin.x, origin.y, targetWidth, targetHeight);
+            context.drawImage(logo, x, y, targetWidth, targetHeight);
         },
 
         ensureLogoLoaded() {
@@ -1092,6 +1221,7 @@ const registerProductImageAlpineData = () => {
             }
 
             const includeText = options.includeText !== false;
+            const includeLogo = options.includeLogo !== false;
 
             let canvas;
 
@@ -1138,7 +1268,9 @@ const registerProductImageAlpineData = () => {
                 this.drawTextOverlay(context, output);
             }
 
-            await this.drawLogoOverlay(context, output);
+            if (includeLogo) {
+                await this.drawLogoOverlay(context, output);
+            }
 
             return output;
         },
@@ -1923,6 +2055,182 @@ const registerProductImageAlpineData = () => {
 
             await this.$wire.updateAiCandidate(this.aiEditorId, 'image/jpeg', base64);
             this.closeAiEditor();
+        },
+    }));
+
+    Alpine.data('pricedImageStampEditor', (config = {}) => ({
+        primaryUrl: config.primaryUrl || '',
+        priceLine: config.priceLine || '',
+        compareLine: config.compareLine || '',
+        unitLabel: config.unitLabel || '',
+        stampX: typeof config.x === 'number' ? config.x : 0.12,
+        stampY: typeof config.y === 'number' ? config.y : 0.12,
+        stampFont: typeof config.font === 'number' ? config.font : 56,
+        stampPosition: config.position || 'top-left',
+        displayWidth: 0,
+        displayHeight: 0,
+        naturalWidth: 0,
+        naturalHeight: 0,
+        drag: null,
+        resize: null,
+
+        init() {
+            this.$watch(
+                () => this.$wire?.pricedImageFont,
+                (value) => {
+                    const next = Number(value);
+
+                    if (Number.isFinite(next)) {
+                        this.stampFont = next;
+                    }
+                },
+            );
+        },
+
+        clamp01(value) {
+            return Math.max(0, Math.min(1, Number(value) || 0));
+        },
+
+        onStageImageLoad(event) {
+            const image = event?.target;
+
+            if (! image) {
+                return;
+            }
+
+            this.displayWidth = image.clientWidth || image.naturalWidth || 0;
+            this.displayHeight = image.clientHeight || image.naturalHeight || 0;
+            this.naturalWidth = image.naturalWidth || this.displayWidth;
+            this.naturalHeight = image.naturalHeight || this.displayHeight;
+        },
+
+        displayFontPx() {
+            const natural = Math.max(1, this.naturalWidth || 800);
+            const display = Math.max(1, this.displayWidth || natural);
+
+            return Math.max(12, Math.round(Number(this.stampFont) * (display / natural)));
+        },
+
+        stampBoxStyle() {
+            const fontPx = this.displayFontPx();
+
+            return {
+                left: `${this.clamp01(this.stampX) * 100}%`,
+                top: `${this.clamp01(this.stampY) * 100}%`,
+                transform: 'translate(-50%, -50%)',
+                fontSize: `${fontPx}px`,
+                fontWeight: '700',
+                lineHeight: '1.2',
+                padding: `${Math.round(fontPx * 0.35)}px ${Math.round(fontPx * 0.4)}px`,
+                background: 'rgba(255, 255, 255, 0.82)',
+                color: '#000000',
+                whiteSpace: 'nowrap',
+            };
+        },
+
+        async syncToWire() {
+            if (! this.$wire) {
+                return;
+            }
+
+            await this.$wire.set('pricedImageX', this.clamp01(this.stampX));
+            await this.$wire.set('pricedImageY', this.clamp01(this.stampY));
+            await this.$wire.set('pricedImagePosition', this.stampPosition);
+            await this.$wire.set(
+                'pricedImageFont',
+                Math.max(28, Math.min(96, Math.round(Number(this.stampFont) || 56))),
+            );
+        },
+
+        async syncAndGenerate() {
+            await this.syncToWire();
+            await this.$wire.generatePricedImage();
+        },
+
+        async snap(position) {
+            const centers = {
+                'top-left': [0.12, 0.12],
+                'top-right': [0.88, 0.12],
+                'bottom-left': [0.12, 0.88],
+                'bottom-right': [0.88, 0.88],
+                center: [0.5, 0.5],
+            };
+            const point = centers[position] || centers['top-left'];
+            this.stampPosition = position;
+            this.stampX = point[0];
+            this.stampY = point[1];
+            await this.syncToWire();
+        },
+
+        startDrag(event) {
+            const stage = event.currentTarget?.closest?.('[data-priced-stamp-stage]');
+
+            if (! stage) {
+                return;
+            }
+
+            const rect = stage.getBoundingClientRect();
+            event.preventDefault();
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            this.drag = {
+                pointerId: event.pointerId,
+                stageLeft: rect.left,
+                stageTop: rect.top,
+                stageWidth: Math.max(1, rect.width),
+                stageHeight: Math.max(1, rect.height),
+            };
+            this.stampPosition = 'custom';
+        },
+
+        moveDrag(event) {
+            if (! this.drag || event.pointerId !== this.drag.pointerId) {
+                return;
+            }
+
+            this.stampX = this.clamp01((event.clientX - this.drag.stageLeft) / this.drag.stageWidth);
+            this.stampY = this.clamp01((event.clientY - this.drag.stageTop) / this.drag.stageHeight);
+        },
+
+        endDrag(event) {
+            if (! this.drag || event.pointerId !== this.drag.pointerId) {
+                return;
+            }
+
+            this.drag = null;
+            this.syncToWire();
+        },
+
+        startResize(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            this.resize = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                startFont: Number(this.stampFont) || 56,
+            };
+            this.stampPosition = 'custom';
+        },
+
+        moveResize(event) {
+            if (! this.resize || event.pointerId !== this.resize.pointerId) {
+                return;
+            }
+
+            const dx = event.clientX - this.resize.startX;
+            const dy = event.clientY - this.resize.startY;
+            const delta = Math.round((dx + dy) / 4);
+            this.stampFont = Math.max(28, Math.min(96, this.resize.startFont + delta));
+        },
+
+        endResize(event) {
+            if (! this.resize || event.pointerId !== this.resize.pointerId) {
+                return;
+            }
+
+            this.resize = null;
+            this.syncToWire();
         },
     }));
 };

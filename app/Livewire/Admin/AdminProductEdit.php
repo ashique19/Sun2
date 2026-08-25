@@ -130,6 +130,10 @@ class AdminProductEdit extends Component
 
     public int $pricedImageFont = 56;
 
+    public float $pricedImageX = 0.12;
+
+    public float $pricedImageY = 0.12;
+
     public int $imagesEpoch = 0;
 
     public function mount(?Product $product = null): void
@@ -257,6 +261,16 @@ class AdminProductEdit extends Component
         $this->js('document.body.classList.remove("overflow-hidden")');
     }
 
+    public function updatedPricedImagePosition(string $value): void
+    {
+        if ($value === 'custom') {
+            return;
+        }
+
+        [$this->pricedImageX, $this->pricedImageY] = app(ProductPricedImageService::class)
+            ->centerForPosition($value);
+    }
+
     public function savePricedImageLayout(): void
     {
         $this->validate([
@@ -267,6 +281,8 @@ class AdminProductEdit extends Component
                 'min:'.ProductPricedImageService::FONT_MIN,
                 'max:'.ProductPricedImageService::FONT_MAX,
             ],
+            'pricedImageX' => ['required', 'numeric', 'min:0', 'max:1'],
+            'pricedImageY' => ['required', 'numeric', 'min:0', 'max:1'],
         ]);
 
         if (! $this->product) {
@@ -277,6 +293,8 @@ class AdminProductEdit extends Component
             'priced_image_layout' => [
                 'position' => $this->pricedImagePosition,
                 'font' => $this->pricedImageFont,
+                'x' => round($this->pricedImageX, 4),
+                'y' => round($this->pricedImageY, 4),
             ],
         ]);
     }
@@ -292,6 +310,8 @@ class AdminProductEdit extends Component
             $pricedImages->generate($this->product->fresh(), [
                 'position' => $this->pricedImagePosition,
                 'font' => $this->pricedImageFont,
+                'x' => round($this->pricedImageX, 4),
+                'y' => round($this->pricedImageY, 4),
             ]);
             $this->product->refresh();
             $this->message = 'Priced image saved.';
@@ -1589,13 +1609,20 @@ class AdminProductEdit extends Component
 
     private function fillPricedImageLayout(?ProductPricedImageService $pricedImages = null): void
     {
-        $layout = $pricedImages?->normalizeLayout($this->product?->priced_image_layout ?? [])
-            ?? app(ProductPricedImageService::class)->normalizeLayout($this->product?->priced_image_layout ?? []);
+        $service = $pricedImages ?? app(ProductPricedImageService::class);
+        $layout = $service->normalizeLayout($this->product?->priced_image_layout ?? []);
 
         $this->pricedImagePosition = (string) $layout['position'];
         $this->pricedImageFont = min(
             ProductPricedImageService::FONT_MAX,
             max(ProductPricedImageService::FONT_MIN, (int) $layout['font']),
         );
+
+        if (isset($layout['x'], $layout['y'])) {
+            $this->pricedImageX = max(0, min(1, (float) $layout['x']));
+            $this->pricedImageY = max(0, min(1, (float) $layout['y']));
+        } else {
+            [$this->pricedImageX, $this->pricedImageY] = $service->centerForPosition($this->pricedImagePosition);
+        }
     }
 }

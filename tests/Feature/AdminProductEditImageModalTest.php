@@ -191,6 +191,7 @@ class AdminProductEditImageModalTest extends TestCase
         Livewire::test(AdminProductEdit::class, ['product' => $product])
             ->assertSeeHtml('touch-none')
             ->assertSeeHtml('h-11 w-11')
+            ->assertSeeHtml('left-full top-full')
             ->assertSeeHtml('@pointerdown="startOverlayTextDrag($event)"')
             ->assertSeeHtml('@pointerdown.stop.prevent="startOverlayTextResize($event)"')
             ->assertDontSeeHtml('@pointermove="moveOverlayTextDrag($event)"')

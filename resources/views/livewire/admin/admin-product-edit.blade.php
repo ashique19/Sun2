@@ -691,7 +691,7 @@
                                                         >
                                                             <span class="pointer-events-none" x-text="overlayText.trim()"></span>
                                                             <button type="button"
-                                                                class="absolute -bottom-3 -right-3 z-30 flex h-11 w-11 touch-none cursor-nwse-resize items-center justify-center sm:-bottom-1.5 sm:-right-1.5 sm:h-7 sm:w-7"
+                                                                class="absolute left-full top-full z-30 flex h-11 w-11 -translate-x-3 -translate-y-3 touch-none cursor-nwse-resize items-center justify-center sm:h-7 sm:w-7 sm:-translate-x-2 sm:-translate-y-2"
                                                                 aria-label="Resize overlay text"
                                                                 title="Drag to resize"
                                                                 @pointerdown.stop.prevent="startOverlayTextResize($event)"
@@ -712,7 +712,7 @@
                                                         >
                                                             <img :src="logoUrl" alt="" class="pointer-events-none h-full w-full object-contain" draggable="false">
                                                             <button type="button"
-                                                                class="absolute -bottom-3 -right-3 z-30 flex h-11 w-11 touch-none cursor-nwse-resize items-center justify-center sm:-bottom-1.5 sm:-right-1.5 sm:h-7 sm:w-7"
+                                                                class="absolute left-full top-full z-30 flex h-11 w-11 -translate-x-3 -translate-y-3 touch-none cursor-nwse-resize items-center justify-center sm:h-7 sm:w-7 sm:-translate-x-2 sm:-translate-y-2"
                                                                 aria-label="Resize logo"
                                                                 title="Drag to resize"
                                                                 @pointerdown.stop.prevent="startOverlayLogoResize($event)"
@@ -733,7 +733,7 @@
                                                         >
                                                             <img :src="overlayImageUrl" alt="" class="pointer-events-none h-full w-full object-contain" draggable="false">
                                                             <button type="button"
-                                                                class="absolute -top-3 -right-3 z-30 flex h-11 w-11 touch-none items-center justify-center sm:-top-2 sm:-right-2 sm:h-7 sm:w-7"
+                                                                class="absolute left-full top-0 z-30 flex h-11 w-11 -translate-x-3 -translate-y-3 touch-none items-center justify-center sm:h-7 sm:w-7 sm:-translate-x-2 sm:-translate-y-2"
                                                                 aria-label="Remove image overlay"
                                                                 title="Remove overlay"
                                                                 @pointerdown.stop.prevent
@@ -742,7 +742,7 @@
                                                                 <span class="pointer-events-none flex h-6 w-6 items-center justify-center rounded-full border border-rose-300 bg-white text-sm font-bold leading-none text-rose-700 shadow sm:h-5 sm:w-5 sm:text-xs">×</span>
                                                             </button>
                                                             <button type="button"
-                                                                class="absolute -bottom-3 -right-3 z-30 flex h-11 w-11 touch-none cursor-nwse-resize items-center justify-center sm:-bottom-1.5 sm:-right-1.5 sm:h-7 sm:w-7"
+                                                                class="absolute left-full top-full z-30 flex h-11 w-11 -translate-x-3 -translate-y-3 touch-none cursor-nwse-resize items-center justify-center sm:h-7 sm:w-7 sm:-translate-x-2 sm:-translate-y-2"
                                                                 aria-label="Resize image overlay"
                                                                 title="Drag to resize"
                                                                 @pointerdown.stop.prevent="startOverlayImageResize($event)"
@@ -1438,7 +1438,7 @@
                                                 <span x-text="priceLine"></span><span x-text="unitLabel" class="ml-0.5"></span>
                                             </p>
                                             <button type="button"
-                                                class="absolute -bottom-3 -right-3 z-30 flex h-11 w-11 touch-none cursor-nwse-resize items-center justify-center sm:-bottom-1.5 sm:-right-1.5 sm:h-7 sm:w-7"
+                                                class="absolute left-full top-full z-30 flex h-11 w-11 -translate-x-3 -translate-y-3 touch-none cursor-nwse-resize items-center justify-center sm:h-7 sm:w-7 sm:-translate-x-2 sm:-translate-y-2"
                                                 aria-label="Resize price stamp"
                                                 title="Drag to resize"
                                                 @pointerdown.stop.prevent="startResize($event)"

@@ -73,6 +73,8 @@ class AdminProductImageEditTest extends TestCase
             ->assertSeeHtml('Adjust tone')
             ->assertSeeHtml('editBrightness')
             ->assertSeeHtml('overlayLogoPosition')
+            ->assertSeeHtml('snapOverlayTextPosition')
+            ->assertSeeHtml('data-text-overlay-stage')
             ->assertSeeHtml('saveSavedEdit()')
             ->assertSeeHtml('wire:ignore')
             ->assertDontSeeHtml('x-show="savedEditorOpen"');

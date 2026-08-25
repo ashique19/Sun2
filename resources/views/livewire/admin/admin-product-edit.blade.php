@@ -623,7 +623,7 @@
                                 <div class="flex items-center justify-between border-b border-[#EFE7D6] px-4 py-3">
                                     <div>
                                         <h3 class="font-semibold">Edit image</h3>
-                                        <p class="text-xs text-[#8C8474]">Drag the crop box, then check the live preview with text/logo.</p>
+                                        <p class="text-xs text-[#8C8474]">Drag the crop box, then drag/resize text on the live preview.</p>
                                     </div>
                                     <button type="button" @click="closeSavedEditor()" :disabled="savedSaving" class="text-sm text-[#6B6459] hover:text-[#1E1E1E] disabled:opacity-60">Close</button>
                                 </div>
@@ -673,11 +673,41 @@
                                             </div>
                                             <div class="flex min-h-[280px] items-center justify-center bg-[#FAF6EF] px-4 py-4">
                                                 <template x-if="savedPreviewUrl">
-                                                    <img :src="savedPreviewUrl" alt="Edited image preview"
-                                                        class="max-h-[46vh] max-w-full rounded-lg border border-[#E0D6C2] object-contain shadow-sm">
+                                                    <div class="relative inline-block max-h-[46vh] max-w-full" data-text-overlay-stage>
+                                                        <img :src="savedPreviewUrl" alt="Edited image preview"
+                                                            @load="onPreviewImageLoad($event)"
+                                                            class="block max-h-[46vh] max-w-full rounded-lg border border-[#E0D6C2] object-contain shadow-sm">
+                                                        <div
+                                                            x-show="overlayText.trim() !== ''"
+                                                            x-cloak
+                                                            class="absolute z-10 cursor-move select-none rounded-sm shadow-sm outline outline-1 outline-[#C9A227]/70"
+                                                            :style="overlayTextBoxStyle()"
+                                                            @pointerdown="startOverlayTextDrag($event)"
+                                                            @pointermove="moveOverlayTextDrag($event)"
+                                                            @pointerup="endOverlayTextDrag($event)"
+                                                            @pointercancel="endOverlayTextDrag($event)"
+                                                            title="Drag to move · resize from the corner handle"
+                                                            role="slider"
+                                                            aria-label="Overlay text position"
+                                                        >
+                                                            <span x-text="overlayText.trim()"></span>
+                                                            <button type="button"
+                                                                class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-[#C9A227] bg-white shadow"
+                                                                aria-label="Resize overlay text"
+                                                                title="Drag to resize"
+                                                                @pointerdown.stop="startOverlayTextResize($event)"
+                                                                @pointermove="moveOverlayTextResize($event)"
+                                                                @pointerup="endOverlayTextResize($event)"
+                                                                @pointercancel="endOverlayTextResize($event)"
+                                                            ></button>
+                                                        </div>
+                                                    </div>
                                                 </template>
                                                 <p x-show="! savedPreviewUrl" class="text-sm text-[#8C8474]" x-cloak>Preview will appear here.</p>
                                             </div>
+                                            <p class="border-t border-[#EFE7D6] px-4 py-2 text-[11px] text-[#8C8474]" x-show="overlayText.trim() !== ''" x-cloak>
+                                                Drag the text on the preview to move it. Drag the corner handle to resize.
+                                            </p>
                                         </div>
                                     </div>
 
@@ -719,17 +749,23 @@
                                                         class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm disabled:opacity-60">
                                                 </div>
                                                 <div>
-                                                    <label class="mb-1 block text-[11px] text-[#8C8474]" for="saved-overlay-text-size">
-                                                        Text size <span class="tabular-nums" x-text="`${overlayTextSize}px`"></span>
+                                                    <label class="mb-1 flex items-center justify-between gap-2 text-[11px] text-[#8C8474]" for="saved-overlay-text-size">
+                                                        <span>Text size</span>
+                                                        <span class="tabular-nums" x-text="`${overlayTextSize}px`"></span>
                                                     </label>
-                                                    <input id="saved-overlay-text-size" type="range" min="20" max="96" step="1" x-model.number="overlayTextSize" :disabled="savedSaving"
-                                                        class="w-full accent-[#C9A227] disabled:opacity-60">
+                                                    <input id="saved-overlay-text-size" type="range" min="12" max="200" step="1" x-model.number="overlayTextSize" :disabled="savedSaving"
+                                                        class="w-full accent-[#C9A227] disabled:opacity-60"
+                                                        aria-label="Text size">
+                                                    <input type="number" min="12" max="200" step="1" x-model.number="overlayTextSize" :disabled="savedSaving"
+                                                        class="mt-1.5 w-24 rounded-lg border border-[#E0D6C2] px-2 py-1 text-sm tabular-nums disabled:opacity-60"
+                                                        aria-label="Text size in pixels">
                                                 </div>
                                                 <div>
+                                                    <p class="mb-1 text-[11px] text-[#8C8474]">Snap position</p>
                                                     <div class="flex gap-1.5" role="group" aria-label="Text position">
                                                         <template x-for="option in overlayPositions()" :key="`text-${option.value}`">
                                                             <button type="button"
-                                                                @click="overlayTextPosition = option.value"
+                                                                @click="snapOverlayTextPosition(option.value)"
                                                                 :title="option.label"
                                                                 :aria-label="option.label"
                                                                 :aria-pressed="overlayTextPosition === option.value ? 'true' : 'false'"

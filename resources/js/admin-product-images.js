@@ -37,6 +37,15 @@ const registerProductImageAlpineData = () => {
         overlayText: '',
         overlayTextSize: 48,
         overlayTextPosition: 'bottom-left',
+        /** Normalized center of the text box (0–1 of canvas). */
+        overlayTextX: 0.5,
+        overlayTextY: 0.88,
+        overlayTextDrag: null,
+        overlayTextResize: null,
+        previewNaturalWidth: 0,
+        previewNaturalHeight: 0,
+        previewDisplayWidth: 0,
+        previewDisplayHeight: 0,
         overlayLogoEnabled: false,
         overlayLogoSize: 22,
         overlayLogoPosition: 'top-right',
@@ -535,12 +544,21 @@ const registerProductImageAlpineData = () => {
             this.overlayText = '';
             this.overlayTextSize = 48;
             this.overlayTextPosition = 'bottom-left';
+            this.overlayTextX = 0.5;
+            this.overlayTextY = 0.88;
+            this.overlayTextDrag = null;
+            this.overlayTextResize = null;
+            this.previewNaturalWidth = 0;
+            this.previewNaturalHeight = 0;
+            this.previewDisplayWidth = 0;
+            this.previewDisplayHeight = 0;
             this.overlayLogoEnabled = false;
             this.overlayLogoSize = 22;
             this.overlayLogoPosition = 'top-right';
             this.savedEditorOpen = true;
             this.preloadLogo();
             this.bindSavedOverlayWatchers();
+            this.snapOverlayTextPosition('bottom-left');
 
             this.$nextTick(() => {
                 afterPaint(() => {
@@ -560,9 +578,6 @@ const registerProductImageAlpineData = () => {
                 () => [
                     this.editBrightness,
                     this.editRedTone,
-                    this.overlayText,
-                    this.overlayTextSize,
-                    this.overlayTextPosition,
                     this.overlayLogoEnabled,
                     this.overlayLogoSize,
                     this.overlayLogoPosition,
@@ -772,7 +787,8 @@ const registerProductImageAlpineData = () => {
             }
 
             try {
-                const output = await this.composeEditedCanvas(720);
+                // Preview omits text so the HTML overlay can be dragged/resized freely.
+                const output = await this.composeEditedCanvas(720, { includeText: false });
 
                 if (! output || ! this.savedEditorOpen) {
                     if (this.savedEditorOpen && ! this.savedPreviewUrl) {
@@ -782,6 +798,8 @@ const registerProductImageAlpineData = () => {
                     return;
                 }
 
+                this.previewNaturalWidth = output.width;
+                this.previewNaturalHeight = output.height;
                 this.savedPreviewUrl = output.toDataURL('image/jpeg', 0.86);
                 this.savedError = null;
             } catch (error) {
@@ -821,17 +839,35 @@ const registerProductImageAlpineData = () => {
             }
         },
 
-        scaledTextSize(canvasWidth) {
-            const base = Math.max(16, Math.min(120, Number(this.overlayTextSize) || 48));
-
-            return Math.max(12, Math.round(base * (Math.max(1, canvasWidth) / 1600)));
+        snapOverlayTextPosition(position) {
+            this.overlayTextPosition = position;
+            const width = Math.max(1, this.previewNaturalWidth || 1600);
+            const height = Math.max(1, this.previewNaturalHeight || 1600);
+            const fontSize = this.scaledTextSize(width);
+            const sample = String(this.overlayText || '').trim() || 'Aa';
+            const approxWidth = Math.ceil(sample.length * fontSize * 0.62) + Math.round(fontSize * 0.9);
+            const approxHeight = Math.ceil(fontSize * 1.25) + Math.round(fontSize * 0.6);
+            const pad = Math.round(Math.min(width, height) * 0.03);
+            const origin = this.cornerOrigin(position, width, height, approxWidth, approxHeight, pad);
+            this.overlayTextX = this.clamp01((origin.x + approxWidth / 2) / width);
+            this.overlayTextY = this.clamp01((origin.y + approxHeight / 2) / height);
         },
 
-        drawTextOverlay(context, canvas) {
+        clamp01(value) {
+            return Math.max(0, Math.min(1, Number(value) || 0));
+        },
+
+        scaledTextSize(canvasWidth) {
+            const base = Math.max(12, Math.min(200, Number(this.overlayTextSize) || 48));
+
+            return Math.max(10, Math.round(base * (Math.max(1, canvasWidth) / 1600)));
+        },
+
+        measureTextBox(context, canvas) {
             const text = String(this.overlayText || '').trim();
 
             if (text === '') {
-                return;
+                return null;
             }
 
             const fontSize = this.scaledTextSize(canvas.width);
@@ -845,20 +881,155 @@ const registerProductImageAlpineData = () => {
             const padY = Math.round(fontSize * 0.3);
             const boxWidth = textWidth + padX * 2;
             const boxHeight = textHeight + padY * 2;
-            const pad = Math.round(Math.min(canvas.width, canvas.height) * 0.03);
-            const origin = this.cornerOrigin(
-                this.overlayTextPosition,
-                canvas.width,
-                canvas.height,
-                boxWidth,
-                boxHeight,
-                pad,
-            );
+            const edgePad = Math.round(Math.min(canvas.width, canvas.height) * 0.02);
+            const centerX = this.clamp01(this.overlayTextX) * canvas.width;
+            const centerY = this.clamp01(this.overlayTextY) * canvas.height;
+            let x = Math.round(centerX - boxWidth / 2);
+            let y = Math.round(centerY - boxHeight / 2);
+            x = Math.max(edgePad, Math.min(canvas.width - boxWidth - edgePad, x));
+            y = Math.max(edgePad, Math.min(canvas.height - boxHeight - edgePad, y));
 
+            return { text, fontSize, padX, padY, boxWidth, boxHeight, x, y };
+        },
+
+        drawTextOverlay(context, canvas) {
+            const box = this.measureTextBox(context, canvas);
+
+            if (! box) {
+                return;
+            }
+
+            context.font = `700 ${box.fontSize}px "DejaVu Sans", "Segoe UI", sans-serif`;
+            context.textBaseline = 'top';
             context.fillStyle = 'rgba(255, 255, 255, 0.82)';
-            context.fillRect(origin.x, origin.y, boxWidth, boxHeight);
+            context.fillRect(box.x, box.y, box.boxWidth, box.boxHeight);
             context.fillStyle = '#1E1E1E';
-            context.fillText(text, origin.x + padX, origin.y + padY);
+            context.fillText(box.text, box.x + box.padX, box.y + box.padY);
+        },
+
+        onPreviewImageLoad(event) {
+            const image = event?.target;
+
+            if (! image) {
+                return;
+            }
+
+            this.previewDisplayWidth = image.clientWidth || image.naturalWidth || 0;
+            this.previewDisplayHeight = image.clientHeight || image.naturalHeight || 0;
+
+            if (! this.previewNaturalWidth && image.naturalWidth) {
+                this.previewNaturalWidth = image.naturalWidth;
+                this.previewNaturalHeight = image.naturalHeight;
+            }
+        },
+
+        overlayTextDisplayFontPx() {
+            const natural = Math.max(1, this.previewNaturalWidth || 1600);
+            const display = Math.max(1, this.previewDisplayWidth || natural);
+
+            return Math.max(10, this.scaledTextSize(natural) * (display / natural));
+        },
+
+        overlayTextBoxStyle() {
+            if (! String(this.overlayText || '').trim()) {
+                return { display: 'none' };
+            }
+
+            const fontPx = this.overlayTextDisplayFontPx();
+
+            return {
+                left: `${this.clamp01(this.overlayTextX) * 100}%`,
+                top: `${this.clamp01(this.overlayTextY) * 100}%`,
+                transform: 'translate(-50%, -50%)',
+                fontSize: `${fontPx}px`,
+                fontWeight: '700',
+                lineHeight: '1.25',
+                padding: `${Math.round(fontPx * 0.3)}px ${Math.round(fontPx * 0.45)}px`,
+                background: 'rgba(255, 255, 255, 0.82)',
+                color: '#1E1E1E',
+                whiteSpace: 'nowrap',
+                maxWidth: '92%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+            };
+        },
+
+        startOverlayTextDrag(event) {
+            if (this.savedSaving || ! String(this.overlayText || '').trim()) {
+                return;
+            }
+
+            const stage = event.currentTarget?.closest?.('[data-text-overlay-stage]');
+
+            if (! stage) {
+                return;
+            }
+
+            const rect = stage.getBoundingClientRect();
+            event.preventDefault();
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            this.overlayTextDrag = {
+                pointerId: event.pointerId,
+                stageLeft: rect.left,
+                stageTop: rect.top,
+                stageWidth: Math.max(1, rect.width),
+                stageHeight: Math.max(1, rect.height),
+            };
+            this.overlayTextPosition = 'custom';
+        },
+
+        moveOverlayTextDrag(event) {
+            if (! this.overlayTextDrag || event.pointerId !== this.overlayTextDrag.pointerId) {
+                return;
+            }
+
+            const { stageLeft, stageTop, stageWidth, stageHeight } = this.overlayTextDrag;
+            this.overlayTextX = this.clamp01((event.clientX - stageLeft) / stageWidth);
+            this.overlayTextY = this.clamp01((event.clientY - stageTop) / stageHeight);
+        },
+
+        endOverlayTextDrag(event) {
+            if (! this.overlayTextDrag || event.pointerId !== this.overlayTextDrag.pointerId) {
+                return;
+            }
+
+            this.overlayTextDrag = null;
+        },
+
+        startOverlayTextResize(event) {
+            if (this.savedSaving || ! String(this.overlayText || '').trim()) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            this.overlayTextResize = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                startSize: Number(this.overlayTextSize) || 48,
+            };
+            this.overlayTextPosition = 'custom';
+        },
+
+        moveOverlayTextResize(event) {
+            if (! this.overlayTextResize || event.pointerId !== this.overlayTextResize.pointerId) {
+                return;
+            }
+
+            const dx = event.clientX - this.overlayTextResize.startX;
+            const dy = event.clientY - this.overlayTextResize.startY;
+            const delta = Math.round((dx + dy) / 2);
+            this.overlayTextSize = Math.max(12, Math.min(200, this.overlayTextResize.startSize + delta));
+        },
+
+        endOverlayTextResize(event) {
+            if (! this.overlayTextResize || event.pointerId !== this.overlayTextResize.pointerId) {
+                return;
+            }
+
+            this.overlayTextResize = null;
         },
 
         async drawLogoOverlay(context, canvas) {
@@ -915,10 +1086,12 @@ const registerProductImageAlpineData = () => {
             });
         },
 
-        async composeEditedCanvas(maxEdge) {
+        async composeEditedCanvas(maxEdge, options = {}) {
             if (! this.savedCropper) {
                 return null;
             }
+
+            const includeText = options.includeText !== false;
 
             let canvas;
 
@@ -960,7 +1133,11 @@ const registerProductImageAlpineData = () => {
             context.filter = 'none';
 
             this.applyRedTone(context, output);
-            this.drawTextOverlay(context, output);
+
+            if (includeText) {
+                this.drawTextOverlay(context, output);
+            }
+
             await this.drawLogoOverlay(context, output);
 
             return output;

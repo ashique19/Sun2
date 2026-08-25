@@ -169,7 +169,33 @@ class AdminProductEditImageModalTest extends TestCase
         $this->assertStringContainsString('startOverlayImageDrag', $source);
         $this->assertStringContainsString('startOverlayImageResize', $source);
         $this->assertStringContainsString('drawOverlayImage', $source);
+        $this->assertStringContainsString('beginOverlayGesture', $source);
+        $this->assertStringContainsString('endOverlayGesture', $source);
+        $this->assertStringContainsString('overlayGestureActive', $source);
+        $this->assertStringContainsString("pointerType === 'touch'", $source);
         $this->assertStringContainsString('pricedImageStampEditor', $source);
+    }
+
+    #[Test]
+    public function saved_image_edit_modal_uses_touch_stable_overlay_handles(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $product = Product::query()->create([
+            'name' => 'Necklace Set',
+            'slug' => 'necklace-set',
+            'price' => 2500,
+            'is_published' => true,
+        ]);
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->assertSeeHtml('touch-none')
+            ->assertSeeHtml('h-11 w-11')
+            ->assertSeeHtml('@pointerdown="startOverlayTextDrag($event)"')
+            ->assertSeeHtml('@pointerdown.stop="startOverlayTextResize($event)"')
+            ->assertDontSeeHtml('@pointermove="moveOverlayTextDrag($event)"')
+            ->assertDontSeeHtml('@pointermove="moveOverlayImageDrag($event)"')
+            ->assertSee('finger stays under the grab point');
     }
 
     #[Test]

@@ -65,6 +65,8 @@ const registerProductImageAlpineData = () => {
         overlayImageY: 0.5,
         overlayImageDrag: null,
         overlayImageResize: null,
+        /** Active window-bound pointer gesture for stable touch drag/resize. */
+        overlayGesture: null,
         _savedOverlayUnwatch: null,
 
         wire() {
@@ -737,6 +739,7 @@ const registerProductImageAlpineData = () => {
             }
 
             this.destroySavedCropper();
+            this.endOverlayGesture();
             this.clearOverlayImage();
             this.savedEditorOpen = false;
             this.savedEditorId = null;
@@ -904,6 +907,116 @@ const registerProductImageAlpineData = () => {
             return Math.max(0, Math.min(1, Number(value) || 0));
         },
 
+        isPrimaryPointer(event) {
+            if (typeof event?.isPrimary === 'boolean' && ! event.isPrimary) {
+                return false;
+            }
+
+            if (typeof event?.button === 'number' && event.button !== 0) {
+                return false;
+            }
+
+            return true;
+        },
+
+        /**
+         * Stable touch/mouse gesture: delta from start point + window listeners
+         * (element-bound move/up drops when the finger leaves a small overlay).
+         */
+        beginOverlayGesture(event, { onMove, onEnd, kind = 'gesture' } = {}) {
+            if (! this.isPrimaryPointer(event) || typeof onMove !== 'function') {
+                return false;
+            }
+
+            this.endOverlayGesture();
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const pointerId = event.pointerId;
+            const target = event.currentTarget;
+            const stage = target?.closest?.('[data-text-overlay-stage], [data-priced-stamp-stage]');
+            const scroller = stage?.closest?.('.overflow-y-auto, .overflow-auto') ?? null;
+            const previousScrollerOverflow = scroller ? scroller.style.overflow : null;
+
+            if (scroller) {
+                scroller.style.overflow = 'hidden';
+            }
+
+            try {
+                target?.setPointerCapture?.(pointerId);
+            } catch {
+                // Some browsers throw if capture is unsupported mid-gesture.
+            }
+
+            const moveOpts = { passive: false };
+            const onPointerMove = (moveEvent) => {
+                if (moveEvent.pointerId !== pointerId) {
+                    return;
+                }
+
+                moveEvent.preventDefault();
+                onMove(moveEvent);
+            };
+            const onPointerUp = (upEvent) => {
+                if (upEvent.pointerId !== pointerId) {
+                    return;
+                }
+
+                this.endOverlayGesture();
+                onEnd?.(upEvent);
+            };
+
+            window.addEventListener('pointermove', onPointerMove, moveOpts);
+            window.addEventListener('pointerup', onPointerUp);
+            window.addEventListener('pointercancel', onPointerUp);
+
+            this.overlayGesture = {
+                kind,
+                pointerId,
+                target,
+                scroller,
+                previousScrollerOverflow,
+                onPointerMove,
+                onPointerUp,
+                moveOpts,
+            };
+
+            return true;
+        },
+
+        endOverlayGesture() {
+            const session = this.overlayGesture;
+
+            if (! session) {
+                return;
+            }
+
+            window.removeEventListener('pointermove', session.onPointerMove, session.moveOpts);
+            window.removeEventListener('pointerup', session.onPointerUp);
+            window.removeEventListener('pointercancel', session.onPointerUp);
+
+            try {
+                session.target?.releasePointerCapture?.(session.pointerId);
+            } catch {
+                // ignore
+            }
+
+            if (session.scroller) {
+                session.scroller.style.overflow = session.previousScrollerOverflow ?? '';
+            }
+
+            this.overlayGesture = null;
+        },
+
+        overlayGestureActive(kind = null) {
+            if (! this.overlayGesture) {
+                return false;
+            }
+
+            return kind ? this.overlayGesture.kind === kind : true;
+        },
+
         scaledTextSize(canvasWidth) {
             const base = Math.max(12, Math.min(200, Number(this.overlayTextSize) || 48));
 
@@ -998,6 +1111,7 @@ const registerProductImageAlpineData = () => {
                 maxWidth: '92%',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
+                touchAction: 'none',
             };
         },
 
@@ -1013,34 +1127,26 @@ const registerProductImageAlpineData = () => {
             }
 
             const rect = stage.getBoundingClientRect();
-            event.preventDefault();
-            event.currentTarget.setPointerCapture?.(event.pointerId);
-            this.overlayTextDrag = {
-                pointerId: event.pointerId,
-                stageLeft: rect.left,
-                stageTop: rect.top,
-                stageWidth: Math.max(1, rect.width),
-                stageHeight: Math.max(1, rect.height),
-            };
+            const startClientX = event.clientX;
+            const startClientY = event.clientY;
+            const startX = this.clamp01(this.overlayTextX);
+            const startY = this.clamp01(this.overlayTextY);
+            const stageWidth = Math.max(1, rect.width);
+            const stageHeight = Math.max(1, rect.height);
+
+            if (! this.beginOverlayGesture(event, {
+                kind: 'text-drag',
+                onMove: (moveEvent) => {
+                    const dx = (moveEvent.clientX - startClientX) / stageWidth;
+                    const dy = (moveEvent.clientY - startClientY) / stageHeight;
+                    this.overlayTextX = this.clamp01(startX + dx);
+                    this.overlayTextY = this.clamp01(startY + dy);
+                },
+            })) {
+                return;
+            }
+
             this.overlayTextPosition = 'custom';
-        },
-
-        moveOverlayTextDrag(event) {
-            if (! this.overlayTextDrag || event.pointerId !== this.overlayTextDrag.pointerId) {
-                return;
-            }
-
-            const { stageLeft, stageTop, stageWidth, stageHeight } = this.overlayTextDrag;
-            this.overlayTextX = this.clamp01((event.clientX - stageLeft) / stageWidth);
-            this.overlayTextY = this.clamp01((event.clientY - stageTop) / stageHeight);
-        },
-
-        endOverlayTextDrag(event) {
-            if (! this.overlayTextDrag || event.pointerId !== this.overlayTextDrag.pointerId) {
-                return;
-            }
-
-            this.overlayTextDrag = null;
         },
 
         startOverlayTextResize(event) {
@@ -1048,35 +1154,24 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
-            event.preventDefault();
-            event.stopPropagation();
-            event.currentTarget.setPointerCapture?.(event.pointerId);
-            this.overlayTextResize = {
-                pointerId: event.pointerId,
-                startX: event.clientX,
-                startY: event.clientY,
-                startSize: Number(this.overlayTextSize) || 48,
-            };
+            const startClientX = event.clientX;
+            const startClientY = event.clientY;
+            const startSize = Number(this.overlayTextSize) || 48;
+            const sensitivity = event.pointerType === 'touch' ? 2.5 : 2;
+
+            if (! this.beginOverlayGesture(event, {
+                kind: 'text-resize',
+                onMove: (moveEvent) => {
+                    const dx = moveEvent.clientX - startClientX;
+                    const dy = moveEvent.clientY - startClientY;
+                    const delta = Math.round((dx + dy) / sensitivity);
+                    this.overlayTextSize = Math.max(12, Math.min(200, startSize + delta));
+                },
+            })) {
+                return;
+            }
+
             this.overlayTextPosition = 'custom';
-        },
-
-        moveOverlayTextResize(event) {
-            if (! this.overlayTextResize || event.pointerId !== this.overlayTextResize.pointerId) {
-                return;
-            }
-
-            const dx = event.clientX - this.overlayTextResize.startX;
-            const dy = event.clientY - this.overlayTextResize.startY;
-            const delta = Math.round((dx + dy) / 2);
-            this.overlayTextSize = Math.max(12, Math.min(200, this.overlayTextResize.startSize + delta));
-        },
-
-        endOverlayTextResize(event) {
-            if (! this.overlayTextResize || event.pointerId !== this.overlayTextResize.pointerId) {
-                return;
-            }
-
-            this.overlayTextResize = null;
         },
 
         overlayLogoBoxStyle() {
@@ -1097,6 +1192,7 @@ const registerProductImageAlpineData = () => {
                 transform: 'translate(-50%, -50%)',
                 width: `${widthPx}px`,
                 height: `${heightPx}px`,
+                touchAction: 'none',
             };
         },
 
@@ -1112,34 +1208,26 @@ const registerProductImageAlpineData = () => {
             }
 
             const rect = stage.getBoundingClientRect();
-            event.preventDefault();
-            event.currentTarget.setPointerCapture?.(event.pointerId);
-            this.overlayLogoDrag = {
-                pointerId: event.pointerId,
-                stageLeft: rect.left,
-                stageTop: rect.top,
-                stageWidth: Math.max(1, rect.width),
-                stageHeight: Math.max(1, rect.height),
-            };
+            const startClientX = event.clientX;
+            const startClientY = event.clientY;
+            const startX = this.clamp01(this.overlayLogoX);
+            const startY = this.clamp01(this.overlayLogoY);
+            const stageWidth = Math.max(1, rect.width);
+            const stageHeight = Math.max(1, rect.height);
+
+            if (! this.beginOverlayGesture(event, {
+                kind: 'logo-drag',
+                onMove: (moveEvent) => {
+                    const dx = (moveEvent.clientX - startClientX) / stageWidth;
+                    const dy = (moveEvent.clientY - startClientY) / stageHeight;
+                    this.overlayLogoX = this.clamp01(startX + dx);
+                    this.overlayLogoY = this.clamp01(startY + dy);
+                },
+            })) {
+                return;
+            }
+
             this.overlayLogoPosition = 'custom';
-        },
-
-        moveOverlayLogoDrag(event) {
-            if (! this.overlayLogoDrag || event.pointerId !== this.overlayLogoDrag.pointerId) {
-                return;
-            }
-
-            const { stageLeft, stageTop, stageWidth, stageHeight } = this.overlayLogoDrag;
-            this.overlayLogoX = this.clamp01((event.clientX - stageLeft) / stageWidth);
-            this.overlayLogoY = this.clamp01((event.clientY - stageTop) / stageHeight);
-        },
-
-        endOverlayLogoDrag(event) {
-            if (! this.overlayLogoDrag || event.pointerId !== this.overlayLogoDrag.pointerId) {
-                return;
-            }
-
-            this.overlayLogoDrag = null;
         },
 
         startOverlayLogoResize(event) {
@@ -1147,35 +1235,24 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
-            event.preventDefault();
-            event.stopPropagation();
-            event.currentTarget.setPointerCapture?.(event.pointerId);
-            this.overlayLogoResize = {
-                pointerId: event.pointerId,
-                startX: event.clientX,
-                startY: event.clientY,
-                startSize: Number(this.overlayLogoSize) || 22,
-            };
+            const startClientX = event.clientX;
+            const startClientY = event.clientY;
+            const startSize = Number(this.overlayLogoSize) || 22;
+            const sensitivity = event.pointerType === 'touch' ? 10 : 8;
+
+            if (! this.beginOverlayGesture(event, {
+                kind: 'logo-resize',
+                onMove: (moveEvent) => {
+                    const dx = moveEvent.clientX - startClientX;
+                    const dy = moveEvent.clientY - startClientY;
+                    const delta = Math.round((dx + dy) / sensitivity);
+                    this.overlayLogoSize = Math.max(8, Math.min(50, startSize + delta));
+                },
+            })) {
+                return;
+            }
+
             this.overlayLogoPosition = 'custom';
-        },
-
-        moveOverlayLogoResize(event) {
-            if (! this.overlayLogoResize || event.pointerId !== this.overlayLogoResize.pointerId) {
-                return;
-            }
-
-            const dx = event.clientX - this.overlayLogoResize.startX;
-            const dy = event.clientY - this.overlayLogoResize.startY;
-            const delta = Math.round((dx + dy) / 8);
-            this.overlayLogoSize = Math.max(8, Math.min(50, this.overlayLogoResize.startSize + delta));
-        },
-
-        endOverlayLogoResize(event) {
-            if (! this.overlayLogoResize || event.pointerId !== this.overlayLogoResize.pointerId) {
-                return;
-            }
-
-            this.overlayLogoResize = null;
         },
 
         clearOverlayImage() {
@@ -1274,6 +1351,7 @@ const registerProductImageAlpineData = () => {
                 transform: 'translate(-50%, -50%)',
                 width: `${Math.max(16, size.width * scale)}px`,
                 height: `${Math.max(10, size.height * scale)}px`,
+                touchAction: 'none',
             };
         },
 
@@ -1289,33 +1367,22 @@ const registerProductImageAlpineData = () => {
             }
 
             const rect = stage.getBoundingClientRect();
-            event.preventDefault();
-            event.currentTarget.setPointerCapture?.(event.pointerId);
-            this.overlayImageDrag = {
-                pointerId: event.pointerId,
-                stageLeft: rect.left,
-                stageTop: rect.top,
-                stageWidth: Math.max(1, rect.width),
-                stageHeight: Math.max(1, rect.height),
-            };
-        },
+            const startClientX = event.clientX;
+            const startClientY = event.clientY;
+            const startX = this.clamp01(this.overlayImageX);
+            const startY = this.clamp01(this.overlayImageY);
+            const stageWidth = Math.max(1, rect.width);
+            const stageHeight = Math.max(1, rect.height);
 
-        moveOverlayImageDrag(event) {
-            if (! this.overlayImageDrag || event.pointerId !== this.overlayImageDrag.pointerId) {
-                return;
-            }
-
-            const { stageLeft, stageTop, stageWidth, stageHeight } = this.overlayImageDrag;
-            this.overlayImageX = this.clamp01((event.clientX - stageLeft) / stageWidth);
-            this.overlayImageY = this.clamp01((event.clientY - stageTop) / stageHeight);
-        },
-
-        endOverlayImageDrag(event) {
-            if (! this.overlayImageDrag || event.pointerId !== this.overlayImageDrag.pointerId) {
-                return;
-            }
-
-            this.overlayImageDrag = null;
+            this.beginOverlayGesture(event, {
+                kind: 'image-drag',
+                onMove: (moveEvent) => {
+                    const dx = (moveEvent.clientX - startClientX) / stageWidth;
+                    const dy = (moveEvent.clientY - startClientY) / stageHeight;
+                    this.overlayImageX = this.clamp01(startX + dx);
+                    this.overlayImageY = this.clamp01(startY + dy);
+                },
+            });
         },
 
         startOverlayImageResize(event) {
@@ -1323,34 +1390,20 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
-            event.preventDefault();
-            event.stopPropagation();
-            event.currentTarget.setPointerCapture?.(event.pointerId);
-            this.overlayImageResize = {
-                pointerId: event.pointerId,
-                startX: event.clientX,
-                startY: event.clientY,
-                startSize: Number(this.overlayImageSize) || 35,
-            };
-        },
+            const startClientX = event.clientX;
+            const startClientY = event.clientY;
+            const startSize = Number(this.overlayImageSize) || 35;
+            const sensitivity = event.pointerType === 'touch' ? 10 : 8;
 
-        moveOverlayImageResize(event) {
-            if (! this.overlayImageResize || event.pointerId !== this.overlayImageResize.pointerId) {
-                return;
-            }
-
-            const dx = event.clientX - this.overlayImageResize.startX;
-            const dy = event.clientY - this.overlayImageResize.startY;
-            const delta = Math.round((dx + dy) / 8);
-            this.overlayImageSize = Math.max(8, Math.min(90, this.overlayImageResize.startSize + delta));
-        },
-
-        endOverlayImageResize(event) {
-            if (! this.overlayImageResize || event.pointerId !== this.overlayImageResize.pointerId) {
-                return;
-            }
-
-            this.overlayImageResize = null;
+            this.beginOverlayGesture(event, {
+                kind: 'image-resize',
+                onMove: (moveEvent) => {
+                    const dx = moveEvent.clientX - startClientX;
+                    const dy = moveEvent.clientY - startClientY;
+                    const delta = Math.round((dx + dy) / sensitivity);
+                    this.overlayImageSize = Math.max(8, Math.min(90, startSize + delta));
+                },
+            });
         },
 
         async drawLogoOverlay(context, canvas) {
@@ -2286,8 +2339,7 @@ const registerProductImageAlpineData = () => {
         displayHeight: 0,
         naturalWidth: 0,
         naturalHeight: 0,
-        drag: null,
-        resize: null,
+        overlayGesture: null,
 
         init() {
             this.$watch(
@@ -2340,7 +2392,106 @@ const registerProductImageAlpineData = () => {
                 background: 'rgba(255, 255, 255, 0.82)',
                 color: '#000000',
                 whiteSpace: 'nowrap',
+                touchAction: 'none',
             };
+        },
+
+        isPrimaryPointer(event) {
+            if (typeof event?.isPrimary === 'boolean' && ! event.isPrimary) {
+                return false;
+            }
+
+            if (typeof event?.button === 'number' && event.button !== 0) {
+                return false;
+            }
+
+            return true;
+        },
+
+        beginOverlayGesture(event, { onMove, onEnd, kind = 'gesture' } = {}) {
+            if (! this.isPrimaryPointer(event) || typeof onMove !== 'function') {
+                return false;
+            }
+
+            this.endOverlayGesture();
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const pointerId = event.pointerId;
+            const target = event.currentTarget;
+            const stage = target?.closest?.('[data-priced-stamp-stage]');
+            const scroller = stage?.closest?.('.overflow-y-auto, .overflow-auto') ?? null;
+            const previousScrollerOverflow = scroller ? scroller.style.overflow : null;
+
+            if (scroller) {
+                scroller.style.overflow = 'hidden';
+            }
+
+            try {
+                target?.setPointerCapture?.(pointerId);
+            } catch {
+                // ignore
+            }
+
+            const moveOpts = { passive: false };
+            const onPointerMove = (moveEvent) => {
+                if (moveEvent.pointerId !== pointerId) {
+                    return;
+                }
+
+                moveEvent.preventDefault();
+                onMove(moveEvent);
+            };
+            const onPointerUp = (upEvent) => {
+                if (upEvent.pointerId !== pointerId) {
+                    return;
+                }
+
+                this.endOverlayGesture();
+                onEnd?.(upEvent);
+            };
+
+            window.addEventListener('pointermove', onPointerMove, moveOpts);
+            window.addEventListener('pointerup', onPointerUp);
+            window.addEventListener('pointercancel', onPointerUp);
+
+            this.overlayGesture = {
+                kind,
+                pointerId,
+                target,
+                scroller,
+                previousScrollerOverflow,
+                onPointerMove,
+                onPointerUp,
+                moveOpts,
+            };
+
+            return true;
+        },
+
+        endOverlayGesture() {
+            const session = this.overlayGesture;
+
+            if (! session) {
+                return;
+            }
+
+            window.removeEventListener('pointermove', session.onPointerMove, session.moveOpts);
+            window.removeEventListener('pointerup', session.onPointerUp);
+            window.removeEventListener('pointercancel', session.onPointerUp);
+
+            try {
+                session.target?.releasePointerCapture?.(session.pointerId);
+            } catch {
+                // ignore
+            }
+
+            if (session.scroller) {
+                session.scroller.style.overflow = session.previousScrollerOverflow ?? '';
+            }
+
+            this.overlayGesture = null;
         },
 
         async syncToWire() {
@@ -2385,67 +2536,53 @@ const registerProductImageAlpineData = () => {
             }
 
             const rect = stage.getBoundingClientRect();
-            event.preventDefault();
-            event.currentTarget.setPointerCapture?.(event.pointerId);
-            this.drag = {
-                pointerId: event.pointerId,
-                stageLeft: rect.left,
-                stageTop: rect.top,
-                stageWidth: Math.max(1, rect.width),
-                stageHeight: Math.max(1, rect.height),
-            };
+            const startClientX = event.clientX;
+            const startClientY = event.clientY;
+            const startX = this.clamp01(this.stampX);
+            const startY = this.clamp01(this.stampY);
+            const stageWidth = Math.max(1, rect.width);
+            const stageHeight = Math.max(1, rect.height);
+
+            if (! this.beginOverlayGesture(event, {
+                kind: 'stamp-drag',
+                onMove: (moveEvent) => {
+                    const dx = (moveEvent.clientX - startClientX) / stageWidth;
+                    const dy = (moveEvent.clientY - startClientY) / stageHeight;
+                    this.stampX = this.clamp01(startX + dx);
+                    this.stampY = this.clamp01(startY + dy);
+                },
+                onEnd: () => {
+                    this.syncToWire();
+                },
+            })) {
+                return;
+            }
+
             this.stampPosition = 'custom';
-        },
-
-        moveDrag(event) {
-            if (! this.drag || event.pointerId !== this.drag.pointerId) {
-                return;
-            }
-
-            this.stampX = this.clamp01((event.clientX - this.drag.stageLeft) / this.drag.stageWidth);
-            this.stampY = this.clamp01((event.clientY - this.drag.stageTop) / this.drag.stageHeight);
-        },
-
-        endDrag(event) {
-            if (! this.drag || event.pointerId !== this.drag.pointerId) {
-                return;
-            }
-
-            this.drag = null;
-            this.syncToWire();
         },
 
         startResize(event) {
-            event.preventDefault();
-            event.stopPropagation();
-            event.currentTarget.setPointerCapture?.(event.pointerId);
-            this.resize = {
-                pointerId: event.pointerId,
-                startX: event.clientX,
-                startY: event.clientY,
-                startFont: Number(this.stampFont) || 56,
-            };
+            const startClientX = event.clientX;
+            const startClientY = event.clientY;
+            const startFont = Number(this.stampFont) || 56;
+            const sensitivity = event.pointerType === 'touch' ? 5 : 4;
+
+            if (! this.beginOverlayGesture(event, {
+                kind: 'stamp-resize',
+                onMove: (moveEvent) => {
+                    const dx = moveEvent.clientX - startClientX;
+                    const dy = moveEvent.clientY - startClientY;
+                    const delta = Math.round((dx + dy) / sensitivity);
+                    this.stampFont = Math.max(28, Math.min(96, startFont + delta));
+                },
+                onEnd: () => {
+                    this.syncToWire();
+                },
+            })) {
+                return;
+            }
+
             this.stampPosition = 'custom';
-        },
-
-        moveResize(event) {
-            if (! this.resize || event.pointerId !== this.resize.pointerId) {
-                return;
-            }
-
-            const dx = event.clientX - this.resize.startX;
-            const dy = event.clientY - this.resize.startY;
-            const delta = Math.round((dx + dy) / 4);
-            this.stampFont = Math.max(28, Math.min(96, this.resize.startFont + delta));
-        },
-
-        endResize(event) {
-            if (! this.resize || event.pointerId !== this.resize.pointerId) {
-                return;
-            }
-
-            this.resize = null;
-            this.syncToWire();
         },
     }));
 };

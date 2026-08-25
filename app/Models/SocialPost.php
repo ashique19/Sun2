@@ -44,7 +44,7 @@ class SocialPost extends Model
      */
     public static function productImageCaption(Product $product): string
     {
-        return 'এই প্রডাক্টের আর ছবি দেখুন এই লিংকে - '.route('product.show', $product);
+        return 'এই প্রডাক্টের দাম ও আরো ছবি দেখুন এই লিংকে - '.route('product.show', $product);
     }
 
     /**

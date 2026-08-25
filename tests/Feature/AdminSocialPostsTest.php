@@ -123,7 +123,7 @@ class AdminSocialPostsTest extends TestCase
             ->assertSee('Facebook preview')
             ->assertSee('Preview copy for Facebook')
             ->assertSee('Make Facebook Post')
-            ->assertSee('এই প্রডাক্টের আর ছবি দেখুন এই লিংকে - ')
+            ->assertSee('এই প্রডাক্টের দাম ও আরো ছবি দেখুন এই লিংকে - ')
             ->assertSee(route('product.show', $product))
             ->assertDontSeeHtml('wire:model.live="postToInstagram"')
             ->assertDontSee('Post to');
@@ -212,7 +212,7 @@ class AdminSocialPostsTest extends TestCase
         ], $photoCaptions);
 
         $this->assertSame(
-            'এই প্রডাক্টের আর ছবি দেখুন এই লিংকে - '.route('product.show', $first),
+            'এই প্রডাক্টের দাম ও আরো ছবি দেখুন এই লিংকে - '.route('product.show', $first),
             $photoCaptions[0],
         );
 

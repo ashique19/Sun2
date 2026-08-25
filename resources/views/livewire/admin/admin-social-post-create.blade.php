@@ -126,7 +126,7 @@
                             placeholder="Write your Facebook post copy…"></textarea>
                         <p class="mt-1 text-xs text-[#8C8474]">
                             Album posts use this as the post message. Each product photo caption is
-                            “এই প্রডাক্টের আর ছবি দেখুন এই লিংকে - ” plus its store URL.
+                            “এই প্রডাক্টের দাম ও আরো ছবি দেখুন এই লিংকে - ” plus its store URL.
                         </p>
                         @error('body')
                             <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>

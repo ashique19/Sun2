@@ -192,7 +192,7 @@ class AdminProductEditImageModalTest extends TestCase
             ->assertSeeHtml('touch-none')
             ->assertSeeHtml('h-11 w-11')
             ->assertSeeHtml('@pointerdown="startOverlayTextDrag($event)"')
-            ->assertSeeHtml('@pointerdown.stop="startOverlayTextResize($event)"')
+            ->assertSeeHtml('@pointerdown.stop.prevent="startOverlayTextResize($event)"')
             ->assertDontSeeHtml('@pointermove="moveOverlayTextDrag($event)"')
             ->assertDontSeeHtml('@pointermove="moveOverlayImageDrag($event)"')
             ->assertSee('finger stays under the grab point');

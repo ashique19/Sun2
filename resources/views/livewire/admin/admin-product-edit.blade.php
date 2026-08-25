@@ -733,7 +733,7 @@
                                                         >
                                                             <img :src="overlayImageUrl" alt="" class="pointer-events-none h-full w-full object-contain" draggable="false">
                                                             <button type="button"
-                                                                class="absolute -top-3 -right-3 flex h-11 w-11 touch-none items-center justify-center sm:-top-2 sm:-right-2 sm:h-7 sm:w-7"
+                                                                class="absolute -top-3 -right-3 z-30 flex h-11 w-11 touch-none items-center justify-center sm:-top-2 sm:-right-2 sm:h-7 sm:w-7"
                                                                 aria-label="Remove image overlay"
                                                                 title="Remove overlay"
                                                                 @pointerdown.stop.prevent
@@ -742,12 +742,12 @@
                                                                 <span class="pointer-events-none flex h-6 w-6 items-center justify-center rounded-full border border-rose-300 bg-white text-sm font-bold leading-none text-rose-700 shadow sm:h-5 sm:w-5 sm:text-xs">×</span>
                                                             </button>
                                                             <button type="button"
-                                                                class="absolute -bottom-3 -right-3 flex h-11 w-11 touch-none items-center justify-center sm:-bottom-1.5 sm:-right-1.5 sm:h-7 sm:w-7"
+                                                                class="absolute -bottom-3 -right-3 z-30 flex h-11 w-11 touch-none cursor-nwse-resize items-center justify-center sm:-bottom-1.5 sm:-right-1.5 sm:h-7 sm:w-7"
                                                                 aria-label="Resize image overlay"
                                                                 title="Drag to resize"
-                                                                @pointerdown.stop="startOverlayImageResize($event)"
+                                                                @pointerdown.stop.prevent="startOverlayImageResize($event)"
                                                             >
-                                                                <span class="pointer-events-none h-3.5 w-3.5 rounded-sm border border-[#C9A227] bg-white shadow sm:h-3 sm:w-3"></span>
+                                                                <span class="pointer-events-none h-4 w-4 rounded-sm border-2 border-[#C9A227] bg-white shadow sm:h-3 sm:w-3 sm:border"></span>
                                                             </button>
                                                         </div>
                                                     </div>
@@ -1438,12 +1438,12 @@
                                                 <span x-text="priceLine"></span><span x-text="unitLabel" class="ml-0.5"></span>
                                             </p>
                                             <button type="button"
-                                                class="absolute -bottom-3 -right-3 flex h-11 w-11 touch-none items-center justify-center sm:-bottom-1.5 sm:-right-1.5 sm:h-7 sm:w-7"
+                                                class="absolute -bottom-3 -right-3 z-30 flex h-11 w-11 touch-none cursor-nwse-resize items-center justify-center sm:-bottom-1.5 sm:-right-1.5 sm:h-7 sm:w-7"
                                                 aria-label="Resize price stamp"
                                                 title="Drag to resize"
-                                                @pointerdown.stop="startResize($event)"
+                                                @pointerdown.stop.prevent="startResize($event)"
                                             >
-                                                <span class="pointer-events-none h-3.5 w-3.5 rounded-sm border border-[#C9A227] bg-white shadow sm:h-3 sm:w-3"></span>
+                                                <span class="pointer-events-none h-4 w-4 rounded-sm border-2 border-[#C9A227] bg-white shadow sm:h-3 sm:w-3 sm:border"></span>
                                             </button>
                                         </div>
                                     </div>

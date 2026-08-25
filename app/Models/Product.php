@@ -36,10 +36,11 @@ class Product extends Model
         'পিস',
         'জোড়া',
         'সেট',
+        'মালা+দুল',
     ];
 
     /**
-     * Unit label shown on priced images (e.g. পিস, জোড়া, সেট).
+     * Unit label shown on priced images (e.g. পিস, জোড়া, সেট, মালা+দুল).
      */
     public function priceUnitLabel(): string
     {

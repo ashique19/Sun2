@@ -480,12 +480,13 @@ class ProductPricedImageTest extends TestCase
             ->assertSee('Price unit')
             ->assertSee('জোড়া')
             ->assertSee('সেট')
-            ->set('price_unit', 'সেট')
+            ->assertSee('মালা+দুল')
+            ->set('price_unit', 'মালা+দুল')
             ->call('save')
             ->assertHasNoErrors();
 
         $product->refresh();
-        $this->assertSame('সেট', $product->price_unit);
+        $this->assertSame('মালা+দুল', $product->price_unit);
         $this->assertNotNull($product->priced_image_path);
         $this->assertNotSame($before, $product->priced_image_path);
     }

@@ -150,7 +150,7 @@
                     </div>
                     <input type="text" wire:model.live="price_unit" maxlength="40" placeholder="পিস"
                         class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
-                    <p class="mt-1 text-xs text-[#8C8474]">Shown on priced images as ৳price/unit (e.g. পিস, জোড়া, সেট).</p>
+                    <p class="mt-1 text-xs text-[#8C8474]">Shown on priced images as ৳price/unit (e.g. পিস, জোড়া, সেট, মালা+দুল).</p>
                     @error('price_unit') <p class="text-xs text-rose-600 mt-1">{{ $message }}</p> @enderror
                 </div>
                 <div>

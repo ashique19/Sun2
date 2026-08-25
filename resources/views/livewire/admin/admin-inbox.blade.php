@@ -894,8 +894,12 @@
                                 @if (filled($pendingReplyText))
                                     <p class="whitespace-pre-wrap break-words leading-relaxed">{{ $pendingReplyText }}</p>
                                 @endif
-                                @if ($pendingReplyImage)
-                                    <img src="{{ $pendingReplyImage->temporaryUrl() }}" alt="" class="mt-2 max-h-48 rounded-xl object-contain">
+                                @if ($pendingReplyImages !== [])
+                                    <div class="mt-2 flex flex-wrap gap-1.5">
+                                        @foreach ($pendingReplyImages as $pendingImage)
+                                            <img src="{{ $pendingImage->temporaryUrl() }}" alt="" class="max-h-32 max-w-[7.5rem] rounded-xl object-cover">
+                                        @endforeach
+                                    </div>
                                 @endif
                                 <p class="mt-1 text-[10px] font-medium text-white/80">Sending…</p>
                             </div>
@@ -920,16 +924,29 @@
                         </div>
                     @endif
 
-                    @if ($replyImage)
-                        <div class="mb-2 flex items-center gap-3 rounded-2xl border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2">
-                            <img src="{{ $replyImage->temporaryUrl() }}" alt="" class="h-12 w-12 rounded-xl object-cover">
-                            <div class="min-w-0 flex-1 text-xs text-[#6B6459]">Image ready to send</div>
-                            <button type="button" wire:click="clearReplyImage" class="text-xs text-[#8C8474] hover:text-[#1E1E1E]">
-                                Remove
+                    @if ($replyImages !== [])
+                        <div class="mb-2 flex flex-wrap items-center gap-2 rounded-2xl border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2">
+                            @foreach ($replyImages as $index => $image)
+                                <div class="relative" wire:key="reply-image-{{ $index }}-{{ method_exists($image, 'getFilename') ? $image->getFilename() : $index }}">
+                                    <img src="{{ $image->temporaryUrl() }}" alt="" class="h-12 w-12 rounded-xl object-cover">
+                                    <button type="button"
+                                        wire:click="removeReplyImage({{ $index }})"
+                                        class="absolute -right-1.5 -top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#1E1E1E] text-[10px] font-bold text-white hover:bg-rose-600"
+                                        title="Remove image"
+                                        aria-label="Remove image">
+                                        ×
+                                    </button>
+                                </div>
+                            @endforeach
+                            <button type="button" wire:click="clearReplyImages" class="ml-auto text-xs text-[#8C8474] hover:text-[#1E1E1E]">
+                                Clear
                             </button>
                         </div>
                     @endif
-                    @error('replyImage')
+                    @error('replyImages')
+                        <p class="mb-2 text-xs text-rose-600">{{ $message }}</p>
+                    @enderror
+                    @error('replyImages.*')
                         <p class="mb-2 text-xs text-rose-600">{{ $message }}</p>
                     @enderror
 
@@ -957,14 +974,19 @@
                     @endif
 
                     <div class="flex items-end gap-2">
-                        <label class="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#E0D6C2] bg-[#FAF6EF] text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]" title="Attach image">
-                            <input type="file" class="hidden" wire:model="replyImage" accept="image/*">
+                        <label
+                            class="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#E0D6C2] bg-[#FAF6EF] text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]"
+                            title="Attach images"
+                            x-data
+                            x-on:livewire-upload-error="$wire.reportReplyImageUploadError()"
+                        >
+                            <input type="file" class="hidden" wire:model="replyImages" accept="image/jpeg,image/png,image/webp,image/gif" multiple>
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
                                 <path fill-rule="evenodd" d="M1 5.25A2.25 2.25 0 0 1 3.25 3h13.5A2.25 2.25 0 0 1 19 5.25v9.5A2.25 2.25 0 0 1 16.75 17H3.25A2.25 2.25 0 0 1 1 14.75v-9.5Zm4.78 1.47a.75.75 0 0 0-1.06 1.06l2.5 2.5a.75.75 0 0 0 1.06 0l1.72-1.72 3.22 3.22a.75.75 0 1 0 1.06-1.06l-3.75-3.75a.75.75 0 0 0-1.06 0L7.28 8.72 5.78 7.22Z" clip-rule="evenodd" />
                             </svg>
                         </label>
                         <div class="min-w-0 flex-1">
-                            <div wire:loading wire:target="replyImage" class="mb-1 text-[11px] text-[#8C8474]">Uploading image…</div>
+                            <div wire:loading wire:target="replyImages" class="mb-1 text-[11px] text-[#8C8474]">Uploading images…</div>
                             @php
                                 $replyRows = max(1, min(8, substr_count((string) $replyText, "\n") + 1));
                             @endphp

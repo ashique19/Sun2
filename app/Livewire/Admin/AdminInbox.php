@@ -56,16 +56,22 @@ class AdminInbox extends Component
 
     public ?int $replyToMessageId = null;
 
-    /** @var TemporaryUploadedFile|null */
-    public $replyImage = null;
+    /**
+     * Composer image attachments (multi-select).
+     *
+     * @var array<int, TemporaryUploadedFile>
+     */
+    public array $replyImages = [];
 
     /**
      * Outbound reply staged for a background Graph send so the composer stays responsive.
      */
     public string $pendingReplyText = '';
 
-    /** @var TemporaryUploadedFile|null */
-    public $pendingReplyImage = null;
+    /**
+     * @var array<int, TemporaryUploadedFile>
+     */
+    public array $pendingReplyImages = [];
 
     public ?int $pendingReplyToMessageId = null;
 
@@ -680,9 +686,26 @@ class AdminInbox extends Component
         $this->replyToMessageId = null;
     }
 
-    public function clearReplyImage(): void
+    public function clearReplyImages(): void
     {
-        $this->replyImage = null;
+        $this->replyImages = [];
+    }
+
+    public function removeReplyImage(int $index): void
+    {
+        if (! array_key_exists($index, $this->replyImages)) {
+            return;
+        }
+
+        unset($this->replyImages[$index]);
+        $this->replyImages = array_values($this->replyImages);
+    }
+
+    public function reportReplyImageUploadError(?string $message = null): void
+    {
+        $this->error = $message
+            ?: 'Image upload failed. Use JPG, PNG, WEBP, or GIF (max 5MB each).';
+        $this->statusMessage = null;
     }
 
     public function openImageEdit(int $messageId): void
@@ -1155,11 +1178,17 @@ class AdminInbox extends Component
 
         $this->validate([
             'replyText' => ['nullable', 'string', 'max:2000'],
-            'replyImage' => ['nullable', 'image', 'max:5120'],
+            'replyImages' => ['nullable', 'array', 'max:10'],
+            'replyImages.*' => Fileinfo::storedImageItemRules(5120, allowGif: true),
             'replyToMessageId' => ['nullable', 'integer'],
         ]);
 
-        if (trim($this->replyText) === '' && $this->replyImage === null) {
+        $images = array_values(array_filter(
+            $this->replyImages,
+            fn ($file) => $file instanceof TemporaryUploadedFile || $file instanceof UploadedFile,
+        ));
+
+        if (trim($this->replyText) === '' && $images === []) {
             $this->error = 'Reply text or image is required.';
 
             return;
@@ -1180,7 +1209,7 @@ class AdminInbox extends Component
 
         // Clear the composer immediately; Graph Send API runs in a follow-up request.
         $this->pendingReplyText = $this->replyText;
-        $this->pendingReplyImage = $this->replyImage;
+        $this->pendingReplyImages = $images;
         $this->pendingReplyToMessageId = $this->replyToMessageId;
         $this->outboundSending = true;
         $this->resetComposer();
@@ -1226,14 +1255,29 @@ class AdminInbox extends Component
             }
         }
 
-        if ($this->pendingReplyImage) {
-            $result = $replies->sendImage(
-                $conversation,
-                $this->pendingReplyImage,
-                $this->pendingReplyText,
-                false,
-                $replyTo,
-            );
+        if ($this->pendingReplyImages !== []) {
+            $caption = $this->pendingReplyText;
+            $images = array_values($this->pendingReplyImages);
+
+            foreach ($images as $index => $image) {
+                $result = $replies->sendImage(
+                    $conversation,
+                    $image,
+                    $index === 0 ? $caption : '',
+                    false,
+                    $index === 0 ? $replyTo : null,
+                );
+
+                if (! ($result['ok'] ?? false)) {
+                    $this->pendingReplyImages = array_slice($images, $index);
+                    if ($index > 0) {
+                        $this->pendingReplyText = '';
+                    }
+                    $this->failPendingOutbound($result['error'] ?? 'Failed to send reply.');
+
+                    return;
+                }
+            }
         } else {
             $result = $replies->sendText(
                 $conversation,
@@ -1241,12 +1285,12 @@ class AdminInbox extends Component
                 false,
                 $replyTo,
             );
-        }
 
-        if (! ($result['ok'] ?? false)) {
-            $this->failPendingOutbound($result['error'] ?? 'Failed to send reply.');
+            if (! ($result['ok'] ?? false)) {
+                $this->failPendingOutbound($result['error'] ?? 'Failed to send reply.');
 
-            return;
+                return;
+            }
         }
 
         $this->clearPendingOutbound();
@@ -1268,7 +1312,7 @@ class AdminInbox extends Component
     private function failPendingOutbound(string $error): void
     {
         $this->replyText = $this->pendingReplyText;
-        $this->replyImage = $this->pendingReplyImage;
+        $this->replyImages = array_values($this->pendingReplyImages);
         $this->replyToMessageId = $this->pendingReplyToMessageId;
         $this->clearPendingOutbound();
         $this->error = $error;
@@ -1278,7 +1322,7 @@ class AdminInbox extends Component
     private function clearPendingOutbound(): void
     {
         $this->pendingReplyText = '';
-        $this->pendingReplyImage = null;
+        $this->pendingReplyImages = [];
         $this->pendingReplyToMessageId = null;
         $this->outboundSending = false;
     }
@@ -1506,7 +1550,7 @@ class AdminInbox extends Component
     {
         $this->replyText = '';
         $this->replyToMessageId = null;
-        $this->replyImage = null;
+        $this->replyImages = [];
     }
 
     private function resetOrderMapping(): void

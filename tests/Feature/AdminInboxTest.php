@@ -934,12 +934,12 @@ class AdminInboxTest extends TestCase
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
-            ->set('replyImage', $file)
+            ->set('replyImages', [$file])
             ->set('replyText', 'Here you go')
             ->call('sendReply')
             ->assertHasNoErrors()
             ->assertSet('statusMessage', 'Reply sent.')
-            ->assertSet('replyImage', null);
+            ->assertSet('replyImages', []);
 
         $outbound = ChannelMessage::query()
             ->where('channel_conversation_id', $conversation->id)
@@ -959,6 +959,108 @@ class AdminInboxTest extends TestCase
                 && ($message['attachment']['type'] ?? null) === 'image'
                 && filled($message['attachment']['payload']['url'] ?? null);
         });
+    }
+
+    #[Test]
+    public function it_can_attach_and_send_multiple_image_replies(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.graph_version' => 'v25.0',
+            'app.url' => 'https://example.test',
+        ]);
+
+        $messageIds = ['m_img_a', 'm_caption_a', 'm_img_b', 'm_img_c'];
+        $messageIdIndex = 0;
+
+        Http::fake(function () use (&$messageIds, &$messageIdIndex) {
+            $id = $messageIds[$messageIdIndex] ?? ('m_extra_'.$messageIdIndex);
+            $messageIdIndex++;
+
+            return Http::response([
+                'message_id' => $id,
+                'recipient_id' => 'psid-1',
+            ], 200);
+        });
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_in_multi',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Send photos',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        $files = [
+            UploadedFile::fake()->image('one.jpg', 40, 40),
+            UploadedFile::fake()->image('two.png', 40, 40),
+            UploadedFile::fake()->image('three.webp', 40, 40),
+        ];
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->set('replyImages', $files)
+            ->set('replyText', 'Album caption')
+            ->call('sendReply')
+            ->assertHasNoErrors()
+            ->assertSet('statusMessage', 'Reply sent.')
+            ->assertSet('replyImages', []);
+
+        $outbound = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->whereNotNull('media_url')
+            ->orderBy('id')
+            ->get();
+
+        $this->assertCount(3, $outbound);
+        $this->assertSame('Album caption', $outbound[0]->body);
+        $this->assertNull($outbound[1]->body);
+        $this->assertNull($outbound[2]->body);
+
+        foreach ($outbound as $message) {
+            $this->assertTrue(is_file(public_path($message->media_url)));
+        }
+
+        $imageSends = 0;
+        Http::assertSent(function ($request) use (&$imageSends) {
+            $message = $request['message'] ?? null;
+            if (is_array($message) && ($message['attachment']['type'] ?? null) === 'image') {
+                $imageSends++;
+            }
+
+            return true;
+        });
+        $this->assertSame(3, $imageSends);
+    }
+
+    #[Test]
+    public function it_rejects_more_than_ten_reply_images(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_in_limit',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Too many',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        $files = [];
+        for ($i = 0; $i < 11; $i++) {
+            $files[] = UploadedFile::fake()->image("n{$i}.jpg", 20, 20);
+        }
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->set('replyImages', $files)
+            ->call('sendReply')
+            ->assertHasErrors(['replyImages']);
     }
 
     #[Test]

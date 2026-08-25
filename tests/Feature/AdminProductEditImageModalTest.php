@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Livewire\Admin\AdminProductEdit;
 use App\Models\Product;
+use App\Models\ProductImage;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -162,7 +163,36 @@ class AdminProductEditImageModalTest extends TestCase
         $this->assertStringContainsString('startOverlayLogoResize', $source);
         $this->assertStringContainsString('includeText: false', $source);
         $this->assertStringContainsString('includeLogo: false', $source);
+        $this->assertStringContainsString('includeOverlayImage: false', $source);
+        $this->assertStringContainsString('onOverlayImageSelected', $source);
+        $this->assertStringContainsString('clearOverlayImage', $source);
+        $this->assertStringContainsString('startOverlayImageDrag', $source);
+        $this->assertStringContainsString('startOverlayImageResize', $source);
+        $this->assertStringContainsString('drawOverlayImage', $source);
         $this->assertStringContainsString('pricedImageStampEditor', $source);
+    }
+
+    #[Test]
+    public function saved_image_edit_modal_exposes_image_overlay_upload_controls(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $product = Product::query()->create([
+            'name' => 'Necklace Set',
+            'slug' => 'necklace-set',
+            'price' => 2500,
+            'is_published' => true,
+        ]);
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->assertSeeHtml('data-overlay-image-controls')
+            ->assertSeeHtml('Put image overlay')
+            ->assertSeeHtml('onOverlayImageSelected($event)')
+            ->assertSeeHtml('clearOverlayImage()')
+            ->assertSeeHtml('startOverlayImageDrag($event)')
+            ->assertSeeHtml('startOverlayImageResize($event)')
+            ->assertSeeHtml('Remove image overlay')
+            ->assertSeeHtml('accept="image/jpeg,image/png,image/webp,image/gif"');
     }
 
     #[Test]
@@ -188,7 +218,7 @@ class AdminProductEditImageModalTest extends TestCase
         imagejpeg($image, $absolute, 90);
         imagedestroy($image);
 
-        \App\Models\ProductImage::query()->create([
+        ProductImage::query()->create([
             'product_id' => $product->id,
             'path' => '/'.$relativeDir.'/primary.jpg',
             'alt' => 'Necklace',

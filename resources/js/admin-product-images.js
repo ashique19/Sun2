@@ -56,6 +56,15 @@ const registerProductImageAlpineData = () => {
         overlayLogoResize: null,
         logoUrl: '/img/settings/logo.png',
         logoImage: null,
+        /** User-uploaded image overlay (object URL + HTMLImageElement). */
+        overlayImageUrl: '',
+        overlayImage: null,
+        overlayImageName: '',
+        overlayImageSize: 35,
+        overlayImageX: 0.5,
+        overlayImageY: 0.5,
+        overlayImageDrag: null,
+        overlayImageResize: null,
         _savedOverlayUnwatch: null,
 
         wire() {
@@ -564,6 +573,7 @@ const registerProductImageAlpineData = () => {
             this.overlayLogoY = 0.12;
             this.overlayLogoDrag = null;
             this.overlayLogoResize = null;
+            this.clearOverlayImage();
             this.savedEditorOpen = true;
             this.preloadLogo();
             this.bindSavedOverlayWatchers();
@@ -727,6 +737,7 @@ const registerProductImageAlpineData = () => {
             }
 
             this.destroySavedCropper();
+            this.clearOverlayImage();
             this.savedEditorOpen = false;
             this.savedEditorId = null;
             this.savedEditorSrc = '';
@@ -792,10 +803,11 @@ const registerProductImageAlpineData = () => {
             }
 
             try {
-                // Preview omits text/logo so the HTML overlays can be dragged/resized freely.
+                // Preview omits text/logo/image overlays so HTML layers can be dragged freely.
                 const output = await this.composeEditedCanvas(720, {
                     includeText: false,
                     includeLogo: false,
+                    includeOverlayImage: false,
                 });
 
                 if (! output || ! this.savedEditorOpen) {
@@ -1166,6 +1178,181 @@ const registerProductImageAlpineData = () => {
             this.overlayLogoResize = null;
         },
 
+        clearOverlayImage() {
+            if (this.overlayImageUrl && String(this.overlayImageUrl).startsWith('blob:')) {
+                try {
+                    URL.revokeObjectURL(this.overlayImageUrl);
+                } catch {
+                    // ignore
+                }
+            }
+
+            this.overlayImageUrl = '';
+            this.overlayImage = null;
+            this.overlayImageName = '';
+            this.overlayImageSize = 35;
+            this.overlayImageX = 0.5;
+            this.overlayImageY = 0.5;
+            this.overlayImageDrag = null;
+            this.overlayImageResize = null;
+        },
+
+        onOverlayImageSelected(event) {
+            const file = event?.target?.files?.[0] ?? null;
+
+            if (event?.target) {
+                event.target.value = '';
+            }
+
+            if (! file) {
+                return;
+            }
+
+            const looksLikeImage = String(file.type || '').startsWith('image/')
+                || /\.(jpe?g|png|webp|gif)$/i.test(file.name || '');
+
+            if (! looksLikeImage) {
+                this.savedError = 'Choose a JPG, PNG, WebP, or GIF image for the overlay.';
+
+                return;
+            }
+
+            this.clearOverlayImage();
+
+            const url = URL.createObjectURL(file);
+            const image = new Image();
+            image.decoding = 'async';
+            image.onload = () => {
+                this.overlayImage = image;
+                this.overlayImageUrl = url;
+                this.overlayImageName = file.name || 'overlay';
+                this.overlayImageSize = 35;
+                this.overlayImageX = 0.5;
+                this.overlayImageY = 0.5;
+                this.savedError = null;
+            };
+            image.onerror = () => {
+                try {
+                    URL.revokeObjectURL(url);
+                } catch {
+                    // ignore
+                }
+                this.savedError = 'Could not load that overlay image.';
+            };
+            image.src = url;
+        },
+
+        measureOverlayImageSize(canvasWidth) {
+            const image = this.overlayImage;
+            const naturalW = Math.max(1, image?.naturalWidth || 200);
+            const naturalH = Math.max(1, image?.naturalHeight || 200);
+            const targetWidth = Math.max(
+                24,
+                Math.round(Math.max(1, canvasWidth) * (Math.max(8, Math.min(90, Number(this.overlayImageSize) || 35)) / 100)),
+            );
+            const scale = targetWidth / naturalW;
+
+            return {
+                width: targetWidth,
+                height: Math.max(12, Math.round(naturalH * scale)),
+            };
+        },
+
+        overlayImageBoxStyle() {
+            if (! this.overlayImageUrl) {
+                return { display: 'none' };
+            }
+
+            const natural = Math.max(1, this.previewNaturalWidth || 1600);
+            const display = Math.max(1, this.previewDisplayWidth || natural);
+            const size = this.measureOverlayImageSize(natural);
+            const scale = display / natural;
+
+            return {
+                left: `${this.clamp01(this.overlayImageX) * 100}%`,
+                top: `${this.clamp01(this.overlayImageY) * 100}%`,
+                transform: 'translate(-50%, -50%)',
+                width: `${Math.max(16, size.width * scale)}px`,
+                height: `${Math.max(10, size.height * scale)}px`,
+            };
+        },
+
+        startOverlayImageDrag(event) {
+            if (this.savedSaving || ! this.overlayImageUrl) {
+                return;
+            }
+
+            const stage = event.currentTarget?.closest?.('[data-text-overlay-stage]');
+
+            if (! stage) {
+                return;
+            }
+
+            const rect = stage.getBoundingClientRect();
+            event.preventDefault();
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            this.overlayImageDrag = {
+                pointerId: event.pointerId,
+                stageLeft: rect.left,
+                stageTop: rect.top,
+                stageWidth: Math.max(1, rect.width),
+                stageHeight: Math.max(1, rect.height),
+            };
+        },
+
+        moveOverlayImageDrag(event) {
+            if (! this.overlayImageDrag || event.pointerId !== this.overlayImageDrag.pointerId) {
+                return;
+            }
+
+            const { stageLeft, stageTop, stageWidth, stageHeight } = this.overlayImageDrag;
+            this.overlayImageX = this.clamp01((event.clientX - stageLeft) / stageWidth);
+            this.overlayImageY = this.clamp01((event.clientY - stageTop) / stageHeight);
+        },
+
+        endOverlayImageDrag(event) {
+            if (! this.overlayImageDrag || event.pointerId !== this.overlayImageDrag.pointerId) {
+                return;
+            }
+
+            this.overlayImageDrag = null;
+        },
+
+        startOverlayImageResize(event) {
+            if (this.savedSaving || ! this.overlayImageUrl) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            this.overlayImageResize = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                startSize: Number(this.overlayImageSize) || 35,
+            };
+        },
+
+        moveOverlayImageResize(event) {
+            if (! this.overlayImageResize || event.pointerId !== this.overlayImageResize.pointerId) {
+                return;
+            }
+
+            const dx = event.clientX - this.overlayImageResize.startX;
+            const dy = event.clientY - this.overlayImageResize.startY;
+            const delta = Math.round((dx + dy) / 8);
+            this.overlayImageSize = Math.max(8, Math.min(90, this.overlayImageResize.startSize + delta));
+        },
+
+        endOverlayImageResize(event) {
+            if (! this.overlayImageResize || event.pointerId !== this.overlayImageResize.pointerId) {
+                return;
+            }
+
+            this.overlayImageResize = null;
+        },
+
         async drawLogoOverlay(context, canvas) {
             if (! this.overlayLogoEnabled) {
                 return;
@@ -1191,6 +1378,29 @@ const registerProductImageAlpineData = () => {
             y = Math.max(edgePad, Math.min(canvas.height - targetHeight - edgePad, y));
 
             context.drawImage(logo, x, y, targetWidth, targetHeight);
+        },
+
+        async drawOverlayImage(context, canvas) {
+            if (! this.overlayImageUrl || ! this.overlayImage) {
+                return;
+            }
+
+            const image = this.overlayImage;
+
+            if (! image.naturalWidth) {
+                throw new Error('Could not load the overlay image.');
+            }
+
+            const size = this.measureOverlayImageSize(canvas.width);
+            const edgePad = Math.round(Math.min(canvas.width, canvas.height) * 0.02);
+            const centerX = this.clamp01(this.overlayImageX) * canvas.width;
+            const centerY = this.clamp01(this.overlayImageY) * canvas.height;
+            let x = Math.round(centerX - size.width / 2);
+            let y = Math.round(centerY - size.height / 2);
+            x = Math.max(edgePad, Math.min(canvas.width - size.width - edgePad, x));
+            y = Math.max(edgePad, Math.min(canvas.height - size.height - edgePad, y));
+
+            context.drawImage(image, x, y, size.width, size.height);
         },
 
         ensureLogoLoaded() {
@@ -1222,6 +1432,7 @@ const registerProductImageAlpineData = () => {
 
             const includeText = options.includeText !== false;
             const includeLogo = options.includeLogo !== false;
+            const includeOverlayImage = options.includeOverlayImage !== false;
 
             let canvas;
 
@@ -1270,6 +1481,10 @@ const registerProductImageAlpineData = () => {
 
             if (includeLogo) {
                 await this.drawLogoOverlay(context, output);
+            }
+
+            if (includeOverlayImage) {
+                await this.drawOverlayImage(context, output);
             }
 
             return output;

@@ -623,7 +623,7 @@
                                 <div class="flex items-center justify-between border-b border-[#EFE7D6] px-4 py-3">
                                     <div>
                                         <h3 class="font-semibold">Edit image</h3>
-                                        <p class="text-xs text-[#8C8474]">Drag the crop box, then drag/resize text on the live preview.</p>
+                                                    <p class="text-xs text-[#8C8474]">Drag the crop box, then drag/resize text, logo, or image overlay on the live preview.</p>
                                     </div>
                                     <button type="button" @click="closeSavedEditor()" :disabled="savedSaving" class="text-sm text-[#6B6459] hover:text-[#1E1E1E] disabled:opacity-60">Close</button>
                                 </div>
@@ -725,13 +725,44 @@
                                                                 @pointercancel="endOverlayLogoResize($event)"
                                                             ></button>
                                                         </div>
+                                                        <div
+                                                            x-show="overlayImageUrl"
+                                                            x-cloak
+                                                            class="absolute z-20 cursor-move select-none outline outline-1 outline-[#C9A227]/70"
+                                                            :style="overlayImageBoxStyle()"
+                                                            @pointerdown="startOverlayImageDrag($event)"
+                                                            @pointermove="moveOverlayImageDrag($event)"
+                                                            @pointerup="endOverlayImageDrag($event)"
+                                                            @pointercancel="endOverlayImageDrag($event)"
+                                                            title="Drag to move · resize from the corner · remove with ×"
+                                                            role="slider"
+                                                            aria-label="Image overlay position"
+                                                        >
+                                                            <img :src="overlayImageUrl" alt="" class="pointer-events-none h-full w-full object-contain" draggable="false">
+                                                            <button type="button"
+                                                                class="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full border border-rose-300 bg-white text-xs font-bold leading-none text-rose-700 shadow"
+                                                                aria-label="Remove image overlay"
+                                                                title="Remove overlay"
+                                                                @pointerdown.stop.prevent
+                                                                @click.stop="clearOverlayImage()"
+                                                            >×</button>
+                                                            <button type="button"
+                                                                class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-[#C9A227] bg-white shadow"
+                                                                aria-label="Resize image overlay"
+                                                                title="Drag to resize"
+                                                                @pointerdown.stop="startOverlayImageResize($event)"
+                                                                @pointermove="moveOverlayImageResize($event)"
+                                                                @pointerup="endOverlayImageResize($event)"
+                                                                @pointercancel="endOverlayImageResize($event)"
+                                                            ></button>
+                                                        </div>
                                                     </div>
                                                 </template>
                                                 <p x-show="! savedPreviewUrl" class="text-sm text-[#8C8474]" x-cloak>Preview will appear here.</p>
                                             </div>
                                             <p class="border-t border-[#EFE7D6] px-4 py-2 text-[11px] text-[#8C8474]"
-                                                x-show="overlayText.trim() !== '' || overlayLogoEnabled" x-cloak>
-                                                Drag text or logo on the preview to move. Drag a corner handle to resize.
+                                                x-show="overlayText.trim() !== '' || overlayLogoEnabled || overlayImageUrl" x-cloak>
+                                                Drag overlays on the preview to move. Corner handle resizes · × removes the uploaded image overlay.
                                             </p>
                                         </div>
                                     </div>
@@ -854,6 +885,46 @@
                                                     </div>
                                                 </div>
                                             </div>
+                                        </div>
+
+                                        <div class="space-y-3 rounded-xl border border-[#EFE7D6] bg-[#FAF6EF]/px-4 py-3" data-overlay-image-controls>
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <div>
+                                                    <p class="text-xs font-medium text-[#6B6459]">Put image overlay</p>
+                                                    <p class="mt-0.5 text-[11px] text-[#8C8474]">Upload any image, then drag / resize it on the live preview.</p>
+                                                </div>
+                                                <label class="cursor-pointer rounded-full border border-[#C9A227] px-3 py-1.5 text-xs font-medium text-[#C9A227] hover:bg-[#FAF6EF]"
+                                                    :class="{ 'pointer-events-none opacity-60': savedSaving }">
+                                                    {{-- Keep input enabled so the native file picker can open; gate via label opacity when saving. --}}
+                                                    Choose image
+                                                    <input type="file" class="sr-only" accept="image/jpeg,image/png,image/webp,image/gif"
+                                                        :disabled="savedSaving"
+                                                        @change="onOverlayImageSelected($event)">
+                                                </label>
+                                            </div>
+                                            <template x-if="overlayImageUrl">
+                                                <div class="flex flex-wrap items-center gap-3">
+                                                    <div class="overflow-hidden rounded-lg border border-[#EFE7D6] bg-white px-2 py-1.5">
+                                                        <img :src="overlayImageUrl" alt="" class="mx-auto h-12 w-auto max-w-[7rem] object-contain">
+                                                    </div>
+                                                    <div class="min-w-0 flex-1 space-y-1.5">
+                                                        <p class="truncate text-[11px] text-[#6B6459]" x-text="overlayImageName"></p>
+                                                        <label class="flex items-center justify-between gap-2 text-[11px] text-[#8C8474]" for="saved-overlay-image-size">
+                                                            <span>Overlay size</span>
+                                                            <span class="tabular-nums" x-text="`${overlayImageSize}%`"></span>
+                                                        </label>
+                                                        <input id="saved-overlay-image-size" type="range" min="8" max="90" step="1"
+                                                            x-model.number="overlayImageSize" :disabled="savedSaving"
+                                                            class="w-full accent-[#C9A227] disabled:opacity-60"
+                                                            aria-label="Image overlay size">
+                                                    </div>
+                                                    <button type="button" @click="clearOverlayImage()" :disabled="savedSaving"
+                                                        class="rounded-full border border-rose-300 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                                                        aria-label="Remove image overlay">
+                                                        Remove
+                                                    </button>
+                                                </div>
+                                            </template>
                                         </div>
 
                                         <p x-show="savedError" x-text="savedError" class="text-xs text-rose-600" x-cloak></p>

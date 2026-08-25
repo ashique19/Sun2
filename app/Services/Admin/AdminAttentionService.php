@@ -16,11 +16,15 @@ class AdminAttentionService
     }
 
     /**
-     * Create an admin attention item for COD mismatch.
+     * Create an admin attention item for COD mismatch / partial delivery review.
+     *
+     * @param  float|null  $collectedAmount  Null when the courier did not report a reliable collected figure.
      */
-    public function createCodMismatch(Order $order, float $expectedAmount, float $collectedAmount, array $metadata = []): AdminAttentionItem
+    public function createCodMismatch(Order $order, float $expectedAmount, ?float $collectedAmount, array $metadata = []): AdminAttentionItem
     {
-        $discrepancy = abs($expectedAmount - $collectedAmount);
+        $discrepancy = $collectedAmount === null
+            ? null
+            : abs($expectedAmount - $collectedAmount);
         $isPartial = (bool) ($metadata['is_partial_delivery'] ?? false);
         $reportedStatus = (string) ($metadata['reported_status'] ?? $metadata['steadfast_status'] ?? '');
 
@@ -36,10 +40,14 @@ class AdminAttentionService
             ? "Partial delivery - Order #{$order->order_number}"
             : "COD Mismatch - Order #{$order->order_number}";
 
-        $description = $isPartial
-            ? 'Courier reported partial delivery'.($reportedStatus !== '' ? " ({$reportedStatus})" : '')
-                .". COD is ৳{$expectedAmount} but collected ৳{$collectedAmount} — review."
-            : "COD is ৳{$expectedAmount} but collected ৳{$collectedAmount} at courier";
+        if ($isPartial) {
+            $statusSuffix = $reportedStatus !== '' ? " ({$reportedStatus})" : '';
+            $description = $collectedAmount === null
+                ? "Courier reported partial delivery{$statusSuffix}. COD is ৳{$expectedAmount}; collected amount was not reported — review."
+                : "Courier reported partial delivery{$statusSuffix}. COD is ৳{$expectedAmount} but collected ৳{$collectedAmount} — review.";
+        } else {
+            $description = "COD is ৳{$expectedAmount} but collected ৳{$collectedAmount} at courier";
+        }
 
         $existing = AdminAttentionItem::query()
             ->unresolved()
@@ -166,5 +174,43 @@ class AdminAttentionService
     public function isCodMismatchSignificant(float $expected, float $collected, float $tolerance = 1.0): bool
     {
         return abs($expected - $collected) > $tolerance;
+    }
+
+    /**
+     * Resolve cash collected from a courier webhook payload.
+     *
+     * Couriers often send `cod_amount` as the booked consignment COD, not cash
+     * actually collected. On partial delivery that value commonly still equals
+     * the full order COD — treating it as "collected" misleads admins.
+     *
+     * Prefer an explicit `collected_amount`. For partial delivery, only treat
+     * `cod_amount` (and similar keys) as collected when it differs from the
+     * expected COD; otherwise return null (unknown / not reported).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function resolveCollectedAmountFromPayload(array $payload, float $expectedAmount, bool $isPartial = false): ?float
+    {
+        if (array_key_exists('collected_amount', $payload)
+            && $payload['collected_amount'] !== ''
+            && $payload['collected_amount'] !== null) {
+            return round((float) $payload['collected_amount'], 2);
+        }
+
+        foreach (['cod_amount', 'amount_to_collect', 'collectable_amount'] as $key) {
+            if (! array_key_exists($key, $payload) || $payload[$key] === '' || $payload[$key] === null) {
+                continue;
+            }
+
+            $amount = round((float) $payload[$key], 2);
+
+            if ($isPartial && ! $this->isCodMismatchSignificant($expectedAmount, $amount)) {
+                return null;
+            }
+
+            return $amount;
+        }
+
+        return $isPartial ? null : round($expectedAmount, 2);
     }
 }

@@ -41,10 +41,12 @@
                             </div>
                             <h3 class="mt-1 truncate text-sm font-medium text-[#1E1E1E]">{{ $item->title }}</h3>
                             <p class="mt-0.5 line-clamp-2 text-xs text-[#8C8474]">{{ $item->description }}</p>
-                            @if ($item->data && isset($item->data['expected_amount']) && isset($item->data['collected_amount']))
+                            @if ($item->data && isset($item->data['expected_amount']))
                                 <p class="mt-1 text-xs font-medium text-rose-600">
                                     Expected: ৳{{ number_format($item->data['expected_amount'], 2) }}
-                                    · Collected: ৳{{ number_format($item->data['collected_amount'], 2) }}
+                                    · Collected: {{ array_key_exists('collected_amount', $item->data) && $item->data['collected_amount'] !== null
+                                        ? '৳'.number_format((float) $item->data['collected_amount'], 2)
+                                        : 'not reported' }}
                                 </p>
                             @endif
                         </div>

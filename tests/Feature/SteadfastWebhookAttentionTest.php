@@ -138,9 +138,39 @@ class SteadfastWebhookAttentionTest extends TestCase
             'tracking_message' => 'Partial delivered',
         ]);
 
+        $item = AdminAttentionItem::query()->sole();
+
         $this->assertSame(1, AdminAttentionItem::query()->count());
         $this->assertSame('dispatched', $order->fresh()->status);
         $this->assertNotSame('delivered', $order->fresh()->status);
+        $this->assertNull($item->data['collected_amount']);
+        $this->assertSame(1200.0, (float) $item->data['expected_amount']);
+        $this->assertStringContainsString('collected amount was not reported', $item->description);
+    }
+
+    #[Test]
+    public function partial_delivered_uses_explicit_collected_amount_when_present(): void
+    {
+        $order = $this->order([
+            'order_number' => 'ORD-PARTIAL-EXPLICIT',
+            'courier_tracker' => 'SFR_PARTIAL_EXPLICIT',
+        ]);
+
+        $this->postWebhook([
+            'notification_type' => 'delivery_status',
+            'invoice' => $order->order_number,
+            'tracking_id' => $order->courier_tracker,
+            'status' => 'partial_delivered',
+            'cod_amount' => 1200,
+            'collected_amount' => 800,
+            'updated_at' => now()->toDateTimeString(),
+            'tracking_message' => 'Partial delivered',
+        ]);
+
+        $item = AdminAttentionItem::query()->sole();
+
+        $this->assertSame(800.0, (float) $item->data['collected_amount']);
+        $this->assertStringContainsString('collected ৳800', $item->description);
     }
 
     #[Test]

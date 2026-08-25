@@ -135,10 +135,12 @@
                             <div>
                                 <p class="font-medium text-[#1E1E1E]">{{ $item->title }}</p>
                                 <p class="text-xs text-[#8C8474] mt-1 line-clamp-2">{{ $item->description }}</p>
-                                @if($item->data && isset($item->data['expected_amount']) && isset($item->data['collected_amount']))
+                                @if($item->data && isset($item->data['expected_amount']))
                                 <p class="text-xs font-medium text-red-600 mt-1">
-                                    Expected: ৳{{ number_format($item->data['expected_amount'], 2) }} • 
-                                    Collected: ৳{{ number_format($item->data['collected_amount'], 2) }}
+                                    Expected: ৳{{ number_format($item->data['expected_amount'], 2) }} •
+                                    Collected: {{ array_key_exists('collected_amount', $item->data) && $item->data['collected_amount'] !== null
+                                        ? '৳'.number_format((float) $item->data['collected_amount'], 2)
+                                        : 'not reported' }}
                                 </p>
                                 @endif
                             </div>

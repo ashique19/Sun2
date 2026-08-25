@@ -130,11 +130,16 @@ class CourierWebhookSupport
         }
 
         if ($mappedStatus === 'delivered') {
-            $cod = $this->codAmount($payload, $order);
             $expected = $order->collectableAmount();
             $isPartial = $this->isPartialDeliveryPayload($payload);
+            $cod = $this->adminAttention->resolveCollectedAmountFromPayload(
+                $payload,
+                $expected,
+                $isPartial,
+            );
 
-            if ($isPartial || $this->adminAttention->isCodMismatchSignificant($expected, $cod)) {
+            if ($isPartial
+                || ($cod !== null && $this->adminAttention->isCodMismatchSignificant($expected, $cod))) {
                 $this->holdDeliveryForReview(
                     order: $order,
                     payload: $payload,
@@ -148,7 +153,7 @@ class CourierWebhookSupport
 
             $this->deliverySettlement->recordCollection(
                 order: $order,
-                amount: $cod,
+                amount: $cod ?? $expected,
                 actor: null,
                 meta: ['source' => 'webhook', 'payload_event' => $payload['event'] ?? null],
             );
@@ -188,7 +193,7 @@ class CourierWebhookSupport
         Order $order,
         array $payload,
         float $expectedAmount,
-        float $collectedAmount,
+        ?float $collectedAmount,
         bool $isPartial,
     ): void {
         $event = (string) ($payload['event'] ?? $payload['status'] ?? '');
@@ -207,10 +212,11 @@ class CourierWebhookSupport
             ],
         );
 
+        $collectedLabel = $collectedAmount === null ? 'not reported' : "৳{$collectedAmount}";
         $reviewNote = $isPartial
             ? 'Partial delivery reported'.($event !== '' ? " ({$event})" : '')
-                .": Expected COD ৳{$expectedAmount}, collected ৳{$collectedAmount}. Requires admin attention."
-            : "COD mismatch: Expected ৳{$expectedAmount}, collected ৳{$collectedAmount}. Courier reported delivered. Requires admin attention.";
+                .": Expected COD ৳{$expectedAmount}, collected {$collectedLabel}. Requires admin attention."
+            : "COD mismatch: Expected ৳{$expectedAmount}, collected {$collectedLabel}. Courier reported delivered. Requires admin attention.";
 
         $this->recordHistory($order, $order->status, $reviewNote);
     }
@@ -248,20 +254,6 @@ class CourierWebhookSupport
             'courier_tracker' => (string) $tracker,
             'courier_id' => $order->courier_id ?? $courierId,
         ]);
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function codAmount(array $payload, Order $order): float
-    {
-        foreach (['collected_amount', 'cod_amount', 'amount_to_collect', 'collectable_amount'] as $key) {
-            if (isset($payload[$key]) && $payload[$key] !== '') {
-                return (float) $payload[$key];
-            }
-        }
-
-        return $order->collectableAmount();
     }
 
     /**

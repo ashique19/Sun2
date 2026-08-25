@@ -143,10 +143,15 @@ class SteadfastWebhookProcessor
         if ($mappedStatus === 'delivered') {
             $order->refresh();
             $expectedAmount = $order->collectableAmount();
-            $collectedAmount = $this->collectedAmountFromPayload($payload, $expectedAmount);
             $isPartial = $this->isPartialDeliveryStatus($steadfastStatus);
+            $collectedAmount = $this->adminAttention->resolveCollectedAmountFromPayload(
+                $payload,
+                $expectedAmount,
+                $isPartial,
+            );
             $needsAttention = $isPartial
-                || $this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount);
+                || ($collectedAmount !== null
+                    && $this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount));
 
             if ($needsAttention) {
                 $this->adminAttention->createCodMismatch(
@@ -161,9 +166,10 @@ class SteadfastWebhookProcessor
                     ],
                 );
 
+                $collectedLabel = $collectedAmount === null ? 'not reported' : "৳{$collectedAmount}";
                 $mismatchMessage = $isPartial
-                    ? "Partial delivery reported ({$steadfastStatus}): Expected COD ৳{$expectedAmount}, collected ৳{$collectedAmount}. Requires admin attention."
-                    : "COD mismatch: Expected ৳{$expectedAmount}, collected ৳{$collectedAmount}. Courier reported status: {$steadfastStatus}. Requires admin attention.";
+                    ? "Partial delivery reported ({$steadfastStatus}): Expected COD ৳{$expectedAmount}, collected {$collectedLabel}. Requires admin attention."
+                    : "COD mismatch: Expected ৳{$expectedAmount}, collected {$collectedLabel}. Courier reported status: {$steadfastStatus}. Requires admin attention.";
                 $this->recordHistory($order, $order->status, $mismatchMessage);
 
                 // Keep order as dispatched — never auto-complete delivery on mismatch/partial.
@@ -173,7 +179,7 @@ class SteadfastWebhookProcessor
             // Full delivery with matching COD — proceed normally.
             $this->deliverySettlement->recordCollection(
                 order: $order,
-                amount: $collectedAmount,
+                amount: $collectedAmount ?? $expectedAmount,
                 actor: null,
                 meta: ['source' => 'steadfast_webhook'],
             );
@@ -215,9 +221,14 @@ class SteadfastWebhookProcessor
         if (preg_match('/delivered successfully/i', $message) && $order->status !== 'delivered') {
             $order->refresh();
             $expectedAmount = $order->collectableAmount();
-            $collectedAmount = $this->collectedAmountFromPayload($payload, $expectedAmount);
+            $collectedAmount = $this->adminAttention->resolveCollectedAmountFromPayload(
+                $payload,
+                $expectedAmount,
+                false,
+            );
 
-            if ($this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount)) {
+            if ($collectedAmount !== null
+                && $this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount)) {
                 $this->adminAttention->createCodMismatch(
                     order: $order,
                     expectedAmount: $expectedAmount,
@@ -241,7 +252,7 @@ class SteadfastWebhookProcessor
 
             $this->deliverySettlement->recordCollection(
                 order: $order,
-                amount: $collectedAmount,
+                amount: $collectedAmount ?? $expectedAmount,
                 actor: null,
                 meta: ['source' => 'steadfast_tracking'],
             );
@@ -319,22 +330,6 @@ class SteadfastWebhookProcessor
             'partial_delivered',
             'partial_delivered_approval_pending',
         ], true);
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function collectedAmountFromPayload(array $payload, float $fallback): float
-    {
-        foreach (['collected_amount', 'cod_amount', 'amount_to_collect', 'collectable_amount'] as $key) {
-            if (! array_key_exists($key, $payload) || $payload[$key] === '' || $payload[$key] === null) {
-                continue;
-            }
-
-            return round((float) $payload[$key], 2);
-        }
-
-        return round($fallback, 2);
     }
 
     private function recordHistory(Order $order, string $status, string $note): void

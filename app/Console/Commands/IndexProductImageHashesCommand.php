@@ -24,7 +24,10 @@ class IndexProductImageHashesCommand extends Command
         $query = ProductImage::query()->orderBy('id');
 
         if (! $force) {
-            $query->whereNull('perceptual_hash');
+            $query->where(function ($builder): void {
+                $builder->whereNull('perceptual_hash')
+                    ->orWhereNull('perceptual_hashes');
+            });
         }
 
         $total = (clone $query)->count();
@@ -56,7 +59,7 @@ class IndexProductImageHashesCommand extends Command
                 $processed++;
 
                 try {
-                    if (! $force && $image->perceptual_hash) {
+                    if (! $force && $image->perceptual_hash && is_array($image->perceptual_hashes) && $image->perceptual_hashes !== []) {
                         $bar->advance();
 
                         continue;

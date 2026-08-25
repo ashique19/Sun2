@@ -75,7 +75,7 @@ class ScreenshotCropCalibrationTest extends TestCase
                     'height_min' => 0.18,
                     'height_max' => 0.36,
                     'width_min' => 0.70,
-                    'strategies' => ['light_letterbox', 'photo_panel', 'trim'],
+                    'strategies' => ['light_letterbox', 'photo_panel', 'texture_panel', 'trim'],
                 ],
             ],
         ];

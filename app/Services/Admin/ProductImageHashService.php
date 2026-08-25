@@ -75,6 +75,13 @@ class ProductImageHashService
      */
     public const TRIM_MIN_CONTENT_FRACTION = 0.15;
 
+    /**
+     * Catalog crop scales stored alongside the full-frame hash for screenshot matching.
+     *
+     * @var list<float>
+     */
+    public const CATALOG_VARIANT_SCALES = [0.7, 0.5];
+
     public function hashFile(string $absolutePath, ?float $centerFraction = null): string
     {
         if (! is_file($absolutePath) || ! is_readable($absolutePath)) {
@@ -120,10 +127,101 @@ class ProductImageHashService
 
     public function hashProductImage(ProductImage $image, bool $allowRemoteDownload = true): ?string
     {
+        $binary = $this->productImageBinary($image, $allowRemoteDownload);
+
+        return $binary === null ? null : $this->hashBinary($binary);
+    }
+
+    public function storeHash(ProductImage $image, bool $allowRemoteDownload = true): ?string
+    {
+        $binary = $this->productImageBinary($image, $allowRemoteDownload);
+
+        if ($binary === null) {
+            return null;
+        }
+
+        $variants = $this->catalogHashVariantsFromBinary($binary);
+        $full = $variants[0]['hash'] ?? null;
+
+        if ($full === null) {
+            return null;
+        }
+
+        $image->update([
+            'perceptual_hash' => $full,
+            'perceptual_hashes' => $variants,
+        ]);
+
+        return $full;
+    }
+
+    /**
+     * @return list<array{strategy: string, hash: string}>
+     */
+    public function catalogHashVariantsFromBinary(string $binary): array
+    {
+        $image = @imagecreatefromstring($binary);
+
+        if ($image === false) {
+            throw new RuntimeException('Unsupported or corrupt image data.');
+        }
+
+        $image = $this->downscaleForHash($image);
+
+        try {
+            $variants = [
+                [
+                    'strategy' => 'full',
+                    'hash' => $this->hashGdImageCopy($image),
+                ],
+            ];
+
+            foreach (self::CATALOG_VARIANT_SCALES as $scale) {
+                try {
+                    $cropped = $this->centerCropCopy($image, $scale);
+                    $variants[] = [
+                        'strategy' => 'center_'.$this->scaleLabel($scale),
+                        'hash' => $this->hashGdImage($cropped),
+                    ];
+                } catch (Throwable $e) {
+                    Log::debug('Catalog center-hash variant failed.', [
+                        'scale' => $scale,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            try {
+                $texture = $this->detectTexturePhotoPanelBounds($image);
+                if ($texture !== null) {
+                    $hash = $this->hashFromBounds($image, $texture);
+                    if ($hash !== null) {
+                        $variants[] = [
+                            'strategy' => 'texture_panel',
+                            'hash' => $hash,
+                        ];
+                    }
+                }
+            } catch (Throwable $e) {
+                Log::debug('Catalog texture-hash variant failed.', [
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            return $variants;
+        } finally {
+            imagedestroy($image);
+        }
+    }
+
+    private function productImageBinary(ProductImage $image, bool $allowRemoteDownload = true): ?string
+    {
         $local = $this->localPath($image->path);
 
         if ($local) {
-            return $this->hashFile($local);
+            $bytes = file_get_contents($local);
+
+            return $bytes === false || $bytes === '' ? null : $bytes;
         }
 
         if (! $allowRemoteDownload) {
@@ -142,20 +240,9 @@ class ProductImageHashService
             return null;
         }
 
-        return $this->hashBinary($response->body());
-    }
+        $bytes = $response->body();
 
-    public function storeHash(ProductImage $image, bool $allowRemoteDownload = true): ?string
-    {
-        $hash = $this->hashProductImage($image, $allowRemoteDownload);
-
-        if ($hash === null) {
-            return null;
-        }
-
-        $image->update(['perceptual_hash' => $hash]);
-
-        return $hash;
+        return $bytes === '' ? null : $bytes;
     }
 
     public function hammingDistance(string $hashA, string $hashB): int
@@ -325,6 +412,7 @@ class ProductImageHashService
         }
 
         $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectBrightPhotoPanelBounds($image), 'query_photo_panel_vs_catalog_full');
+        $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectTexturePhotoPanelBounds($image), 'query_texture_panel_vs_catalog_full');
         $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectEmbeddedCardBounds($image), 'query_embedded_card_vs_catalog_full');
         $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectLightLetterboxBounds($image), 'query_light_letterbox_vs_catalog_full');
         $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectUniformChromeBounds($image), 'query_trim_chrome_vs_catalog_full');
@@ -442,9 +530,12 @@ class ProductImageHashService
     public function findTopMatches(string $hash, int $limit = self::TOP_MATCHES, float $minPercent = self::MIN_MATCH_PERCENT): array
     {
         $rows = ProductImage::query()
-            ->whereNotNull('perceptual_hash')
+            ->where(function ($query): void {
+                $query->whereNotNull('perceptual_hash')
+                    ->orWhereNotNull('perceptual_hashes');
+            })
             ->with(['product:id,name,sku,price,stock_quantity,slug'])
-            ->get(['id', 'product_id', 'path', 'perceptual_hash']);
+            ->get(['id', 'product_id', 'path', 'perceptual_hash', 'perceptual_hashes']);
 
         $bestByProduct = [];
 
@@ -453,36 +544,61 @@ class ProductImageHashService
                 continue;
             }
 
-            $distance = $this->hammingDistance($hash, (string) $row->perceptual_hash);
-            $percent = round(max(0, (1 - ($distance / self::HASH_BITS)) * 100), 1);
+            foreach ($this->catalogHashesForRow($row) as $catalogHash) {
+                $distance = $this->hammingDistance($hash, $catalogHash);
+                $percent = round(max(0, (1 - ($distance / self::HASH_BITS)) * 100), 1);
 
-            if ($percent < $minPercent) {
-                continue;
+                if ($percent < $minPercent) {
+                    continue;
+                }
+
+                $productId = (int) $row->product_id;
+                $existing = $bestByProduct[$productId] ?? null;
+
+                if ($existing && $existing['match_percent'] >= $percent) {
+                    continue;
+                }
+
+                $bestByProduct[$productId] = [
+                    'product_id' => $productId,
+                    'name' => $row->product->name,
+                    'sku' => $row->product->sku,
+                    'price' => (float) $row->product->price,
+                    'stock_quantity' => (int) $row->product->stock_quantity,
+                    'image_url' => StorefrontAssets::url($row->path),
+                    'match_percent' => $percent,
+                    'distance' => $distance,
+                ];
             }
-
-            $productId = (int) $row->product_id;
-            $existing = $bestByProduct[$productId] ?? null;
-
-            if ($existing && $existing['match_percent'] >= $percent) {
-                continue;
-            }
-
-            $bestByProduct[$productId] = [
-                'product_id' => $productId,
-                'name' => $row->product->name,
-                'sku' => $row->product->sku,
-                'price' => (float) $row->product->price,
-                'stock_quantity' => (int) $row->product->stock_quantity,
-                'image_url' => StorefrontAssets::url($row->path),
-                'match_percent' => $percent,
-                'distance' => $distance,
-            ];
         }
 
         $matches = array_values($bestByProduct);
         usort($matches, fn (array $a, array $b) => $b['match_percent'] <=> $a['match_percent']);
 
         return array_slice($matches, 0, $limit);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function catalogHashesForRow(ProductImage $row): array
+    {
+        $hashes = [];
+
+        if (is_array($row->perceptual_hashes)) {
+            foreach ($row->perceptual_hashes as $variant) {
+                $hash = is_array($variant) ? ($variant['hash'] ?? null) : null;
+                if (is_string($hash) && $hash !== '') {
+                    $hashes[$hash] = $hash;
+                }
+            }
+        }
+
+        if (is_string($row->perceptual_hash) && $row->perceptual_hash !== '') {
+            $hashes[$row->perceptual_hash] = $row->perceptual_hash;
+        }
+
+        return array_values($hashes);
     }
 
     /**
@@ -660,6 +776,7 @@ class ProductImageHashService
 
         $candidates = array_filter([
             $this->detectBrightPhotoPanelBounds($image),
+            $this->detectTexturePhotoPanelBounds($image),
             $this->detectEmbeddedCardBounds($image),
             $this->detectLightLetterboxBounds($image),
             $this->detectUniformChromeBounds($image),
@@ -739,6 +856,150 @@ class ProductImageHashService
         }
 
         return [$left, $top, $right, $bottom, 'photo_panel'];
+    }
+
+    /**
+     * Find the densest textured rectangular region (product photo vs flat UI chrome).
+     *
+     * @return array{0:int,1:int,2:int,3:int,4:string}|null
+     */
+    private function detectTexturePhotoPanelBounds(\GdImage $image): ?array
+    {
+        $width = imagesx($image);
+        $height = imagesy($image);
+
+        if ($width < 16 || $height < 16) {
+            return null;
+        }
+
+        $rowScores = [];
+        for ($y = 0; $y < $height; $y++) {
+            $rowScores[$y] = $this->rowTextureScore($image, $y);
+        }
+
+        $sorted = $rowScores;
+        sort($sorted);
+        $median = $this->percentile($sorted, 0.5);
+        $p75 = $this->percentile($sorted, 0.75);
+        $threshold = max($median * 1.35, $p75 * 0.85, 8.0);
+
+        $run = $this->longestContiguousRun(
+            static fn (int $y): bool => $rowScores[$y] >= $threshold,
+            $height,
+        );
+
+        if ($run === null || $run['length'] < max(8, (int) round($height * 0.10))) {
+            return null;
+        }
+
+        $top = $run['start'];
+        $bottom = $run['end'];
+
+        $maxHeight = max(8, (int) round($height * self::PHOTO_PANEL_MAX_HEIGHT_FRACTION));
+        if (($bottom - $top + 1) > $maxHeight) {
+            // Keep the highest-texture window inside the run.
+            $bestStart = $top;
+            $bestScore = -1.0;
+            for ($start = $top; $start + $maxHeight - 1 <= $bottom; $start++) {
+                $windowScore = 0.0;
+                for ($y = $start; $y < $start + $maxHeight; $y++) {
+                    $windowScore += $rowScores[$y];
+                }
+                if ($windowScore > $bestScore) {
+                    $bestScore = $windowScore;
+                    $bestStart = $start;
+                }
+            }
+            $top = $bestStart;
+            $bottom = $bestStart + $maxHeight - 1;
+        }
+
+        while ($bottom > $top && $rowScores[$bottom] < $threshold * 0.7) {
+            $bottom--;
+        }
+        while ($top < $bottom && $rowScores[$top] < $threshold * 0.7) {
+            $top++;
+        }
+
+        $colScores = [];
+        for ($x = 0; $x < $width; $x++) {
+            $colScores[$x] = $this->columnTextureScore($image, $x, $top, $bottom);
+        }
+
+        $sortedCols = $colScores;
+        sort($sortedCols);
+        $colMedian = $this->percentile($sortedCols, 0.5);
+        $colThreshold = max($colMedian * 1.25, 6.0);
+
+        $left = 0;
+        for ($x = 0; $x < $width; $x++) {
+            if ($colScores[$x] >= $colThreshold) {
+                $left = $x;
+                break;
+            }
+        }
+
+        $right = $width - 1;
+        for ($x = $width - 1; $x >= $left; $x--) {
+            if ($colScores[$x] >= $colThreshold) {
+                $right = $x;
+                break;
+            }
+        }
+
+        if ($left >= $right || $top >= $bottom) {
+            return null;
+        }
+
+        if (! $this->boundsAreValid($image, $left, $top, $right, $bottom)) {
+            return null;
+        }
+
+        // Reject near-full-frame crops on plain catalog photos (no screenshot chrome).
+        $areaFraction = (($right - $left + 1) * ($bottom - $top + 1)) / ($width * $height);
+        if ($areaFraction > 0.92 && ! $this->hasScreenshotChrome($image, $top, $bottom)) {
+            return null;
+        }
+
+        return [$left, $top, $right, $bottom, 'texture_panel'];
+    }
+
+    private function rowTextureScore(\GdImage $image, int $y): float
+    {
+        $width = imagesx($image);
+        if ($width < 2) {
+            return 0.0;
+        }
+
+        $sum = 0.0;
+        $prev = $this->grayAt($image, 0, $y);
+
+        for ($x = 1; $x < $width; $x++) {
+            $gray = $this->grayAt($image, $x, $y);
+            $sum += abs($gray - $prev);
+            $prev = $gray;
+        }
+
+        return $sum / ($width - 1);
+    }
+
+    private function columnTextureScore(\GdImage $image, int $x, int $top, int $bottom): float
+    {
+        $span = $bottom - $top + 1;
+        if ($span < 2) {
+            return 0.0;
+        }
+
+        $sum = 0.0;
+        $prev = $this->grayAt($image, $x, $top);
+
+        for ($y = $top + 1; $y <= $bottom; $y++) {
+            $gray = $this->grayAt($image, $x, $y);
+            $sum += abs($gray - $prev);
+            $prev = $gray;
+        }
+
+        return $sum / ($span - 1);
     }
 
     /**
@@ -1218,6 +1479,7 @@ class ProductImageHashService
         $widthFraction = ($right - $left + 1) / $width;
         $strategyBonus = match ($strategy) {
             'photo_panel' => 0.12 + ($widthFraction >= 0.82 ? 0.08 : 0.0),
+            'texture_panel' => 0.14 + ($widthFraction >= 0.75 ? 0.06 : 0.0),
             'embedded_card' => $widthFraction <= 0.86 ? 0.1 : -0.15,
             'light_letterbox' => 0.08,
             default => 0.0,

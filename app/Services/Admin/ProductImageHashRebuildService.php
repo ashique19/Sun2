@@ -27,17 +27,20 @@ class ProductImageHashRebuildService
     }
 
     /**
-     * @return array{total:int, hashed:int, missing:int}
+     * @return array{total:int, hashed:int, missing:int, multi_hashed:int, missing_variants:int}
      */
     public function coverage(): array
     {
         $total = ProductImage::query()->count();
         $hashed = ProductImage::query()->whereNotNull('perceptual_hash')->count();
+        $multiHashed = ProductImage::query()->whereNotNull('perceptual_hashes')->count();
 
         return [
             'total' => $total,
             'hashed' => $hashed,
             'missing' => max(0, $total - $hashed),
+            'multi_hashed' => $multiHashed,
+            'missing_variants' => max(0, $total - $multiHashed),
         ];
     }
 
@@ -59,7 +62,10 @@ class ProductImageHashRebuildService
         $query = ProductImage::query();
 
         if (! $force) {
-            $query->whereNull('perceptual_hash');
+            $query->where(function ($builder): void {
+                $builder->whereNull('perceptual_hash')
+                    ->orWhereNull('perceptual_hashes');
+            });
         }
 
         $total = $query->count();
@@ -125,7 +131,10 @@ class ProductImageHashRebuildService
                 ->limit($chunkSize);
 
             if (! $run->force) {
-                $query->whereNull('perceptual_hash');
+                $query->where(function ($builder): void {
+                    $builder->whereNull('perceptual_hash')
+                        ->orWhereNull('perceptual_hashes');
+                });
             }
 
             $images = $query->get();

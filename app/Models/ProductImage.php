@@ -15,6 +15,7 @@ class ProductImage extends Model
             'is_primary' => 'boolean',
             'is_admin_only' => 'boolean',
             'sort_order' => 'integer',
+            'perceptual_hashes' => 'array',
         ];
     }
 

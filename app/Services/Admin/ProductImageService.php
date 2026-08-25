@@ -143,16 +143,35 @@ class ProductImageService
             'sort_order' => $nextOrder,
             'is_primary' => $isPrimary,
             'is_admin_only' => $adminOnly,
-            'perceptual_hash' => $this->safeHash(public_path(ltrim($path, '/'))),
+            ...$this->safeHashAttributes(public_path(ltrim($path, '/'))),
         ]);
     }
 
-    private function safeHash(string $absolutePath): ?string
+    /**
+     * @return array{perceptual_hash:?string, perceptual_hashes:?list<array{strategy:string,hash:string}>}
+     */
+    private function safeHashAttributes(string $absolutePath): array
     {
         try {
-            return app(ProductImageHashService::class)->hashFile($absolutePath);
+            $bytes = is_file($absolutePath) ? file_get_contents($absolutePath) : false;
+            if ($bytes === false || $bytes === '') {
+                return [
+                    'perceptual_hash' => null,
+                    'perceptual_hashes' => null,
+                ];
+            }
+
+            $variants = app(ProductImageHashService::class)->catalogHashVariantsFromBinary($bytes);
+
+            return [
+                'perceptual_hash' => $variants[0]['hash'] ?? null,
+                'perceptual_hashes' => $variants,
+            ];
         } catch (\Throwable) {
-            return null;
+            return [
+                'perceptual_hash' => null,
+                'perceptual_hashes' => null,
+            ];
         }
     }
 
@@ -212,7 +231,7 @@ class ProductImageService
 
         $image->update([
             'path' => $newPath,
-            'perceptual_hash' => $this->safeHash(public_path(ltrim($newPath, '/'))),
+            ...$this->safeHashAttributes(public_path(ltrim($newPath, '/'))),
         ]);
 
         if ($oldPath !== $newPath) {
@@ -275,7 +294,7 @@ class ProductImageService
 
         $image->update([
             'path' => $newPath,
-            'perceptual_hash' => $this->safeHash(public_path(ltrim($newPath, '/'))),
+            ...$this->safeHashAttributes(public_path(ltrim($newPath, '/'))),
         ]);
 
         if ($oldPath !== $newPath) {

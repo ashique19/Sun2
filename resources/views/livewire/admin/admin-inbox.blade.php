@@ -985,6 +985,13 @@
                                 <path fill-rule="evenodd" d="M1 5.25A2.25 2.25 0 0 1 3.25 3h13.5A2.25 2.25 0 0 1 19 5.25v9.5A2.25 2.25 0 0 1 16.75 17H3.25A2.25 2.25 0 0 1 1 14.75v-9.5Zm4.78 1.47a.75.75 0 0 0-1.06 1.06l2.5 2.5a.75.75 0 0 0 1.06 0l1.72-1.72 3.22 3.22a.75.75 0 1 0 1.06-1.06l-3.75-3.75a.75.75 0 0 0-1.06 0L7.28 8.72 5.78 7.22Z" clip-rule="evenodd" />
                             </svg>
                         </label>
+                        <button type="button"
+                            wire:click="openComposerProductPicker"
+                            title="Send product (images, link, price)"
+                            aria-label="Send product"
+                            class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-[#FAF6EF] text-sm font-bold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                            +P
+                        </button>
                         <div class="min-w-0 flex-1">
                             <div wire:loading wire:target="replyImages" class="mb-1 text-[11px] text-[#8C8474]">Uploading images…</div>
                             @php
@@ -1310,18 +1317,28 @@
         </div>
     @endif
 
-    @if ($pricedSendMessage)
-        <div x-data="{}" wire:key="priced-send-teleport-{{ $pricedSendMessage->id }}">
+    @if ($composerProductPickerOpen || $pricedSendMessage)
+        @php
+            $productPickerKey = $pricedSendMessage?->id ?? 'composer';
+            $productPickerTitle = $pricedSendMessage
+                ? 'Send priced product image'
+                : 'Send product';
+            $productPickerSubtitle = $pricedSendMessage
+                ? 'Filter by category or price, then send catalog options as a reply.'
+                : 'Search the catalog, then send images, link, price text, or a priced image.';
+        @endphp
+        <div x-data="{}" wire:key="product-picker-teleport-{{ $productPickerKey }}">
             @teleport('body')
                 <div
+                    data-inbox-product-picker-modal
                     data-inbox-priced-send-modal
-                    wire:key="priced-send-modal-{{ $pricedSendMessage->id }}"
+                    wire:key="product-picker-modal-{{ $productPickerKey }}"
                     wire:click.self="closePricedImageSend"
                     class="fixed inset-0 flex items-end justify-center overflow-y-auto overscroll-contain bg-black/50 p-0 sm:items-center sm:p-4"
                     style="z-index: 100000;"
                     role="dialog"
                     aria-modal="true"
-                    aria-labelledby="inbox-priced-send-title"
+                    aria-labelledby="inbox-product-picker-title"
                 >
                     <div
                         class="relative flex w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-[#E7DFCF] bg-white shadow-2xl sm:rounded-2xl"
@@ -1331,8 +1348,8 @@
                     >
                         <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#E7DFCF] px-4 py-3">
                             <div class="min-w-0">
-                                <h3 id="inbox-priced-send-title" class="text-base font-semibold text-[#1E1E1E]">Send priced product image</h3>
-                                <p class="mt-0.5 text-xs text-[#8C8474]">Filter by category or price, then send a priced image as a reply.</p>
+                                <h3 id="inbox-product-picker-title" class="text-base font-semibold text-[#1E1E1E]">{{ $productPickerTitle }}</h3>
+                                <p class="mt-0.5 text-xs text-[#8C8474]">{{ $productPickerSubtitle }}</p>
                             </div>
                             <button type="button" wire:click="closePricedImageSend" class="text-2xl leading-none text-[#8C8474] hover:text-[#1E1E1E]" aria-label="Close">&times;</button>
                         </div>
@@ -1378,7 +1395,7 @@
 
                             <div class="space-y-2">
                                 @forelse ($pricedSendResults as $row)
-                                    <div wire:key="priced-send-row-{{ $row['id'] }}" class="flex items-center gap-2.5 rounded-xl border border-[#E7DFCF] p-2.5">
+                                    <div wire:key="product-picker-row-{{ $row['id'] }}" class="flex items-center gap-2.5 rounded-xl border border-[#E7DFCF] p-2.5">
                                         @if (! empty($row['image_url']))
                                             <img src="{{ $row['image_url'] }}" alt="" class="h-14 w-14 shrink-0 rounded-lg object-cover bg-[#FAF6EF]">
                                         @else
@@ -1396,13 +1413,37 @@
                                             <p class="text-[11px] {{ $row['has_priced_image'] ? 'text-emerald-700' : 'text-[#8C8474]' }}">
                                                 {{ $row['has_priced_image'] ? 'Priced image ready' : 'Will generate priced image' }}
                                             </p>
+                                            <div class="mt-1.5 flex flex-wrap gap-2">
+                                                <button type="button"
+                                                    wire:click="sendProductPickerAlbumImages({{ $row['id'] }})"
+                                                    wire:loading.attr="disabled"
+                                                    title="Send all catalog images"
+                                                    class="text-[11px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
+                                                    A.Img
+                                                </button>
+                                                <button type="button"
+                                                    wire:click="sendProductPickerLink({{ $row['id'] }})"
+                                                    wire:loading.attr="disabled"
+                                                    title="Send store product link"
+                                                    class="text-[11px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
+                                                    Link
+                                                </button>
+                                                <button type="button"
+                                                    wire:click="sendProductPickerPrice({{ $row['id'] }})"
+                                                    wire:loading.attr="disabled"
+                                                    title="Send price as text"
+                                                    class="text-[11px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
+                                                    Price
+                                                </button>
+                                                <button type="button"
+                                                    wire:click="sendPricedProductImage({{ $row['id'] }})"
+                                                    wire:loading.attr="disabled"
+                                                    title="Send priced product image"
+                                                    class="text-[11px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
+                                                    P.img
+                                                </button>
+                                            </div>
                                         </div>
-                                        <button type="button"
-                                            wire:click="sendPricedProductImage({{ $row['id'] }})"
-                                            wire:loading.attr="disabled"
-                                            class="shrink-0 rounded-lg bg-[#C9A227] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#b89220] disabled:opacity-60">
-                                            Send
-                                        </button>
                                     </div>
                                 @empty
                                     <p class="text-xs text-[#8C8474]">No products match these filters.</p>

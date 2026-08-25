@@ -154,6 +154,9 @@ class AdminInbox extends Component
     /** Inbound image message targeted by the priced-product send modal. */
     public ?int $pricedSendMessageId = null;
 
+    /** Composer "+P" product picker (search + send images/link/price/priced image). */
+    public bool $composerProductPickerOpen = false;
+
     public string $pricedSendSearch = '';
 
     public string $pricedSendCategory = '';
@@ -799,7 +802,30 @@ class AdminInbox extends Component
 
         $this->ensureConversationSelected((int) $message->channel_conversation_id);
         $this->closeImageEdit();
+        $this->composerProductPickerOpen = false;
         $this->pricedSendMessageId = $message->id;
+        $this->pricedSendSearch = '';
+        $this->pricedSendCategory = '';
+        $this->pricedSendPriceMin = '';
+        $this->pricedSendPriceMax = '';
+        $this->refreshPricedSendResults();
+    }
+
+    public function openComposerProductPicker(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+        $this->error = null;
+        $this->statusMessage = null;
+
+        if (! $this->selectedConversationId) {
+            $this->error = 'Select a conversation first.';
+
+            return;
+        }
+
+        $this->closeImageEdit();
+        $this->pricedSendMessageId = null;
+        $this->composerProductPickerOpen = true;
         $this->pricedSendSearch = '';
         $this->pricedSendCategory = '';
         $this->pricedSendPriceMin = '';
@@ -809,6 +835,7 @@ class AdminInbox extends Component
 
     public function closePricedImageSend(): void
     {
+        $this->composerProductPickerOpen = false;
         $this->pricedSendMessageId = null;
         $this->pricedSendSearch = '';
         $this->pricedSendCategory = '';
@@ -1092,26 +1119,16 @@ class AdminInbox extends Component
         $this->error = null;
         $this->statusMessage = null;
 
-        if (! $this->pricedSendMessageId) {
+        if (! $this->isProductPickerOpen()) {
             return;
         }
 
-        $replyTo = $this->inboundImageMessage($this->pricedSendMessageId);
-        if (! $replyTo) {
-            $this->error = 'Image message not found.';
-            $this->closePricedImageSend();
-
+        $context = $this->resolveProductPickerContext();
+        if ($context === null) {
             return;
         }
 
-        $this->ensureConversationSelected((int) $replyTo->channel_conversation_id);
-
-        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
-        if (! $conversation) {
-            $this->error = 'Conversation not found.';
-
-            return;
-        }
+        [$conversation, $replyTo] = $context;
 
         $product = Product::query()->find($productId);
         if (! $product) {
@@ -1151,6 +1168,160 @@ class AdminInbox extends Component
         $this->markConversationRead($conversation, $replies);
         $this->closePricedImageSend();
         $this->statusMessage = 'Priced image sent.';
+    }
+
+    public function sendProductPickerAlbumImages(int $productId, ChannelReplyService $replies): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
+
+        if (! $this->isProductPickerOpen()) {
+            return;
+        }
+
+        $context = $this->resolveProductPickerContext();
+        if ($context === null) {
+            return;
+        }
+
+        [$conversation, $replyTo] = $context;
+
+        $product = Product::query()->with(['images' => fn ($q) => $q->orderBy('sort_order')->orderBy('id')])->find($productId);
+        if (! $product) {
+            $this->error = 'Product not found.';
+
+            return;
+        }
+
+        $images = $product->images
+            ->filter(function ($image) use ($product): bool {
+                $path = is_string($image->path) ? trim($image->path) : '';
+                if ($path === '') {
+                    return false;
+                }
+
+                $priced = is_string($product->priced_image_path) ? trim($product->priced_image_path) : '';
+
+                return $priced === '' || ltrim($path, '/') !== ltrim($priced, '/');
+            })
+            ->values();
+
+        if ($images->isEmpty()) {
+            $this->error = 'This product has no catalog images to send.';
+
+            return;
+        }
+
+        $sent = 0;
+        foreach ($images as $image) {
+            try {
+                $upload = $this->uploadedFileFromPublicPath((string) $image->path);
+            } catch (Throwable $e) {
+                $this->error = $e->getMessage();
+
+                return;
+            }
+
+            $result = $replies->sendImage(
+                $conversation,
+                $upload,
+                '',
+                false,
+                $sent === 0 ? $replyTo : null,
+            );
+
+            if (! ($result['ok'] ?? false)) {
+                $this->error = $result['error'] ?? 'Failed to send product image.';
+
+                return;
+            }
+
+            $sent++;
+        }
+
+        $this->markConversationRead($conversation, $replies);
+        $this->closePricedImageSend();
+        $this->statusMessage = $sent === 1
+            ? 'Sent 1 product image.'
+            : 'Sent '.$sent.' product images.';
+    }
+
+    public function sendProductPickerLink(int $productId, ChannelReplyService $replies): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
+
+        if (! $this->isProductPickerOpen()) {
+            return;
+        }
+
+        $context = $this->resolveProductPickerContext();
+        if ($context === null) {
+            return;
+        }
+
+        [$conversation, $replyTo] = $context;
+
+        $product = Product::query()->find($productId);
+        if (! $product) {
+            $this->error = 'Product not found.';
+
+            return;
+        }
+
+        $result = $replies->sendText($conversation, route('product.show', $product), false, $replyTo);
+
+        if (! ($result['ok'] ?? false)) {
+            $this->error = $result['error'] ?? 'Failed to send product link.';
+
+            return;
+        }
+
+        $this->markConversationRead($conversation, $replies);
+        $this->closePricedImageSend();
+        $this->statusMessage = 'Product link sent.';
+    }
+
+    public function sendProductPickerPrice(int $productId, ChannelReplyService $replies): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
+
+        if (! $this->isProductPickerOpen()) {
+            return;
+        }
+
+        $context = $this->resolveProductPickerContext();
+        if ($context === null) {
+            return;
+        }
+
+        [$conversation, $replyTo] = $context;
+
+        $product = Product::query()->find($productId);
+        if (! $product) {
+            $this->error = 'Product not found.';
+
+            return;
+        }
+
+        $result = $replies->sendText($conversation, $product->priceWithUnitLabel(), false, $replyTo);
+
+        if (! ($result['ok'] ?? false)) {
+            $this->error = $result['error'] ?? 'Failed to send price reply.';
+
+            return;
+        }
+
+        $this->markConversationRead($conversation, $replies);
+        $this->closePricedImageSend();
+        $this->statusMessage = 'Price reply sent.';
     }
 
     public function sendReply(): void
@@ -1747,7 +1918,7 @@ class AdminInbox extends Component
 
     private function refreshPricedSendResults(): void
     {
-        if (! $this->pricedSendMessageId) {
+        if (! $this->isProductPickerOpen()) {
             $this->pricedSendResults = [];
 
             return;
@@ -1792,6 +1963,51 @@ class AdminInbox extends Component
                 'has_priced_image' => $hasPriced,
             ];
         })->all();
+    }
+
+    private function isProductPickerOpen(): bool
+    {
+        return $this->composerProductPickerOpen || $this->pricedSendMessageId !== null;
+    }
+
+    /**
+     * @return array{0: ChannelConversation, 1: ?ChannelMessage}|null
+     */
+    private function resolveProductPickerContext(): ?array
+    {
+        if ($this->pricedSendMessageId) {
+            $replyTo = $this->inboundImageMessage($this->pricedSendMessageId);
+            if (! $replyTo) {
+                $this->error = 'Image message not found.';
+                $this->closePricedImageSend();
+
+                return null;
+            }
+
+            $this->ensureConversationSelected((int) $replyTo->channel_conversation_id);
+        }
+
+        $conversation = $this->selectedConversationId
+            ? ChannelConversation::query()->find($this->selectedConversationId)
+            : null;
+
+        if (! $conversation) {
+            $this->error = 'Conversation not found.';
+
+            return null;
+        }
+
+        $replyTo = null;
+        if ($this->pricedSendMessageId) {
+            $replyTo = $this->inboundImageMessage($this->pricedSendMessageId);
+        } elseif ($this->replyToMessageId) {
+            $replyTo = ChannelMessage::query()
+                ->where('channel_conversation_id', $conversation->id)
+                ->whereKey($this->replyToMessageId)
+                ->first();
+        }
+
+        return [$conversation, $replyTo];
     }
 
     private function normalizedPriceBound(string $value): ?float
@@ -2001,9 +2217,10 @@ class AdminInbox extends Component
             'mappingMessage' => $mappingMessage,
             'imageEditMessage' => $imageEditMessage,
             'pricedSendMessage' => $pricedSendMessage,
-            'pricedSendCategories' => $this->pricedSendMessageId
+            'pricedSendCategories' => $this->isProductPickerOpen()
                 ? Category::query()->orderBy('name')->get(['id', 'name'])
                 : collect(),
+            'composerProductPickerOpen' => $this->composerProductPickerOpen,
             'quickReplies' => $quickReplies,
             'hasOlderMessages' => $hasOlderMessages,
             'threadLookbackHours' => $lookbackHours,

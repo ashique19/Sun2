@@ -8,7 +8,6 @@ use App\Models\Product;
 use App\Models\ProductImage;
 use App\Services\Admin\GeminiClient;
 use App\Services\Admin\ProductImageHashService;
-use App\Services\Admin\ScreenshotSubjectDetector;
 use App\Services\Storefront\AddressLocationGuesser;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Carbon;
@@ -56,7 +55,6 @@ class ChannelOrderParser
         private GeminiClient $gemini,
         private AddressLocationGuesser $locationGuesser,
         private ProductImageHashService $imageHasher,
-        private ScreenshotSubjectDetector $subjects,
     ) {}
 
     /**
@@ -571,23 +569,6 @@ class ChannelOrderParser
                 $matches = $this->imageHasher->findTopMatchesFromBinary($bytes, ProductImageHashService::TOP_MATCHES, $minPercent);
                 $matches = $this->filterPublishedMatches($matches);
 
-                $top = $matches[0] ?? null;
-                if (($top === null || (float) $top['match_percent'] < $autoPercent)
-                    && $this->subjects->isEnabled()) {
-                    $subject = $this->subjects->detectCropFractions($bytes, $downloaded['mime']);
-                    if ($subject !== null) {
-                        $matches = $this->filterPublishedMatches(
-                            $this->imageHasher->findTopMatchesFromBinary(
-                                $bytes,
-                                ProductImageHashService::TOP_MATCHES,
-                                $minPercent,
-                                $subject,
-                            ),
-                        );
-                        $top = $matches[0] ?? null;
-                    }
-                }
-
                 foreach ($matches as $match) {
                     $candidates[] = [
                         'product_id' => (int) $match['product_id'],
@@ -596,6 +577,7 @@ class ChannelOrderParser
                     ];
                 }
 
+                $top = $matches[0] ?? null;
                 if ($top && (float) $top['match_percent'] >= $autoPercent) {
                     if ($bestAuto === null || (float) $top['match_percent'] > (float) $bestAuto['match_percent']) {
                         $bestAuto = $top;

@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\ChannelMessage;
 use App\Services\Admin\ProductImageHashService;
-use App\Services\Admin\ScreenshotSubjectDetector;
 use App\Services\Channels\ChannelMessageImageMatchService;
 use App\Support\AdminAccess;
 use Illuminate\Http\JsonResponse;
@@ -13,12 +12,12 @@ class ChannelMessageCropSuggestionController extends Controller
 {
     /**
      * Return content-aware crop bounds for inbox screenshot tagging.
+     * Uses local heuristics only — no remote vision calls on the crop modal.
      */
     public function __invoke(
         ChannelMessage $message,
         ChannelMessageImageMatchService $media,
         ProductImageHashService $hasher,
-        ScreenshotSubjectDetector $subjects,
     ): JsonResponse {
         AdminAccess::ensureStaffAdmin();
 
@@ -32,18 +31,8 @@ class ChannelMessageCropSuggestionController extends Controller
             return response()->json(['suggestion' => null]);
         }
 
-        $heuristic = $hasher->suggestScreenshotCropFractions($downloaded['bytes']);
-        $subject = null;
-
-        if ($subjects->shouldRefine($heuristic)) {
-            $subject = $subjects->detectCropFractions(
-                $downloaded['bytes'],
-                $downloaded['mime'] ?? $message->media_mime,
-            );
-        }
-
         return response()->json([
-            'suggestion' => $hasher->preferCropSuggestion($heuristic, $subject),
+            'suggestion' => $hasher->suggestScreenshotCropFractions($downloaded['bytes']),
         ]);
     }
 }

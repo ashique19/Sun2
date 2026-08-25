@@ -82,29 +82,25 @@ class ScreenshotSubjectDetectorTest extends TestCase
         config([
             'gemini.api_key' => null,
             'gemini.api_keys' => [],
-            'channels.ai_draft.image_subject_detect' => true,
+            'channels.ai_draft.image_subject_detect' => false,
         ]);
 
         $this->assertNull(app(ScreenshotSubjectDetector::class)->detectCropFractions($this->pngBytes()));
     }
 
     #[Test]
-    public function crop_suggestion_endpoint_prefers_subject_vision_when_heuristic_is_loose(): void
+    public function crop_suggestion_endpoint_uses_local_heuristics_only(): void
     {
         config([
             'channels.ai_draft.image_min_bytes' => 100,
+            'channels.ai_draft.image_subject_detect' => true,
+            'gemini.api_key' => 'test-key',
         ]);
 
-        $subjects = Mockery::mock(ScreenshotSubjectDetector::class);
-        $subjects->shouldReceive('shouldRefine')->once()->andReturn(true);
-        $subjects->shouldReceive('detectCropFractions')->once()->andReturn([
-            'left' => 0.05,
-            'top' => 0.16,
-            'width' => 0.9,
-            'height' => 0.4,
-            'strategy' => 'subject_vision',
-        ]);
-        $this->app->instance(ScreenshotSubjectDetector::class, $subjects);
+        $gemini = Mockery::mock(GeminiClient::class);
+        $gemini->shouldReceive('isConfigured')->andReturn(true);
+        $gemini->shouldReceive('generateJsonFromParts')->never();
+        $this->app->instance(GeminiClient::class, $gemini);
 
         $relativeDir = 'img/inbox-tests';
         $absoluteDir = public_path($relativeDir);
@@ -129,22 +125,20 @@ class ScreenshotSubjectDetectorTest extends TestCase
             'sent_at' => now(),
         ]);
 
-        $this->actingAs($this->adminUser())
+        $response = $this->actingAs($this->adminUser())
             ->getJson(route('admin.inbox.crop-suggestion', $message))
-            ->assertOk()
-            ->assertJsonPath('suggestion.strategy', 'subject_vision')
-            ->assertJsonPath('suggestion.height', 0.4);
+            ->assertOk();
+
+        $suggestion = $response->json('suggestion');
+        $this->assertNotNull($suggestion);
+        $this->assertNotSame('subject_vision', $suggestion['strategy'] ?? null);
 
         @unlink(public_path($relativePath));
     }
 
     #[Test]
-    public function subject_vision_crop_improves_auto_match_when_heuristics_miss(): void
+    public function subject_fractions_can_still_improve_hash_match_offline(): void
     {
-        config([
-            'channels.ai_draft.image_min_bytes' => 100,
-        ]);
-
         $hasher = app(ProductImageHashService::class);
 
         $catalog = imagecreatetruecolor(360, 360);
@@ -160,17 +154,12 @@ class ScreenshotSubjectDetectorTest extends TestCase
         $catalogBytes = (string) ob_get_clean();
         imagedestroy($catalog);
 
-        // Tall FB-style screenshot: product in upper-middle, busy UI below.
         $screenshot = imagecreatetruecolor(480, 960);
         $black = imagecolorallocate($screenshot, 8, 8, 10);
         imagefill($screenshot, 0, 0, $black);
         $catalogImage = imagecreatefromstring($catalogBytes);
         imagecopyresampled($screenshot, $catalogImage, 24, 120, 0, 0, 432, 432, 360, 360);
         imagedestroy($catalogImage);
-        $white = imagecolorallocate($screenshot, 230, 230, 230);
-        $blue = imagecolorallocate($screenshot, 24, 119, 242);
-        imagefilledrectangle($screenshot, 20, 700, 460, 820, $blue);
-        imagestring($screenshot, 5, 40, 660, 'Sundoritoma Send message', $white);
         ob_start();
         imagepng($screenshot);
         $screenshotBytes = (string) ob_get_clean();
@@ -201,26 +190,13 @@ class ScreenshotSubjectDetectorTest extends TestCase
             'height' => 432 / 960,
         ];
 
-        $withVision = $hasher->findBestAutoMatchFromBinary($screenshotBytes, $subject);
+        $withSubject = $hasher->findBestAutoMatchFromBinary($screenshotBytes, $subject);
 
-        $this->assertNotNull($withVision);
-        $this->assertSame($product->id, $withVision['product_id']);
+        $this->assertNotNull($withSubject);
+        $this->assertSame($product->id, $withSubject['product_id']);
         $this->assertGreaterThanOrEqual(
             ProductImageHashService::AUTO_MATCH_PERCENT,
-            $withVision['match_percent'],
+            $withSubject['match_percent'],
         );
-
-        $preferred = $hasher->preferCropSuggestion(
-            [
-                'left' => 0.0,
-                'top' => 0.1,
-                'width' => 1.0,
-                'height' => 0.8,
-                'strategy' => 'trim',
-            ],
-            $subject + ['strategy' => 'subject_vision'],
-        );
-
-        $this->assertSame('subject_vision', $preferred['strategy']);
     }
 }

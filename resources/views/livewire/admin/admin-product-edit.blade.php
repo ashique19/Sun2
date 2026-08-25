@@ -691,12 +691,12 @@
                                                         >
                                                             <span class="pointer-events-none" x-text="overlayText.trim()"></span>
                                                             <button type="button"
-                                                                class="absolute -bottom-3 -right-3 flex h-11 w-11 touch-none items-center justify-center sm:-bottom-1.5 sm:-right-1.5 sm:h-7 sm:w-7"
+                                                                class="absolute -bottom-3 -right-3 z-30 flex h-11 w-11 touch-none cursor-nwse-resize items-center justify-center sm:-bottom-1.5 sm:-right-1.5 sm:h-7 sm:w-7"
                                                                 aria-label="Resize overlay text"
                                                                 title="Drag to resize"
-                                                                @pointerdown.stop="startOverlayTextResize($event)"
+                                                                @pointerdown.stop.prevent="startOverlayTextResize($event)"
                                                             >
-                                                                <span class="pointer-events-none h-3.5 w-3.5 rounded-sm border border-[#C9A227] bg-white shadow sm:h-3 sm:w-3"></span>
+                                                                <span class="pointer-events-none h-4 w-4 rounded-sm border-2 border-[#C9A227] bg-white shadow sm:h-3 sm:w-3 sm:border"></span>
                                                             </button>
                                                         </div>
                                                         <div
@@ -712,12 +712,12 @@
                                                         >
                                                             <img :src="logoUrl" alt="" class="pointer-events-none h-full w-full object-contain" draggable="false">
                                                             <button type="button"
-                                                                class="absolute -bottom-3 -right-3 flex h-11 w-11 touch-none items-center justify-center sm:-bottom-1.5 sm:-right-1.5 sm:h-7 sm:w-7"
+                                                                class="absolute -bottom-3 -right-3 z-30 flex h-11 w-11 touch-none cursor-nwse-resize items-center justify-center sm:-bottom-1.5 sm:-right-1.5 sm:h-7 sm:w-7"
                                                                 aria-label="Resize logo"
                                                                 title="Drag to resize"
-                                                                @pointerdown.stop="startOverlayLogoResize($event)"
+                                                                @pointerdown.stop.prevent="startOverlayLogoResize($event)"
                                                             >
-                                                                <span class="pointer-events-none h-3.5 w-3.5 rounded-sm border border-[#C9A227] bg-white shadow sm:h-3 sm:w-3"></span>
+                                                                <span class="pointer-events-none h-4 w-4 rounded-sm border-2 border-[#C9A227] bg-white shadow sm:h-3 sm:w-3 sm:border"></span>
                                                             </button>
                                                         </div>
                                                         <div

@@ -1120,6 +1120,11 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
+            // Resize/remove controls sit inside the drag target — ignore those presses.
+            if (event.target?.closest?.('button')) {
+                return;
+            }
+
             const stage = event.currentTarget?.closest?.('[data-text-overlay-stage]');
 
             if (! stage) {
@@ -1198,6 +1203,10 @@ const registerProductImageAlpineData = () => {
 
         startOverlayLogoDrag(event) {
             if (this.savedSaving || ! this.overlayLogoEnabled) {
+                return;
+            }
+
+            if (event.target?.closest?.('button')) {
                 return;
             }
 
@@ -1357,6 +1366,10 @@ const registerProductImageAlpineData = () => {
 
         startOverlayImageDrag(event) {
             if (this.savedSaving || ! this.overlayImageUrl) {
+                return;
+            }
+
+            if (event.target?.closest?.('button')) {
                 return;
             }
 
@@ -2529,6 +2542,10 @@ const registerProductImageAlpineData = () => {
         },
 
         startDrag(event) {
+            if (event.target?.closest?.('button')) {
+                return;
+            }
+
             const stage = event.currentTarget?.closest?.('[data-priced-stamp-stage]');
 
             if (! stage) {

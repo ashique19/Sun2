@@ -261,21 +261,45 @@
 
     @if ($conversations->isEmpty() || $diagnostics['severity'] !== 'ok')
         @php
+            $isEmptyInboxStatus = $conversations->isEmpty();
+            $messengerNotesStorageKey = 'admin-inbox-messenger-notes:'.$diagnostics['severity'];
             $box = match ($diagnostics['severity']) {
                 'error' => 'border-rose-200 bg-rose-50 text-rose-900',
                 'warning' => 'border-amber-200 bg-amber-50 text-amber-950',
                 default => 'border-[#E0D6C2] bg-[#FAF6EF] text-[#1E1E1E]',
             };
         @endphp
-        <div @class([
-            'mx-4 mt-3 rounded-xl border p-3 sm:p-4 xl:mx-0 xl:mt-0 xl:p-5',
-            $box,
-            'hidden xl:block' => $mobileThreadOpen && $conversations->isNotEmpty(),
-        ])>
+        <div
+            @unless ($isEmptyInboxStatus)
+                wire:key="messenger-notes-{{ $diagnostics['severity'] }}"
+                x-data="{
+                    storageKey: @js($messengerNotesStorageKey),
+                    open: true,
+                    init() {
+                        try {
+                            this.open = localStorage.getItem(this.storageKey) !== '1';
+                        } catch (e) {}
+                    },
+                    dismiss() {
+                        this.open = false;
+                        try {
+                            localStorage.setItem(this.storageKey, '1');
+                        } catch (e) {}
+                    },
+                }"
+                x-show="open"
+                x-cloak
+            @endunless
+            @class([
+                'mx-4 mt-3 rounded-xl border p-3 sm:p-4 xl:mx-0 xl:mt-0 xl:p-5',
+                $box,
+                'hidden xl:block' => $mobileThreadOpen && $conversations->isNotEmpty(),
+            ])
+        >
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div class="min-w-0">
                     <h2 class="font-semibold">
-                        @if ($conversations->isEmpty())
+                        @if ($isEmptyInboxStatus)
                             Inbox status
                         @else
                             Messenger connection notes
@@ -298,12 +322,24 @@
                         · Use <strong>Sync Messenger</strong> to import threads Graph can currently see.
                     </p>
                 </div>
-                @if ($diagnostics['filters_active'] && $conversations->isEmpty())
-                    <button type="button" wire:click="clearFilters"
-                        class="rounded-full border border-current/20 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-white/80">
-                        Clear filters
-                    </button>
-                @endif
+                <div class="flex shrink-0 flex-wrap items-center gap-2">
+                    @if ($diagnostics['filters_active'] && $isEmptyInboxStatus)
+                        <button type="button" wire:click="clearFilters"
+                            class="rounded-full border border-current/20 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-white/80">
+                            Clear filters
+                        </button>
+                    @endif
+                    @unless ($isEmptyInboxStatus)
+                        <button
+                            type="button"
+                            @click="dismiss()"
+                            aria-label="Dismiss Messenger connection notes"
+                            class="rounded-full border border-current/20 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-white/80"
+                        >
+                            Dismiss
+                        </button>
+                    @endunless
+                </div>
             </div>
 
             <ul class="mt-3 space-y-2 text-sm xl:mt-4">

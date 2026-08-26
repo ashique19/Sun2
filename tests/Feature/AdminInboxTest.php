@@ -310,6 +310,8 @@ class AdminInboxTest extends TestCase
 
         Livewire::test(AdminInbox::class)
             ->assertSee('Inbox status')
+            ->assertDontSee('Messenger connection notes')
+            ->assertDontSeeHtml('aria-label="Dismiss Messenger connection notes"')
             ->assertSee('No conversations stored yet')
             ->assertSee('/api/webhooks/messenger')
             ->assertSee('Verify token configured')
@@ -318,6 +320,29 @@ class AdminInboxTest extends TestCase
             ->assertSee('Facebook Page token needs attention')
             ->assertSee('Paste User or Page access token')
             ->assertSee('Save token');
+    }
+
+    #[Test]
+    public function messenger_connection_notes_are_dismissible_when_threads_exist(): void
+    {
+        config([
+            'facebook.messenger.enabled' => true,
+            'facebook.messenger.verify_token' => '',
+            'facebook.messenger.app_secret' => '',
+            'facebook.messenger.page_access_token' => '',
+            'facebook.messenger.page_id' => '',
+            'app.url' => 'https://example.test',
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $this->conversation();
+
+        Livewire::test(AdminInbox::class)
+            ->assertSee('Messenger connection notes')
+            ->assertDontSee('Inbox status')
+            ->assertSeeHtml('aria-label="Dismiss Messenger connection notes"')
+            ->assertSeeHtml('admin-inbox-messenger-notes:')
+            ->assertSee('Dismiss');
     }
 
     #[Test]

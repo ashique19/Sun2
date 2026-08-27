@@ -1308,7 +1308,7 @@ class AdminInboxTest extends TestCase
             ->assertSet('lastSyncedAt', null)
             ->assertSet('syncToast', 'Facebook Page access token or Page ID is not configured.')
             ->assertSee('Sync failed:')
-            ->assertSee('Facebook Page token needs attention')
+            ->assertSee('Facebook Page access token or Page ID is not configured.')
             ->call('dismissSyncToast')
             ->assertSet('syncToast', null);
     }

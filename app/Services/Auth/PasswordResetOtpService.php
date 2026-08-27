@@ -2,16 +2,15 @@
 
 namespace App\Services\Auth;
 
-use App\Contracts\Sms\SmsSender;
+use App\Jobs\SendSmsJob;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\RateLimiter;
 use RuntimeException;
 
 class PasswordResetOtpService
 {
     private const CACHE_PREFIX = 'password_reset_otp:';
-
-    public function __construct(private SmsSender $sms) {}
 
     public function send(string $phone): void
     {
@@ -20,6 +19,8 @@ class PasswordResetOtpService
         }
 
         $normalized = PhoneNumber::normalize($phone);
+        $this->assertWithinSendLimits($normalized);
+
         $code = app()->hasDebugModeEnabled()
             ? '123456'
             : (string) random_int(100000, 999999);
@@ -37,7 +38,7 @@ class PasswordResetOtpService
             config('checkout.otp_ttl_minutes', 10),
         );
 
-        $this->sms->send(PhoneNumber::display($phone), $message);
+        SendSmsJob::dispatch(PhoneNumber::display($phone), $message);
     }
 
     public function verify(string $phone, string $code): bool
@@ -67,5 +68,26 @@ class PasswordResetOtpService
         Cache::forget($key);
 
         return true;
+    }
+
+    private function assertWithinSendLimits(string $normalizedPhone): void
+    {
+        $cooldownSeconds = max(1, (int) config('checkout.otp_send_cooldown_seconds', 60));
+        $hourlyMax = max(1, (int) config('checkout.otp_send_max_per_hour', 5));
+
+        $cooldownKey = 'otp_send_cooldown:password:'.$normalizedPhone;
+        $hourlyKey = 'otp_send_hourly:password:'.$normalizedPhone;
+
+        if (RateLimiter::tooManyAttempts($cooldownKey, 1)) {
+            $retry = RateLimiter::availableIn($cooldownKey);
+            throw new RuntimeException("Please wait {$retry} seconds before requesting another OTP.");
+        }
+
+        if (RateLimiter::tooManyAttempts($hourlyKey, $hourlyMax)) {
+            throw new RuntimeException('Too many OTP requests. Please try again later.');
+        }
+
+        RateLimiter::hit($cooldownKey, $cooldownSeconds);
+        RateLimiter::hit($hourlyKey, 3600);
     }
 }

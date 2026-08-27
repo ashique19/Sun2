@@ -211,6 +211,7 @@ class AdminAttentionService
             return $amount;
         }
 
-        return $isPartial ? null : round($expectedAmount, 2);
+        // No reliable collected amount in the payload — never invent expected COD.
+        return null;
     }
 }

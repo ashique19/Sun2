@@ -14,4 +14,10 @@ return [
     'otp_ttl_minutes' => (int) env('CHECKOUT_OTP_TTL', 10),
 
     'otp_max_attempts' => 5,
+
+    /** Minimum seconds between OTP send requests for the same phone. */
+    'otp_send_cooldown_seconds' => (int) env('CHECKOUT_OTP_SEND_COOLDOWN', 60),
+
+    /** Max OTP send requests per phone per rolling hour. */
+    'otp_send_max_per_hour' => (int) env('CHECKOUT_OTP_SEND_MAX_PER_HOUR', 5),
 ];

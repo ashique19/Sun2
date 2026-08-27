@@ -2,16 +2,15 @@
 
 namespace App\Services\Storefront;
 
-use App\Contracts\Sms\SmsSender;
+use App\Jobs\SendSmsJob;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\RateLimiter;
 use RuntimeException;
 
 class CheckoutOtpService
 {
     private const CACHE_PREFIX = 'checkout_otp:';
-
-    public function __construct(private SmsSender $sms) {}
 
     public function send(string $phone): void
     {
@@ -20,6 +19,8 @@ class CheckoutOtpService
         if (! PhoneNumber::isValidBangladeshMobile($phone)) {
             throw new RuntimeException('Please enter a valid Bangladesh mobile number.');
         }
+
+        $this->assertWithinSendLimits($normalized);
 
         $code = app()->hasDebugModeEnabled()
             ? '123456'
@@ -38,7 +39,7 @@ class CheckoutOtpService
             config('checkout.otp_ttl_minutes', 10),
         );
 
-        $this->sms->send(PhoneNumber::display($phone), $message);
+        SendSmsJob::dispatch(PhoneNumber::display($phone), $message);
     }
 
     public function verify(string $phone, string $code): bool
@@ -68,5 +69,26 @@ class CheckoutOtpService
         Cache::forget($key);
 
         return true;
+    }
+
+    private function assertWithinSendLimits(string $normalizedPhone): void
+    {
+        $cooldownSeconds = max(1, (int) config('checkout.otp_send_cooldown_seconds', 60));
+        $hourlyMax = max(1, (int) config('checkout.otp_send_max_per_hour', 5));
+
+        $cooldownKey = 'otp_send_cooldown:checkout:'.$normalizedPhone;
+        $hourlyKey = 'otp_send_hourly:checkout:'.$normalizedPhone;
+
+        if (RateLimiter::tooManyAttempts($cooldownKey, 1)) {
+            $retry = RateLimiter::availableIn($cooldownKey);
+            throw new RuntimeException("Please wait {$retry} seconds before requesting another OTP.");
+        }
+
+        if (RateLimiter::tooManyAttempts($hourlyKey, $hourlyMax)) {
+            throw new RuntimeException('Too many OTP requests. Please try again later.');
+        }
+
+        RateLimiter::hit($cooldownKey, $cooldownSeconds);
+        RateLimiter::hit($hourlyKey, 3600);
     }
 }

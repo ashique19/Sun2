@@ -154,10 +154,18 @@ class ProductImageHashService
             Log::debug('Catalog DCT hash failed.', ['error' => $e->getMessage()]);
         }
 
+        $embedding = null;
+        try {
+            $embedding = app(ProductImageEmbeddingService::class)->embedBinary($binary);
+        } catch (Throwable $e) {
+            Log::debug('Catalog embedding failed.', ['error' => $e->getMessage()]);
+        }
+
         $image->update([
             'perceptual_hash' => $full,
             'perceptual_hashes' => $variants,
             'dct_hash' => $dctHash,
+            'embedding_vector' => $embedding,
         ]);
 
         return $full;

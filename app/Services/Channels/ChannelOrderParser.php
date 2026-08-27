@@ -12,7 +12,6 @@ use App\Services\Storefront\AddressLocationGuesser;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -55,6 +54,7 @@ class ChannelOrderParser
         private GeminiClient $gemini,
         private AddressLocationGuesser $locationGuesser,
         private ProductImageHashService $imageHasher,
+        private ChannelInboundMediaService $inboundMedia,
     ) {}
 
     /**
@@ -144,11 +144,10 @@ class ChannelOrderParser
             $result['source'] = 'local+image';
         }
 
-        // Optional Gemini: only fill gaps local parse left empty.
-        if ($this->gemini->isConfigured() && $this->needsGapFill($result)) {
+        // Optional Gemini: text-only gap fill. Never send image bytes (50-photo albums timed out).
+        if ($this->gemini->isConfigured() && $this->needsGapFill($result) && trim($rawText) !== '') {
             try {
-                $imageParts = $imageMatch['gemini_parts'];
-                $gap = $this->parseGapsWithGemini($rawText, $imageParts, $result);
+                $gap = $this->parseGapsWithGemini($rawText, $result);
                 $before = $result;
                 $result = $this->mergeGapsOnly($result, $gap, $weak);
                 if ($result !== $before) {
@@ -490,19 +489,20 @@ class ChannelOrderParser
     }
 
     /**
+     * Local image matching only — never builds Gemini inline_data parts.
+     * Persists each inbound photo once; reuses media_path / media_dhash / media_dct_hash.
+     *
      * @param  Collection<int, ChannelMessage>  $messages
      * @return array{
      *     product_id:?int,
      *     product_name:?string,
      *     candidates: list<array{product_id:int,name:string,match_percent:float}>,
-     *     gemini_parts: list<array<string, mixed>>,
      *     weak_points: list<string>
      * }
      */
     private function matchProductFromImages(Collection $messages): array
     {
         $weak = [];
-        $geminiParts = [];
         $candidates = [];
         $autoPercent = (float) config(
             'channels.ai_draft.image_match_auto_percent',
@@ -512,11 +512,10 @@ class ChannelOrderParser
             'channels.ai_draft.image_match_min_percent',
             ProductImageHashService::MIN_MATCH_PERCENT,
         );
-        $minBytes = max(1, (int) config('channels.ai_draft.image_min_bytes', 5000));
 
         $imageMessages = $messages->filter(
             fn (ChannelMessage $message) => $message->hasMedia() && $message->isImageAttachment()
-        );
+        )->values();
 
         if ($imageMessages->isEmpty()) {
             $weak[] = self::WEAK_IMAGE_NONE;
@@ -525,49 +524,71 @@ class ChannelOrderParser
                 'product_id' => null,
                 'product_name' => null,
                 'candidates' => [],
-                'gemini_parts' => [],
                 'weak_points' => $weak,
             ];
         }
 
-        $hashedCount = ProductImage::query()->whereNotNull('perceptual_hash')->count();
+        $hashedCount = ProductImage::query()
+            ->where(function ($query): void {
+                $query->whereNotNull('perceptual_hash')
+                    ->orWhereNotNull('perceptual_hashes')
+                    ->orWhereNotNull('dct_hash');
+            })
+            ->count();
         if ($hashedCount === 0) {
             $weak[] = self::WEAK_CATALOG_UNHASHED;
         }
 
-        $bestAuto = null;
+        /** @var list<array{message_id:int,product_id:int,name:string,match_percent:float,dhash:?string,newer_weight:float}> $autoHits */
+        $autoHits = [];
         $downloadFailures = 0;
         $hadBytes = false;
+        $total = $imageMessages->count();
 
-        foreach ($imageMessages as $message) {
-            $downloaded = $this->downloadMediaBytes((string) $message->media_url, $message->media_mime);
-            if ($downloaded === null) {
+        foreach ($imageMessages as $index => $message) {
+            try {
+                $cached = $this->inboundMedia->ensureCached($message);
+            } catch (Throwable $e) {
+                Log::warning('Channel draft inbound media cache failed.', [
+                    'message_id' => $message->id,
+                    'error' => $e->getMessage(),
+                ]);
                 $downloadFailures++;
 
                 continue;
             }
 
-            $bytes = $downloaded['bytes'];
-            if (strlen($bytes) < $minBytes) {
-                // Likely sticker / tiny emoji attachment.
+            if ($cached === null) {
+                $downloadFailures++;
+
                 continue;
             }
 
             $hadBytes = true;
-            $geminiParts[] = [
-                'inline_data' => [
-                    'mime_type' => $downloaded['mime'],
-                    'data' => base64_encode($bytes),
-                ],
-            ];
 
             if ($hashedCount === 0) {
                 continue;
             }
 
             try {
-                $matches = $this->imageHasher->findTopMatchesFromBinary($bytes, ProductImageHashService::TOP_MATCHES, $minPercent);
+                // Prefer crop-aware binary match; falls back to cached full-frame / DCT hashes.
+                $matches = $this->imageHasher->findTopMatchesFromBinary(
+                    $cached['bytes'],
+                    ProductImageHashService::TOP_MATCHES,
+                    $minPercent,
+                );
                 $matches = $this->filterPublishedMatches($matches);
+
+                if ($matches === [] && filled($cached['dhash'] ?? null)) {
+                    $matches = $this->filterPublishedMatches(
+                        $this->imageHasher->findTopMatches((string) $cached['dhash'], ProductImageHashService::TOP_MATCHES, $minPercent)
+                    );
+                }
+                if ($matches === [] && filled($cached['dct_hash'] ?? null)) {
+                    $matches = $this->filterPublishedMatches(
+                        $this->imageHasher->findTopMatches((string) $cached['dct_hash'], ProductImageHashService::TOP_MATCHES, $minPercent)
+                    );
+                }
 
                 foreach ($matches as $match) {
                     $candidates[] = [
@@ -579,9 +600,16 @@ class ChannelOrderParser
 
                 $top = $matches[0] ?? null;
                 if ($top && (float) $top['match_percent'] >= $autoPercent) {
-                    if ($bestAuto === null || (float) $top['match_percent'] > (float) $bestAuto['match_percent']) {
-                        $bestAuto = $top;
-                    }
+                    // Newer photos weigh more (last image in the window ≈ "this one").
+                    $newerWeight = 1.0 + (($index + 1) / max(1, $total));
+                    $autoHits[] = [
+                        'message_id' => (int) $message->id,
+                        'product_id' => (int) $top['product_id'],
+                        'name' => (string) $top['name'],
+                        'match_percent' => (float) $top['match_percent'],
+                        'dhash' => $cached['dhash'] ?? null,
+                        'newer_weight' => $newerWeight,
+                    ];
                 } elseif ($top) {
                     $weak[] = self::WEAK_IMAGE_BELOW_AUTO;
                 } else {
@@ -610,13 +638,60 @@ class ChannelOrderParser
         $candidates = array_values($byProduct);
         usort($candidates, fn (array $a, array $b) => $b['match_percent'] <=> $a['match_percent']);
 
+        $winner = $this->voteAutoProduct($autoHits);
+
         return [
-            'product_id' => $bestAuto ? (int) $bestAuto['product_id'] : null,
-            'product_name' => $bestAuto ? (string) $bestAuto['name'] : null,
+            'product_id' => $winner ? (int) $winner['product_id'] : null,
+            'product_name' => $winner ? (string) $winner['name'] : null,
             'candidates' => array_slice($candidates, 0, 5),
-            'gemini_parts' => $geminiParts,
             'weak_points' => array_values(array_unique($weak)),
         ];
+    }
+
+    /**
+     * Cluster near-duplicate incoming hashes and vote for the winning product.
+     * Newer photos in the window get a higher weight.
+     *
+     * @param  list<array{message_id:int,product_id:int,name:string,match_percent:float,dhash:?string,newer_weight:float}>  $autoHits
+     * @return array{product_id:int,name:string}|null
+     */
+    private function voteAutoProduct(array $autoHits): ?array
+    {
+        if ($autoHits === []) {
+            return null;
+        }
+
+        /** @var array<int, array{product_id:int,name:string,score:float,best_percent:float}> $scores */
+        $scores = [];
+
+        foreach ($autoHits as $hit) {
+            $id = (int) $hit['product_id'];
+            $weight = (float) $hit['newer_weight'] * (1.0 + ((float) $hit['match_percent'] / 100));
+            if (! isset($scores[$id])) {
+                $scores[$id] = [
+                    'product_id' => $id,
+                    'name' => (string) $hit['name'],
+                    'score' => 0.0,
+                    'best_percent' => 0.0,
+                ];
+            }
+            $scores[$id]['score'] += $weight;
+            $scores[$id]['best_percent'] = max($scores[$id]['best_percent'], (float) $hit['match_percent']);
+            $scores[$id]['name'] = (string) $hit['name'];
+        }
+
+        usort($scores, function (array $a, array $b): int {
+            $byScore = $b['score'] <=> $a['score'];
+            if ($byScore !== 0) {
+                return $byScore;
+            }
+
+            return $b['best_percent'] <=> $a['best_percent'];
+        });
+
+        $top = $scores[0] ?? null;
+
+        return $top ? ['product_id' => $top['product_id'], 'name' => $top['name']] : null;
     }
 
     /**
@@ -644,106 +719,6 @@ class ChannelOrderParser
     }
 
     /**
-     * @return array{bytes: string, mime: string}|null
-     */
-    private function downloadMediaBytes(string $url, ?string $mime): ?array
-    {
-        try {
-            if (! str_starts_with($url, 'http://') && ! str_starts_with($url, 'https://')) {
-                $relative = ltrim(str_replace('\\', '/', $url), '/');
-                $absolute = public_path($relative);
-                if (! is_file($absolute)) {
-                    return null;
-                }
-                $bytes = file_get_contents($absolute);
-                if ($bytes === false || $bytes === '') {
-                    return null;
-                }
-
-                return [
-                    'bytes' => $bytes,
-                    'mime' => $mime ?: (mime_content_type($absolute) ?: 'image/jpeg'),
-                ];
-            }
-
-            $token = $this->tokenForMediaUrl($url);
-            $response = null;
-
-            if ($token !== '' && $this->mediaUrlNeedsToken($url)) {
-                $response = Http::timeout(20)
-                    ->withOptions(['allow_redirects' => true])
-                    ->withToken($token)
-                    ->get($url);
-
-                if (! $response->successful()) {
-                    $withQuery = $this->withAccessTokenQuery($url, $token);
-                    $response = Http::timeout(20)
-                        ->withOptions(['allow_redirects' => true])
-                        ->get($withQuery);
-                }
-            } else {
-                $response = Http::timeout(20)
-                    ->withOptions(['allow_redirects' => true])
-                    ->get($url);
-            }
-
-            if ($response === null || ! $response->successful()) {
-                return null;
-            }
-
-            $bytes = $response->body();
-            if ($bytes === '') {
-                return null;
-            }
-
-            $resolvedMime = $mime ?: $response->header('Content-Type') ?: 'image/jpeg';
-            $resolvedMime = explode(';', $resolvedMime)[0];
-
-            return ['bytes' => $bytes, 'mime' => $resolvedMime];
-        } catch (Throwable $e) {
-            Log::warning('Failed to download channel media for draft parse.', [
-                'url' => $url,
-                'message' => $e->getMessage(),
-            ]);
-
-            return null;
-        }
-    }
-
-    private function tokenForMediaUrl(string $url): string
-    {
-        return trim((string) config('facebook.messenger.page_access_token', ''));
-    }
-
-    private function mediaUrlNeedsToken(string $url): bool
-    {
-        return str_contains($url, 'fbcdn')
-            || str_contains($url, 'facebook.com')
-            || str_contains($url, 'fbsbx.com')
-            || str_contains($url, 'lookaside');
-    }
-
-    private function withAccessTokenQuery(string $url, string $token): string
-    {
-        $parts = parse_url($url);
-        if ($parts === false || ! isset($parts['scheme'], $parts['host'])) {
-            return $url;
-        }
-
-        parse_str($parts['query'] ?? '', $query);
-        if (isset($query['access_token']) && $query['access_token'] !== '') {
-            return $url;
-        }
-
-        $query['access_token'] = $token;
-
-        return $parts['scheme'].'://'.$parts['host']
-            .(isset($parts['port']) ? ':'.$parts['port'] : '')
-            .($parts['path'] ?? '')
-            .'?'.http_build_query($query);
-    }
-
-    /**
      * @param  array<string, mixed>  $current
      */
     private function needsGapFill(array $current): bool
@@ -754,29 +729,30 @@ class ChannelOrderParser
     }
 
     /**
-     * @param  list<array<string, mixed>>  $imageParts
+     * Text-only Gemini gap fill. Image bytes must never be included (locked).
+     *
      * @param  array<string, mixed>  $current
      * @return array<string, mixed>
      */
-    private function parseGapsWithGemini(string $rawText, array $imageParts, array $current): array
+    private function parseGapsWithGemini(string $rawText, array $current): array
     {
-        $catalog = Product::query()
-            ->where('is_published', true)
-            ->orderBy('name')
-            ->limit(80)
-            ->get(['id', 'name', 'sku'])
-            ->map(fn (Product $p) => '#'.$p->id.' '.$p->name.($p->sku ? ' ('.$p->sku.')' : ''))
-            ->implode("\n");
+        // Product ID comes from local hash matching — do not dump the catalog for vision.
+        $productHint = '';
+        if (! empty($current['product_id'])) {
+            $productHint = 'Product already matched locally as #'.(int) $current['product_id']
+                .' ('.(string) ($current['product_name'] ?? '').'). Do not change product_id unless clearly wrong.';
+        }
 
         $system = <<<'PROMPT'
-You extract Bangladesh e-commerce order details from recent Messenger customer messages and optional product photos.
+You extract Bangladesh e-commerce order details from recent Messenger customer TEXT messages only.
 Return ONLY JSON with keys: name, phone, address, city, area, product_id, product_name, quantity
 Rules:
 - Only fill fields you are confident about; use null otherwise.
 - Do not invent phone numbers.
 - address must be a short delivery address only — never paste the whole chat or chitchat.
-- product_id must be an integer from the catalog when confident, else null.
+- product_id / product_name: leave null unless the TEXT clearly names a product; do not invent ids.
 - quantity defaults to 1.
+- You are NOT given product photos — ignore any request to identify jewelry from images.
 PROMPT;
 
         $known = json_encode([
@@ -784,13 +760,14 @@ PROMPT;
             'phone' => $current['phone'] ?? null,
             'address' => $current['address'] ?? null,
             'product_id' => $current['product_id'] ?? null,
+            'product_name' => $current['product_name'] ?? null,
         ], JSON_UNESCAPED_UNICODE);
 
-        $userText = "Already extracted locally (do not contradict phone):\n{$known}\n\nCatalog:\n"
-            .($catalog !== '' ? $catalog : '(empty)')
-            ."\n\nCustomer messages:\n".($rawText !== '' ? $rawText : '(image only)');
+        $userText = "Already extracted locally (do not contradict phone):\n{$known}\n"
+            .($productHint !== '' ? $productHint."\n" : '')
+            ."\nCustomer messages:\n".($rawText !== '' ? $rawText : '(no text)');
 
-        $parts = [['text' => $userText], ...$imageParts];
+        $parts = [['text' => $userText]];
         $data = $this->gemini->generateJsonFromParts($system, $parts);
 
         $address = $this->nullableString($data['address'] ?? null);

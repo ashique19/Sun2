@@ -19,6 +19,14 @@ class ChannelMessageMediaController extends Controller
     {
         AdminAccess::ensureStaffAdmin();
 
+        $localPath = $message->localMediaPath();
+        if ($localPath !== null) {
+            $local = $this->localFileResponse($localPath, $message->media_mime);
+            if ($local) {
+                return $local;
+            }
+        }
+
         $url = trim((string) ($message->media_url ?? ''));
         abort_if($url === '', 404);
 

@@ -646,3 +646,26 @@ running the same store pipeline as manual uploads (hash, primary rules, etc.).
 - Bulk multi-raw generate in one click.
 - Replacing manual upload / Cropper queue (this is an additional path).
 - Using AI for §11 priced-image stamp (priced stamp stays GD/deterministic).
+
+## 16. Screenshot product auto-detect (LOCKED)
+
+**Status: locked / shipping.** Improves Admin Inbox + AI draft image matching.
+
+### Locked decisions
+
+1. **No image bytes to Gemini** — gap-fill is text-only (`ChannelOrderParser`). Never
+   attach `inline_data` / `gemini_parts` for inbound photos (50-image albums timed out).
+2. **PHP GD only** — dHash + chrome/crop variants + DCT pHash. No CLIP / OCR / vision APIs.
+3. **Incremental cache** — inbound photos persist under `img/channel-inbound/{conversation}/`
+   with `channel_messages.media_path`, `media_dhash`, `media_dct_hash` computed once.
+4. **Per-image failure isolation** — one corrupt download cannot abort text parse or other matches.
+5. **Product ID from local matcher only**; Gemini may fill name/phone/address from text.
+6. **Group handling** — auto-hits are voted with newer photos weighted higher (duplicate
+   detection + vote, not true multi-view recognition).
+
+### Explicit non-goals
+
+- Sending any screenshot to Gemini for product ID.
+- Embedding / CLIP index (later unlock).
+- Staff-correction memory hash→SKU map (later unlock).
+

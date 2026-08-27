@@ -147,12 +147,114 @@ class ProductImageHashService
             return null;
         }
 
+        $dctHash = null;
+        try {
+            $dctHash = $this->dctHashBinary($binary);
+        } catch (Throwable $e) {
+            Log::debug('Catalog DCT hash failed.', ['error' => $e->getMessage()]);
+        }
+
         $image->update([
             'perceptual_hash' => $full,
             'perceptual_hashes' => $variants,
+            'dct_hash' => $dctHash,
         ]);
 
         return $full;
+    }
+
+    /**
+     * 64-bit DCT perceptual hash (pHash). More stable under WhatsApp/JPEG recompression than dHash alone.
+     */
+    public function dctHashBinary(string $binary): string
+    {
+        $image = @imagecreatefromstring($binary);
+
+        if ($image === false) {
+            throw new RuntimeException('Unsupported or corrupt image data.');
+        }
+
+        $image = $this->downscaleForHash($image);
+        $size = 32;
+        $resized = imagecreatetruecolor($size, $size);
+
+        if ($resized === false) {
+            imagedestroy($image);
+            throw new RuntimeException('Could not allocate DCT hash buffer.');
+        }
+
+        imagecopyresampled(
+            $resized,
+            $image,
+            0,
+            0,
+            0,
+            0,
+            $size,
+            $size,
+            imagesx($image),
+            imagesy($image),
+        );
+        imagedestroy($image);
+
+        $pixels = [];
+        for ($y = 0; $y < $size; $y++) {
+            for ($x = 0; $x < $size; $x++) {
+                $pixels[$y][$x] = $this->grayAt($resized, $x, $y);
+            }
+        }
+        imagedestroy($resized);
+
+        $dct = $this->dct2d($pixels, $size);
+        $lowFreq = [];
+        for ($y = 0; $y < 8; $y++) {
+            for ($x = 0; $x < 8; $x++) {
+                if ($x === 0 && $y === 0) {
+                    continue;
+                }
+                $lowFreq[] = $dct[$y][$x];
+            }
+        }
+
+        $sorted = $lowFreq;
+        sort($sorted);
+        $median = $sorted[(int) floor(count($sorted) / 2)] ?? 0.0;
+
+        $bits = '';
+        foreach ($lowFreq as $value) {
+            $bits .= $value > $median ? '1' : '0';
+        }
+
+        // 63 bits from 8x8 minus DC; pad to 64 for hex storage compatibility.
+        $bits = str_pad($bits, self::HASH_BITS, '0');
+
+        return sprintf('%016s', base_convert($bits, 2, 16));
+    }
+
+    /**
+     * @param  array<int, array<int, float>>  $pixels
+     * @return array<int, array<int, float>>
+     */
+    private function dct2d(array $pixels, int $size): array
+    {
+        $dct = [];
+        for ($u = 0; $u < $size; $u++) {
+            for ($v = 0; $v < $size; $v++) {
+                $sum = 0.0;
+                for ($x = 0; $x < $size; $x++) {
+                    for ($y = 0; $y < $size; $y++) {
+                        $sum += $pixels[$y][$x]
+                            * cos(((2 * $x + 1) * $u * M_PI) / (2 * $size))
+                            * cos(((2 * $y + 1) * $v * M_PI) / (2 * $size));
+                    }
+                }
+                $cu = $u === 0 ? 1 / sqrt(2) : 1.0;
+                $cv = $v === 0 ? 1 / sqrt(2) : 1.0;
+                $dct[$v][$u] = 0.25 * $cu * $cv * $sum;
+            }
+        }
+
+        return $dct;
     }
 
     /**
@@ -532,11 +634,12 @@ class ProductImageHashService
         $rows = ProductImage::query()
             ->where(function ($query): void {
                 $query->whereNotNull('perceptual_hash')
-                    ->orWhereNotNull('perceptual_hashes');
+                    ->orWhereNotNull('perceptual_hashes')
+                    ->orWhereNotNull('dct_hash');
             })
             ->whereHas('product', fn ($query) => $query->where('is_published', true))
             ->with(['product:id,name,sku,price,stock_quantity,slug'])
-            ->get(['id', 'product_id', 'path', 'perceptual_hash', 'perceptual_hashes']);
+            ->get(['id', 'product_id', 'path', 'perceptual_hash', 'perceptual_hashes', 'dct_hash']);
 
         $bestByProduct = [];
 
@@ -597,6 +700,10 @@ class ProductImageHashService
 
         if (is_string($row->perceptual_hash) && $row->perceptual_hash !== '') {
             $hashes[$row->perceptual_hash] = $row->perceptual_hash;
+        }
+
+        if (is_string($row->dct_hash) && $row->dct_hash !== '') {
+            $hashes[$row->dct_hash] = $row->dct_hash;
         }
 
         return array_values($hashes);

@@ -5,8 +5,6 @@ namespace App\Services\Channels;
 use App\Models\ChannelMessage;
 use App\Models\Product;
 use App\Services\Admin\ProductImageHashService;
-use App\Services\Facebook\FacebookPageTokenService;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -14,7 +12,7 @@ class ChannelMessageImageMatchService
 {
     public function __construct(
         private ProductImageHashService $hasher,
-        private FacebookPageTokenService $tokens,
+        private ChannelInboundMediaService $media,
     ) {}
 
     /**
@@ -30,18 +28,18 @@ class ChannelMessageImageMatchService
             return null;
         }
 
-        $downloaded = $this->downloadInboundImageBytes($message);
-        if ($downloaded === null) {
+        $cached = $this->media->ensureCached($message);
+        if ($cached === null) {
             return null;
         }
 
         $minBytes = max(1, (int) config('channels.ai_draft.image_min_bytes', 5000));
-        if (strlen($downloaded['bytes']) < $minBytes) {
+        if (strlen($cached['bytes']) < $minBytes) {
             return null;
         }
 
         try {
-            $top = $this->hasher->findBestAutoMatchFromBinary($downloaded['bytes']);
+            $top = $this->hasher->findBestAutoMatchFromBinary($cached['bytes']);
         } catch (Throwable $e) {
             Log::debug('Inbox inbound image hash failed.', [
                 'message_id' => $message->id,
@@ -52,7 +50,12 @@ class ChannelMessageImageMatchService
         }
 
         if ($top === null || (float) $top['match_percent'] < ProductImageHashService::AUTO_MATCH_PERCENT) {
-            return null;
+            // Fall back to full-frame / DCT hash compare when crop heuristics miss.
+            $top = $this->matchFromCachedHashes($cached);
+            if ($top === null || (float) $top['match_percent'] < ProductImageHashService::AUTO_MATCH_PERCENT) {
+                return null;
+            }
+            $top['strategy'] = $top['strategy'] ?? 'cached_hash';
         }
 
         $productId = (int) $top['product_id'];
@@ -85,19 +88,19 @@ class ChannelMessageImageMatchService
             return [];
         }
 
-        $downloaded = $this->downloadInboundImageBytes($message);
-        if ($downloaded === null) {
+        $cached = $this->media->ensureCached($message);
+        if ($cached === null) {
             return [];
         }
 
         $minBytes = max(1, (int) config('channels.ai_draft.image_min_bytes', 5000));
-        if (strlen($downloaded['bytes']) < $minBytes) {
+        if (strlen($cached['bytes']) < $minBytes) {
             return [];
         }
 
         try {
             return $this->hasher->findTopMatchesFromBinary(
-                $downloaded['bytes'],
+                $cached['bytes'],
                 $limit,
                 ProductImageHashService::MIN_MATCH_PERCENT,
             );
@@ -116,124 +119,40 @@ class ChannelMessageImageMatchService
      */
     public function downloadInboundImageBytes(ChannelMessage $message): ?array
     {
-        if ($message->direction !== ChannelMessage::DIRECTION_INBOUND
-            || ! $message->isImageAttachment()) {
+        $cached = $this->media->ensureCached($message);
+        if ($cached === null) {
             return null;
         }
 
-        $url = trim((string) ($message->media_url ?? ''));
-        if ($url === '') {
-            return null;
-        }
-
-        return $this->downloadMediaBytes($url, $message->media_mime);
+        return [
+            'bytes' => $cached['bytes'],
+            'mime' => $cached['mime'],
+        ];
     }
 
     /**
-     * @return array{bytes: string, mime: string}|null
+     * @param  array{bytes: string, mime: string, path: ?string, dhash: ?string, dct_hash: ?string}  $cached
+     * @return array{product_id:int,name:string,sku:?string,price:float,stock_quantity:int,image_url:?string,match_percent:float,distance:int,strategy?:string}|null
      */
-    private function downloadMediaBytes(string $url, ?string $mime): ?array
+    private function matchFromCachedHashes(array $cached): ?array
     {
-        try {
-            if (! str_starts_with($url, 'http://') && ! str_starts_with($url, 'https://')) {
-                $relative = ltrim(str_replace('\\', '/', $url), '/');
-                if (str_contains($relative, '..')) {
-                    return null;
-                }
+        $best = null;
 
-                $absolute = public_path($relative);
-                if (! is_file($absolute)) {
-                    return null;
-                }
-
-                $bytes = file_get_contents($absolute);
-                if ($bytes === false || $bytes === '') {
-                    return null;
-                }
-
-                return [
-                    'bytes' => $bytes,
-                    'mime' => $mime ?: (mime_content_type($absolute) ?: 'image/jpeg'),
-                ];
+        foreach (array_filter([$cached['dhash'] ?? null, $cached['dct_hash'] ?? null]) as $hash) {
+            $matches = $this->hasher->findTopMatches(
+                (string) $hash,
+                1,
+                ProductImageHashService::AUTO_MATCH_PERCENT,
+            );
+            $top = $matches[0] ?? null;
+            if ($top === null) {
+                continue;
             }
-
-            $token = $this->tokens->token();
-            $response = null;
-
-            if ($token !== '' && $this->mediaUrlNeedsToken($url)) {
-                $response = Http::timeout(20)
-                    ->withOptions(['allow_redirects' => true])
-                    ->withToken($token)
-                    ->get($url);
-
-                if (! $response->successful()) {
-                    $response = Http::timeout(20)
-                        ->withOptions(['allow_redirects' => true])
-                        ->get($this->withAccessTokenQuery($url, $token));
-                }
-            } else {
-                $response = Http::timeout(20)
-                    ->withOptions(['allow_redirects' => true])
-                    ->get($url);
+            if ($best === null || (float) $top['match_percent'] > (float) $best['match_percent']) {
+                $best = $top + ['strategy' => 'cached_hash'];
             }
-
-            if ($response === null || ! $response->successful()) {
-                return null;
-            }
-
-            $bytes = $response->body();
-            if ($bytes === '') {
-                return null;
-            }
-
-            $contentType = (string) ($response->header('Content-Type') ?: $mime ?: 'image/jpeg');
-            $contentType = explode(';', $contentType)[0];
-
-            return [
-                'bytes' => $bytes,
-                'mime' => $contentType !== '' ? $contentType : 'image/jpeg',
-            ];
-        } catch (Throwable $e) {
-            Log::debug('Inbox inbound image download failed.', [
-                'url' => $url,
-                'error' => $e->getMessage(),
-            ]);
-
-            return null;
-        }
-    }
-
-    private function mediaUrlNeedsToken(string $url): bool
-    {
-        return str_contains($url, 'fbcdn')
-            || str_contains($url, 'facebook.com')
-            || str_contains($url, 'fbsbx.com')
-            || str_contains($url, 'lookaside');
-    }
-
-    private function withAccessTokenQuery(string $url, string $token): string
-    {
-        $parts = parse_url($url);
-        if ($parts === false || ! isset($parts['scheme'], $parts['host'])) {
-            return $url;
         }
 
-        parse_str($parts['query'] ?? '', $query);
-        if (isset($query['access_token']) && $query['access_token'] !== '') {
-            return $url;
-        }
-
-        $query['access_token'] = $token;
-
-        $rebuilt = $parts['scheme'].'://'.$parts['host']
-            .(isset($parts['port']) ? ':'.$parts['port'] : '')
-            .($parts['path'] ?? '')
-            .'?'.http_build_query($query);
-
-        if (isset($parts['fragment'])) {
-            $rebuilt .= '#'.$parts['fragment'];
-        }
-
-        return $rebuilt;
+        return $best;
     }
 }

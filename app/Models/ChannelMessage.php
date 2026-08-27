@@ -42,7 +42,24 @@ class ChannelMessage extends Model
 
     public function hasMedia(): bool
     {
-        return filled($this->media_url);
+        return filled($this->media_url) || filled($this->media_path);
+    }
+
+    public function localMediaPath(): ?string
+    {
+        $path = trim((string) ($this->media_path ?? ''));
+        if ($path === '' || str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return null;
+        }
+
+        $relative = ltrim(str_replace('\\', '/', $path), '/');
+        if (str_contains($relative, '..')) {
+            return null;
+        }
+
+        $absolute = public_path($relative);
+
+        return is_file($absolute) ? $relative : null;
     }
 
     public function previewText(int $limit = 80): string
@@ -74,9 +91,14 @@ class ChannelMessage extends Model
             return true;
         }
 
-        $url = (string) $this->media_url;
-        if (preg_match('/\.(jpe?g|png|gif|webp|bmp)(\?|$)/i', $url) === 1) {
+        $path = (string) ($this->media_path ?: $this->media_url);
+        if (preg_match('/\.(jpe?g|png|gif|webp|bmp)(\?|$)/i', $path) === 1) {
             return true;
+        }
+
+        $url = (string) ($this->media_url ?? '');
+        if ($url === '') {
+            return filled($this->media_path);
         }
 
         // Match this row's media URL to the corresponding Messenger attachment

@@ -148,7 +148,7 @@ class ProductImageService
     }
 
     /**
-     * @return array{perceptual_hash:?string, perceptual_hashes:?list<array{strategy:string,hash:string}>}
+     * @return array{perceptual_hash:?string, perceptual_hashes:?list<array{strategy:string,hash:string}>, dct_hash:?string}
      */
     private function safeHashAttributes(string $absolutePath): array
     {
@@ -158,19 +158,29 @@ class ProductImageService
                 return [
                     'perceptual_hash' => null,
                     'perceptual_hashes' => null,
+                    'dct_hash' => null,
                 ];
             }
 
-            $variants = app(ProductImageHashService::class)->catalogHashVariantsFromBinary($bytes);
+            $hasher = app(ProductImageHashService::class);
+            $variants = $hasher->catalogHashVariantsFromBinary($bytes);
+            $dctHash = null;
+            try {
+                $dctHash = $hasher->dctHashBinary($bytes);
+            } catch (\Throwable) {
+                // DCT is additive; dHash variants alone still work.
+            }
 
             return [
                 'perceptual_hash' => $variants[0]['hash'] ?? null,
                 'perceptual_hashes' => $variants,
+                'dct_hash' => $dctHash,
             ];
         } catch (\Throwable) {
             return [
                 'perceptual_hash' => null,
                 'perceptual_hashes' => null,
+                'dct_hash' => null,
             ];
         }
     }

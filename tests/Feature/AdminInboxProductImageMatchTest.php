@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\User;
 use App\Services\Admin\ProductImageHashService;
+use App\Services\Channels\ChannelMessageImageMatchService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -404,6 +405,220 @@ class AdminInboxProductImageMatchTest extends TestCase
     }
 
     #[Test]
+    public function find_top_matches_excludes_unpublished_catalog_products(): void
+    {
+        $sharedHash = str_repeat('c', 16);
+        $published = $this->productWithHash($sharedHash);
+
+        $unpublished = Product::query()->create([
+            'name' => 'Unpublished Crop Twin',
+            'slug' => 'unpublished-crop-twin-'.uniqid(),
+            'sku' => 'UCT'.random_int(100, 999),
+            'price' => 1500,
+            'purchase_price' => 700,
+            'stock_quantity' => 2,
+            'is_published' => false,
+            'display_order' => 0,
+        ]);
+        ProductImage::query()->create([
+            'product_id' => $unpublished->id,
+            'path' => 'products/unpublished-crop-twin.jpg',
+            'alt' => $unpublished->name,
+            'sort_order' => 0,
+            'perceptual_hash' => $sharedHash,
+        ]);
+
+        $onlyUnpublishedHash = str_repeat('d', 16);
+        $onlyUnpublished = Product::query()->create([
+            'name' => 'Only Unpublished Match',
+            'slug' => 'only-unpublished-match-'.uniqid(),
+            'sku' => 'OUM'.random_int(100, 999),
+            'price' => 1200,
+            'purchase_price' => 500,
+            'stock_quantity' => 1,
+            'is_published' => false,
+            'display_order' => 0,
+        ]);
+        ProductImage::query()->create([
+            'product_id' => $onlyUnpublished->id,
+            'path' => 'products/only-unpublished.jpg',
+            'alt' => $onlyUnpublished->name,
+            'sort_order' => 0,
+            'perceptual_hash' => $onlyUnpublishedHash,
+        ]);
+
+        $hasher = app(ProductImageHashService::class);
+
+        $sharedMatches = $hasher->findTopMatches($sharedHash, 5, ProductImageHashService::MIN_MATCH_PERCENT);
+        $sharedIds = array_map(fn (array $m) => $m['product_id'], $sharedMatches);
+        $this->assertContains($published->id, $sharedIds);
+        $this->assertNotContains($unpublished->id, $sharedIds);
+
+        $this->assertSame(
+            [],
+            $hasher->findTopMatches($onlyUnpublishedHash, 5, ProductImageHashService::MIN_MATCH_PERCENT),
+        );
+    }
+
+    #[Test]
+    public function crop_tag_lists_published_match_and_skips_unpublished_twin(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $hash = str_repeat('e', 16);
+        $published = $this->productWithHash($hash);
+        $published->forceFill(['name' => 'Published Tag Crop'])->save();
+
+        $unpublished = Product::query()->create([
+            'name' => 'Unpublished Tag Crop',
+            'slug' => 'unpublished-tag-crop-'.uniqid(),
+            'sku' => 'UTC'.random_int(100, 999),
+            'price' => 1600,
+            'purchase_price' => 800,
+            'stock_quantity' => 3,
+            'is_published' => false,
+            'display_order' => 0,
+        ]);
+        ProductImage::query()->create([
+            'product_id' => $unpublished->id,
+            'path' => 'products/unpublished-tag-crop.jpg',
+            'alt' => $unpublished->name,
+            'sort_order' => 0,
+            'perceptual_hash' => $hash,
+        ]);
+
+        $conversation = $this->conversation();
+        $message = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => null,
+            'media_url' => 'https://example.test/tag-crop.jpg',
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now(),
+        ]);
+
+        $real = app(ProductImageHashService::class);
+        $hasher = \Mockery::mock(ProductImageHashService::class);
+        $hasher->shouldReceive('hashUploadedFile')->once()->andReturn($hash);
+        $hasher->shouldReceive('findTopMatches')
+            ->once()
+            ->andReturnUsing(fn (string $h, int $limit = 5, float $min = 80.0) => $real->findTopMatches($h, $limit, $min));
+        $this->app->instance(ProductImageHashService::class, $hasher);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('openTagProductOnImage', $message->id)
+            ->assertSet('mappingMode', 'tag')
+            ->set('mappingCroppedImage', UploadedFile::fake()->image('tag-crop.jpg', 200, 200))
+            ->call('matchProductFromCroppedImage')
+            ->assertSee('Published Tag Crop')
+            ->assertDontSee('Unpublished Tag Crop')
+            ->assertSee('Tag')
+            ->call('selectMappingImageMatch', $published->id)
+            ->assertSet('error', null)
+            ->assertSee('Tagged');
+
+        $this->assertSame($published->id, $message->fresh()->matched_product_id);
+        $this->assertNull($conversation->fresh()->draft_order_id);
+    }
+
+    #[Test]
+    public function crop_tag_shows_no_match_when_only_unpublished_catalog_hits(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $hash = str_repeat('f', 16);
+        $unpublished = Product::query()->create([
+            'name' => 'Ghost Unpublished Crop',
+            'slug' => 'ghost-unpublished-crop-'.uniqid(),
+            'sku' => 'GUC'.random_int(100, 999),
+            'price' => 1400,
+            'purchase_price' => 600,
+            'stock_quantity' => 1,
+            'is_published' => false,
+            'display_order' => 0,
+        ]);
+        ProductImage::query()->create([
+            'product_id' => $unpublished->id,
+            'path' => 'products/ghost-unpublished.jpg',
+            'alt' => $unpublished->name,
+            'sort_order' => 0,
+            'perceptual_hash' => $hash,
+        ]);
+
+        $conversation = $this->conversation();
+        $message = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.test/ghost-crop.jpg',
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now(),
+        ]);
+
+        $real = app(ProductImageHashService::class);
+        $hasher = \Mockery::mock(ProductImageHashService::class);
+        $hasher->shouldReceive('hashUploadedFile')->once()->andReturn($hash);
+        $hasher->shouldReceive('findTopMatches')
+            ->once()
+            ->andReturnUsing(fn (string $h, int $limit = 5, float $min = 80.0) => $real->findTopMatches($h, $limit, $min));
+        $this->app->instance(ProductImageHashService::class, $hasher);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('openTagProductOnImage', $message->id)
+            ->set('mappingCroppedImage', UploadedFile::fake()->image('ghost-crop.jpg', 200, 200))
+            ->call('matchProductFromCroppedImage')
+            ->assertSet('mappingImageMatches', [])
+            ->assertSee('No catalog match at 80%+')
+            ->assertDontSee('Ghost Unpublished Crop');
+
+        $this->assertNull($message->fresh()->matched_product_id);
+    }
+
+    #[Test]
+    public function product_name_search_in_map_modal_excludes_unpublished(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        Product::query()->create([
+            'name' => 'Visible Gold Ring',
+            'slug' => 'visible-gold-ring-'.uniqid(),
+            'sku' => 'VGR'.random_int(100, 999),
+            'price' => 900,
+            'purchase_price' => 400,
+            'stock_quantity' => 4,
+            'is_published' => true,
+            'display_order' => 0,
+        ]);
+        Product::query()->create([
+            'name' => 'Hidden Gold Ring',
+            'slug' => 'hidden-gold-ring-'.uniqid(),
+            'sku' => 'HGR'.random_int(100, 999),
+            'price' => 950,
+            'purchase_price' => 420,
+            'stock_quantity' => 2,
+            'is_published' => false,
+            'display_order' => 0,
+        ]);
+
+        $message = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.test/search-tag.jpg',
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('openTagProductOnImage', $message->id)
+            ->set('mappingProductSearch', 'Gold Ring')
+            ->assertSee('Visible Gold Ring')
+            ->assertDontSee('Hidden Gold Ring');
+    }
+
+    #[Test]
     public function crop_suggestion_endpoint_returns_trim_bounds_for_screenshot(): void
     {
         $this->actingAs($this->adminUser());
@@ -494,7 +709,7 @@ class AdminInboxProductImageMatchTest extends TestCase
             'sent_at' => now(),
         ]);
 
-        $matches = app(\App\Services\Channels\ChannelMessageImageMatchService::class)
+        $matches = app(ChannelMessageImageMatchService::class)
             ->screenshotFallbackMatches($message);
 
         $this->assertNotEmpty($matches);

@@ -22,7 +22,7 @@ class CheckoutOtpService
 
         $this->assertWithinSendLimits($normalized);
 
-        $code = app()->hasDebugModeEnabled()
+        $code = (app()->hasDebugModeEnabled() || app()->runningUnitTests())
             ? '123456'
             : (string) random_int(100000, 999999);
         $ttl = now()->addMinutes((int) config('checkout.otp_ttl_minutes', 10));

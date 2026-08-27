@@ -201,6 +201,30 @@ class SteadfastWebhookAttentionTest extends TestCase
     }
 
     #[Test]
+    public function delivered_without_collected_amount_fields_requires_attention(): void
+    {
+        $order = $this->order([
+            'order_number' => 'ORD-NO-COD',
+            'courier_tracker' => 'SFR_NO_COD',
+        ]);
+
+        $this->postWebhook([
+            'notification_type' => 'delivery_status',
+            'invoice' => $order->order_number,
+            'tracking_id' => $order->courier_tracker,
+            'status' => 'delivered',
+            'updated_at' => now()->toDateTimeString(),
+            'tracking_message' => 'Delivered successfully',
+        ]);
+
+        $this->assertSame('dispatched', $order->fresh()->status);
+        $item = AdminAttentionItem::query()->sole();
+        $this->assertNull($item->data['collected_amount'] ?? null);
+        $this->assertTrue((bool) ($item->data['collected_amount_missing'] ?? false));
+        $this->assertSame(0, PaymentTransaction::query()->where('order_id', $order->id)->count());
+    }
+
+    #[Test]
     public function duplicate_delivered_webhook_records_cod_once(): void
     {
         $order = $this->order([

@@ -170,7 +170,7 @@ Quick view of locked plans §10–§14 after local work landed on `main`:
 | §11 Priced image | Not started | Full v1 (compose, admin button/editor, auto-regen, tests) |
 | §12 Social posts | Not started | Full v1 (compose, FB+IG publish, Latest posts, re-publish) |
 | §13 Admin Inbox | Not started | Full Inbox UI + unread; order modal is temporary only |
-| §14 Admin attention | Mostly done | `tracking_update` COD gate; dedupe; feature tests |
+| §14 Admin attention | Done | COD gate incl. missing collected amount; tracking path; tests |
 | (Later) Reply AI | Deferred | Suggest-reply / style learn — after Inbox |
 
 ## 10. Product regular price (`compare_at_price`) — locked plan
@@ -558,11 +558,11 @@ from the dashboard row clears them from this section.
 
 ### Still to do
 
-- [ ] Steadfast `tracking_update` “delivered successfully” path — apply the same COD
-      checkpoint (today it can still auto-deliver without comparing collected vs expected)
-- [ ] Dedupe: one open attention per order+type (update message on repeat webhook)
-- [ ] Feature tests: match → delivered; mismatch → attention + not clean delivered;
+- [x] Steadfast `tracking_update` “delivered successfully” path — same COD checkpoint
+- [x] Dedupe: one open attention per order+type (update message on repeat webhook)
+- [x] Feature tests: match → delivered; mismatch → attention + not clean delivered;
       dashboard/issues list + resolve
+- [x] Delivered with **no** collected-amount fields → attention (never invent expected COD)
 
 ### Follow-on
 
@@ -661,11 +661,50 @@ running the same store pipeline as manual uploads (hash, primary rules, etc.).
 4. **Per-image failure isolation** — one corrupt download cannot abort text parse or other matches.
 5. **Product ID from local matcher only**; Gemini may fill name/phone/address from text.
 6. **Group handling** — auto-hits are voted with newer photos weighted higher (duplicate
-   detection + vote, not true multi-view recognition).
+   detection + vote, not true multi-view recognition). True multi-view uses the GD
+   embedding fallback (§17).
 
 ### Explicit non-goals
 
 - Sending any screenshot to Gemini for product ID.
-- Embedding / CLIP index (later unlock).
-- Staff-correction memory hash→SKU map (later unlock).
+- External CLIP / ONNX / paid vision APIs (local GD embedding only).
+
+## 17. Match memory, COD gate, OTP queues, embedding, ETL (2026-08-27)
+
+**Status: shipping on this branch.**
+
+| Item | Behavior |
+|------|----------|
+| Staff-correction memory | Tag on inbox photo writes `product_image_match_memories` (exact dHash/DCT → product). Auto-match / draft parse consult memory **before** Hamming search (`strategy=staff_memory`). Clear tag deletes memories sourced from that message. |
+| COD gate tighten | Delivered / tracking-delivered with **no** collected amount fields → attention; never invent expected COD as collected. |
+| OTP send limits + queue | `CheckoutOtpService` / `PasswordResetOtpService`: cooldown + hourly RateLimiter; SMS via `SendSmsJob`. |
+| GD embedding index | `product_images.embedding_vector` (hue histogram + luminance grid). Fallback when hash match misses (`strategy=embedding`). Built in `storeHash` / upload path. |
+| ETL cutover check | `php artisan legacy:validate-cutover` — commands, README, dump presence (non-strict by default). |
+
+### Production SQL (MySQL)
+
+```sql
+CREATE TABLE `product_image_match_memories` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `hash` VARCHAR(16) NOT NULL,
+  `hash_kind` VARCHAR(8) NOT NULL,
+  `product_id` BIGINT UNSIGNED NOT NULL,
+  `source_channel_message_id` BIGINT UNSIGNED NULL,
+  `created_by` BIGINT UNSIGNED NULL,
+  `hit_count` INT UNSIGNED NOT NULL DEFAULT 0,
+  `last_hit_at` TIMESTAMP NULL,
+  `created_at` TIMESTAMP NULL,
+  `updated_at` TIMESTAMP NULL,
+  UNIQUE KEY `product_image_match_memories_hash_hash_kind_unique` (`hash`, `hash_kind`),
+  KEY `product_image_match_memories_product_id_foreign` (`product_id`),
+  CONSTRAINT `product_image_match_memories_product_id_foreign` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `product_image_match_memories_source_channel_message_id_foreign` FOREIGN KEY (`source_channel_message_id`) REFERENCES `channel_messages` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `product_image_match_memories_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+);
+
+ALTER TABLE `product_images`
+  ADD COLUMN `embedding_vector` JSON NULL AFTER `dct_hash`;
+```
+
+Then: `php artisan products:index-image-hashes --force` to backfill embeddings.
 

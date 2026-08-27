@@ -16,6 +16,7 @@ use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
 use App\Services\Channels\InboxQuickReplyService;
 use App\Services\Channels\MessengerConversationSyncService;
+use App\Services\Channels\ProductImageMatchMemoryService;
 use App\Services\Facebook\FacebookPageTokenService;
 use App\Support\AdminAccess;
 use App\Support\Fileinfo;
@@ -583,6 +584,12 @@ class AdminInbox extends Component
 
         $message->forceFill(['matched_product_id' => $product->id])->save();
 
+        app(ProductImageMatchMemoryService::class)->rememberFromStaffTag(
+            $message,
+            $product,
+            auth()->user(),
+        );
+
         $this->inboundImageMatchState[(string) $message->id] = [
             'status' => 'done',
             'product_id' => (int) $product->id,
@@ -629,6 +636,8 @@ class AdminInbox extends Component
         if (! $message) {
             return;
         }
+
+        app(ProductImageMatchMemoryService::class)->forgetFromMessage($message);
 
         $message->forceFill(['matched_product_id' => null])->save();
 

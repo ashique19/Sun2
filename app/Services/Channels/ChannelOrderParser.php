@@ -7,6 +7,7 @@ use App\Models\ChannelMessage;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Services\Admin\GeminiClient;
+use App\Services\Admin\ProductImageEmbeddingService;
 use App\Services\Admin\ProductImageHashService;
 use App\Services\Storefront\AddressLocationGuesser;
 use App\Support\PhoneNumber;
@@ -55,6 +56,8 @@ class ChannelOrderParser
         private AddressLocationGuesser $locationGuesser,
         private ProductImageHashService $imageHasher,
         private ChannelInboundMediaService $inboundMedia,
+        private ProductImageMatchMemoryService $matchMemory,
+        private ProductImageEmbeddingService $embeddings,
     ) {}
 
     /**
@@ -571,6 +574,37 @@ class ChannelOrderParser
             }
 
             try {
+                $memory = $this->matchMemory->lookup(
+                    $cached['dhash'] ?? null,
+                    $cached['dct_hash'] ?? null,
+                );
+
+                if ($memory !== null) {
+                    $product = Product::query()
+                        ->whereKey($memory['product_id'])
+                        ->where('is_published', true)
+                        ->first();
+
+                    if ($product !== null) {
+                        $newerWeight = 1.0 + (($index + 1) / max(1, $total));
+                        $autoHits[] = [
+                            'message_id' => (int) $message->id,
+                            'product_id' => (int) $product->id,
+                            'name' => (string) $product->name,
+                            'match_percent' => 100.0,
+                            'dhash' => $cached['dhash'] ?? null,
+                            'newer_weight' => $newerWeight,
+                        ];
+                        $candidates[] = [
+                            'product_id' => (int) $product->id,
+                            'name' => (string) $product->name,
+                            'match_percent' => 100.0,
+                        ];
+
+                        continue;
+                    }
+                }
+
                 // Prefer crop-aware binary match; falls back to cached full-frame / DCT hashes.
                 $matches = $this->imageHasher->findTopMatchesFromBinary(
                     $cached['bytes'],
@@ -588,6 +622,13 @@ class ChannelOrderParser
                     $matches = $this->filterPublishedMatches(
                         $this->imageHasher->findTopMatches((string) $cached['dct_hash'], ProductImageHashService::TOP_MATCHES, $minPercent)
                     );
+                }
+
+                if ($matches === []) {
+                    $embeddingMatch = $this->embeddings->findBestAutoMatchFromBinary($cached['bytes']);
+                    if ($embeddingMatch !== null) {
+                        $matches = [$embeddingMatch];
+                    }
                 }
 
                 foreach ($matches as $match) {

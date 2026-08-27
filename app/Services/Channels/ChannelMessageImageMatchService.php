@@ -4,6 +4,7 @@ namespace App\Services\Channels;
 
 use App\Models\ChannelMessage;
 use App\Models\Product;
+use App\Services\Admin\ProductImageEmbeddingService;
 use App\Services\Admin\ProductImageHashService;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -13,11 +14,13 @@ class ChannelMessageImageMatchService
     public function __construct(
         private ProductImageHashService $hasher,
         private ChannelInboundMediaService $media,
+        private ProductImageMatchMemoryService $matchMemory,
+        private ProductImageEmbeddingService $embeddings,
     ) {}
 
     /**
      * Best published catalog match at or above the auto threshold (90%).
-     * Uses local heuristics only (full / photo-panel / trim / center crops).
+     * Order: staff memory → local hash crops → cached hashes → GD embedding.
      *
      * @return array{product_id: int, name: string, match_percent: float, strategy: string}|null
      */
@@ -33,6 +36,27 @@ class ChannelMessageImageMatchService
             return null;
         }
 
+        $memory = $this->matchMemory->lookup(
+            $cached['dhash'] ?? null,
+            $cached['dct_hash'] ?? null,
+        );
+
+        if ($memory !== null) {
+            $product = Product::query()
+                ->whereKey($memory['product_id'])
+                ->where('is_published', true)
+                ->first();
+
+            if ($product !== null) {
+                return [
+                    'product_id' => (int) $product->id,
+                    'name' => (string) $product->name,
+                    'match_percent' => 100.0,
+                    'strategy' => 'staff_memory',
+                ];
+            }
+        }
+
         $minBytes = max(1, (int) config('channels.ai_draft.image_min_bytes', 5000));
         if (strlen($cached['bytes']) < $minBytes) {
             return null;
@@ -46,16 +70,20 @@ class ChannelMessageImageMatchService
                 'error' => $e->getMessage(),
             ]);
 
-            return null;
+            $top = null;
         }
 
         if ($top === null || (float) $top['match_percent'] < ProductImageHashService::AUTO_MATCH_PERCENT) {
             // Fall back to full-frame / DCT hash compare when crop heuristics miss.
             $top = $this->matchFromCachedHashes($cached);
             if ($top === null || (float) $top['match_percent'] < ProductImageHashService::AUTO_MATCH_PERCENT) {
-                return null;
+                $top = $this->matchFromEmbedding($cached['bytes']);
+                if ($top === null) {
+                    return null;
+                }
+            } else {
+                $top['strategy'] = $top['strategy'] ?? 'cached_hash';
             }
-            $top['strategy'] = $top['strategy'] ?? 'cached_hash';
         }
 
         $productId = (int) $top['product_id'];
@@ -74,6 +102,24 @@ class ChannelMessageImageMatchService
             'match_percent' => (float) $top['match_percent'],
             'strategy' => (string) ($top['strategy'] ?? 'query_full_vs_catalog_full'),
         ];
+    }
+
+    /**
+     * @return array{product_id:int,name:string,match_percent:float,strategy:string}|null
+     */
+    private function matchFromEmbedding(string $bytes): ?array
+    {
+        try {
+            $match = $this->embeddings->findBestAutoMatchFromBinary($bytes);
+        } catch (Throwable $e) {
+            Log::debug('Inbox inbound embedding match failed.', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        return $match;
     }
 
     /**

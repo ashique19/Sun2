@@ -148,7 +148,7 @@ class ProductImageService
     }
 
     /**
-     * @return array{perceptual_hash:?string, perceptual_hashes:?list<array{strategy:string,hash:string}>, dct_hash:?string}
+     * @return array{perceptual_hash:?string, perceptual_hashes:?list<array{strategy:string,hash:string}>, dct_hash:?string, embedding_vector:?list<float>}
      */
     private function safeHashAttributes(string $absolutePath): array
     {
@@ -159,6 +159,7 @@ class ProductImageService
                     'perceptual_hash' => null,
                     'perceptual_hashes' => null,
                     'dct_hash' => null,
+                    'embedding_vector' => null,
                 ];
             }
 
@@ -171,16 +172,25 @@ class ProductImageService
                 // DCT is additive; dHash variants alone still work.
             }
 
+            $embedding = null;
+            try {
+                $embedding = app(ProductImageEmbeddingService::class)->embedBinary($bytes);
+            } catch (\Throwable) {
+                // Embedding is additive fallback.
+            }
+
             return [
                 'perceptual_hash' => $variants[0]['hash'] ?? null,
                 'perceptual_hashes' => $variants,
                 'dct_hash' => $dctHash,
+                'embedding_vector' => $embedding,
             ];
         } catch (\Throwable) {
             return [
                 'perceptual_hash' => null,
                 'perceptual_hashes' => null,
                 'dct_hash' => null,
+                'embedding_vector' => null,
             ];
         }
     }

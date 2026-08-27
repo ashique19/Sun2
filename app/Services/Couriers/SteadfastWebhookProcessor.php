@@ -150,8 +150,8 @@ class SteadfastWebhookProcessor
                 $isPartial,
             );
             $needsAttention = $isPartial
-                || ($collectedAmount !== null
-                    && $this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount));
+                || $collectedAmount === null
+                || $this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount);
 
             if ($needsAttention) {
                 $this->adminAttention->createCodMismatch(
@@ -163,6 +163,7 @@ class SteadfastWebhookProcessor
                         'webhook_payload' => $payload,
                         'reported_status' => $steadfastStatus,
                         'is_partial_delivery' => $isPartial,
+                        'collected_amount_missing' => $collectedAmount === null,
                     ],
                 );
 
@@ -172,14 +173,14 @@ class SteadfastWebhookProcessor
                     : "COD mismatch: Expected ৳{$expectedAmount}, collected {$collectedLabel}. Courier reported status: {$steadfastStatus}. Requires admin attention.";
                 $this->recordHistory($order, $order->status, $mismatchMessage);
 
-                // Keep order as dispatched — never auto-complete delivery on mismatch/partial.
+                // Keep order as dispatched — never auto-complete delivery on mismatch/partial/unknown COD.
                 return;
             }
 
             // Full delivery with matching COD — proceed normally.
             $this->deliverySettlement->recordCollection(
                 order: $order,
-                amount: $collectedAmount ?? $expectedAmount,
+                amount: $collectedAmount,
                 actor: null,
                 meta: ['source' => 'steadfast_webhook'],
             );
@@ -227,8 +228,8 @@ class SteadfastWebhookProcessor
                 false,
             );
 
-            if ($collectedAmount !== null
-                && $this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount)) {
+            if ($collectedAmount === null
+                || $this->adminAttention->isCodMismatchSignificant($expectedAmount, $collectedAmount)) {
                 $this->adminAttention->createCodMismatch(
                     order: $order,
                     expectedAmount: $expectedAmount,
@@ -238,13 +239,15 @@ class SteadfastWebhookProcessor
                         'webhook_payload' => $payload,
                         'reported_status' => 'tracking_delivered',
                         'source' => 'steadfast_tracking',
+                        'collected_amount_missing' => $collectedAmount === null,
                     ],
                 );
 
+                $collectedLabel = $collectedAmount === null ? 'not reported' : "৳{$collectedAmount}";
                 $this->recordHistory(
                     $order,
                     $order->status,
-                    "COD mismatch: Expected ৳{$expectedAmount}, collected ৳{$collectedAmount}. Courier reported delivered via tracking update. Requires admin attention.",
+                    "COD mismatch: Expected ৳{$expectedAmount}, collected {$collectedLabel}. Courier reported delivered via tracking update. Requires admin attention.",
                 );
 
                 return;
@@ -252,7 +255,7 @@ class SteadfastWebhookProcessor
 
             $this->deliverySettlement->recordCollection(
                 order: $order,
-                amount: $collectedAmount ?? $expectedAmount,
+                amount: $collectedAmount,
                 actor: null,
                 meta: ['source' => 'steadfast_tracking'],
             );

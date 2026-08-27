@@ -16,6 +16,7 @@ class ProductImage extends Model
             'is_admin_only' => 'boolean',
             'sort_order' => 'integer',
             'perceptual_hashes' => 'array',
+            'embedding_vector' => 'array',
         ];
     }
 

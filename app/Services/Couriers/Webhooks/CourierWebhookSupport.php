@@ -139,7 +139,8 @@ class CourierWebhookSupport
             );
 
             if ($isPartial
-                || ($cod !== null && $this->adminAttention->isCodMismatchSignificant($expected, $cod))) {
+                || $cod === null
+                || $this->adminAttention->isCodMismatchSignificant($expected, $cod)) {
                 $this->holdDeliveryForReview(
                     order: $order,
                     payload: $payload,
@@ -153,7 +154,7 @@ class CourierWebhookSupport
 
             $this->deliverySettlement->recordCollection(
                 order: $order,
-                amount: $cod ?? $expected,
+                amount: $cod,
                 actor: null,
                 meta: ['source' => 'webhook', 'payload_event' => $payload['event'] ?? null],
             );

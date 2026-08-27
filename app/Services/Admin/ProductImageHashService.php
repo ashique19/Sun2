@@ -534,6 +534,7 @@ class ProductImageHashService
                 $query->whereNotNull('perceptual_hash')
                     ->orWhereNotNull('perceptual_hashes');
             })
+            ->whereHas('product', fn ($query) => $query->where('is_published', true))
             ->with(['product:id,name,sku,price,stock_quantity,slug'])
             ->get(['id', 'product_id', 'path', 'perceptual_hash', 'perceptual_hashes']);
 

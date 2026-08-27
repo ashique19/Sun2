@@ -487,6 +487,7 @@ class AdminInbox extends Component
         }
 
         $this->mappingProductSuggestions = Product::query()
+            ->published()
             ->with(['images' => fn ($q) => $q->orderBy('sort_order')->limit(1)])
             ->searchTerm($term)
             ->orderBy('name')

@@ -1007,6 +1007,16 @@ class AdminOrderForm extends Component
         $this->refreshDeliveryCharge();
     }
 
+    public function dismissMessage(): void
+    {
+        $this->message = null;
+    }
+
+    public function dismissError(): void
+    {
+        $this->error = null;
+    }
+
     public function save(AdminOrderService $orders): void
     {
         $this->error = null;

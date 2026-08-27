@@ -36,24 +36,24 @@
     </div>
 
     @if ($message)
-        <div
-            wire:key="product-edit-toast-{{ md5($message) }}"
-            x-data="{ show: true }"
-            x-show="show"
-            x-transition.opacity.duration.200ms
-            x-init="setTimeout(() => { show = false; $wire.dismissMessage() }, 3500)"
-            @class([
-                'fixed left-1/2 z-[55] w-[min(24rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border px-3 py-2.5 text-center text-sm shadow-lg',
-                'bottom-28 md:bottom-6',
-                str_starts_with((string) $message, 'Warning:')
-                    ? 'border-amber-200 bg-amber-50 text-amber-950'
-                    : 'border-emerald-200 bg-emerald-50 text-emerald-900',
-            ])
-            role="status"
+        <x-admin.toast
+            :message="$message"
+            :type="str_starts_with((string) $message, 'Warning:') ? 'warning' : 'success'"
+            dismiss-method="dismissMessage"
+            :ms="3500"
             data-product-edit-toast
-        >
-            {{ $message }}
-        </div>
+        />
+    @endif
+
+    @if ($errors->isNotEmpty())
+        <x-admin.toast
+            :message="$errors->count() > 1
+                ? $errors->first().' (+'.($errors->count() - 1).' more)'
+                : $errors->first()"
+            type="error"
+            :ms="5500"
+            data-product-edit-error-toast
+        />
     @endif
 
     <form @submit.prevent="submitProduct()" class="flex flex-col gap-6 pb-24 md:pb-0" data-product-edit-form>

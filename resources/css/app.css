@@ -253,6 +253,23 @@ body:has(.mobile-nav-toggle:checked) {
     overflow: hidden;
 }
 
+/* Admin inbox: mobile thread sheet fits below top bar, or full viewport when thread mode hides the bar. */
+@media (max-width: 1279px) {
+    body:not([data-inbox-mobile-thread="1"]) [data-inbox-mobile-thread-sheet] {
+        top: 4rem;
+        max-height: calc(100dvh - 4rem);
+    }
+
+    body[data-inbox-mobile-thread="1"] #admin-mobile-top-bar {
+        display: none;
+    }
+
+    body[data-inbox-mobile-thread="1"] [data-inbox-mobile-thread-sheet] {
+        top: 0;
+        max-height: 100dvh;
+    }
+}
+
 /* Mobile bottom nav — explicit CSS so it stays a fixed row
    even if utility classes are missing from a stale Vite build. */
 .storefront-bottom-nav {

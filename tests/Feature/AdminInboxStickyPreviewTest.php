@@ -117,6 +117,23 @@ class AdminInboxStickyPreviewTest extends TestCase
             ->assertSeeHtml('grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto]');
     }
 
+    public function inbox_mobile_thread_sheet_uses_viewport_aware_positioning(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $conversation = $this->conversation('psid-mobile-layout', now());
+
+        $this->get(route('admin.inbox', ['conversation' => $conversation->id]))
+            ->assertOk()
+            ->assertSeeHtml('data-inbox-mobile-thread-sheet')
+            ->assertSeeHtml('data-inbox-mobile-thread="1"');
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSet('mobileThreadOpen', true)
+            ->assertSeeHtml('x-effect="document.body.dataset.inboxMobileThread = $wire.mobileThreadOpen');
+    }
+
     #[Test]
     public function inbox_errors_render_as_fixed_toasts_not_in_flow_banners(): void
     {

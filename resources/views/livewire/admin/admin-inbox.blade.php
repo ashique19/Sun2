@@ -366,7 +366,7 @@
     @endif
 
     <div @class([
-        'mt-2 grid min-h-0 flex-1 auto-rows-fr xl:mt-0 xl:grid-cols-[22rem_minmax(0,1fr)] xl:gap-6',
+        'mt-2 grid min-h-0 flex-1 grid-rows-1 xl:mt-0 xl:grid-cols-[22rem_minmax(0,1fr)] xl:gap-6',
     ])>
         {{-- Conversation list --}}
         <div @class([
@@ -461,7 +461,7 @@
         {{-- Thread: fullscreen messenger sheet on mobile --}}
         <div @class([
             'relative flex min-h-0 flex-col overflow-hidden bg-[#F7F3EA]',
-            'fixed inset-0 z-30 xl:static xl:z-auto xl:min-h-0 xl:h-full xl:rounded-2xl xl:border xl:border-[#EFE7D6] xl:bg-white',
+            'fixed inset-0 z-30 h-dvh max-h-dvh xl:static xl:z-auto xl:h-full xl:max-h-full xl:min-h-0 xl:rounded-2xl xl:border xl:border-[#EFE7D6] xl:bg-white',
             $mobileThreadOpen ? 'flex' : 'hidden xl:flex',
         ])>
             <div
@@ -474,6 +474,7 @@
             </div>
 
             @if ($selectedConversation)
+                <div class="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
                 <div class="shrink-0 border-b border-[#E7DFCF] bg-white/95 px-3 py-2.5 backdrop-blur xl:px-4 xl:py-3">
                     <div class="flex items-center gap-2">
                         <button type="button"
@@ -617,7 +618,7 @@
                         },
                     }"
                     @scroll.passive="onScroll()"
-                    class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3 xl:px-4 xl:py-4">
+                    class="min-h-0 overflow-y-auto space-y-2 px-3 py-3 xl:px-4 xl:py-4">
                     @foreach ($selectedConversation->messages as $messageRow)
                         @php $isOutbound = $messageRow->direction === 'outbound'; @endphp
                         <div
@@ -1070,6 +1071,7 @@
                             </svg>
                         </button>
                     </div>
+                </div>
                 </div>
             @else
                 <div class="flex flex-1 items-center justify-center bg-white px-4 py-16 text-center text-sm text-[#8C8474] xl:rounded-2xl">

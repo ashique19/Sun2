@@ -78,7 +78,7 @@ class AdminInboxStickyPreviewTest extends TestCase
         $this->get(route('admin.inbox'))
             ->assertOk()
             ->assertSeeHtml('class="flex min-h-0 flex-1 flex-col xl:gap-4"')
-            ->assertSeeHtml('auto-rows-fr');
+            ->assertSeeHtml('grid-rows-1');
     }
 
     #[Test]
@@ -95,6 +95,26 @@ class AdminInboxStickyPreviewTest extends TestCase
             ->call('selectConversation', $second->id)
             ->assertSet('desktopPreviewConversationId', $second->id)
             ->assertSet('selectedConversationId', $second->id);
+    }
+
+    #[Test]
+    public function inbox_page_keeps_reply_composer_in_dom(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $conversation = $this->conversation('psid-reply', now());
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Need this product',
+            'sent_at' => now(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSee('Message…')
+            ->assertSeeHtml('wire:keydown.enter.exact.prevent="sendReply"')
+            ->assertSeeHtml('grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto]');
     }
 
     #[Test]

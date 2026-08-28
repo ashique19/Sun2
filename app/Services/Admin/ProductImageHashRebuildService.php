@@ -5,6 +5,7 @@ namespace App\Services\Admin;
 use App\Models\ImageHashRun;
 use App\Models\ProductImage;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Throwable;
 
 class ProductImageHashRebuildService
@@ -12,6 +13,31 @@ class ProductImageHashRebuildService
     public function __construct(
         private readonly ProductImageHashService $hasher,
     ) {}
+
+    public function isFullyIndexed(ProductImage $image): bool
+    {
+        return is_string($image->perceptual_hash)
+            && $image->perceptual_hash !== ''
+            && is_array($image->perceptual_hashes)
+            && $image->perceptual_hashes !== []
+            && is_string($image->dct_hash)
+            && $image->dct_hash !== ''
+            && is_array($image->embedding_vector)
+            && count($image->embedding_vector) === ProductImageEmbeddingService::DIMENSIONS;
+    }
+
+    /**
+     * @return Builder<ProductImage>
+     */
+    public function incompleteIndexQuery(): Builder
+    {
+        return ProductImage::query()->where(function ($builder): void {
+            $builder->whereNull('perceptual_hash')
+                ->orWhereNull('perceptual_hashes')
+                ->orWhereNull('dct_hash')
+                ->orWhereNull('embedding_vector');
+        });
+    }
 
     public function latestRun(): ?ImageHashRun
     {
@@ -27,13 +53,27 @@ class ProductImageHashRebuildService
     }
 
     /**
-     * @return array{total:int, hashed:int, missing:int, multi_hashed:int, missing_variants:int}
+     * @return array{
+     *     total:int,
+     *     hashed:int,
+     *     missing:int,
+     *     multi_hashed:int,
+     *     missing_variants:int,
+     *     fully_indexed:int,
+     *     missing_dct:int,
+     *     missing_embedding:int,
+     *     needs_screenshot_backfill:int
+     * }
      */
     public function coverage(): array
     {
         $total = ProductImage::query()->count();
         $hashed = ProductImage::query()->whereNotNull('perceptual_hash')->count();
         $multiHashed = ProductImage::query()->whereNotNull('perceptual_hashes')->count();
+        $missingDct = ProductImage::query()->whereNull('dct_hash')->count();
+        $missingEmbedding = ProductImage::query()->whereNull('embedding_vector')->count();
+        $needsBackfill = $this->incompleteIndexQuery()->count();
+        $fullyIndexed = max(0, $total - $needsBackfill);
 
         return [
             'total' => $total,
@@ -41,6 +81,10 @@ class ProductImageHashRebuildService
             'missing' => max(0, $total - $hashed),
             'multi_hashed' => $multiHashed,
             'missing_variants' => max(0, $total - $multiHashed),
+            'fully_indexed' => $fullyIndexed,
+            'missing_dct' => $missingDct,
+            'missing_embedding' => $missingEmbedding,
+            'needs_screenshot_backfill' => $needsBackfill,
         ];
     }
 
@@ -62,12 +106,7 @@ class ProductImageHashRebuildService
         $query = ProductImage::query();
 
         if (! $force) {
-            $query->where(function ($builder): void {
-                $builder->whereNull('perceptual_hash')
-                    ->orWhereNull('perceptual_hashes')
-                    ->orWhereNull('dct_hash')
-                    ->orWhereNull('embedding_vector');
-            });
+            $query = $this->incompleteIndexQuery();
         }
 
         $total = $query->count();
@@ -127,21 +166,13 @@ class ProductImageHashRebuildService
             $chunkSize = (int) ($run->meta['chunk_size'] ?? config('products.image_hash_chunk_size', 25));
             $cursor = (int) $run->image_cursor;
 
-            $query = ProductImage::query()
-                ->where('id', '>', $cursor)
-                ->orderBy('id')
-                ->limit($chunkSize);
-
             if (! $run->force) {
-                $query->where(function ($builder): void {
-                    $builder->whereNull('perceptual_hash')
-                        ->orWhereNull('perceptual_hashes')
-                        ->orWhereNull('dct_hash')
-                        ->orWhereNull('embedding_vector');
-                });
+                $query = $this->incompleteIndexQuery()->where('id', '>', $cursor);
+            } else {
+                $query = ProductImage::query()->where('id', '>', $cursor);
             }
 
-            $images = $query->get();
+            $images = $query->orderBy('id')->limit($chunkSize)->get();
 
             if ($images->isEmpty()) {
                 $run->update([
@@ -169,6 +200,10 @@ class ProductImageHashRebuildService
                 $processed++;
 
                 try {
+                    if (! $run->force && $this->isFullyIndexed($image)) {
+                        continue;
+                    }
+
                     $hash = $this->hasher->storeHash($image, allowRemoteDownload: true);
 
                     if ($hash) {

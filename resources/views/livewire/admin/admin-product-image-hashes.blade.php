@@ -7,23 +7,19 @@
         <div>
             <h1 class="font-serif text-3xl font-semibold">Image Hashes</h1>
             <p class="mt-1 text-sm text-[#8C8474]">
-                Perceptual hashes power paste-to-match on Create Order. Missing hashes are filled from local files or the CDN.
+                Perceptual hashes, DCT hashes, crop variants, and embeddings power paste-to-match on Create Order and inbox screenshot product recognition.
             </p>
         </div>
         <div class="flex flex-wrap items-center gap-3">
-            <label class="inline-flex items-center gap-2 text-sm text-[#6B6459]">
-                <input type="checkbox" wire:model="forceRehash" class="rounded border-[#E0D6C2] text-[#C9A227] focus:ring-[#C9A227]" @disabled($active)>
-                Re-hash existing
-            </label>
             <button
                 type="button"
-                wire:click="startRebuild"
+                wire:click="openRebuildModal"
                 wire:loading.attr="disabled"
                 @disabled($active || ! $gdAvailable)
                 class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-                <span wire:loading.remove wire:target="startRebuild">{{ $active ? 'Rebuild in progress…' : 'Rebuild image hashes' }}</span>
-                <span wire:loading wire:target="startRebuild">Starting…</span>
+                <span wire:loading.remove wire:target="openRebuildModal,confirmRebuild">{{ $active ? 'Rebuild in progress…' : 'Rebuild image hashes' }}</span>
+                <span wire:loading wire:target="openRebuildModal,confirmRebuild">Starting…</span>
             </button>
         </div>
     </div>
@@ -34,19 +30,50 @@
         </div>
     @endunless
 
+    @if ($coverage['needs_screenshot_backfill'] > 0)
+        <div class="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p class="font-semibold">Screenshot matching needs a catalog backfill</p>
+            <p class="mt-1">
+                {{ number_format($coverage['needs_screenshot_backfill']) }} product image(s) are missing DCT hashes, crop variants, and/or embeddings.
+                Open <strong>Rebuild image hashes</strong> and run a backfill — no SSH or artisan command required.
+            </p>
+        </div>
+    @endif
+
     <div class="grid gap-4 lg:grid-cols-3 mb-8">
         <div class="rounded-xl border border-[#EFE7D6] bg-white p-5">
-            <p class="text-xs uppercase tracking-wide text-[#8C8474]">Coverage</p>
+            <p class="text-xs uppercase tracking-wide text-[#8C8474]">Full index</p>
+            <p class="mt-2 text-2xl font-semibold tabular-nums">
+                {{ number_format($coverage['fully_indexed']) }}
+                <span class="text-base font-normal text-[#8C8474]">/ {{ number_format($coverage['total']) }}</span>
+            </p>
+            @if ($coverage['needs_screenshot_backfill'] > 0)
+                <p class="mt-3 text-sm text-amber-800">
+                    {{ number_format($coverage['needs_screenshot_backfill']) }} image(s) need DCT / crop variants / embeddings for inbox screenshots.
+                </p>
+            @elseif ($coverage['total'] > 0)
+                <p class="mt-3 text-sm text-emerald-700">Catalog fully indexed for screenshot matching.</p>
+            @else
+                <p class="mt-3 text-sm text-[#6B6459]">No product images yet.</p>
+            @endif
+            @if ($coverage['missing_dct'] > 0 || $coverage['missing_embedding'] > 0)
+                <p class="mt-2 text-xs text-[#8C8474]">
+                    Missing DCT: {{ number_format($coverage['missing_dct']) }}
+                    · Missing embeddings: {{ number_format($coverage['missing_embedding']) }}
+                </p>
+            @endif
+        </div>
+
+        <div class="rounded-xl border border-[#EFE7D6] bg-white p-5">
+            <p class="text-xs uppercase tracking-wide text-[#8C8474]">Legacy dHash only</p>
             <p class="mt-2 text-2xl font-semibold tabular-nums">
                 {{ number_format($coverage['hashed']) }}
                 <span class="text-base font-normal text-[#8C8474]">/ {{ number_format($coverage['total']) }}</span>
             </p>
             @if ($coverage['missing'] > 0)
-                <p class="mt-3 text-sm text-amber-800">{{ number_format($coverage['missing']) }} image(s) still missing a hash.</p>
+                <p class="mt-3 text-sm text-amber-800">{{ number_format($coverage['missing']) }} image(s) still missing any hash.</p>
             @elseif ($coverage['total'] > 0)
-                <p class="mt-3 text-sm text-emerald-700">All product images have a perceptual hash.</p>
-            @else
-                <p class="mt-3 text-sm text-[#6B6459]">No product images yet.</p>
+                <p class="mt-3 text-sm text-[#6B6459]">All images have at least a basic perceptual hash.</p>
             @endif
         </div>
 
@@ -79,22 +106,22 @@
                 </p>
                 <p class="mt-1 text-sm text-[#8C8474]">{{ $run->message }}</p>
             @else
-                <p class="mt-3 text-sm text-[#6B6459]">Click rebuild to backfill missing hashes.</p>
+                <p class="mt-3 text-sm text-[#6B6459]">Click rebuild to backfill missing hashes in the browser.</p>
             @endif
         </div>
+    </div>
 
-        <div class="rounded-xl border border-[#EFE7D6] bg-white p-5">
-            <p class="text-xs uppercase tracking-wide text-[#8C8474]">Cron URL (optional)</p>
-            <p class="mt-2 text-xs text-[#8C8474]">
-                Hosting panel cron can hit this URL — no SSH needed. Add <span class="font-mono">&amp;force=1</span> to re-hash everything.
-            </p>
-            @if ($tokenConfigured)
-                <p class="mt-2 text-xs text-emerald-700">PRODUCT_IMAGE_HASH_REBUILD_TOKEN is configured.</p>
-            @else
-                <p class="mt-2 text-xs text-amber-800">Set PRODUCT_IMAGE_HASH_REBUILD_TOKEN in .env to enable the cron URL.</p>
-            @endif
-            <p class="mt-2 text-[11px] text-[#8C8474] break-all font-mono">{{ $rebuildUrlHint }}</p>
-        </div>
+    <div class="mb-8 rounded-xl border border-[#EFE7D6] bg-white p-5">
+        <p class="text-xs uppercase tracking-wide text-[#8C8474]">Cron URL (optional)</p>
+        <p class="mt-2 text-sm text-[#6B6459]">
+            Hosting panel cron can hit this URL when the admin page is closed. Use <span class="font-mono text-xs">&amp;force=1</span> only when you need to re-hash every image.
+        </p>
+        @if ($tokenConfigured)
+            <p class="mt-2 text-xs text-emerald-700">PRODUCT_IMAGE_HASH_REBUILD_TOKEN is configured.</p>
+        @else
+            <p class="mt-2 text-xs text-amber-800">Set PRODUCT_IMAGE_HASH_REBUILD_TOKEN in .env to enable the cron URL.</p>
+        @endif
+        <p class="mt-2 text-[11px] text-[#8C8474] break-all font-mono">{{ $rebuildUrlHint }}</p>
     </div>
 
     @if ($latest?->error)
@@ -128,7 +155,7 @@
                                 {{ ($row->started_at ?? $row->created_at)?->timezone(config('app.timezone'))->format('Y-m-d H:i') }}
                             </td>
                             <td class="px-4 py-3">{{ $row->trigger }}</td>
-                            <td class="px-4 py-3">{{ $row->force ? 'force' : 'missing only' }}</td>
+                            <td class="px-4 py-3">{{ $row->force ? 're-hash all' : 'backfill missing' }}</td>
                             <td class="px-4 py-3">
                                 <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium
                                     {{ $row->status === 'completed' ? 'bg-emerald-50 text-emerald-700' : '' }}
@@ -153,4 +180,77 @@
             </table>
         </div>
     </div>
+
+    @teleport('body')
+        @if ($rebuildModalOpen)
+            <div
+                class="fixed inset-0 z-[80] flex items-end justify-center overflow-y-auto overscroll-contain bg-black/50 p-0 sm:items-center sm:p-4"
+                wire:click.self="closeRebuildModal"
+                wire:key="image-hash-rebuild-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Rebuild product image hashes"
+            >
+                <div class="flex max-h-[min(90dvh,36rem)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl" wire:click.stop>
+                    <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-4">
+                        <div>
+                            <h2 class="font-semibold text-lg">Rebuild image hashes</h2>
+                            <p class="mt-1 text-sm text-[#8C8474]">
+                                Runs in the browser in small batches. Keep this tab open until progress reaches 100%.
+                            </p>
+                        </div>
+                        <button type="button" wire:click="closeRebuildModal"
+                            class="shrink-0 rounded-full border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
+                            Close
+                        </button>
+                    </div>
+
+                    <div class="max-h-[min(24rem,calc(90dvh-11rem))] overflow-y-auto px-4 py-4 space-y-4">
+                        <div class="rounded-xl border border-[#E7DFCF] bg-[#FAF6EF] px-4 py-3 text-sm text-[#6B6459]">
+                            <p class="font-semibold text-[#1E1E1E]">Backfill missing (recommended)</p>
+                            <p class="mt-1">
+                                Adds crop variants, DCT hashes, and embeddings for images that only have legacy dHash data.
+                                Use this for inbox screenshot product matching.
+                            </p>
+                            @if ($coverage['needs_screenshot_backfill'] > 0)
+                                <p class="mt-2 text-amber-800 font-medium">
+                                    {{ number_format($coverage['needs_screenshot_backfill']) }} image(s) queued for backfill.
+                                </p>
+                            @else
+                                <p class="mt-2 text-emerald-700">Nothing missing — catalog already fully indexed.</p>
+                            @endif
+                        </div>
+
+                        <label class="flex items-start gap-3 rounded-xl border border-[#E7DFCF] px-4 py-3 text-sm text-[#6B6459]">
+                            <input type="checkbox" wire:model="forceRehash" class="mt-0.5 rounded border-[#E0D6C2] text-[#C9A227] focus:ring-[#C9A227]">
+                            <span>
+                                <span class="font-semibold text-[#1E1E1E]">Re-hash all images</span>
+                                <span class="mt-1 block">
+                                    Re-process every product photo even when hashes exist. Slower — use after bulk image replacements.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="flex shrink-0 items-center justify-end gap-2 border-t border-[#EFE7D6] px-4 py-3">
+                        <button type="button" wire:click="closeRebuildModal"
+                            class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
+                            Cancel
+                        </button>
+                        <button type="button"
+                            wire:click="confirmRebuild"
+                            wire:loading.attr="disabled"
+                            wire:target="confirmRebuild"
+                            @disabled(! $forceRehash && $coverage['needs_screenshot_backfill'] === 0)
+                            class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-50 disabled:cursor-not-allowed">
+                            <span wire:loading.remove wire:target="confirmRebuild">
+                                {{ $forceRehash ? 'Re-hash all' : 'Backfill missing' }}
+                            </span>
+                            <span wire:loading wire:target="confirmRebuild">Starting…</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        @endif
+    @endteleport
 </div>

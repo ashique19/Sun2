@@ -421,17 +421,23 @@ body:has(.mobile-nav-toggle:checked) {
     }
 }
 
-/* Inbox filter panel: explicit show/hide so mobile toggle does not depend on
-   Tailwind detecting dynamic max-* / conflicting display utilities. */
+/* Inbox filter panel: absolute overlay on mobile so the conversation list
+   height stays stable when filters open/close. */
 .inbox-mobile-filters {
     display: none;
-    width: 100%;
+    position: absolute;
+    left: 1rem;
+    right: 1rem;
+    top: calc(100% - 0.25rem);
+    z-index: 30;
+    width: auto;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.5rem;
     border-radius: 0.75rem;
     border: 1px solid #efe7d6;
     background: #fff;
     padding: 0.75rem;
+    box-shadow: 0 10px 30px rgba(30, 30, 30, 0.12);
 }
 
 .inbox-mobile-filters.is-open {
@@ -442,6 +448,11 @@ body:has(.mobile-nav-toggle:checked) {
     .inbox-mobile-filters,
     .inbox-mobile-filters.is-open {
         display: flex;
+        position: static;
+        left: auto;
+        right: auto;
+        top: auto;
+        z-index: auto;
         width: auto;
         flex-wrap: wrap;
         align-items: center;
@@ -451,5 +462,6 @@ body:has(.mobile-nav-toggle:checked) {
         border: 0;
         background: transparent;
         padding: 0;
+        box-shadow: none;
     }
 }

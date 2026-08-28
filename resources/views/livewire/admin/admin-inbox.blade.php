@@ -4,7 +4,7 @@
         ->count();
 @endphp
 
-<div class="xl:space-y-6">
+<div class="flex h-[calc(100dvh-3.25rem)] min-h-0 flex-col md:h-[calc(100dvh-4.75rem)] xl:h-[calc(100dvh-6.5rem)] xl:gap-4">
     {{--
         Fixed beacon so Graph poll keeps running while the mobile thread sheet is open.
         The sheet is position:fixed (out of document flow), which can collapse in-flow
@@ -62,49 +62,47 @@
     @endscript
 
     @if ($syncToast)
-        <div
-            wire:key="sync-toast-{{ md5($syncToast) }}"
-            x-data="{ show: true }"
-            x-show="show"
-            x-transition.opacity.duration.200ms
-            x-init="setTimeout(() => { show = false; $wire.dismissSyncToast() }, 8000)"
-            class="fixed bottom-4 left-1/2 z-[70] w-[min(24rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900 shadow-lg"
-            role="alert"
-        >
-            <div class="flex items-start gap-2">
-                <p class="min-w-0 flex-1">Sync failed: {{ $syncToast }}</p>
-                <button type="button"
-                    wire:click="dismissSyncToast"
-                    class="shrink-0 text-xs font-semibold text-rose-700 hover:text-rose-900"
-                    aria-label="Dismiss sync error">
-                    Dismiss
-                </button>
-            </div>
-        </div>
+        <x-admin.toast
+            :message="$syncToast"
+            type="error"
+            prefix="Sync failed: "
+            dismiss-method="dismissSyncToast"
+            :ms="8000"
+            dismissable
+            bottom="bottom-4"
+        />
     @endif
 
     @if ($statusMessage)
-        <div
-            wire:key="status-toast-{{ md5($statusMessage) }}"
-            x-data="{ show: true }"
-            x-show="show"
-            x-transition.opacity.duration.200ms
-            x-init="setTimeout(() => { show = false; $wire.dismissStatusMessage() }, 2500)"
-            class="pointer-events-none fixed bottom-16 left-1/2 z-[70] w-[min(24rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-center text-sm text-emerald-900 shadow-lg"
-            role="status"
-        >
-            {{ $statusMessage }}
-        </div>
+        <x-admin.toast
+            :message="$statusMessage"
+            type="success"
+            dismiss-method="dismissStatusMessage"
+            :ms="2500"
+            bottom="bottom-16"
+        />
+    @endif
+
+    @if ($error)
+        <x-admin.toast
+            :message="$error"
+            type="error"
+            dismiss-method="clearInboxError"
+            :ms="6000"
+            dismissable
+            bottom="bottom-28"
+            data-inbox-error-toast
+        />
     @endif
 
     {{-- Invalid Facebook token banner host (component teleports here). Valid token is an icon beside Filters. --}}
-    <div id="inbox-fb-token-banner" class="px-4 pt-3 empty:hidden empty:p-0 xl:px-0 xl:pt-0"></div>
+    <div id="inbox-fb-token-banner" class="shrink-0 px-4 pt-2 empty:hidden empty:p-0 xl:px-0 xl:pt-0"></div>
 
     {{-- Header: on small screens, Inbox title + icon actions share one row. --}}
     <div
         x-data="{ filtersOpen: @js($mobileFiltersOpen) }"
         @class([
-            'flex flex-col gap-2 px-4 pt-2 xl:gap-3 xl:px-0 xl:pt-0',
+            'relative shrink-0 flex flex-col gap-2 px-4 pt-2 xl:gap-3 xl:px-0 xl:pt-0',
             'hidden xl:flex' => $mobileThreadOpen,
         ])
     >
@@ -252,13 +250,6 @@
         </div>
     </div>
 
-    @if ($error)
-        <div @class([
-            'mx-4 mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900 xl:mx-0 xl:mt-0 xl:px-4 xl:py-3',
-            'hidden xl:block' => $mobileThreadOpen,
-        ])>{{ $error }}</div>
-    @endif
-
     @if ($conversations->isEmpty() || $diagnostics['severity'] !== 'ok')
         @php
             $isEmptyInboxStatus = $conversations->isEmpty();
@@ -291,7 +282,7 @@
                 x-cloak
             @endunless
             @class([
-                'mx-4 mt-3 rounded-xl border p-3 sm:p-4 xl:mx-0 xl:mt-0 xl:p-5',
+                'shrink-0 mx-4 mt-2 max-h-40 overflow-y-auto rounded-xl border p-3 sm:p-4 xl:mx-0 xl:mt-0 xl:max-h-48 xl:p-5',
                 $box,
                 'hidden xl:block' => $mobileThreadOpen && $conversations->isNotEmpty(),
             ])
@@ -360,7 +351,7 @@
 
     @if ($diagnostics['filters_active'] && $conversations->count() !== $diagnostics['total_conversations'])
         <div @class([
-            'mx-4 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 xl:mx-0 xl:mt-0 xl:px-4 xl:py-3',
+            'shrink-0 mx-4 mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 xl:mx-0 xl:mt-0 xl:px-4 xl:py-3',
             'hidden xl:flex' => $mobileThreadOpen,
         ])>
             <p>
@@ -375,14 +366,13 @@
     @endif
 
     <div @class([
-        'mt-3 grid xl:mt-0 xl:grid-cols-[22rem_minmax(0,1fr)] xl:items-stretch xl:gap-6',
-        'min-h-[calc(100dvh-8.5rem)] xl:min-h-0',
+        'mt-2 grid min-h-0 flex-1 xl:mt-0 xl:grid-cols-[22rem_minmax(0,1fr)] xl:items-stretch xl:gap-6',
     ])>
         {{-- Conversation list --}}
         <div @class([
-            'flex flex-col overflow-hidden bg-white',
+            'flex min-h-0 flex-col overflow-hidden bg-white',
             'border-y border-[#EFE7D6] xl:rounded-2xl xl:border',
-            'h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] xl:h-[min(75vh,52rem)] xl:max-h-[min(75vh,52rem)]',
+            'h-full max-h-full',
             $mobileThreadOpen ? 'hidden xl:flex' : 'flex',
         ])>
             <div class="hidden shrink-0 border-b border-[#E7DFCF] px-4 py-3 text-sm font-medium xl:block">
@@ -470,9 +460,8 @@
 
         {{-- Thread: fullscreen messenger sheet on mobile --}}
         <div @class([
-            'flex flex-col overflow-hidden bg-[#F7F3EA]',
-            'fixed inset-0 z-30 xl:static xl:z-auto xl:rounded-2xl xl:border xl:border-[#EFE7D6] xl:bg-white',
-            'xl:h-[min(75vh,52rem)] xl:max-h-[min(75vh,52rem)]',
+            'relative flex min-h-0 flex-col overflow-hidden bg-[#F7F3EA]',
+            'fixed inset-0 z-30 xl:static xl:z-auto xl:h-full xl:max-h-full xl:rounded-2xl xl:border xl:border-[#EFE7D6] xl:bg-white',
             $mobileThreadOpen ? 'flex' : 'hidden xl:flex',
         ])>
             @if ($selectedConversation)
@@ -544,7 +533,7 @@
 
                 @if ($orderPanelOpen && $selectedConversation->draftOrder)
                     @php $draft = $selectedConversation->draftOrder; @endphp
-                    <div class="shrink-0 border-b border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2.5 text-xs text-[#6B6459] xl:px-4">
+                    <div class="absolute left-0 right-0 top-[3.25rem] z-20 mx-2 max-h-[40%] overflow-y-auto rounded-xl border border-[#E7DFCF] bg-[#FAF6EF]/95 px-3 py-2.5 text-xs text-[#6B6459] shadow-lg backdrop-blur xl:top-[3.5rem] xl:mx-3">
                         <div class="flex items-start justify-between gap-2">
                             <div class="min-w-0 space-y-0.5">
                                 <p class="font-semibold text-[#1E1E1E]">
@@ -564,10 +553,18 @@
                                     </p>
                                 @endif
                             </div>
-                            <a href="{{ route('admin.orders.edit', $draft) }}"
-                                class="shrink-0 font-semibold text-[#C9A227] hover:underline">
-                                Edit
-                            </a>
+                            <div class="flex shrink-0 items-start gap-2">
+                                <a href="{{ route('admin.orders.edit', $draft) }}"
+                                    class="font-semibold text-[#C9A227] hover:underline">
+                                    Edit
+                                </a>
+                                <button type="button"
+                                    wire:click="toggleOrderPanel"
+                                    class="text-[10px] font-semibold text-[#8C8474] hover:text-[#1E1E1E]"
+                                    aria-label="Close order panel">
+                                    Close
+                                </button>
+                            </div>
                         </div>
                         <p class="mt-1.5 text-[10px] text-[#8C8474]">
                             Right-click or long-press a message → Add to order fields.
@@ -581,9 +578,16 @@
                     x-data="{
                         stick: true,
                         threshold: 96,
+                        lastCount: 0,
                         init() {
+                            this.lastCount = this.$el.querySelectorAll('[data-inbox-msg]').length;
                             this.scrollBottom();
                             const obs = new MutationObserver(() => {
+                                const count = this.$el.querySelectorAll('[data-inbox-msg]').length;
+                                if (count === this.lastCount) {
+                                    return;
+                                }
+                                this.lastCount = count;
                                 if (this.stick) {
                                     this.$nextTick(() => this.scrollBottom());
                                 }
@@ -607,7 +611,9 @@
                     class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3 xl:px-4 xl:py-4">
                     @foreach ($selectedConversation->messages as $messageRow)
                         @php $isOutbound = $messageRow->direction === 'outbound'; @endphp
-                        <div @class([
+                        <div
+                            data-inbox-msg
+                            @class([
                             'flex w-full',
                             'justify-end' => $isOutbound,
                             'justify-start' => ! $isOutbound,

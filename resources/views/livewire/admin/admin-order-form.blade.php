@@ -14,10 +14,33 @@
     </div>
 
     @if ($message)
-        <div class="rounded-lg bg-emerald-50 text-emerald-700 text-sm px-4 py-3 mb-4 break-words">{{ $message }}</div>
+        <x-admin.toast
+            :message="$message"
+            type="success"
+            dismiss-method="dismissMessage"
+            :ms="3500"
+            data-order-form-toast="success"
+        />
     @endif
     @if ($error)
-        <div class="rounded-lg bg-rose-50 text-rose-700 text-sm px-4 py-3 mb-4 break-words">{{ $error }}</div>
+        <x-admin.toast
+            :message="$error"
+            type="error"
+            dismiss-method="dismissError"
+            :ms="6000"
+            dismissable
+            data-order-form-toast="error"
+        />
+    @endif
+    @if ($errors->isNotEmpty())
+        <x-admin.toast
+            :message="$errors->count() > 1
+                ? $errors->first().' (+'.($errors->count() - 1).' more)'
+                : $errors->first()"
+            type="error"
+            :ms="5500"
+            data-order-form-toast="validation"
+        />
     @endif
 
     {{-- Capture-phase DOM sync: phone lookup morphs can leave inputs visually filled while $wire is empty. --}}

@@ -53,6 +53,9 @@ class AdminInbox extends Component
     #[Url(as: 'conversation', history: false)]
     public ?int $selectedConversationId = null;
 
+    /** Sticky desktop preview so poll reorder does not swap the open thread. */
+    public ?int $desktopPreviewConversationId = null;
+
     public string $replyText = '';
 
     public ?int $replyToMessageId = null;
@@ -214,6 +217,7 @@ class AdminInbox extends Component
     {
         $conversation = ChannelConversation::query()->findOrFail($conversationId);
         $this->selectedConversationId = $conversation->id;
+        $this->desktopPreviewConversationId = $conversation->id;
         $this->mobileThreadOpen = true;
         $this->resetComposer();
         $this->resetOrderMapping();
@@ -1553,6 +1557,11 @@ class AdminInbox extends Component
         $this->statusMessage = null;
     }
 
+    public function clearInboxError(): void
+    {
+        $this->error = null;
+    }
+
     /**
      * Echo / Livewire listener: re-render list + open thread from DB (no Graph).
      * When the event targets the open conversation, also mark website read / defer seen.
@@ -2123,11 +2132,21 @@ class AdminInbox extends Component
 
         $conversations = $query->limit(100)->get();
 
-        // Desktop convenience: preview the first thread without writing ?conversation= into the URL.
-        // URL selection is only set by explicit open / deep link, and cleared by the mobile back button.
+        // Desktop convenience: sticky preview of one thread without writing ?conversation=.
+        // Poll/sort must not swap the preview to whichever conversation is newest.
         $displayConversationId = $this->selectedConversationId;
         if ($displayConversationId === null && $conversations->isNotEmpty() && ! $this->mobileThreadOpen) {
-            $displayConversationId = (int) $conversations->first()->id;
+            $previewStillListed = $this->desktopPreviewConversationId !== null
+                && $conversations->contains(
+                    fn (ChannelConversation $conversation): bool => (int) $conversation->id === (int) $this->desktopPreviewConversationId
+                );
+
+            if ($previewStillListed) {
+                $displayConversationId = (int) $this->desktopPreviewConversationId;
+            } else {
+                $displayConversationId = (int) $conversations->first()->id;
+                $this->desktopPreviewConversationId = $displayConversationId;
+            }
         }
 
         $threadSearch = trim($this->threadMessageSearch);

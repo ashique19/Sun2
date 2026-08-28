@@ -5,7 +5,9 @@ namespace App\Livewire\Admin;
 use App\Models\Area;
 use App\Models\Category;
 use App\Models\City;
+use App\Models\Coupon;
 use App\Models\Order;
+use App\Models\OrderProduct;
 use App\Models\Product;
 use App\Models\User;
 use App\Rules\BangladeshMobile;
@@ -16,6 +18,8 @@ use App\Services\Admin\ProductImageHashService;
 use App\Services\Admin\ProductImageService;
 use App\Services\Couriers\PathaoMerchantSuccessClient;
 use App\Services\Locations\LocationAliasLearner;
+use App\Services\Orders\CouponStackingService;
+use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderTotalCalculator;
 use App\Services\Storefront\AddressLocationGuesser;
 use App\Services\Storefront\CheckoutPricing;
@@ -24,6 +28,7 @@ use App\Support\PhoneNumber;
 use App\Support\StorefrontAssets;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
@@ -88,9 +93,16 @@ class AdminOrderForm extends Component
 
     public string $deliveryCharge = '0';
 
-    public string $charge = '0';
+    /**
+     * Multi-line charges, discounts, and coupons (replaces single charge/discount fields).
+     *
+     * @var list<array{key:string,type:string,label:string,amount:string,coupon_id:?int,coupon_code:?string,locked:bool}>
+     */
+    public array $adjustmentLines = [];
 
-    public string $discount = '0';
+    public string $couponCodeInput = '';
+
+    public string $courierChargeInput = '0';
 
     public bool $autoDelivery = true;
 
@@ -167,13 +179,14 @@ class AdminOrderForm extends Component
         $this->orderDate = now('Asia/Dhaka')->toDateString();
 
         if ($order?->exists) {
-            $this->order = $order->load(['items.product', 'courier', 'exchangeOf:id,order_number']);
+            $this->order = $order->load(['items.product', 'courier', 'exchangeOf:id,order_number', 'adjustments']);
             $this->fillFromOrder($this->order);
+            $this->courierChargeInput = (string) (int) round((float) $this->order->courier_charge);
             $this->hydrateExchangeOf($this->order->exchange_of_order_id ? (int) $this->order->exchange_of_order_id : null);
             $this->orderDate = $this->order->placed_at?->timezone('Asia/Dhaka')->toDateString()
                 ?? $this->orderDate;
         } elseif ($this->repeat) {
-            $source = Order::query()->with('items.product')->find($this->repeat);
+            $source = Order::query()->with(['items.product', 'adjustments'])->find($this->repeat);
 
             if ($source) {
                 $this->fillFromOrder($source);
@@ -314,8 +327,7 @@ class AdminOrderForm extends Component
         $this->customerNote = (string) ($source->customer_note ?? '');
         $this->isExchange = (bool) $source->is_replacement;
         $this->deliveryCharge = (string) (int) round((float) $source->delivery_charge);
-        $this->charge = (string) (int) round((float) ($source->charge ?? 0));
-        $this->discount = (string) (int) round((float) $source->discount);
+        $this->loadAdjustmentLinesFromOrder($source);
         $this->autoDelivery = false;
 
         $resolved = app(OrderPasteParser::class)->resolveLocation(
@@ -555,7 +567,7 @@ class AdminOrderForm extends Component
             $this->suppressAddressGuess = true;
         }
 
-        if (! empty($parsed['due_amount']) && (float) $this->discount === 0.0) {
+        if (! empty($parsed['due_amount']) && $this->adjustmentDiscountSum() === 0.0) {
             // Keep due amount visible via admin note hint only if empty.
             if (trim($this->adminNote) === '') {
                 $this->adminNote = 'Pasted TOTAL DUE: '.number_format((float) $parsed['due_amount'], 0).' Tk';
@@ -1017,6 +1029,213 @@ class AdminOrderForm extends Component
         $this->error = null;
     }
 
+    public function addChargeLine(): void
+    {
+        $this->adjustmentLines[] = $this->blankAdjustmentLine('charge', 'Extra charge');
+    }
+
+    public function addDiscountLine(): void
+    {
+        $this->adjustmentLines[] = $this->blankAdjustmentLine('discount', 'Discount');
+    }
+
+    public function removeAdjustmentLine(string $key): void
+    {
+        $this->adjustmentLines = array_values(array_filter(
+            $this->adjustmentLines,
+            fn (array $line): bool => $line['key'] !== $key || ($line['locked'] ?? false),
+        ));
+    }
+
+    public function applyCouponCode(): void
+    {
+        $this->error = null;
+        $code = strtoupper(trim($this->couponCodeInput));
+
+        if ($code === '') {
+            $this->error = 'Enter a coupon code.';
+
+            return;
+        }
+
+        $coupon = Coupon::query()->whereRaw('UPPER(code) = ?', [$code])->first();
+
+        if ($coupon === null) {
+            $this->error = "Coupon '{$code}' not found.";
+
+            return;
+        }
+
+        $existingCouponLines = array_values(array_filter(
+            $this->adjustmentLines,
+            fn (array $line): bool => ($line['type'] ?? '') === 'coupon' && isset($line['coupon_id']),
+        ));
+
+        $stacking = app(CouponStackingService::class);
+        $validation = $stacking->validate(
+            $coupon,
+            $this->subtotal(),
+            array_map(fn (array $line): array => ['coupon_id' => (int) $line['coupon_id']], $existingCouponLines),
+            adminOverride: true,
+        );
+
+        if (! $validation['valid']) {
+            $this->error = $validation['message'] ?? 'Coupon cannot be applied.';
+
+            return;
+        }
+
+        $priorLines = $this->normalizedAdjustmentLinesForCalculator();
+        $remaining = $stacking->remainingSubtotal($this->subtotal(), $priorLines);
+        $items = $this->couponCapItems();
+
+        $resolved = $stacking->resolve(
+            $coupon,
+            $remaining,
+            $this->subtotal(),
+            $items,
+            [],
+        );
+
+        if ($resolved['rejected']) {
+            $this->error = $resolved['rejection_message'] ?? 'Coupon cannot be applied.';
+
+            return;
+        }
+
+        $built = $stacking->buildAdjustmentLine(
+            $coupon,
+            $resolved,
+            sortOrder: 20 + (count($this->adjustmentLines) * 10),
+        );
+
+        $this->adjustmentLines[] = [
+            'key' => (string) Str::uuid(),
+            'type' => 'coupon',
+            'label' => (string) $built['label'],
+            'amount' => (string) (int) round((float) $built['amount']),
+            'coupon_id' => (int) $built['coupon_id'],
+            'coupon_code' => (string) $coupon->code,
+            'locked' => false,
+            'meta' => $built['meta'] ?? null,
+        ];
+
+        $this->couponCodeInput = '';
+        $this->message = "Coupon {$coupon->code} added.";
+    }
+
+    public function applyCourierChargeEstimate(): void
+    {
+        $estimate = $this->previewCourierChargeEstimate();
+
+        if ($estimate === null) {
+            $this->error = 'Add products and location to estimate courier cost.';
+
+            return;
+        }
+
+        $this->courierChargeInput = (string) (int) round($estimate);
+    }
+
+    public function previewCourierChargeEstimate(): ?float
+    {
+        if ($this->lines === []) {
+            return null;
+        }
+
+        $city = $this->cityId ? City::query()->find($this->cityId) : null;
+        $area = $this->areaId ? Area::query()->find($this->areaId) : null;
+
+        $draft = new Order([
+            'city' => $city?->name ?? $this->order?->city,
+            'area' => $area?->name ?? $this->order?->area,
+            'status' => $this->order?->status ?? 'new',
+        ]);
+
+        $draft->setRelation('items', collect($this->lines)->map(fn (array $line): OrderProduct => new OrderProduct([
+            'product_id' => $line['product_id'],
+            'quantity' => (int) $line['quantity'],
+            'returned_quantity' => 0,
+        ])));
+
+        if ($this->order?->relationLoaded('courier')) {
+            $draft->setRelation('courier', $this->order->courier);
+        } elseif ($this->order?->courier_id) {
+            $draft->setRelation('courier', $this->order->courier);
+        }
+
+        return app(OrderCourierChargeSync::class)->estimateMerchantDeliveryFee(
+            $draft,
+            $this->order?->courier,
+        );
+    }
+
+    public function adjustmentChargeSum(): float
+    {
+        return (float) array_reduce(
+            $this->adjustmentLines,
+            fn (float $carry, array $line): float => ($line['type'] ?? '') === 'charge'
+                ? $carry + $this->roundedMoney($line['amount'] ?? 0)
+                : $carry,
+            0.0,
+        );
+    }
+
+    public function adjustmentDiscountSum(): float
+    {
+        return (float) array_reduce(
+            $this->adjustmentLines,
+            fn (float $carry, array $line): float => in_array($line['type'] ?? '', ['discount', 'coupon'], true)
+                ? $carry + $this->roundedMoney($line['amount'] ?? 0)
+                : $carry,
+            0.0,
+        );
+    }
+
+    /**
+     * @return list<array{type:string,label:string,amount:float,source:string,sort_order:int,coupon_id?:int|null,meta?:array|null}>
+     */
+    public function adjustmentLinesForSync(): array
+    {
+        $lines = [];
+
+        foreach (array_values($this->adjustmentLines) as $index => $line) {
+            $amount = $this->roundedMoney($line['amount'] ?? 0);
+
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $type = (string) ($line['type'] ?? 'charge');
+            $label = trim((string) ($line['label'] ?? ''));
+
+            if ($label === '') {
+                $label = match ($type) {
+                    'coupon' => (string) ($line['coupon_code'] ?? 'Coupon'),
+                    'discount' => 'Discount',
+                    default => 'Charge',
+                };
+            }
+
+            $entry = [
+                'type' => $type,
+                'label' => $label,
+                'amount' => (float) $amount,
+                'source' => ($line['locked'] ?? false) ? 'partial_return_writeoff' : 'admin',
+                'sort_order' => ($index + 1) * 10,
+            ];
+
+            if ($type === 'coupon' && isset($line['coupon_id'])) {
+                $entry['coupon_id'] = (int) $line['coupon_id'];
+                $entry['meta'] = is_array($line['meta'] ?? null) ? $line['meta'] : null;
+            }
+
+            $lines[] = $entry;
+        }
+
+        return $lines;
+    }
+
     public function save(AdminOrderService $orders): void
     {
         $this->error = null;
@@ -1034,31 +1253,39 @@ class AdminOrderForm extends Component
         $city = $this->cityId ? City::query()->find($this->cityId) : null;
         $area = $this->areaId ? Area::query()->find($this->areaId) : null;
 
-        $orderData = AdminOrderService::orderAttributesFromForm([
-            'name' => $validated['name'],
-            'phone' => $validated['phone'],
-            'address' => $this->address,
-            'payment_method' => $validated['paymentMethod'],
-            'admin_note' => $validated['adminNote'] ?? null,
-            'courier_note' => $this->courierNote !== '' ? $this->courierNote : null,
-            'is_replacement' => $this->isExchange,
-            'exchange_of_order_id' => $this->isExchange ? $this->exchangeOfOrderId : null,
-            'has_return' => $this->order
-                ? (bool) $this->order->has_return
-                : ($this->isExchange && $this->exchangeOfOrderId === null),
-            'email' => $this->order?->email,
-            'status' => $this->order?->status ?? 'new',
-            'customer_note' => trim((string) ($validated['customerNote'] ?? '')) !== ''
-                ? trim((string) $validated['customerNote'])
-                : null,
-            'subtotal' => $this->subtotal(),
-            'delivery_charge' => (float) $this->roundedMoney($this->deliveryCharge),
-            'charge' => (float) $this->roundedMoney($this->charge),
-            'discount' => (float) $this->roundedMoney($this->discount),
-            'city' => $city?->name,
-            'area' => $area?->name,
-            'placed_at' => $this->resolvedPlacedAt(),
-        ], (bool) $this->order);
+        $orderData = array_merge(
+            AdminOrderService::orderAttributesFromForm([
+                'name' => $validated['name'],
+                'phone' => $validated['phone'],
+                'address' => $this->address,
+                'payment_method' => $validated['paymentMethod'],
+                'admin_note' => $validated['adminNote'] ?? null,
+                'courier_note' => $this->courierNote !== '' ? $this->courierNote : null,
+                'is_replacement' => $this->isExchange,
+                'exchange_of_order_id' => $this->isExchange ? $this->exchangeOfOrderId : null,
+                'has_return' => $this->order
+                    ? (bool) $this->order->has_return
+                    : ($this->isExchange && $this->exchangeOfOrderId === null),
+                'email' => $this->order?->email,
+                'status' => $this->order?->status ?? 'new',
+                'customer_note' => trim((string) ($validated['customerNote'] ?? '')) !== ''
+                    ? trim((string) $validated['customerNote'])
+                    : null,
+                'subtotal' => $this->subtotal(),
+                'delivery_charge' => (float) $this->roundedMoney($this->deliveryCharge),
+                'charge' => $this->adjustmentChargeSum(),
+                'discount' => $this->adjustmentDiscountSum(),
+                'placed_at' => $this->resolvedPlacedAt(),
+            ], (bool) $this->order),
+            [
+                'adjustment_lines' => $this->adjustmentLinesForSync(),
+                'courier_charge_manual' => $this->order
+                    ? (float) $this->roundedMoney($this->courierChargeInput)
+                    : null,
+                'city' => $city?->name,
+                'area' => $area?->name,
+            ],
+        );
 
         $lines = array_values(array_map(fn (array $line) => [
             'product_id' => $line['product_id'],
@@ -1082,7 +1309,9 @@ class AdminOrderForm extends Component
                 return;
             }
 
-            $this->order = $order->load(['items.product', 'courier']);
+            $this->order = $order->load(['items.product', 'courier', 'adjustments']);
+            $this->loadAdjustmentLinesFromOrder($this->order);
+            $this->courierChargeInput = (string) (int) round((float) $this->order->courier_charge);
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Throwable $e) {
@@ -1120,8 +1349,8 @@ class AdminOrderForm extends Component
             0,
             $this->roundedMoney($this->subtotal())
                 + $this->roundedMoney($this->deliveryCharge)
-                + $this->roundedMoney($this->charge)
-                - $this->roundedMoney($this->discount),
+                + $this->adjustmentChargeSum()
+                - $this->adjustmentDiscountSum(),
         );
     }
 
@@ -1147,17 +1376,14 @@ class AdminOrderForm extends Component
             return null;
         }
 
-        $adjustments = [];
+        $adjustments = array_map(
+            fn (array $line): array => ['type' => $line['type'], 'amount' => (float) $line['amount']],
+            $this->adjustmentLinesForSync(),
+        );
 
-        if ($this->roundedMoney($this->charge) > 0) {
-            $adjustments[] = ['type' => 'charge', 'amount' => $this->roundedMoney($this->charge)];
-        }
-
-        if ($this->roundedMoney($this->discount) > 0) {
-            $adjustments[] = ['type' => 'discount', 'amount' => $this->roundedMoney($this->discount)];
-        }
-
-        $courierCharge = $this->order ? (float) $this->order->courier_charge : 0.0;
+        $courierCharge = $this->order
+            ? (float) $this->roundedMoney($this->courierChargeInput)
+            : (float) ($this->previewCourierChargeEstimate() ?? 0);
         $packagingCost = $this->order ? (float) ($this->order->packaging_cost ?? 0) : 0.0;
         $collectedAmount = $this->order ? (float) ($this->order->collected_amount ?? 0) : 0.0;
         $courierSlug = $this->order?->courier?->slug;
@@ -1186,16 +1412,6 @@ class AdminOrderForm extends Component
     public function updatedDeliveryCharge(mixed $value): void
     {
         $this->deliveryCharge = (string) $this->roundedMoney($value);
-    }
-
-    public function updatedCharge(mixed $value): void
-    {
-        $this->charge = (string) $this->roundedMoney($value);
-    }
-
-    public function updatedDiscount(mixed $value): void
-    {
-        $this->discount = (string) $this->roundedMoney($value);
     }
 
     public function render()
@@ -1397,8 +1613,12 @@ class AdminOrderForm extends Component
                 },
             ],
             'deliveryCharge' => ['required', 'integer', 'min:0'],
-            'charge' => ['required', 'integer', 'min:0'],
-            'discount' => ['required', 'integer', 'min:0'],
+            'courierChargeInput' => ['nullable', 'integer', 'min:0'],
+            'adjustmentLines' => ['array'],
+            'adjustmentLines.*.type' => ['required', 'in:charge,discount,coupon'],
+            'adjustmentLines.*.label' => ['nullable', 'string', 'max:120'],
+            'adjustmentLines.*.amount' => ['nullable', 'integer', 'min:0'],
+            'couponCodeInput' => ['nullable', 'string', 'max:64'],
             // Products optional — rush intake often saves customer details first, lines later.
             'lines' => ['array'],
             'lines.*.quantity' => ['required', 'integer', 'min:1'],
@@ -1423,5 +1643,91 @@ class AdminOrderForm extends Component
         // Past calendar day in Dhaka — store noon local as a real UTC instant
         // so Asia/Dhaka day grouping on the dashboard stays correct.
         return $selected->copy()->setTime(12, 0, 0)->utc();
+    }
+
+    private function loadAdjustmentLinesFromOrder(Order $source): void
+    {
+        $source->loadMissing('adjustments');
+
+        if ($source->adjustments->isNotEmpty()) {
+            $this->adjustmentLines = $source->adjustments
+                ->sortBy('sort_order')
+                ->values()
+                ->map(fn ($adj): array => [
+                    'key' => 'adj-'.$adj->id,
+                    'type' => (string) $adj->type,
+                    'label' => (string) $adj->label,
+                    'amount' => (string) (int) round((float) $adj->amount),
+                    'coupon_id' => $adj->coupon_id ? (int) $adj->coupon_id : null,
+                    'coupon_code' => $adj->type === 'coupon' ? (string) $adj->label : null,
+                    'locked' => (string) ($adj->source ?? '') === 'partial_return_writeoff',
+                    'meta' => is_array($adj->meta) ? $adj->meta : null,
+                ])
+                ->all();
+
+            return;
+        }
+
+        $this->adjustmentLines = [];
+
+        if ((float) ($source->charge ?? 0) > 0) {
+            $this->adjustmentLines[] = $this->blankAdjustmentLine('charge', 'Charge', (string) (int) round((float) $source->charge));
+        }
+
+        if ((float) ($source->discount ?? 0) > 0) {
+            $this->adjustmentLines[] = $this->blankAdjustmentLine('discount', 'Discount', (string) (int) round((float) $source->discount));
+        }
+    }
+
+    /**
+     * @return array{key:string,type:string,label:string,amount:string,coupon_id:?int,coupon_code:?string,locked:bool}
+     */
+    private function blankAdjustmentLine(string $type, string $label, string $amount = '0'): array
+    {
+        return [
+            'key' => (string) Str::uuid(),
+            'type' => $type,
+            'label' => $label,
+            'amount' => $amount,
+            'coupon_id' => null,
+            'coupon_code' => null,
+            'locked' => false,
+        ];
+    }
+
+    /**
+     * @return list<array{type:string,amount:float}>
+     */
+    private function normalizedAdjustmentLinesForCalculator(): array
+    {
+        return array_map(
+            fn (array $line): array => [
+                'type' => (string) $line['type'],
+                'amount' => (float) $this->roundedMoney($line['amount'] ?? 0),
+            ],
+            $this->adjustmentLinesForSync(),
+        );
+    }
+
+    /**
+     * @return Collection<int, array{product_id:int,max_discount:float|null,quantity:int,line_total:float}>
+     */
+    private function couponCapItems(): Collection
+    {
+        if ($this->lines === []) {
+            return collect();
+        }
+
+        $productIds = array_column($this->lines, 'product_id');
+        $caps = Product::query()->whereIn('id', $productIds)->pluck('max_discount', 'id');
+
+        return collect($this->lines)->map(fn (array $line): array => [
+            'product_id' => (int) $line['product_id'],
+            'max_discount' => $caps[(int) $line['product_id']] !== null
+                ? (float) $caps[(int) $line['product_id']]
+                : null,
+            'quantity' => (int) $line['quantity'],
+            'line_total' => (float) $this->roundedMoney($line['line_total']),
+        ]);
     }
 }

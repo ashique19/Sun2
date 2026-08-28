@@ -107,14 +107,14 @@ class OrderCodChargeTest extends TestCase
 
         Livewire::test(AdminOrderShow::class, ['order' => $order])
             ->assertSee('Bill to customer')
+            ->assertSee('Net revenue')
+            ->assertSee('Delivery margin')
             ->assertSee('Receivable from courier')
             ->assertSee('Gross profit')
             ->assertSee('COD charge')
             ->assertSee('1% of collected − delivery')
             ->assertSee('11.00')
-            ->assertSee('Collected by courier')
-            ->assertDontSee('Net revenue')
-            ->assertDontSee('Delivery margin');
+            ->assertSee('Collected by courier');
     }
 
     #[Test]

@@ -200,6 +200,10 @@
                                     @if ((float) $item->price > 0 && (int) $item->quantity > 1)
                                         <span class="text-[#8C8474]">&middot; &#2547; {{ number_format($item->price, 0) }} each</span>
                                     @endif
+                                    @php($lineCogs = $item->effectiveUnitCost() * max(0, (int) $item->quantity - (int) ($item->returned_quantity ?? 0)))
+                                    @if ($lineCogs > 0)
+                                        <span class="text-[#8C8474]">&middot; COGS &#2547;{{ number_format($lineCogs, 0) }}</span>
+                                    @endif
                                 </p>
                             </div>
                         </div>
@@ -225,9 +229,61 @@
                             <div class="flex justify-between gap-3 text-emerald-700"><span>− Discounts / coupons</span><span class="tabular-nums">&#2547; {{ number_format($order->discount, 0) }}</span></div>
                         @endif
                         <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 font-semibold">
-                            <span>Bill to customer</span>
+                            <span>Bill to customer (COD)</span>
                             <span class="tabular-nums">&#2547; {{ number_format($money->billToCustomer, 0) }}</span>
                         </div>
+                    </div>
+
+                    @php($lastCourierChargeLog = $order->adjustmentLogs->firstWhere('field', 'courier_charge'))
+
+                    <div class="space-y-2 border-t border-[#E7DFCF] pt-3">
+                        <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Net revenue</p>
+                        <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Revenue</span><span class="tabular-nums">&#2547; {{ number_format($money->subtotal, 0) }}</span></div>
+                        @if ($money->cogs > 0)
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− COGS</span><span class="tabular-nums">&#2547; {{ number_format($money->cogs, 0) }}</span></div>
+                        @endif
+                        @foreach ($order->adjustments->where('type', 'charge') as $adj)
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ {{ $adj->label }}</span><span class="tabular-nums">&#2547; {{ number_format($adj->amount, 0) }}</span></div>
+                        @endforeach
+                        @if ($order->adjustments->isEmpty() && (float) $order->charge > 0)
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ Charges</span><span class="tabular-nums">&#2547; {{ number_format($order->charge, 0) }}</span></div>
+                        @endif
+                        @foreach ($order->adjustments->whereIn('type', ['discount', 'coupon']) as $adj)
+                            <div class="flex justify-between gap-3 text-emerald-700"><span>− {{ $adj->label }}</span><span class="tabular-nums">&#2547; {{ number_format($adj->amount, 0) }}</span></div>
+                        @endforeach
+                        @if ($order->adjustments->isEmpty() && (float) $order->discount > 0)
+                            <div class="flex justify-between gap-3 text-emerald-700"><span>− Discounts / coupons</span><span class="tabular-nums">&#2547; {{ number_format($order->discount, 0) }}</span></div>
+                        @endif
+                        @if ($money->deliveryCharge > 0)
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ Customer delivery</span><span class="tabular-nums">&#2547; {{ number_format($money->deliveryCharge, 0) }}</span></div>
+                        @endif
+                        @if ($money->courierCharge > 0)
+                            <div class="flex justify-between gap-3">
+                                <span class="text-[#6B6459]">
+                                    − Courier cost
+                                    @if ($lastCourierChargeLog?->phase)
+                                        <span class="text-[11px] font-normal text-[#8C8474]">({{ $lastCourierChargeLog->phase }})</span>
+                                    @endif
+                                </span>
+                                <span class="tabular-nums">&#2547; {{ number_format($money->courierCharge, 0) }}</span>
+                            </div>
+                        @endif
+                        @if ($money->packagingCost > 0)
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Packaging</span><span class="tabular-nums">&#2547; {{ number_format($money->packagingCost, 0) }}</span></div>
+                        @endif
+                        @if ($money->codCharge > 0)
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− COD charge</span><span class="tabular-nums">&#2547; {{ number_format($money->codCharge, 2) }}</span></div>
+                        @endif
+                        <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 text-base font-semibold">
+                            <span>Net revenue</span>
+                            <span @class(['tabular-nums', 'text-rose-600' => $money->netRevenue < 0])>&#2547; {{ number_format($money->netRevenue, 0) }}</span>
+                        </div>
+                        @if ($money->deliveryCharge > 0 || $money->courierCharge > 0)
+                            <div class="flex justify-between gap-3 text-xs text-[#8C8474]">
+                                <span>Delivery margin</span>
+                                <span @class(['tabular-nums', 'text-rose-600' => $money->deliveryMargin < 0])>&#2547; {{ number_format($money->deliveryMargin, 0) }}</span>
+                            </div>
+                        @endif
                     </div>
 
                     <div class="space-y-2 border-t border-[#E7DFCF] pt-3">

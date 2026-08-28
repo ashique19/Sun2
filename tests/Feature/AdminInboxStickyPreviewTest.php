@@ -115,7 +115,8 @@ class AdminInboxStickyPreviewTest extends TestCase
             ->assertSee('Message…')
             ->assertSeeHtml('wire:keydown.enter.exact.prevent="sendReply"')
             ->assertSeeHtml('aria-label="Send"')
-            ->assertSeeHtml('absolute bottom-2 right-2')
+            ->assertSeeHtml('absolute right-1.5 top-1/2')
+            ->assertSeeHtml('items-center gap-1.5')
             ->assertSeeHtml('data-inbox-thread-header')
             ->assertSeeHtml('flex min-h-0 flex-1 flex-col overflow-hidden');
     }

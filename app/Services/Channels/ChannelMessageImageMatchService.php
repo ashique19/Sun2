@@ -73,10 +73,10 @@ class ChannelMessageImageMatchService
             $top = null;
         }
 
-        if ($top === null || (float) $top['match_percent'] < ProductImageHashService::AUTO_MATCH_PERCENT) {
+        if ($top === null || (float) $top['match_percent'] < ProductImageHashService::autoMatchPercent()) {
             // Fall back to full-frame / DCT hash compare when crop heuristics miss.
             $top = $this->matchFromCachedHashes($cached);
-            if ($top === null || (float) $top['match_percent'] < ProductImageHashService::AUTO_MATCH_PERCENT) {
+            if ($top === null || (float) $top['match_percent'] < ProductImageHashService::autoMatchPercent()) {
                 $top = $this->matchFromEmbedding($cached['bytes']);
                 if ($top === null) {
                     return null;
@@ -148,7 +148,7 @@ class ChannelMessageImageMatchService
             return $this->hasher->findTopMatchesFromBinary(
                 $cached['bytes'],
                 $limit,
-                ProductImageHashService::MIN_MATCH_PERCENT,
+                ProductImageHashService::minMatchPercent(),
             );
         } catch (Throwable $e) {
             Log::debug('Inbox screenshot fallback image match failed.', [
@@ -184,11 +184,21 @@ class ChannelMessageImageMatchService
     {
         $best = null;
 
-        foreach (array_filter([$cached['dhash'] ?? null, $cached['dct_hash'] ?? null]) as $hash) {
+        $autoPercent = ProductImageHashService::autoMatchPercent();
+
+        foreach ([
+            ['hash' => $cached['dhash'] ?? null, 'kind' => 'dhash'],
+            ['hash' => $cached['dct_hash'] ?? null, 'kind' => 'dct'],
+        ] as $candidate) {
+            if (! is_string($candidate['hash']) || $candidate['hash'] === '') {
+                continue;
+            }
+
             $matches = $this->hasher->findTopMatches(
-                (string) $hash,
+                $candidate['hash'],
                 1,
-                ProductImageHashService::AUTO_MATCH_PERCENT,
+                $autoPercent,
+                $candidate['kind'],
             );
             $top = $matches[0] ?? null;
             if ($top === null) {

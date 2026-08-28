@@ -163,7 +163,7 @@ class ProductImageEmbeddingService
                 }
             });
 
-        if ($best === null || $bestSim < self::AUTO_SIMILARITY) {
+        if ($best === null || $bestSim < (ProductImageHashService::autoMatchPercent() / 100)) {
             return null;
         }
 

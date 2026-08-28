@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\ProductImage;
+use App\Services\Admin\ProductImageEmbeddingService;
 use App\Services\Admin\ProductImageHashService;
 use Illuminate\Console\Command;
 
@@ -26,7 +27,9 @@ class IndexProductImageHashesCommand extends Command
         if (! $force) {
             $query->where(function ($builder): void {
                 $builder->whereNull('perceptual_hash')
-                    ->orWhereNull('perceptual_hashes');
+                    ->orWhereNull('perceptual_hashes')
+                    ->orWhereNull('dct_hash')
+                    ->orWhereNull('embedding_vector');
             });
         }
 
@@ -59,7 +62,7 @@ class IndexProductImageHashesCommand extends Command
                 $processed++;
 
                 try {
-                    if (! $force && $image->perceptual_hash && is_array($image->perceptual_hashes) && $image->perceptual_hashes !== []) {
+                    if (! $force && $this->isFullyIndexed($image)) {
                         $bar->advance();
 
                         continue;
@@ -89,5 +92,17 @@ class IndexProductImageHashesCommand extends Command
         $this->info("Done. hashed={$ok} failed={$failed}");
 
         return self::SUCCESS;
+    }
+
+    private function isFullyIndexed(ProductImage $image): bool
+    {
+        return is_string($image->perceptual_hash)
+            && $image->perceptual_hash !== ''
+            && is_array($image->perceptual_hashes)
+            && $image->perceptual_hashes !== []
+            && is_string($image->dct_hash)
+            && $image->dct_hash !== ''
+            && is_array($image->embedding_vector)
+            && count($image->embedding_vector) === ProductImageEmbeddingService::DIMENSIONS;
     }
 }

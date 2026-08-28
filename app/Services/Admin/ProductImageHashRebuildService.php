@@ -64,7 +64,9 @@ class ProductImageHashRebuildService
         if (! $force) {
             $query->where(function ($builder): void {
                 $builder->whereNull('perceptual_hash')
-                    ->orWhereNull('perceptual_hashes');
+                    ->orWhereNull('perceptual_hashes')
+                    ->orWhereNull('dct_hash')
+                    ->orWhereNull('embedding_vector');
             });
         }
 
@@ -133,7 +135,9 @@ class ProductImageHashRebuildService
             if (! $run->force) {
                 $query->where(function ($builder): void {
                     $builder->whereNull('perceptual_hash')
-                        ->orWhereNull('perceptual_hashes');
+                        ->orWhereNull('perceptual_hashes')
+                        ->orWhereNull('dct_hash')
+                        ->orWhereNull('embedding_vector');
                 });
             }
 

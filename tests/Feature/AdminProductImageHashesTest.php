@@ -60,6 +60,22 @@ class AdminProductImageHashesTest extends TestCase
     }
 
     #[Test]
+    public function open_rebuild_modal_stays_open_and_does_not_poll_when_idle(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminProductImageHashes::class)
+            ->call('openRebuildModal')
+            ->assertSet('rebuildModalOpen', true)
+            ->assertSee('Backfill missing')
+            ->assertSeeHtml('image-hash-rebuild-modal')
+            ->assertDontSeeHtml('wire:poll')
+            ->call('tickRebuild')
+            ->assertSet('rebuildModalOpen', true)
+            ->assertSee('Backfill missing');
+    }
+
+    #[Test]
     public function rebuild_modal_backfills_legacy_row_without_force(): void
     {
         $this->actingAs($this->adminUser());

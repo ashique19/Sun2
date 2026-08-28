@@ -114,6 +114,8 @@ class AdminInboxStickyPreviewTest extends TestCase
             ->call('selectConversation', $conversation->id)
             ->assertSee('Message…')
             ->assertSeeHtml('wire:keydown.enter.exact.prevent="sendReply"')
+            ->assertSeeHtml('aria-label="Send"')
+            ->assertSeeHtml('absolute bottom-2 right-2')
             ->assertSeeHtml('grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto]');
     }
 

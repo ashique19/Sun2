@@ -1032,7 +1032,7 @@
                         </div>
                     @endif
 
-                    <div class="flex items-end gap-2">
+                    <div class="flex min-w-0 max-w-full items-end gap-2">
                         <label
                             class="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#E0D6C2] bg-[#FAF6EF] text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]"
                             title="Attach images"
@@ -1051,7 +1051,7 @@
                             class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-[#FAF6EF] text-sm font-bold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
                             +P
                         </button>
-                        <div class="min-w-0 flex-1">
+                        <div class="relative min-w-0 flex-1">
                             <div wire:loading wire:target="replyImages" class="mb-1 text-[11px] text-[#8C8474]">Uploading images…</div>
                             @php
                                 $replyRows = max(1, min(8, substr_count((string) $replyText, "\n") + 1));
@@ -1060,18 +1060,29 @@
                                 wire:model="replyText"
                                 rows="{{ $replyRows }}"
                                 placeholder="{{ $replyToMessage ? 'Write a reply…' : 'Message…' }}"
-                                class="w-full resize-none rounded-2xl border border-[#E0D6C2] bg-[#FAF6EF] px-4 py-2.5 text-sm leading-5 focus:border-[#C9A227] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C9A227] disabled:opacity-60"
+                                class="w-full min-w-0 resize-none rounded-2xl border border-[#E0D6C2] bg-[#FAF6EF] py-2.5 pl-4 pr-14 text-sm leading-5 focus:border-[#C9A227] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C9A227] disabled:opacity-60 xl:pr-4"
                                 wire:keydown.enter.exact.prevent="sendReply"
                                 @disabled($outboundSending)
                                 title="Enter to send · Shift+Enter for a new line"
                             ></textarea>
+                            <button type="button"
+                                wire:click="sendReply"
+                                wire:loading.attr="disabled"
+                                wire:target="sendReply,flushPendingOutbound"
+                                @disabled($outboundSending)
+                                class="absolute bottom-2 right-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#C9A227] text-white hover:bg-[#b89220] disabled:opacity-60 xl:hidden"
+                                aria-label="Send">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                                    <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.154.75.75 0 0 0 0-1.115A28.897 28.897 0 0 0 3.105 2.288Z" />
+                                </svg>
+                            </button>
                         </div>
                         <button type="button"
                             wire:click="sendReply"
                             wire:loading.attr="disabled"
                             wire:target="sendReply,flushPendingOutbound"
                             @disabled($outboundSending)
-                            class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#C9A227] text-white hover:bg-[#b89220] disabled:opacity-60"
+                            class="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#C9A227] text-white hover:bg-[#b89220] disabled:opacity-60 xl:inline-flex"
                             aria-label="Send">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
                                 <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.154.75.75 0 0 0 0-1.115A28.897 28.897 0 0 0 3.105 2.288Z" />

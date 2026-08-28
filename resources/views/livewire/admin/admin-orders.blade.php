@@ -152,14 +152,7 @@
                                 <span class="col-span-full text-sm text-[#8C8474]">—</span>
                             @endforelse
                         </div>
-                        @php($netRevenue = $order->netRevenue())
-                        <div class="shrink-0 text-right sm:min-w-[5.5rem]">
-                            <p class="text-[11px] uppercase tracking-wide text-[#8C8474]">COD</p>
-                            <p class="text-sm font-semibold tabular-nums text-[#1E1E1E]">&#2547; {{ number_format($order->total, 0) }}</p>
-                            <p class="mt-1 text-[11px] text-[#8C8474]">Net
-                                <span @class(['tabular-nums font-medium', 'text-rose-600' => $netRevenue < 0, 'text-[#6B6459]' => $netRevenue >= 0])>&#2547;{{ number_format($netRevenue, 0) }}</span>
-                            </p>
-                        </div>
+                        <x-admin.order-list-economics :order="$order" class="sm:min-w-[5.5rem]" />
                     </div>
                     @if ($adminNote || $courierNote || $customerNote)
                         <div class="mt-3 space-y-2 border-t border-[#EFE7D6] pt-3">
@@ -276,23 +269,7 @@
                                         </p>
                                     @endif
                                 </div>
-                                <div class="shrink-0 text-right">
-                                    <p class="text-[11px] uppercase tracking-wide text-[#8C8474]">COD</p>
-                                    <p class="text-sm font-semibold tabular-nums text-[#1E1E1E]">&#2547; {{ number_format($order->total, 0) }}</p>
-                                    @php($netRevenue = $order->netRevenue())
-                                    <p class="mt-1 text-[11px] text-[#8C8474]">Net
-                                        <span @class(['tabular-nums font-medium', 'text-rose-600' => $netRevenue < 0, 'text-[#6B6459]' => $netRevenue >= 0])>&#2547;{{ number_format($netRevenue, 0) }}</span>
-                                    </p>
-                                    @if ((float) $order->due_amount > 0 && (float) $order->paid_amount > 0)
-                                        <p class="text-[11px] text-[#8C8474]">Due &#2547;{{ number_format($order->due_amount, 0) }}</p>
-                                    @endif
-                                    @if ((float) $order->delivery_charge > 0 || (float) $order->courier_charge > 0)
-                                        <p class="hidden sm:block mt-1 text-[10px] leading-snug text-[#8C8474] tabular-nums">
-                                            Del &#2547;{{ number_format($order->delivery_charge, 0) }}
-                                            &middot; Cour &#2547;{{ number_format($order->courier_charge, 0) }}
-                                        </p>
-                                    @endif
-                                </div>
+                                <x-admin.order-list-economics :order="$order" :show-due="true" />
                             </div>
 
                             <div class="min-w-0">

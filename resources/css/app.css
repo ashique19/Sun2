@@ -267,6 +267,11 @@ body:has(.mobile-nav-toggle:checked) {
     body[data-inbox-mobile-thread="1"] [data-inbox-mobile-thread-sheet] {
         top: 0;
         max-height: 100dvh;
+        background-color: #ffffff;
+    }
+
+    body[data-inbox-mobile-thread="1"] [data-inbox-mobile-thread-sheet] [data-inbox-thread-header] {
+        margin-top: 0;
     }
 }
 

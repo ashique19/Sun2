@@ -487,8 +487,8 @@
                 <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div
                     data-inbox-thread-header
-                    class="shrink-0 border-b border-[#E7DFCF] bg-white px-3 pb-2.5 pt-[env(safe-area-inset-top,0px)] backdrop-blur max-xl:pr-[max(0.75rem,env(safe-area-inset-right))] xl:bg-white/95 xl:px-4 xl:py-3">
-                    <div class="flex min-w-0 max-w-full items-center gap-1 overflow-hidden xl:gap-2">
+                    class="shrink-0 border-b border-[#E7DFCF] bg-white px-3 pb-2.5 pt-[env(safe-area-inset-top,0px)] backdrop-blur max-xl:pt-[max(0.375rem,env(safe-area-inset-top,0px))] max-xl:pr-[max(0.75rem,env(safe-area-inset-right))] xl:bg-white/95 xl:px-4 xl:py-3">
+                    <div class="flex min-w-0 max-w-full items-center gap-1 xl:gap-2">
                         <button type="button"
                             wire:click="closeMobileThread"
                             class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#6B6459] hover:bg-[#FAF6EF] xl:hidden"
@@ -1053,9 +1053,9 @@
                         </div>
                     @endif
 
-                    <div class="flex min-w-0 max-w-full items-end gap-2">
+                    <div class="flex min-w-0 max-w-full items-center gap-1.5 max-xl:gap-2 xl:gap-2">
                         <label
-                            class="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#E0D6C2] bg-[#FAF6EF] text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]"
+                            class="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#E0D6C2] bg-[#FAF6EF] text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] xl:h-11 xl:w-11"
                             title="Attach images"
                             x-data
                             x-on:livewire-upload-error="$wire.reportReplyImageUploadError()"
@@ -1069,19 +1069,20 @@
                             wire:click="openComposerProductPicker"
                             title="Send product (images, link, price)"
                             aria-label="Send product"
-                            class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-[#FAF6EF] text-sm font-bold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                            class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-[#FAF6EF] text-sm font-bold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] xl:h-11 xl:w-11">
                             +P
                         </button>
-                        <div class="relative min-w-0 flex-1">
+                        <div class="min-w-0 flex-1 self-center">
                             <div wire:loading wire:target="replyImages" class="mb-1 text-[11px] text-[#8C8474]">Uploading images…</div>
                             @php
                                 $replyRows = max(1, min(8, substr_count((string) $replyText, "\n") + 1));
                             @endphp
+                            <div class="relative min-w-0">
                             <textarea
                                 wire:model="replyText"
                                 rows="{{ $replyRows }}"
                                 placeholder="{{ $replyToMessage ? 'Write a reply…' : 'Message…' }}"
-                                class="w-full min-w-0 resize-none rounded-2xl border border-[#E0D6C2] bg-[#FAF6EF] py-2.5 pl-4 pr-14 text-sm leading-5 focus:border-[#C9A227] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C9A227] disabled:opacity-60 xl:pr-4"
+                                class="block w-full min-w-0 min-h-10 resize-none rounded-2xl border border-[#E0D6C2] bg-[#FAF6EF] py-2 pl-4 pr-12 text-sm leading-5 focus:border-[#C9A227] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C9A227] disabled:opacity-60 xl:min-h-11 xl:py-2.5 xl:pr-4"
                                 wire:keydown.enter.exact.prevent="sendReply"
                                 @disabled($outboundSending)
                                 title="Enter to send · Shift+Enter for a new line"
@@ -1091,12 +1092,13 @@
                                 wire:loading.attr="disabled"
                                 wire:target="sendReply,flushPendingOutbound"
                                 @disabled($outboundSending)
-                                class="absolute bottom-2 right-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#C9A227] text-white hover:bg-[#b89220] disabled:opacity-60 xl:hidden"
+                                class="absolute right-1.5 top-1/2 inline-flex h-8 w-8 shrink-0 -translate-y-1/2 items-center justify-center rounded-full bg-[#C9A227] text-white hover:bg-[#b89220] disabled:opacity-60 xl:hidden"
                                 aria-label="Send">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
                                     <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.154.75.75 0 0 0 0-1.115A28.897 28.897 0 0 0 3.105 2.288Z" />
                                 </svg>
                             </button>
+                            </div>
                         </div>
                         <button type="button"
                             wire:click="sendReply"

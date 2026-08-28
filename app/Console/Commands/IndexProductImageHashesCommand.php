@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\ProductImage;
-use App\Services\Admin\ProductImageEmbeddingService;
+use App\Services\Admin\ProductImageHashRebuildService;
 use App\Services\Admin\ProductImageHashService;
 use Illuminate\Console\Command;
 
@@ -16,7 +16,7 @@ class IndexProductImageHashesCommand extends Command
 
     protected $description = 'Backfill perceptual hashes for product images (local or CDN)';
 
-    public function handle(ProductImageHashService $hasher): int
+    public function handle(ProductImageHashService $hasher, ProductImageHashRebuildService $rebuild): int
     {
         $force = (bool) $this->option('force');
         $chunk = max(1, (int) $this->option('chunk'));
@@ -25,12 +25,7 @@ class IndexProductImageHashesCommand extends Command
         $query = ProductImage::query()->orderBy('id');
 
         if (! $force) {
-            $query->where(function ($builder): void {
-                $builder->whereNull('perceptual_hash')
-                    ->orWhereNull('perceptual_hashes')
-                    ->orWhereNull('dct_hash')
-                    ->orWhereNull('embedding_vector');
-            });
+            $query = $rebuild->incompleteIndexQuery()->orderBy('id');
         }
 
         $total = (clone $query)->count();
@@ -53,7 +48,7 @@ class IndexProductImageHashesCommand extends Command
         $failed = 0;
         $processed = 0;
 
-        $query->chunkById($chunk, function ($images) use ($hasher, $force, $limit, &$ok, &$failed, &$processed, $bar) {
+        $query->chunkById($chunk, function ($images) use ($hasher, $rebuild, $force, $limit, &$ok, &$failed, &$processed, $bar) {
             foreach ($images as $image) {
                 if ($limit > 0 && $processed >= $limit) {
                     return false;
@@ -62,7 +57,7 @@ class IndexProductImageHashesCommand extends Command
                 $processed++;
 
                 try {
-                    if (! $force && $this->isFullyIndexed($image)) {
+                    if (! $force && $rebuild->isFullyIndexed($image)) {
                         $bar->advance();
 
                         continue;
@@ -92,17 +87,5 @@ class IndexProductImageHashesCommand extends Command
         $this->info("Done. hashed={$ok} failed={$failed}");
 
         return self::SUCCESS;
-    }
-
-    private function isFullyIndexed(ProductImage $image): bool
-    {
-        return is_string($image->perceptual_hash)
-            && $image->perceptual_hash !== ''
-            && is_array($image->perceptual_hashes)
-            && $image->perceptual_hashes !== []
-            && is_string($image->dct_hash)
-            && $image->dct_hash !== ''
-            && is_array($image->embedding_vector)
-            && count($image->embedding_vector) === ProductImageEmbeddingService::DIMENSIONS;
     }
 }

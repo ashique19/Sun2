@@ -16,13 +16,37 @@ class AdminProductImageHashes extends Component
 
     public bool $forceRehash = false;
 
+    public bool $rebuildModalOpen = false;
+
     public function mount(ProductImageHashRebuildService $hashes): void
     {
         $this->activeRunId = $hashes->activeRun()?->id;
     }
 
-    public function startRebuild(ProductImageHashRebuildService $hashes): void
+    public function openRebuildModal(ProductImageHashRebuildService $hashes): void
     {
+        if ($hashes->activeRun()) {
+            return;
+        }
+
+        $this->forceRehash = false;
+
+        $this->rebuildModalOpen = true;
+    }
+
+    public function closeRebuildModal(): void
+    {
+        $this->rebuildModalOpen = false;
+    }
+
+    public function confirmRebuild(ProductImageHashRebuildService $hashes): void
+    {
+        if ($hashes->activeRun()) {
+            $this->rebuildModalOpen = false;
+
+            return;
+        }
+
         $run = $hashes->start(
             trigger: 'admin',
             user: auth()->user(),
@@ -31,7 +55,13 @@ class AdminProductImageHashes extends Component
         );
 
         $this->activeRunId = $run->id;
+        $this->rebuildModalOpen = false;
         $hashes->processChunk($run);
+    }
+
+    public function startRebuild(ProductImageHashRebuildService $hashes): void
+    {
+        $this->openRebuildModal($hashes);
     }
 
     public function tickRebuild(ProductImageHashRebuildService $hashes): void

@@ -1,4 +1,12 @@
-<div wire:poll.1s.keep-alive="tickRebuild">
+<div>
+    @if ($activeRunId || $active)
+        <div
+            wire:poll.1s="tickRebuild"
+            wire:poll.keep-alive
+            class="pointer-events-none fixed bottom-0 left-0 z-0 h-px w-px opacity-0"
+            aria-hidden="true"
+        ></div>
+    @endif
     @if ($statusMessage)
         <x-admin.toast
             :message="$statusMessage"
@@ -36,7 +44,8 @@
                 class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 <span wire:loading.remove wire:target="openRebuildModal,confirmRebuild">{{ $active ? 'Rebuild in progress…' : 'Rebuild image hashes' }}</span>
-                <span wire:loading wire:target="openRebuildModal,confirmRebuild">Starting…</span>
+                <span wire:loading wire:target="openRebuildModal">Opening…</span>
+                <span wire:loading wire:target="confirmRebuild">Starting…</span>
             </button>
         </div>
     </div>
@@ -198,76 +207,74 @@
         </div>
     </div>
 
-    @teleport('body')
-        @if ($rebuildModalOpen)
-            <div
-                class="fixed inset-0 z-[80] flex items-end justify-center overflow-y-auto overscroll-contain bg-black/50 p-0 sm:items-center sm:p-4"
-                wire:click.self="closeRebuildModal"
-                wire:key="image-hash-rebuild-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-label="Rebuild product image hashes"
-            >
-                <div class="flex max-h-[min(90dvh,36rem)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl" wire:click.stop>
-                    <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-4">
-                        <div>
-                            <h2 class="font-semibold text-lg">Rebuild image hashes</h2>
-                            <p class="mt-1 text-sm text-[#8C8474]">
-                                Runs in the browser in small batches. Keep this tab open until progress reaches 100%.
+    @if ($rebuildModalOpen)
+        <div
+            class="fixed inset-0 z-[80] flex items-end justify-center overflow-y-auto overscroll-contain bg-black/50 p-0 sm:items-center sm:p-4"
+            wire:click.self="closeRebuildModal"
+            wire:key="image-hash-rebuild-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Rebuild product image hashes"
+        >
+            <div class="flex max-h-[min(90dvh,36rem)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl" wire:click.stop>
+                <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#EFE7D6] px-4 py-4">
+                    <div>
+                        <h2 class="font-semibold text-lg">Rebuild image hashes</h2>
+                        <p class="mt-1 text-sm text-[#8C8474]">
+                            Runs in the browser in small batches. Keep this tab open until progress reaches 100%.
+                        </p>
+                    </div>
+                    <button type="button" wire:click="closeRebuildModal"
+                        class="shrink-0 rounded-full border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
+                        Close
+                    </button>
+                </div>
+
+                <div class="max-h-[min(24rem,calc(90dvh-11rem))] overflow-y-auto px-4 py-4 space-y-4">
+                    <div class="rounded-xl border border-[#E7DFCF] bg-[#FAF6EF] px-4 py-3 text-sm text-[#6B6459]">
+                        <p class="font-semibold text-[#1E1E1E]">Backfill missing (recommended)</p>
+                        <p class="mt-1">
+                            Adds crop variants, DCT hashes, and embeddings for images that only have legacy dHash data.
+                            Use this for inbox screenshot product matching.
+                        </p>
+                        @if ($coverage['needs_screenshot_backfill'] > 0)
+                            <p class="mt-2 text-amber-800 font-medium">
+                                {{ number_format($coverage['needs_screenshot_backfill']) }} image(s) queued for backfill.
                             </p>
-                        </div>
-                        <button type="button" wire:click="closeRebuildModal"
-                            class="shrink-0 rounded-full border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
-                            Close
-                        </button>
+                        @else
+                            <p class="mt-2 text-emerald-700">Nothing missing — catalog already fully indexed.</p>
+                        @endif
                     </div>
 
-                    <div class="max-h-[min(24rem,calc(90dvh-11rem))] overflow-y-auto px-4 py-4 space-y-4">
-                        <div class="rounded-xl border border-[#E7DFCF] bg-[#FAF6EF] px-4 py-3 text-sm text-[#6B6459]">
-                            <p class="font-semibold text-[#1E1E1E]">Backfill missing (recommended)</p>
-                            <p class="mt-1">
-                                Adds crop variants, DCT hashes, and embeddings for images that only have legacy dHash data.
-                                Use this for inbox screenshot product matching.
-                            </p>
-                            @if ($coverage['needs_screenshot_backfill'] > 0)
-                                <p class="mt-2 text-amber-800 font-medium">
-                                    {{ number_format($coverage['needs_screenshot_backfill']) }} image(s) queued for backfill.
-                                </p>
-                            @else
-                                <p class="mt-2 text-emerald-700">Nothing missing — catalog already fully indexed.</p>
-                            @endif
-                        </div>
-
-                        <label class="flex items-start gap-3 rounded-xl border border-[#E7DFCF] px-4 py-3 text-sm text-[#6B6459]">
-                            <input type="checkbox" wire:model="forceRehash" class="mt-0.5 rounded border-[#E0D6C2] text-[#C9A227] focus:ring-[#C9A227]">
-                            <span>
-                                <span class="font-semibold text-[#1E1E1E]">Re-hash all images</span>
-                                <span class="mt-1 block">
-                                    Re-process every product photo even when hashes exist. Slower — use after bulk image replacements.
-                                </span>
+                    <label class="flex items-start gap-3 rounded-xl border border-[#E7DFCF] px-4 py-3 text-sm text-[#6B6459]">
+                        <input type="checkbox" wire:model="forceRehash" class="mt-0.5 rounded border-[#E0D6C2] text-[#C9A227] focus:ring-[#C9A227]">
+                        <span>
+                            <span class="font-semibold text-[#1E1E1E]">Re-hash all images</span>
+                            <span class="mt-1 block">
+                                Re-process every product photo even when hashes exist. Slower — use after bulk image replacements.
                             </span>
-                        </label>
-                    </div>
+                        </span>
+                    </label>
+                </div>
 
-                    <div class="flex shrink-0 items-center justify-end gap-2 border-t border-[#EFE7D6] px-4 py-3">
-                        <button type="button" wire:click="closeRebuildModal"
-                            class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
-                            Cancel
-                        </button>
-                        <button type="button"
-                            wire:click="confirmRebuild"
-                            wire:loading.attr="disabled"
-                            wire:target="confirmRebuild"
-                            @disabled(! $forceRehash && $coverage['needs_screenshot_backfill'] === 0)
-                            class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-50 disabled:cursor-not-allowed">
-                            <span wire:loading.remove wire:target="confirmRebuild">
-                                {{ $forceRehash ? 'Re-hash all' : 'Backfill missing' }}
-                            </span>
-                            <span wire:loading wire:target="confirmRebuild">Starting…</span>
-                        </button>
-                    </div>
+                <div class="flex shrink-0 items-center justify-end gap-2 border-t border-[#EFE7D6] px-4 py-3">
+                    <button type="button" wire:click="closeRebuildModal"
+                        class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm text-[#6B6459] hover:bg-[#FAF6EF]">
+                        Cancel
+                    </button>
+                    <button type="button"
+                        wire:click="confirmRebuild"
+                        wire:loading.attr="disabled"
+                        wire:target="confirmRebuild"
+                        @disabled(! $forceRehash && $coverage['needs_screenshot_backfill'] === 0)
+                        class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span wire:loading.remove wire:target="confirmRebuild">
+                            {{ $forceRehash ? 'Re-hash all' : 'Backfill missing' }}
+                        </span>
+                        <span wire:loading wire:target="confirmRebuild">Starting…</span>
+                    </button>
                 </div>
             </div>
-        @endif
-    @endteleport
+        </div>
+    @endif
 </div>

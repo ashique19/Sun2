@@ -124,6 +124,21 @@ class StorefrontProductNeighborNavTest extends TestCase
     }
 
     #[Test]
+    public function product_page_shares_breadcrumb_and_compact_neighbor_nav_on_small_screens(): void
+    {
+        [, $first, $middle, $last] = $this->orderedCategoryProducts();
+
+        $this->get(route('product.show', $middle))
+            ->assertOk()
+            ->assertSeeHtml('class="mb-4 flex items-center gap-2 md:block"')
+            ->assertSeeHtml('class="flex items-center gap-1 md:hidden"')
+            ->assertSeeHtml('aria-label="'.__('storefront.previous_product').': First Earring"')
+            ->assertSeeHtml('aria-label="'.__('storefront.next_product').': Last Earring"')
+            ->assertSeeHtml(route('product.show', $first))
+            ->assertSeeHtml(route('product.show', $last));
+    }
+
+    #[Test]
     public function uncategorized_products_navigate_across_published_catalog(): void
     {
         $alpha = Product::query()->create([

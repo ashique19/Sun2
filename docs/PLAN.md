@@ -683,28 +683,15 @@ running the same store pipeline as manual uploads (hash, primary rules, etc.).
 
 ### Production SQL (MySQL)
 
-```sql
-CREATE TABLE `product_image_match_memories` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  `hash` VARCHAR(16) NOT NULL,
-  `hash_kind` VARCHAR(8) NOT NULL,
-  `product_id` BIGINT UNSIGNED NOT NULL,
-  `source_channel_message_id` BIGINT UNSIGNED NULL,
-  `created_by` BIGINT UNSIGNED NULL,
-  `hit_count` INT UNSIGNED NOT NULL DEFAULT 0,
-  `last_hit_at` TIMESTAMP NULL,
-  `created_at` TIMESTAMP NULL,
-  `updated_at` TIMESTAMP NULL,
-  UNIQUE KEY `product_image_match_memories_hash_hash_kind_unique` (`hash`, `hash_kind`),
-  KEY `product_image_match_memories_product_id_foreign` (`product_id`),
-  CONSTRAINT `product_image_match_memories_product_id_foreign` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `product_image_match_memories_source_channel_message_id_foreign` FOREIGN KEY (`source_channel_message_id`) REFERENCES `channel_messages` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `product_image_match_memories_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
-);
+Use **`docs/production_apply_2026_08_27_match_memory.sql`** — idempotent, safe to re-run.
+It applies (in order):
 
-ALTER TABLE `product_images`
-  ADD COLUMN `embedding_vector` JSON NULL AFTER `dct_hash`;
-```
+1. `channel_messages.media_path`, `media_dhash`, `media_dct_hash` (after `media_mime`; works when `matched_product_id` is already present)
+2. `product_images.dct_hash` + index (after `perceptual_hashes` when present, else `perceptual_hash`, else `path`)
+3. `product_image_match_memories` table
+4. `product_images.embedding_vector` (after `dct_hash` when present)
+
+Do **not** paste raw `ALTER … AFTER perceptual_hashes` if that column is missing on production — the script picks the correct anchor column.
 
 Then: `php artisan products:index-image-hashes --force` to backfill embeddings.
 

@@ -20,12 +20,18 @@ return new class extends Migration
             }
         });
 
-        Schema::table('product_images', function (Blueprint $table) {
-            if (! Schema::hasColumn('product_images', 'dct_hash')) {
-                $table->string('dct_hash', 16)->nullable()->after('perceptual_hashes');
+        if (! Schema::hasColumn('product_images', 'dct_hash')) {
+            Schema::table('product_images', function (Blueprint $table) {
+                $afterColumn = match (true) {
+                    Schema::hasColumn('product_images', 'perceptual_hashes') => 'perceptual_hashes',
+                    Schema::hasColumn('product_images', 'perceptual_hash') => 'perceptual_hash',
+                    default => 'path',
+                };
+
+                $table->string('dct_hash', 16)->nullable()->after($afterColumn);
                 $table->index('dct_hash');
-            }
-        });
+            });
+        }
     }
 
     public function down(): void

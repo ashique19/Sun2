@@ -11,15 +11,28 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasColumn('product_images', 'embedding_vector')) {
+            return;
+        }
+
         Schema::table('product_images', function (Blueprint $table) {
-            $table->json('embedding_vector')->nullable()->after('dct_hash');
+            $afterColumn = match (true) {
+                Schema::hasColumn('product_images', 'dct_hash') => 'dct_hash',
+                Schema::hasColumn('product_images', 'perceptual_hashes') => 'perceptual_hashes',
+                Schema::hasColumn('product_images', 'perceptual_hash') => 'perceptual_hash',
+                default => 'path',
+            };
+
+            $table->json('embedding_vector')->nullable()->after($afterColumn);
         });
     }
 
     public function down(): void
     {
         Schema::table('product_images', function (Blueprint $table) {
-            $table->dropColumn('embedding_vector');
+            if (Schema::hasColumn('product_images', 'embedding_vector')) {
+                $table->dropColumn('embedding_vector');
+            }
         });
     }
 };

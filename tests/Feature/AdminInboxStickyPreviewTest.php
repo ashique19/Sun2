@@ -71,6 +71,17 @@ class AdminInboxStickyPreviewTest extends TestCase
     }
 
     #[Test]
+    public function inbox_page_uses_full_height_flex_layout(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $this->get(route('admin.inbox'))
+            ->assertOk()
+            ->assertSeeHtml('class="flex min-h-0 flex-1 flex-col xl:gap-4"')
+            ->assertSeeHtml('auto-rows-fr');
+    }
+
+    #[Test]
     public function selecting_a_conversation_updates_sticky_preview(): void
     {
         $this->actingAs($this->adminUser());

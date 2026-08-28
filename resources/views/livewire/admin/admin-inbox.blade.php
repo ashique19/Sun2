@@ -4,7 +4,7 @@
         ->count();
 @endphp
 
-<div class="flex h-[calc(100dvh-3.25rem)] min-h-0 flex-col md:h-[calc(100dvh-4.75rem)] xl:h-[calc(100dvh-6.5rem)] xl:gap-4">
+<div class="flex min-h-0 flex-1 flex-col xl:gap-4">
     {{--
         Fixed beacon so Graph poll keeps running while the mobile thread sheet is open.
         The sheet is position:fixed (out of document flow), which can collapse in-flow
@@ -366,7 +366,7 @@
     @endif
 
     <div @class([
-        'mt-2 grid min-h-0 flex-1 xl:mt-0 xl:grid-cols-[22rem_minmax(0,1fr)] xl:items-stretch xl:gap-6',
+        'mt-2 grid min-h-0 flex-1 auto-rows-fr xl:mt-0 xl:grid-cols-[22rem_minmax(0,1fr)] xl:gap-6',
     ])>
         {{-- Conversation list --}}
         <div @class([
@@ -461,9 +461,18 @@
         {{-- Thread: fullscreen messenger sheet on mobile --}}
         <div @class([
             'relative flex min-h-0 flex-col overflow-hidden bg-[#F7F3EA]',
-            'fixed inset-0 z-30 xl:static xl:z-auto xl:h-full xl:max-h-full xl:rounded-2xl xl:border xl:border-[#EFE7D6] xl:bg-white',
+            'fixed inset-0 z-30 xl:static xl:z-auto xl:min-h-0 xl:h-full xl:rounded-2xl xl:border xl:border-[#EFE7D6] xl:bg-white',
             $mobileThreadOpen ? 'flex' : 'hidden xl:flex',
         ])>
+            <div
+                wire:loading.delay.shortest
+                wire:target="selectConversation"
+                class="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-[1px] xl:rounded-2xl"
+                aria-live="polite"
+                aria-busy="true">
+                <p class="text-sm font-medium text-[#6B6459]">Opening conversation…</p>
+            </div>
+
             @if ($selectedConversation)
                 <div class="shrink-0 border-b border-[#E7DFCF] bg-white/95 px-3 py-2.5 backdrop-blur xl:px-4 xl:py-3">
                     <div class="flex items-center gap-2">

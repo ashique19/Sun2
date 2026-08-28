@@ -12,7 +12,11 @@
     @endif
     @livewireStyles
 </head>
-<body class="min-h-screen bg-[#FAF6EF] text-[#1E1E1E] antialiased">
+<body @class([
+    'bg-[#FAF6EF] text-[#1E1E1E] antialiased',
+    'min-h-screen' => ! request()->routeIs('admin.inbox'),
+    'h-dvh overflow-hidden' => request()->routeIs('admin.inbox'),
+])>
     @php
         $isModeratorOnly = auth()->user()?->isModeratorOnly() ?? false;
         $closeDrawer = "document.getElementById('admin-mobile-nav-toggle').checked = false";
@@ -36,10 +40,17 @@
         </div>
     </div>
 
-    <div class="min-h-screen flex">
+    <div @class([
+        'flex',
+        'min-h-screen' => ! request()->routeIs('admin.inbox'),
+        'h-full min-h-0' => request()->routeIs('admin.inbox'),
+    ])>
         <x-admin.sidebar />
 
-        <div class="flex-1 min-w-0">
+        <div @class([
+            'flex-1 min-w-0',
+            'flex flex-col min-h-0' => request()->routeIs('admin.inbox'),
+        ])>
             <header class="hidden md:flex border-b border-[#E7DFCF] bg-white/90 backdrop-blur px-4 sm:px-6 py-4 items-center justify-between gap-4">
                 <div>
                     <p class="text-xs uppercase tracking-wide text-[#8C8474]">Sundoritoma Admin</p>
@@ -56,7 +67,7 @@
 
             <main @class([
                 'p-4 sm:p-6' => ! request()->routeIs('admin.inbox'),
-                'p-0 xl:p-6' => request()->routeIs('admin.inbox'),
+                'flex flex-1 flex-col min-h-0 overflow-hidden p-0 xl:p-6' => request()->routeIs('admin.inbox'),
             ])>
                 {{ $slot }}
             </main>

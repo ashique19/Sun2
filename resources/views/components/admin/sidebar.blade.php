@@ -1,7 +1,11 @@
 @php
     $isModeratorOnly = auth()->user()?->isModeratorOnly() ?? false;
 @endphp
-<aside class="hidden md:flex w-56 lg:w-64 shrink-0 flex-col border-r border-[#E7DFCF] bg-white min-h-screen">
+<aside @class([
+    'hidden md:flex w-56 lg:w-64 shrink-0 flex-col border-r border-[#E7DFCF] bg-white',
+    'min-h-screen' => ! request()->routeIs('admin.inbox'),
+    'h-full min-h-0' => request()->routeIs('admin.inbox'),
+])>
     <div class="px-5 py-6 border-b border-[#E7DFCF]">
         <a href="{{ $isModeratorOnly ? route('admin.orders.new') : route('admin.dashboard') }}" wire:navigate class="font-serif text-xl font-semibold text-[#C9A227]">
             Admin

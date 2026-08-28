@@ -187,6 +187,9 @@ class AdminInbox extends Component
     /** Search message bodies in the open thread (searches full history). */
     public string $threadMessageSearch = '';
 
+    /** Skip updatedSelectedConversationId when selectConversation already activated the thread. */
+    private bool $suppressConversationUpdatedHook = false;
+
     public function mount(ChannelInboxPurgeService $purge, ChannelReplyService $replies): void
     {
         AdminAccess::ensureStaffAdmin();
@@ -203,8 +206,8 @@ class AdminInbox extends Component
             $this->mobileThreadOpen = true;
             $conversation = ChannelConversation::query()->find($this->selectedConversationId);
             if ($conversation) {
-                $this->markConversationRead($conversation, $replies);
-                $this->queueInboundImageMatching();
+                $this->desktopPreviewConversationId = $conversation->id;
+                $this->activateConversation($conversation, $replies);
             }
         }
 
@@ -216,17 +219,13 @@ class AdminInbox extends Component
     public function selectConversation(int $conversationId, ChannelReplyService $replies): void
     {
         $conversation = ChannelConversation::query()->findOrFail($conversationId);
+
+        $this->suppressConversationUpdatedHook = true;
         $this->selectedConversationId = $conversation->id;
         $this->desktopPreviewConversationId = $conversation->id;
-        $this->mobileThreadOpen = true;
-        $this->resetComposer();
-        $this->resetOrderMapping();
-        $this->resetImageTools();
-        $this->resetThreadHistory();
-        $this->error = null;
-        $this->statusMessage = null;
-        $this->markConversationRead($conversation, $replies);
-        $this->queueInboundImageMatching();
+        $this->suppressConversationUpdatedHook = false;
+
+        $this->activateConversation($conversation, $replies);
     }
 
     /**
@@ -237,6 +236,10 @@ class AdminInbox extends Component
      */
     public function updatedSelectedConversationId(?int $conversationId): void
     {
+        if ($this->suppressConversationUpdatedHook) {
+            return;
+        }
+
         if ($conversationId === null) {
             $this->mobileThreadOpen = false;
             $this->resetComposer();
@@ -258,6 +261,12 @@ class AdminInbox extends Component
             return;
         }
 
+        $this->desktopPreviewConversationId = $conversation->id;
+        $this->activateConversation($conversation, app(ChannelReplyService::class));
+    }
+
+    private function activateConversation(ChannelConversation $conversation, ChannelReplyService $replies): void
+    {
         $this->mobileThreadOpen = true;
         $this->resetComposer();
         $this->resetOrderMapping();
@@ -265,7 +274,7 @@ class AdminInbox extends Component
         $this->resetThreadHistory();
         $this->error = null;
         $this->statusMessage = null;
-        $this->markConversationRead($conversation, app(ChannelReplyService::class));
+        $this->markConversationRead($conversation, $replies);
         $this->queueInboundImageMatching();
     }
 
@@ -1770,12 +1779,15 @@ class AdminInbox extends Component
         }
 
         $messages = ChannelMessage::query()
-            ->with('matchedProduct:id,name')
             ->where('channel_conversation_id', $this->selectedConversationId)
             ->where('direction', ChannelMessage::DIRECTION_INBOUND)
             ->whereNotNull('media_url')
             ->orderBy('id')
-            ->get();
+            ->get(['id', 'matched_product_id', 'media_mime', 'media_url']);
+
+        $productNames = Product::query()
+            ->whereIn('id', $messages->pluck('matched_product_id')->filter()->unique())
+            ->pluck('name', 'id');
 
         $queued = false;
 
@@ -1789,11 +1801,11 @@ class AdminInbox extends Component
                 continue;
             }
 
-            if ($message->matched_product_id && $message->matchedProduct) {
+            if ($message->matched_product_id) {
                 $this->inboundImageMatchState[$key] = [
                     'status' => 'done',
                     'product_id' => (int) $message->matched_product_id,
-                    'name' => (string) $message->matchedProduct->name,
+                    'name' => (string) ($productNames[(int) $message->matched_product_id] ?? 'Product'),
                     'match_percent' => 100.0,
                     'strategy' => 'stored',
                 ];

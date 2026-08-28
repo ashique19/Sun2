@@ -371,7 +371,8 @@
     @endif
 
     <div @class([
-        'mt-2 grid min-h-0 flex-1 grid-rows-1 xl:mt-0 xl:grid-cols-[22rem_minmax(0,1fr)] xl:gap-6',
+        'grid min-h-0 flex-1 grid-rows-1 xl:grid-cols-[22rem_minmax(0,1fr)] xl:gap-6',
+        $mobileThreadOpen ? 'mt-0' : 'mt-2 xl:mt-0',
     ])>
         {{-- Conversation list --}}
         <div @class([
@@ -467,9 +468,11 @@
         <div
             data-inbox-mobile-thread-sheet
             @class([
-            'relative flex min-h-0 flex-col overflow-hidden bg-[#F7F3EA]',
-            'fixed inset-x-0 bottom-0 z-30 xl:static xl:inset-auto xl:z-auto xl:h-full xl:max-h-full xl:min-h-0 xl:rounded-2xl xl:border xl:border-[#EFE7D6] xl:bg-white',
-            $mobileThreadOpen ? 'flex' : 'hidden xl:flex',
+            'relative flex min-h-0 flex-col overflow-hidden',
+            'fixed z-30 xl:static xl:inset-auto xl:z-auto xl:h-full xl:max-h-full xl:min-h-0 xl:rounded-2xl xl:border xl:border-[#EFE7D6] xl:bg-white',
+            $mobileThreadOpen
+                ? 'inset-0 flex bg-white'
+                : 'inset-x-0 bottom-0 hidden bg-[#F7F3EA] xl:flex xl:bg-white',
         ])>
             <div
                 wire:loading.delay.shortest
@@ -481,9 +484,11 @@
             </div>
 
             @if ($selectedConversation)
-                <div class="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
-                <div class="shrink-0 border-b border-[#E7DFCF] bg-white/95 px-3 py-2.5 backdrop-blur xl:px-4 xl:py-3">
-                    <div class="flex items-center gap-2">
+                <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div
+                    data-inbox-thread-header
+                    class="shrink-0 border-b border-[#E7DFCF] bg-white px-3 pb-2.5 pt-[env(safe-area-inset-top,0px)] backdrop-blur max-xl:pr-[max(0.75rem,env(safe-area-inset-right))] xl:bg-white/95 xl:px-4 xl:py-3">
+                    <div class="flex min-w-0 max-w-full items-center gap-1 overflow-hidden xl:gap-2">
                         <button type="button"
                             wire:click="closeMobileThread"
                             class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#6B6459] hover:bg-[#FAF6EF] xl:hidden"
@@ -492,7 +497,7 @@
                                 <path fill-rule="evenodd" d="M17 10a.75.75 0 0 1-.75.75H5.56l3.22 3.22a.75.75 0 1 1-1.06 1.06l-4.5-4.5a.75.75 0 0 1 0-1.06l4.5-4.5a.75.75 0 0 1 1.06 1.06L5.56 9.25H16.25A.75.75 0 0 1 17 10Z" clip-rule="evenodd" />
                             </svg>
                         </button>
-                        <div class="min-w-0 flex-1">
+                        <div class="min-w-0 flex-1 overflow-hidden">
                             <h2 class="truncate text-base font-semibold text-[#1E1E1E]">
                                 {{ $selectedConversation->customer_name ?: $selectedConversation->customer_phone ?: $selectedConversation->external_user_id }}
                             </h2>
@@ -518,9 +523,10 @@
                                 @endif
                             </p>
                         </div>
+                        <div class="flex shrink-0 items-center gap-1">
                         <button type="button"
                             wire:click="toggleOrderPanel"
-                            class="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-3 text-xs font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]"
+                            class="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-2.5 text-xs font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] xl:px-3"
                             aria-label="Order fields"
                             title="Order fields">
                             {{ $selectedConversation->draftOrder ? 'Order' : '+ Order' }}
@@ -529,11 +535,26 @@
                             wire:click="syncFromFacebook"
                             wire:loading.attr="disabled"
                             wire:target="syncFromFacebook"
-                            class="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-3 text-xs font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60 xl:hidden"
+                            class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60 xl:hidden"
+                            aria-label="Sync from Facebook"
+                            title="Sync from Facebook">
+                            <span wire:loading.remove wire:target="syncFromFacebook">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.39a.75.75 0 0 0-.75.75v3.842a.75.75 0 0 0 1.5 0v-2.14l.311.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm-10.623-2.85a5.5 5.5 0 0 1 9.201-2.466l.312.311H11.77a.75.75 0 0 0 0 1.5h3.843a.75.75 0 0 0 .75-.75V3.328a.75.75 0 1 0-1.5 0V5.47l-.311-.311A7 7 0 0 0 3.04 8.295a.75.75 0 1 0 1.45.39Z" clip-rule="evenodd" />
+                                </svg>
+                            </span>
+                            <span wire:loading wire:target="syncFromFacebook">…</span>
+                        </button>
+                        <button type="button"
+                            wire:click="syncFromFacebook"
+                            wire:loading.attr="disabled"
+                            wire:target="syncFromFacebook"
+                            class="hidden h-10 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-3 text-xs font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60 xl:inline-flex"
                             aria-label="Sync from Facebook">
                             <span wire:loading.remove wire:target="syncFromFacebook">Sync</span>
                             <span wire:loading wire:target="syncFromFacebook">…</span>
                         </button>
+                        </div>
                     </div>
                     @if ($mappingField !== 'product')
                         @if ($hasOlderMessages && ! $threadHistoryExpanded)
@@ -625,7 +646,7 @@
                         },
                     }"
                     @scroll.passive="onScroll()"
-                    class="min-h-0 overflow-y-auto space-y-2 px-3 py-3 xl:px-4 xl:py-4">
+                    class="min-h-0 flex-1 overflow-y-auto space-y-2 px-3 py-3 xl:px-4 xl:py-4">
                     @foreach ($selectedConversation->messages as $messageRow)
                         @php $isOutbound = $messageRow->direction === 'outbound'; @endphp
                         <div

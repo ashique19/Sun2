@@ -116,7 +116,8 @@ class AdminInboxStickyPreviewTest extends TestCase
             ->assertSeeHtml('wire:keydown.enter.exact.prevent="sendReply"')
             ->assertSeeHtml('aria-label="Send"')
             ->assertSeeHtml('absolute bottom-2 right-2')
-            ->assertSeeHtml('grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto]');
+            ->assertSeeHtml('data-inbox-thread-header')
+            ->assertSeeHtml('flex min-h-0 flex-1 flex-col overflow-hidden');
     }
 
     public function inbox_mobile_thread_sheet_uses_viewport_aware_positioning(): void

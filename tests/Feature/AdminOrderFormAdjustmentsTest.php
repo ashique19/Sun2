@@ -195,4 +195,20 @@ class AdminOrderFormAdjustmentsTest extends TestCase
         $order->refresh();
         $this->assertSame(530.0, (float) $order->total);
     }
+
+    #[Test]
+    public function create_order_form_renders_stacked_adjustments_markup(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminOrderForm::class)
+            ->assertSee('Adjustments')
+            ->assertSee('+ Charge')
+            ->assertSee('+ Discount')
+            ->assertSee('Coupon code')
+            ->assertSee('Add coupon')
+            ->call('addChargeLine')
+            ->assertSee('Remove')
+            ->assertSee('Amount');
+    }
 }

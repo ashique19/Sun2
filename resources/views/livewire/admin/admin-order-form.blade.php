@@ -1,4 +1,4 @@
-<div class="min-w-0 max-w-full overflow-x-hidden pb-24 xl:pb-0">
+<div class="min-w-0 max-w-full overflow-x-hidden pb-28 xl:pb-0">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
         <div class="min-w-0">
             <a href="{{ $order ? route('admin.orders.show', $order) : route('admin.orders.new') }}"
@@ -445,8 +445,8 @@
                 </div>
             </div>
 
-            <div class="space-y-4 sm:space-y-6">
-                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6 space-y-4 text-sm">
+            <div class="space-y-4 sm:space-y-6 min-w-0">
+                <div class="rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6 space-y-4 text-sm min-w-0 overflow-visible">
                     <h2 class="font-semibold">Totals</h2>
                     <div class="flex justify-between"><span class="text-[#6B6459]">Subtotal</span><span class="tabular-nums">&#2547; {{ number_format($this->subtotal(), 0) }}</span></div>
                     @if ($lines !== [])
@@ -474,11 +474,11 @@
                     </div>
                     @if ($order)
                         <div>
-                            <div class="flex items-center justify-between gap-2 mb-1">
+                            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between mb-1">
                                 <label class="text-[#6B6459]">Courier cost</label>
                                 @if ($this->previewCourierChargeEstimate() !== null)
                                     <button type="button" wire:click="applyCourierChargeEstimate"
-                                        class="text-xs font-semibold text-[#C9A227] hover:text-[#B8921F]">
+                                        class="text-left text-xs font-semibold text-[#C9A227] hover:text-[#B8921F] sm:text-right">
                                         Use estimate (&#2547; {{ number_format((int) $this->previewCourierChargeEstimate(), 0) }})
                                     </button>
                                 @endif
@@ -496,8 +496,8 @@
                             </p>
                         </div>
                     @endif
-                    <div class="space-y-2">
-                        <div class="flex items-center justify-between gap-2">
+                    <div class="space-y-2 min-w-0">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <label class="text-[#6B6459] font-medium">Adjustments</label>
                             <div class="flex flex-wrap gap-1">
                                 <button type="button" wire:click="addChargeLine"
@@ -512,41 +512,46 @@
                         </div>
                         @forelse ($adjustmentLines as $adjLine)
                             <div wire:key="adj-line-{{ $adjLine['key'] }}" @class([
-                                'rounded-lg border px-2 py-2 space-y-1',
+                                'rounded-lg border px-2 py-2 space-y-2 min-w-0',
                                 ($adjLine['locked'] ?? false) ? 'border-[#E7DFCF] bg-[#FAF6EF]' : 'border-[#E0D6C2] bg-white',
                             ])>
-                                <div class="flex items-center gap-2">
+                                <div class="flex items-center justify-between gap-2 min-w-0">
                                     <span @class([
                                         'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide',
                                         'bg-emerald-50 text-emerald-700' => $adjLine['type'] === 'charge',
                                         'bg-rose-50 text-rose-700' => in_array($adjLine['type'], ['discount', 'coupon'], true),
                                     ])>{{ $adjLine['type'] }}</span>
-                                    @if ($adjLine['locked'] ?? false)
-                                        <span class="min-w-0 flex-1 truncate text-sm text-[#6B6459]">{{ $adjLine['label'] }}</span>
-                                        <span class="shrink-0 tabular-nums text-sm">&#2547; {{ number_format((int) $adjLine['amount'], 0) }}</span>
-                                    @else
-                                        <input type="text" wire:model.live="adjustmentLines.{{ $loop->index }}.label"
-                                            placeholder="Label"
-                                            class="min-w-0 flex-1 rounded border border-[#E0D6C2] px-2 py-1 text-sm">
-                                        <input type="number" min="0" step="1" wire:model.live="adjustmentLines.{{ $loop->index }}.amount"
-                                            class="w-20 shrink-0 rounded border border-[#E0D6C2] px-2 py-1 text-sm tabular-nums text-right">
+                                    @unless ($adjLine['locked'] ?? false)
                                         <button type="button" wire:click="removeAdjustmentLine('{{ $adjLine['key'] }}')"
                                             class="shrink-0 text-xs font-semibold text-rose-600 hover:text-rose-800"
-                                            aria-label="Remove adjustment">✕</button>
-                                    @endif
+                                            aria-label="Remove adjustment">Remove</button>
+                                    @endunless
                                 </div>
+                                @if ($adjLine['locked'] ?? false)
+                                    <div class="flex items-start justify-between gap-2 min-w-0">
+                                        <span class="min-w-0 flex-1 break-words text-sm text-[#6B6459]">{{ $adjLine['label'] }}</span>
+                                        <span class="shrink-0 tabular-nums text-sm">&#2547; {{ number_format((int) $adjLine['amount'], 0) }}</span>
+                                    </div>
+                                @else
+                                    <input type="text" wire:model.live="adjustmentLines.{{ $loop->index }}.label"
+                                        placeholder="Label"
+                                        class="w-full min-w-0 rounded border border-[#E0D6C2] px-2 py-1.5 text-sm">
+                                    <input type="number" min="0" step="1" wire:model.live="adjustmentLines.{{ $loop->index }}.amount"
+                                        placeholder="Amount"
+                                        class="w-full min-w-0 rounded border border-[#E0D6C2] px-2 py-1.5 text-sm tabular-nums sm:max-w-[8rem]">
+                                @endif
                                 @if (($adjLine['type'] ?? '') === 'coupon' && filled($adjLine['coupon_code'] ?? null))
-                                    <p class="text-[11px] text-[#8C8474]">Coupon {{ $adjLine['coupon_code'] }}</p>
+                                    <p class="text-[11px] text-[#8C8474] break-words">Coupon {{ $adjLine['coupon_code'] }}</p>
                                 @endif
                             </div>
                         @empty
                             <p class="text-xs text-[#8C8474]">No extra charges or discounts.</p>
                         @endforelse
-                        <div class="flex gap-2">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-stretch min-w-0">
                             <input type="text" wire:model="couponCodeInput" placeholder="Coupon code"
-                                class="min-w-0 flex-1 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm uppercase">
+                                class="w-full min-w-0 flex-1 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm uppercase">
                             <button type="button" wire:click="applyCouponCode"
-                                class="shrink-0 rounded-lg border border-[#E0D6C2] bg-white px-3 py-2 text-xs font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                                class="w-full shrink-0 rounded-lg border border-[#E0D6C2] bg-white px-3 py-2 text-xs font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] sm:w-auto sm:self-start">
                                 Add coupon
                             </button>
                         </div>

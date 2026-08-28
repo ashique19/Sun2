@@ -133,6 +133,31 @@ class AdminDashboardMetrics
     }
 
     /**
+     * Placement-day cohort split by product category (for expandable rows in Orders by date).
+     *
+     * @return array<string, list<array{
+     *     category_id: int|null,
+     *     name: string,
+     *     order_qty: int,
+     *     order_value: float,
+     *     delivery_qty: int,
+     *     delivery_value: float
+     * }>>
+     */
+    public static function orderAndDeliveryByDateAndCategory(bool $fresh = false): array
+    {
+        $cacheKey = self::DAILY_CACHE_KEY.':by-date-category:'.now('Asia/Dhaka')->toDateString();
+
+        if ($fresh) {
+            Cache::forget($cacheKey);
+        }
+
+        return Cache::remember($cacheKey, self::DAILY_CACHE_TTL, function () {
+            return self::computeOrderAndDeliveryByDateAndCategory();
+        });
+    }
+
+    /**
      * @return array{
      *     months: list<array{
      *         key: string,
@@ -391,5 +416,73 @@ class AdminDashboardMetrics
             ],
             'rows' => $sorted,
         ];
+    }
+
+    /**
+     * @return array<string, list<array{
+     *     category_id: int|null,
+     *     name: string,
+     *     order_qty: int,
+     *     order_value: float,
+     *     delivery_qty: int,
+     *     delivery_value: float
+     * }>>
+     */
+    private static function computeOrderAndDeliveryByDateAndCategory(): array
+    {
+        $today = now('Asia/Dhaka')->startOfDay();
+        $currentMonthStart = $today->copy()->startOfMonth();
+        $previousMonthStart = $today->copy()->subMonthNoOverflow()->startOfMonth();
+        $last7Start = $today->copy()->subDays(6);
+        $queryFrom = $previousMonthStart->lt($last7Start) ? $previousMonthStart : $last7Start;
+
+        $dayExpr = DhakaSql::date('orders.placed_at');
+        $keptValue = OrderEconomicsSql::keptValueExpression();
+
+        $aggregated = DB::table('orders')
+            ->leftJoin('order_products', 'order_products.order_id', '=', 'orders.id')
+            ->leftJoin('products', 'products.id', '=', 'order_products.product_id')
+            ->leftJoin('categories', 'categories.id', '=', 'products.category_id')
+            ->whereNotNull('orders.placed_at')
+            ->where('orders.placed_at', '>=', $queryFrom->copy()->timezone('UTC'))
+            ->where('orders.status', '!=', Order::STATUS_DRAFT)
+            ->selectRaw("{$dayExpr} as day")
+            ->selectRaw('categories.id as category_id')
+            ->selectRaw("MAX(COALESCE(NULLIF(categories.name, ''), 'Uncategorized')) as name")
+            ->selectRaw('COUNT(DISTINCT orders.id) as order_qty')
+            ->selectRaw('COALESCE(SUM(COALESCE(order_products.line_total, 0)), 0) as order_value')
+            ->selectRaw("COUNT(DISTINCT CASE WHEN orders.status = 'delivered' THEN orders.id END) as delivery_qty")
+            ->selectRaw("COALESCE(SUM(CASE WHEN orders.status = 'delivered' THEN {$keptValue} ELSE 0 END), 0) as delivery_value")
+            ->groupByRaw("{$dayExpr}, categories.id")
+            ->get();
+
+        /** @var array<string, list<array{category_id: int|null, name: string, order_qty: int, order_value: float, delivery_qty: int, delivery_value: float}>> $byDate */
+        $byDate = [];
+
+        foreach ($aggregated as $row) {
+            $date = (string) $row->day;
+            $categoryId = $row->category_id !== null ? (int) $row->category_id : null;
+
+            $byDate[$date] ??= [];
+            $byDate[$date][] = [
+                'category_id' => $categoryId,
+                'name' => (string) ($row->name ?: 'Uncategorized'),
+                'order_qty' => (int) $row->order_qty,
+                'order_value' => round((float) $row->order_value, 2),
+                'delivery_qty' => (int) $row->delivery_qty,
+                'delivery_value' => round((float) $row->delivery_value, 2),
+            ];
+        }
+
+        foreach ($byDate as &$rows) {
+            usort($rows, function (array $a, array $b): int {
+                $byQty = $b['order_qty'] <=> $a['order_qty'];
+
+                return $byQty !== 0 ? $byQty : strcasecmp($a['name'], $b['name']);
+            });
+        }
+        unset($rows);
+
+        return $byDate;
     }
 }

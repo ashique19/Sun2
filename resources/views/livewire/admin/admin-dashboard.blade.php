@@ -761,10 +761,36 @@
                             @endforeach
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-[#E7DFCF]">
-                        @forelse ($ordersDatePanel['days'] as $day)
-                            <tr class="hover:bg-[#FAF6EF]/50" wire:key="orders-day-{{ $ordersDatePanel['key'] }}-{{ $day['date'] }}">
-                                <td class="px-1.5 py-1.5 sm:px-2 font-medium tabular-nums">{{ $day['label'] }}</td>
+                    @forelse ($ordersDatePanel['days'] as $day)
+                        @php
+                            $dayCategories = $ordersByDateCategory[$day['date']] ?? [];
+                            $canExpand = $dayCategories !== [];
+                        @endphp
+                        <tbody
+                            x-data="{ open: false }"
+                            class="divide-y divide-[#E7DFCF] border-b border-[#E7DFCF] last:border-b-0"
+                            wire:key="orders-day-group-{{ $ordersDatePanel['key'] }}-{{ $day['date'] }}"
+                        >
+                            <tr class="hover:bg-[#FAF6EF]/50">
+                                <td class="px-1.5 py-1.5 sm:px-2 font-medium tabular-nums">
+                                    <div class="flex items-center gap-1">
+                                        @if ($canExpand)
+                                            <button
+                                                type="button"
+                                                @click="open = ! open"
+                                                :aria-expanded="open"
+                                                aria-label="Show category breakdown for {{ $day['label'] }}"
+                                                class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-[#E0D6C2] bg-white text-[11px] font-bold leading-none text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]"
+                                            >
+                                                <span x-show="! open">+</span>
+                                                <span x-show="open" x-cloak>−</span>
+                                            </button>
+                                        @else
+                                            <span class="inline-flex h-5 w-5 shrink-0" aria-hidden="true"></span>
+                                        @endif
+                                        <span>{{ $day['label'] }}</span>
+                                    </div>
+                                </td>
                                 <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">
                                     <a href="{{ route('admin.orders.all', ['dateFrom' => $day['date'], 'dateTo' => $day['date']]) }}"
                                         class="underline decoration-[#E0D6C2] underline-offset-2 hover:text-[#C9A227]"
@@ -778,12 +804,30 @@
                                 </td>
                                 <td class="px-1 py-1.5 sm:px-2 text-right tabular-nums">{{ number_format($day['delivery_value'], 0) }}</td>
                             </tr>
-                        @empty
+                            @foreach ($dayCategories as $categoryRow)
+                                <tr
+                                    x-show="open"
+                                    x-cloak
+                                    class="bg-[#FAF6EF]/40 text-[#6B6459]"
+                                    wire:key="orders-day-cat-{{ $ordersDatePanel['key'] }}-{{ $day['date'] }}-{{ $categoryRow['category_id'] ?? 'none' }}"
+                                >
+                                    <td class="px-1.5 py-1 sm:px-2 pl-7 sm:pl-8">
+                                        <span class="block truncate text-[11px] sm:text-xs" title="{{ $categoryRow['name'] }}">{{ $categoryRow['name'] }}</span>
+                                    </td>
+                                    <td class="px-1 py-1 sm:px-2 text-right tabular-nums text-[11px] sm:text-xs">{{ number_format($categoryRow['order_qty']) }}</td>
+                                    <td class="px-1 py-1 sm:px-2 text-right tabular-nums text-[11px] sm:text-xs">{{ number_format($categoryRow['order_value'], 0) }}</td>
+                                    <td class="px-1 py-1 sm:px-2 text-right tabular-nums text-[11px] sm:text-xs">{{ number_format($categoryRow['delivery_qty']) }}</td>
+                                    <td class="px-1 py-1 sm:px-2 text-right tabular-nums text-[11px] sm:text-xs">{{ number_format($categoryRow['delivery_value'], 0) }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    @empty
+                        <tbody>
                             <tr>
                                 <td colspan="5" class="px-3 py-8 text-center text-[#8C8474]">No orders in this period.</td>
                             </tr>
-                        @endforelse
-                    </tbody>
+                        </tbody>
+                    @endforelse
                     @if (($ordersDatePanel['days'] ?? []) !== [])
                         <tfoot class="bg-[#FAF6EF] font-semibold border-t border-[#E7DFCF]">
                             <tr>

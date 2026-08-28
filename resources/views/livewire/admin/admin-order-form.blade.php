@@ -474,22 +474,82 @@
                     </div>
                     @if ($order)
                         <div>
-                            <label class="block text-[#6B6459] mb-1">Courier cost</label>
+                            <div class="flex items-center justify-between gap-2 mb-1">
+                                <label class="text-[#6B6459]">Courier cost</label>
+                                @if ($this->previewCourierChargeEstimate() !== null)
+                                    <button type="button" wire:click="applyCourierChargeEstimate"
+                                        class="text-xs font-semibold text-[#C9A227] hover:text-[#B8921F]">
+                                        Use estimate (&#2547; {{ number_format((int) $this->previewCourierChargeEstimate(), 0) }})
+                                    </button>
+                                @endif
+                            </div>
+                            <input type="number" min="0" step="1" wire:model.live="courierChargeInput"
+                                class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 tabular-nums">
+                            <p class="mt-1 text-xs text-[#8C8474]">What the courier charges us (merchant fee). Also set on dispatch.</p>
+                        </div>
+                    @elseif ($this->previewCourierChargeEstimate() !== null)
+                        <div>
+                            <label class="block text-[#6B6459] mb-1">Courier cost (estimate)</label>
                             <p class="rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2 tabular-nums text-[#6B6459]">
-                                &#2547; {{ number_format((float) $order->courier_charge, 0) }}
-                                <span class="block text-xs text-[#8C8474] mt-0.5">Set on dispatch or from order detail.</span>
+                                &#2547; {{ number_format((int) $this->previewCourierChargeEstimate(), 0) }}
+                                <span class="block text-xs text-[#8C8474] mt-0.5">Applied when dispatched.</span>
                             </p>
                         </div>
                     @endif
-                    <div>
-                        <label class="block text-[#6B6459] mb-1">Charge</label>
-                        <input type="number" min="0" step="1" wire:model.live="charge"
-                            class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2">
-                    </div>
-                    <div>
-                        <label class="block text-[#6B6459] mb-1">Discount</label>
-                        <input type="number" min="0" step="1" wire:model.live="discount"
-                            class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2">
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between gap-2">
+                            <label class="text-[#6B6459] font-medium">Adjustments</label>
+                            <div class="flex flex-wrap gap-1">
+                                <button type="button" wire:click="addChargeLine"
+                                    class="rounded-full border border-[#E0D6C2] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                                    + Charge
+                                </button>
+                                <button type="button" wire:click="addDiscountLine"
+                                    class="rounded-full border border-[#E0D6C2] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                                    + Discount
+                                </button>
+                            </div>
+                        </div>
+                        @forelse ($adjustmentLines as $adjLine)
+                            <div wire:key="adj-line-{{ $adjLine['key'] }}" @class([
+                                'rounded-lg border px-2 py-2 space-y-1',
+                                ($adjLine['locked'] ?? false) ? 'border-[#E7DFCF] bg-[#FAF6EF]' : 'border-[#E0D6C2] bg-white',
+                            ])>
+                                <div class="flex items-center gap-2">
+                                    <span @class([
+                                        'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+                                        'bg-emerald-50 text-emerald-700' => $adjLine['type'] === 'charge',
+                                        'bg-rose-50 text-rose-700' => in_array($adjLine['type'], ['discount', 'coupon'], true),
+                                    ])>{{ $adjLine['type'] }}</span>
+                                    @if ($adjLine['locked'] ?? false)
+                                        <span class="min-w-0 flex-1 truncate text-sm text-[#6B6459]">{{ $adjLine['label'] }}</span>
+                                        <span class="shrink-0 tabular-nums text-sm">&#2547; {{ number_format((int) $adjLine['amount'], 0) }}</span>
+                                    @else
+                                        <input type="text" wire:model.live="adjustmentLines.{{ $loop->index }}.label"
+                                            placeholder="Label"
+                                            class="min-w-0 flex-1 rounded border border-[#E0D6C2] px-2 py-1 text-sm">
+                                        <input type="number" min="0" step="1" wire:model.live="adjustmentLines.{{ $loop->index }}.amount"
+                                            class="w-20 shrink-0 rounded border border-[#E0D6C2] px-2 py-1 text-sm tabular-nums text-right">
+                                        <button type="button" wire:click="removeAdjustmentLine('{{ $adjLine['key'] }}')"
+                                            class="shrink-0 text-xs font-semibold text-rose-600 hover:text-rose-800"
+                                            aria-label="Remove adjustment">✕</button>
+                                    @endif
+                                </div>
+                                @if (($adjLine['type'] ?? '') === 'coupon' && filled($adjLine['coupon_code'] ?? null))
+                                    <p class="text-[11px] text-[#8C8474]">Coupon {{ $adjLine['coupon_code'] }}</p>
+                                @endif
+                            </div>
+                        @empty
+                            <p class="text-xs text-[#8C8474]">No extra charges or discounts.</p>
+                        @endforelse
+                        <div class="flex gap-2">
+                            <input type="text" wire:model="couponCodeInput" placeholder="Coupon code"
+                                class="min-w-0 flex-1 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm uppercase">
+                            <button type="button" wire:click="applyCouponCode"
+                                class="shrink-0 rounded-lg border border-[#E0D6C2] bg-white px-3 py-2 text-xs font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                                Add coupon
+                            </button>
+                        </div>
                     </div>
                     @if ($this->previewNetRevenue() !== null)
                         @php($previewNet = $this->previewNetRevenue())

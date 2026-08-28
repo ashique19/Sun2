@@ -8,6 +8,7 @@ use App\Models\OrderStatusHistory;
 use App\Models\Product;
 use App\Services\Orders\OrderAdjustmentAuditor;
 use App\Services\Orders\OrderAdjustmentSync;
+use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderPaymentSync;
 use App\Services\Orders\OrderStockService;
 use App\Support\PhoneNumber;
@@ -23,6 +24,7 @@ class AdminOrderService
         private OrderAdjustmentAuditor $auditor,
         private OrderPaymentSync $paymentSync,
         private OrderDeliveryReturnService $deliveryReturns,
+        private OrderCourierChargeSync $courierChargeSync,
     ) {}
 
     /**
@@ -33,11 +35,12 @@ class AdminOrderService
     {
         return DB::transaction(function () use ($orderData, $lines) {
             $orderData = $this->attachCustomerUser($orderData);
+            $persistData = $this->orderAttributesForModel($orderData);
 
             $newQuantities = $this->stock->quantitiesFromLines($lines);
             $this->stock->syncQuantities([], $newQuantities);
 
-            $order = Order::query()->create(array_merge($orderData, [
+            $order = Order::query()->create(array_merge($persistData, [
                 'order_number' => 'PENDING',
                 'created_by' => auth()->id(),
                 'updated_by' => auth()->id(),
@@ -88,7 +91,7 @@ class AdminOrderService
                 $this->stock->syncQuantities($oldQuantities, $newQuantities);
             }
 
-            $order->update(array_merge($orderData, [
+            $order->update(array_merge($this->orderAttributesForModel($orderData), [
                 'updated_by' => auth()->id(),
             ]));
 
@@ -98,6 +101,7 @@ class AdminOrderService
             $order = $order->fresh(['items']);
 
             $this->syncMoneyComponents($order, $orderData, $oldDeliveryCharge);
+            $this->syncCourierChargeFromForm($order, $orderData);
 
             if ($changeSummary !== null) {
                 $this->statusHistory->record($order, $changeSummary);
@@ -179,8 +183,23 @@ class AdminOrderService
             }
         }
 
-        $lines = $this->buildAdjustmentLinesFromScalars($orderData);
+        $lines = $this->buildAdjustmentLines($orderData);
         $this->adjustmentSync->replaceAdjustments($order->fresh(['items']), $lines, auth()->user());
+    }
+
+    /**
+     * @param  array<string, mixed>  $orderData
+     * @return list<array{type:string,label:string,amount:float,source:string,sort_order:int,coupon_id?:int|null,meta?:array|null}>
+     */
+    private function buildAdjustmentLines(array $orderData): array
+    {
+        $explicit = $orderData['adjustment_lines'] ?? null;
+
+        if (is_array($explicit) && $explicit !== []) {
+            return $explicit;
+        }
+
+        return $this->buildAdjustmentLinesFromScalars($orderData);
     }
 
     /**
@@ -362,6 +381,43 @@ class AdminOrderService
         }
 
         return $attributes;
+    }
+
+    /**
+     * @param  array<string, mixed>  $orderData
+     */
+    private function syncCourierChargeFromForm(Order $order, array $orderData): void
+    {
+        if (! array_key_exists('courier_charge_manual', $orderData)) {
+            return;
+        }
+
+        $amount = round((float) $orderData['courier_charge_manual'], 2);
+
+        if ($amount < 0) {
+            return;
+        }
+
+        $this->courierChargeSync->set(
+            order: $order->fresh(),
+            amount: $amount,
+            phase: 'manual',
+            actor: auth()->user(),
+            meta: ['source' => 'admin_order_form'],
+        );
+    }
+
+    /**
+     * Strip non-column keys before persisting to orders table.
+     *
+     * @param  array<string, mixed>  $orderData
+     * @return array<string, mixed>
+     */
+    private function orderAttributesForModel(array $orderData): array
+    {
+        unset($orderData['adjustment_lines'], $orderData['courier_charge_manual']);
+
+        return $orderData;
     }
 
     /**

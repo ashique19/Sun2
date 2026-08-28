@@ -17,17 +17,19 @@
     <x-seo.json-ld :data="\App\Support\JsonLd::productBreadcrumb($product)" />
 
     <div class="mx-auto max-w-6xl px-4 py-8 pb-24 lg:pb-0">
-        <nav class="text-xs text-[#5C564C] mb-4" aria-label="Breadcrumb">
-            <a href="{{ route('home') }}" wire:navigate class="hover:text-[#7A6114]">{{ __('storefront.breadcrumb_home') }}</a>
-            @if ($product->category)
+        <div class="mb-4 flex items-center gap-2 md:block">
+            <nav class="min-w-0 flex-1 text-xs text-[#5C564C] md:mb-4" aria-label="Breadcrumb">
+                <a href="{{ route('home') }}" wire:navigate class="hover:text-[#7A6114]">{{ __('storefront.breadcrumb_home') }}</a>
+                @if ($product->category)
+                    <span class="mx-2">/</span>
+                    <a href="{{ route('category.show', $product->category) }}" wire:navigate class="hover:text-[#7A6114]">{{ $product->category->name }}</a>
+                @endif
                 <span class="mx-2">/</span>
-                <a href="{{ route('category.show', $product->category) }}" wire:navigate class="hover:text-[#7A6114]">{{ $product->category->name }}</a>
-            @endif
-            <span class="mx-2">/</span>
-            <span class="text-[#1E1E1E] line-clamp-1">{{ $product->name }}</span>
-        </nav>
+                <span class="text-[#1E1E1E] line-clamp-1">{{ $product->name }}</span>
+            </nav>
 
-        <x-storefront.product-neighbor-nav :product="$product" />
+            <x-storefront.product-neighbor-nav :product="$product" class="shrink-0" />
+        </div>
 
         <div class="grid lg:grid-cols-2 gap-10 mt-6">
             <div>

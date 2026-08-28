@@ -2,7 +2,7 @@
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ?? 'Admin - Sundoritoma' }}</title>
     <meta name="robots" content="noindex, nofollow">
@@ -16,14 +16,16 @@
     'bg-[#FAF6EF] text-[#1E1E1E] antialiased',
     'min-h-screen' => ! request()->routeIs('admin.inbox'),
     'flex h-dvh flex-col overflow-hidden' => request()->routeIs('admin.inbox'),
-])>
+]) @if (request()->routeIs('admin.inbox') && filled(request()->query('conversation')))
+    data-inbox-mobile-thread="1"
+@endif>
     @php
         $isModeratorOnly = auth()->user()?->isModeratorOnly() ?? false;
         $closeDrawer = "document.getElementById('admin-mobile-nav-toggle').checked = false";
     @endphp
 
-    {{-- Small screen top bar (inside flex column on Inbox so it does not push content off-screen) --}}
-    <div @class([
+    {{-- Small screen top bar (hidden while mobile inbox thread is open — see data-inbox-mobile-thread) --}}
+    <div id="admin-mobile-top-bar" @class([
         'md:hidden border-b border-[#E7DFCF] bg-white px-4 py-3 flex items-center justify-between gap-3',
         'sticky top-0 z-20' => ! request()->routeIs('admin.inbox'),
         'shrink-0 z-20' => request()->routeIs('admin.inbox'),

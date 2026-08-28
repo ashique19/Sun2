@@ -4,7 +4,12 @@
         ->count();
 @endphp
 
-<div class="flex min-h-0 flex-1 flex-col xl:gap-4">
+<div
+    x-data
+    x-init="document.body.dataset.inboxMobileThread = $wire.mobileThreadOpen ? '1' : '0'"
+    x-effect="document.body.dataset.inboxMobileThread = $wire.mobileThreadOpen ? '1' : '0'"
+    @class(['flex min-h-0 flex-1 flex-col xl:gap-4'])
+>
     {{--
         Fixed beacon so Graph poll keeps running while the mobile thread sheet is open.
         The sheet is position:fixed (out of document flow), which can collapse in-flow
@@ -459,9 +464,11 @@
         </div>
 
         {{-- Thread: fullscreen messenger sheet on mobile --}}
-        <div @class([
+        <div
+            data-inbox-mobile-thread-sheet
+            @class([
             'relative flex min-h-0 flex-col overflow-hidden bg-[#F7F3EA]',
-            'fixed inset-0 z-30 h-dvh max-h-dvh xl:static xl:z-auto xl:h-full xl:max-h-full xl:min-h-0 xl:rounded-2xl xl:border xl:border-[#EFE7D6] xl:bg-white',
+            'fixed inset-x-0 bottom-0 z-30 xl:static xl:inset-auto xl:z-auto xl:h-full xl:max-h-full xl:min-h-0 xl:rounded-2xl xl:border xl:border-[#EFE7D6] xl:bg-white',
             $mobileThreadOpen ? 'flex' : 'hidden xl:flex',
         ])>
             <div

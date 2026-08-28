@@ -31,11 +31,25 @@ class ProductImageHashRebuildService
      */
     public function incompleteIndexQuery(): Builder
     {
-        return ProductImage::query()->where(function ($builder): void {
-            $builder->whereNull('perceptual_hash')
-                ->orWhereNull('perceptual_hashes')
-                ->orWhereNull('dct_hash')
-                ->orWhereNull('embedding_vector');
+        $dimensions = ProductImageEmbeddingService::DIMENSIONS;
+
+        return ProductImage::query()->where(function ($builder) use ($dimensions): void {
+            $builder->where(function ($query): void {
+                $query->whereNull('perceptual_hash')
+                    ->orWhere('perceptual_hash', '');
+            })
+                ->orWhere(function ($query): void {
+                    $query->whereNull('perceptual_hashes')
+                        ->orWhereJsonLength('perceptual_hashes', 0);
+                })
+                ->orWhere(function ($query): void {
+                    $query->whereNull('dct_hash')
+                        ->orWhere('dct_hash', '');
+                })
+                ->orWhere(function ($query) use ($dimensions): void {
+                    $query->whereNull('embedding_vector')
+                        ->orWhereJsonLength('embedding_vector', '<', $dimensions);
+                });
         });
     }
 
@@ -229,6 +243,26 @@ class ProductImageHashRebuildService
                     number_format($failed),
                 ),
             ]);
+
+            $hasMore = (! $run->force ? $this->incompleteIndexQuery() : ProductImage::query())
+                ->where('id', '>', $lastId)
+                ->exists();
+
+            if (! $hasMore) {
+                $run->update([
+                    'status' => 'completed',
+                    'phase' => 'done',
+                    'message' => sprintf(
+                        'Done — hashed %s, failed %s',
+                        number_format($ok),
+                        number_format($failed),
+                    ),
+                    'progress_current' => (int) $run->progress_total,
+                    'finished_at' => now(),
+                ]);
+
+                return true;
+            }
 
             return false;
         } catch (Throwable $e) {

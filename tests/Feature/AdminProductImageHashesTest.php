@@ -108,12 +108,65 @@ class AdminProductImageHashesTest extends TestCase
             ->assertSet('forceRehash', false)
             ->assertSee('Backfill missing')
             ->call('confirmRebuild')
-            ->assertSet('rebuildModalOpen', false);
+            ->assertSet('rebuildModalOpen', false)
+            ->assertSet('activeRunId', fn ($id) => $id !== null)
+            ->call('tickRebuild')
+            ->assertSet('activeRunId', null)
+            ->assertSet('statusMessage', fn ($message) => is_string($message) && $message !== '');
 
         $row->refresh();
 
         $this->assertNotNull($row->dct_hash);
         $this->assertIsArray($row->embedding_vector);
         $this->assertNotEmpty($row->embedding_vector);
+    }
+
+    #[Test]
+    public function rebuild_with_nothing_to_index_shows_status_message(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminProductImageHashes::class)
+            ->set('forceRehash', true)
+            ->call('openRebuildModal')
+            ->call('confirmRebuild')
+            ->assertSet('activeRunId', null)
+            ->assertSet('statusMessage', 'Nothing to index');
+    }
+
+    #[Test]
+    public function rebuild_surfaces_failure_message_when_chunk_processing_errors(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $product = Product::query()->create([
+            'name' => 'Broken Hash Product',
+            'slug' => 'broken-hash-'.uniqid(),
+            'price' => 900,
+            'purchase_price' => 400,
+            'stock_quantity' => 1,
+            'is_published' => true,
+        ]);
+
+        ProductImage::query()->create([
+            'product_id' => $product->id,
+            'path' => '/img/products/missing/catalog.jpg',
+            'alt' => $product->name,
+            'is_primary' => true,
+            'sort_order' => 0,
+            'perceptual_hash' => null,
+            'perceptual_hashes' => null,
+            'dct_hash' => null,
+            'embedding_vector' => null,
+        ]);
+
+        Livewire::test(AdminProductImageHashes::class)
+            ->set('forceRehash', true)
+            ->call('openRebuildModal')
+            ->call('confirmRebuild')
+            ->assertSet('activeRunId', fn ($id) => $id !== null)
+            ->call('tickRebuild')
+            ->assertSet('activeRunId', null)
+            ->assertSet('statusMessage', fn ($message) => is_string($message) && str_contains($message, 'Done'));
     }
 }

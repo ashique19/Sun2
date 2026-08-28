@@ -330,6 +330,7 @@ class AdminDashboard extends Component
             default => $orderActivity['last7'],
         };
         $ordersByCategory = AdminDashboardMetrics::orderAndDeliveryByCategory();
+        $ordersByDateCategory = AdminDashboardMetrics::orderAndDeliveryByDateAndCategory();
         $expenseAssistant = app(ExpenseAssistantService::class);
         $dueExpenseReminders = $expenseAssistant->dueReminders(auth()->user());
         $showEveningExpensePrompt = $expenseAssistant->shouldShowEveningPrompt(auth()->user());
@@ -400,6 +401,7 @@ class AdminDashboard extends Component
             'orderMonthTiles' => $orderMonthTiles,
             'ordersDatePanel' => $ordersDatePanel,
             'ordersByCategory' => $ordersByCategory,
+            'ordersByDateCategory' => $ordersByDateCategory,
             'attentionSummary' => $attentionSummary,
             'unconfirmedCourierCharges' => $unconfirmedCourierCharges,
             'courierChargeAreaLabels' => $courierChargeAreaLabels,

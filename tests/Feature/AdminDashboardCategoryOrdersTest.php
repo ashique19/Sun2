@@ -151,4 +151,39 @@ class AdminDashboardCategoryOrdersTest extends TestCase
 
         Carbon::setTestNow();
     }
+
+    #[Test]
+    public function orders_by_date_can_expand_category_breakdown_per_day(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-13 12:00:00', 'Asia/Dhaka'));
+
+        $earrings = $this->category('Earrings');
+        $necklaces = $this->category('Necklaces');
+        $earringProduct = $this->product('Jhumka', $earrings, 500);
+        $necklaceProduct = $this->product('Chain', $necklaces, 800);
+
+        $day = Carbon::parse('2026-08-12 10:00:00', 'Asia/Dhaka')->utc();
+
+        $this->orderWithProduct($earringProduct, 'delivered', $day, 500);
+        $this->orderWithProduct($earringProduct, 'new', $day->copy()->addHour(), 500);
+        $this->orderWithProduct($necklaceProduct, 'new', $day->copy()->addHours(2), 800);
+
+        $byDate = AdminDashboardMetrics::orderAndDeliveryByDateAndCategory(fresh: true);
+        $dayKey = '2026-08-12';
+
+        $this->assertArrayHasKey($dayKey, $byDate);
+        $byName = collect($byDate[$dayKey])->keyBy('name');
+        $this->assertSame(2, $byName['Earrings']['order_qty']);
+        $this->assertSame(1, $byName['Earrings']['delivery_qty']);
+        $this->assertSame(1, $byName['Necklaces']['order_qty']);
+
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSeeHtml('aria-label="Show category breakdown for Aug-12"')
+            ->assertSeeHtml('x-data="{ open: false }"')
+            ->assertSee('Earrings');
+
+        Carbon::setTestNow();
+    }
 }

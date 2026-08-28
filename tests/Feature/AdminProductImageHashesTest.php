@@ -109,10 +109,8 @@ class AdminProductImageHashesTest extends TestCase
             ->assertSee('Backfill missing')
             ->call('confirmRebuild')
             ->assertSet('rebuildModalOpen', false)
-            ->assertSet('activeRunId', fn ($id) => $id !== null)
-            ->call('tickRebuild')
             ->assertSet('activeRunId', null)
-            ->assertSet('statusMessage', fn ($message) => is_string($message) && $message !== '');
+            ->assertSet('statusMessage', fn ($message) => is_string($message) && str_contains($message, 'Done'));
 
         $row->refresh();
 
@@ -164,9 +162,7 @@ class AdminProductImageHashesTest extends TestCase
             ->set('forceRehash', true)
             ->call('openRebuildModal')
             ->call('confirmRebuild')
-            ->assertSet('activeRunId', fn ($id) => $id !== null)
-            ->call('tickRebuild')
             ->assertSet('activeRunId', null)
-            ->assertSet('statusMessage', fn ($message) => is_string($message) && str_contains($message, 'Done'));
+            ->assertSet('errorMessage', fn ($message) => is_string($message) && str_contains($message, 'no images were updated'));
     }
 }

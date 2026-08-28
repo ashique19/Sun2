@@ -18,9 +18,23 @@ class AdminProductImageHashes extends Component
 
     public bool $rebuildModalOpen = false;
 
+    public ?string $statusMessage = null;
+
+    public ?string $errorMessage = null;
+
     public function mount(ProductImageHashRebuildService $hashes): void
     {
         $this->activeRunId = $hashes->activeRun()?->id;
+    }
+
+    public function dismissStatusMessage(): void
+    {
+        $this->statusMessage = null;
+    }
+
+    public function dismissErrorMessage(): void
+    {
+        $this->errorMessage = null;
     }
 
     public function openRebuildModal(ProductImageHashRebuildService $hashes): void
@@ -41,8 +55,12 @@ class AdminProductImageHashes extends Component
 
     public function confirmRebuild(ProductImageHashRebuildService $hashes): void
     {
+        $this->statusMessage = null;
+        $this->errorMessage = null;
+
         if ($hashes->activeRun()) {
             $this->rebuildModalOpen = false;
+            $this->errorMessage = 'A rebuild is already in progress. Keep this tab open until it finishes.';
 
             return;
         }
@@ -56,7 +74,16 @@ class AdminProductImageHashes extends Component
 
         $this->activeRunId = $run->id;
         $this->rebuildModalOpen = false;
-        $hashes->processChunk($run);
+
+        if ((int) $run->progress_total === 0) {
+            $hashes->processChunk($run->fresh());
+            $this->syncRunFeedback($run->fresh(), $hashes);
+            $this->activeRunId = $hashes->activeRun()?->id;
+
+            return;
+        }
+
+        $this->tickRebuild($hashes);
     }
 
     public function startRebuild(ProductImageHashRebuildService $hashes): void
@@ -75,13 +102,55 @@ class AdminProductImageHashes extends Component
         $run = ImageHashRun::query()->find($this->activeRunId);
 
         if (! $run || ! $run->isActive()) {
-            $this->activeRunId = null;
+            if ($run) {
+                $this->syncRunFeedback($run, $hashes);
+            }
+
+            $this->activeRunId = $hashes->activeRun()?->id;
 
             return;
         }
 
         if ($hashes->processChunk($run)) {
-            $this->activeRunId = null;
+            $this->syncRunFeedback($run->fresh(), $hashes);
+            $this->activeRunId = $hashes->activeRun()?->id;
+        }
+    }
+
+    private function syncRunFeedback(ImageHashRun $run, ProductImageHashRebuildService $hashes): void
+    {
+        if ($run->status === 'completed') {
+            $remaining = $hashes->coverage()['needs_screenshot_backfill'];
+
+            if ((int) $run->hashed_ok === 0 && (int) $run->failed > 0) {
+                $this->errorMessage = sprintf(
+                    'Rebuild finished but no images were updated (%s failed). Product images may be unreachable from the server — check CDN URLs or run php artisan products:index-image-hashes via SSH.',
+                    number_format($run->failed),
+                );
+                $this->statusMessage = null;
+
+                return;
+            }
+
+            if ($remaining > 0 && ! $run->force) {
+                $this->errorMessage = sprintf(
+                    '%s image(s) still need backfill after this run. Try “Re-hash all images” or use the cron rebuild URL.',
+                    number_format($remaining),
+                );
+                $this->statusMessage = null;
+
+                return;
+            }
+
+            $this->statusMessage = $run->message ?: 'Rebuild finished.';
+            $this->errorMessage = null;
+
+            return;
+        }
+
+        if ($run->status === 'failed') {
+            $this->errorMessage = $run->error ?: $run->message ?: 'Rebuild failed.';
+            $this->statusMessage = null;
         }
     }
 

@@ -1,8 +1,25 @@
-<div
-    @if ($active)
-        wire:poll.1s="tickRebuild"
+<div wire:poll.1s.keep-alive="tickRebuild">
+    @if ($statusMessage)
+        <x-admin.toast
+            :message="$statusMessage"
+            type="success"
+            dismiss-method="dismissStatusMessage"
+            :ms="6000"
+            bottom="bottom-4"
+        />
     @endif
->
+
+    @if ($errorMessage)
+        <x-admin.toast
+            :message="$errorMessage"
+            type="error"
+            dismiss-method="dismissErrorMessage"
+            :ms="10000"
+            dismissable
+            bottom="bottom-4"
+        />
+    @endif
+
     <div class="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
             <h1 class="font-serif text-3xl font-semibold">Image Hashes</h1>

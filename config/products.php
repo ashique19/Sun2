@@ -10,7 +10,7 @@ return [
     | Keep this modest when hashing from CDN (network + GD resize per image).
     |
     */
-    'image_hash_chunk_size' => (int) env('PRODUCT_IMAGE_HASH_CHUNK_SIZE', 25),
+    'image_hash_chunk_size' => (int) env('PRODUCT_IMAGE_HASH_CHUNK_SIZE', 5),
 
     /*
     |--------------------------------------------------------------------------

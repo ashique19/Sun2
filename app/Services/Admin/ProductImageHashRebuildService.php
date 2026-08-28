@@ -31,11 +31,25 @@ class ProductImageHashRebuildService
      */
     public function incompleteIndexQuery(): Builder
     {
-        return ProductImage::query()->where(function ($builder): void {
-            $builder->whereNull('perceptual_hash')
-                ->orWhereNull('perceptual_hashes')
-                ->orWhereNull('dct_hash')
-                ->orWhereNull('embedding_vector');
+        $dimensions = ProductImageEmbeddingService::DIMENSIONS;
+
+        return ProductImage::query()->where(function ($builder) use ($dimensions): void {
+            $builder->where(function ($query): void {
+                $query->whereNull('perceptual_hash')
+                    ->orWhere('perceptual_hash', '');
+            })
+                ->orWhere(function ($query): void {
+                    $query->whereNull('perceptual_hashes')
+                        ->orWhereJsonLength('perceptual_hashes', 0);
+                })
+                ->orWhere(function ($query): void {
+                    $query->whereNull('dct_hash')
+                        ->orWhere('dct_hash', '');
+                })
+                ->orWhere(function ($query) use ($dimensions): void {
+                    $query->whereNull('embedding_vector')
+                        ->orWhereJsonLength('embedding_vector', '<', $dimensions);
+                });
         });
     }
 
@@ -163,8 +177,9 @@ class ProductImageHashRebuildService
                 ]);
             }
 
-            $chunkSize = (int) ($run->meta['chunk_size'] ?? config('products.image_hash_chunk_size', 25));
+            $chunkSize = (int) ($run->meta['chunk_size'] ?? config('products.image_hash_chunk_size', 5));
             $cursor = (int) $run->image_cursor;
+            $chunkDeadline = microtime(true) + 8;
 
             if (! $run->force) {
                 $query = $this->incompleteIndexQuery()->where('id', '>', $cursor);
@@ -175,14 +190,21 @@ class ProductImageHashRebuildService
             $images = $query->orderBy('id')->limit($chunkSize)->get();
 
             if ($images->isEmpty()) {
+                $stillIncomplete = ! $run->force && $this->incompleteIndexQuery()->exists();
+
                 $run->update([
-                    'status' => 'completed',
-                    'phase' => 'done',
-                    'message' => sprintf(
-                        'Done — hashed %s, failed %s',
-                        number_format($run->hashed_ok),
-                        number_format($run->failed),
-                    ),
+                    'status' => $stillIncomplete ? 'failed' : 'completed',
+                    'phase' => $stillIncomplete ? 'failed' : 'done',
+                    'message' => $stillIncomplete
+                        ? 'Rebuild stopped before all images were processed'
+                        : sprintf(
+                            'Done — hashed %s, failed %s',
+                            number_format($run->hashed_ok),
+                            number_format($run->failed),
+                        ),
+                    'error' => $stillIncomplete
+                        ? 'Some images were not reached during this run. Try again, use “Re-hash all images”, or run php artisan products:index-image-hashes on the server.'
+                        : null,
                     'progress_current' => (int) $run->progress_total,
                     'finished_at' => now(),
                 ]);
@@ -196,6 +218,10 @@ class ProductImageHashRebuildService
             $lastId = $cursor;
 
             foreach ($images as $image) {
+                if (microtime(true) >= $chunkDeadline) {
+                    break;
+                }
+
                 $lastId = (int) $image->id;
                 $processed++;
 
@@ -229,6 +255,35 @@ class ProductImageHashRebuildService
                     number_format($failed),
                 ),
             ]);
+
+            $attemptedAll = min($processed, (int) $run->progress_total) >= (int) $run->progress_total;
+
+            $hasMoreByCursor = $run->force
+                ? ProductImage::query()->where('id', '>', $lastId)->exists()
+                : $this->incompleteIndexQuery()->where('id', '>', $lastId)->exists();
+
+            if ($attemptedAll || ! $hasMoreByCursor) {
+                $stillIncomplete = ! $run->force && $this->incompleteIndexQuery()->exists();
+
+                $run->update([
+                    'status' => ($stillIncomplete && ! $attemptedAll) ? 'failed' : 'completed',
+                    'phase' => ($stillIncomplete && ! $attemptedAll) ? 'failed' : 'done',
+                    'message' => ($stillIncomplete && ! $attemptedAll)
+                        ? 'Rebuild stopped before all images were processed'
+                        : sprintf(
+                            'Done — hashed %s, failed %s',
+                            number_format($ok),
+                            number_format($failed),
+                        ),
+                    'error' => ($stillIncomplete && ! $attemptedAll)
+                        ? 'Some images were not reached during this run. Try again, use “Re-hash all images”, or run php artisan products:index-image-hashes on the server.'
+                        : null,
+                    'progress_current' => (int) $run->progress_total,
+                    'finished_at' => now(),
+                ]);
+
+                return true;
+            }
 
             return false;
         } catch (Throwable $e) {

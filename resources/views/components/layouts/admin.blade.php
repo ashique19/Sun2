@@ -15,15 +15,19 @@
 <body @class([
     'bg-[#FAF6EF] text-[#1E1E1E] antialiased',
     'min-h-screen' => ! request()->routeIs('admin.inbox'),
-    'h-dvh overflow-hidden' => request()->routeIs('admin.inbox'),
+    'flex h-dvh flex-col overflow-hidden' => request()->routeIs('admin.inbox'),
 ])>
     @php
         $isModeratorOnly = auth()->user()?->isModeratorOnly() ?? false;
         $closeDrawer = "document.getElementById('admin-mobile-nav-toggle').checked = false";
     @endphp
 
-    {{-- Small screen top bar --}}
-    <div class="md:hidden sticky top-0 z-20 border-b border-[#E7DFCF] bg-white px-4 py-3 flex items-center justify-between gap-3">
+    {{-- Small screen top bar (inside flex column on Inbox so it does not push content off-screen) --}}
+    <div @class([
+        'md:hidden border-b border-[#E7DFCF] bg-white px-4 py-3 flex items-center justify-between gap-3',
+        'sticky top-0 z-20' => ! request()->routeIs('admin.inbox'),
+        'shrink-0 z-20' => request()->routeIs('admin.inbox'),
+    ])>
         <a href="{{ $isModeratorOnly ? route('admin.orders.new') : route('admin.dashboard') }}" wire:navigate class="font-serif font-semibold text-[#C9A227]">Admin</a>
         <div class="flex items-center gap-2">
             <x-admin.shortcut-icons />
@@ -43,7 +47,7 @@
     <div @class([
         'flex',
         'min-h-screen' => ! request()->routeIs('admin.inbox'),
-        'h-full min-h-0' => request()->routeIs('admin.inbox'),
+        'min-h-0 flex-1' => request()->routeIs('admin.inbox'),
     ])>
         <x-admin.sidebar />
 
@@ -67,7 +71,7 @@
 
             <main @class([
                 'p-4 sm:p-6' => ! request()->routeIs('admin.inbox'),
-                'flex flex-1 flex-col min-h-0 overflow-hidden p-0 xl:p-6' => request()->routeIs('admin.inbox'),
+                'flex min-h-0 flex-1 flex-col overflow-hidden p-0 xl:px-6 xl:py-4' => request()->routeIs('admin.inbox'),
             ])>
                 {{ $slot }}
             </main>

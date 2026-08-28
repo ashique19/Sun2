@@ -353,21 +353,40 @@ class ProductImageHashService
             return null;
         }
 
-        $url = StorefrontAssets::url($image->path);
+        $urls = array_values(array_unique(array_filter([
+            StorefrontAssets::largestAvailableUrl($image->path),
+            StorefrontAssets::url($image->path),
+        ])));
 
-        if (! $url || ! str_starts_with($url, 'http')) {
-            return null;
+        foreach ($urls as $url) {
+            if (! is_string($url) || ! str_starts_with($url, 'http')) {
+                continue;
+            }
+
+            try {
+                $response = Http::timeout(15)->get($url);
+
+                if ($response->successful() && $response->body() !== '') {
+                    return $response->body();
+                }
+
+                Log::debug('Catalog image fetch failed.', [
+                    'product_image_id' => $image->id,
+                    'path' => $image->path,
+                    'url' => $url,
+                    'status' => $response->status(),
+                ]);
+            } catch (Throwable $e) {
+                Log::debug('Catalog image fetch error.', [
+                    'product_image_id' => $image->id,
+                    'path' => $image->path,
+                    'url' => $url,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
 
-        $response = Http::timeout(20)->get($url);
-
-        if (! $response->successful()) {
-            return null;
-        }
-
-        $bytes = $response->body();
-
-        return $bytes === '' ? null : $bytes;
+        return null;
     }
 
     public function hammingDistance(string $hashA, string $hashB): int

@@ -1,8 +1,4 @@
-<div
-    @if ($activeRunId || $active)
-        wire:poll.1s="tickRebuild"
-    @endif
->
+<div wire:poll.1s.keep-alive="tickRebuild">
     @if ($statusMessage)
         <x-admin.toast
             :message="$statusMessage"

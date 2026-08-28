@@ -161,3 +161,17 @@ WHERE NOT EXISTS (
 );
 
 SELECT 'OK: 2026-08-27 match-memory schema applied (or already present).' AS result;
+
+-- =============================================================================
+-- RECOVERY: if you already ran the raw step-1 channel_messages ALTER manually,
+-- skip section 1 above (or run this whole file — step 1 no-ops safely).
+--
+-- Step 2 fails with "Unknown column 'perceptual_hashes'" when production only
+-- has perceptual_hash (migration 2026_08_25 not applied yet). Use AFTER below:
+--
+--   ALTER TABLE `product_images`
+--     ADD COLUMN `dct_hash` VARCHAR(16) NULL AFTER `perceptual_hash`,
+--     ADD INDEX `product_images_dct_hash_index` (`dct_hash`);
+--
+-- Or run sections 2–5 of this file only (from "Catalog DCT pHash" downward).
+-- =============================================================================

@@ -85,7 +85,7 @@
 
     {{-- Small screen bar --}}
     <div
-        class="mx-auto max-w-6xl px-3 py-2 space-y-2 sm:hidden"
+        class="mx-auto max-w-6xl px-3 py-2 space-y-0 sm:hidden"
         x-data="{ searchOpen: {{ filled($query) ? 'true' : 'false' }} }"
     >
         <div class="flex items-center gap-2">

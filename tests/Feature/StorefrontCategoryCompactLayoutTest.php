@@ -53,6 +53,9 @@ class StorefrontCategoryCompactLayoutTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('aria-label="'.__('storefront.search').'"', false);
+        $response->assertSee('mx-auto max-w-6xl px-3 py-3 space-y-2 sm:hidden', false);
+        $response->assertSee('flex min-w-0 flex-1 items-center', false);
+        $response->assertSee('h-9 w-9 shrink-0', false);
         $response->assertSee('x-data="{ searchOpen: false }"', false);
         $response->assertSee('x-show="searchOpen"', false);
         $response->assertSee('x-ref="mobileSearch"', false);

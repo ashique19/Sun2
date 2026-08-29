@@ -85,22 +85,22 @@
 
     {{-- Small screen bar --}}
     <div
-        class="mx-auto max-w-6xl px-4 py-3 space-y-2 sm:hidden"
+        class="mx-auto max-w-6xl px-3 py-3 space-y-2 sm:hidden"
         x-data="{ searchOpen: {{ filled($query) ? 'true' : 'false' }} }"
     >
-        <div class="flex items-center gap-3">
-            <a href="{{ route('home') }}" wire:navigate class="flex items-center shrink-0 min-w-[9.5rem]" aria-label="Sundoritoma">
+        <div class="flex items-center gap-2">
+            <a href="{{ route('home') }}" wire:navigate class="flex min-w-0 flex-1 items-center" aria-label="Sundoritoma">
                 <img src="/img/settings/logo.png"
                      alt="Sundoritoma"
-                     class="h-14 w-auto max-w-[12rem] object-contain object-left"
+                     class="h-12 w-auto max-w-[9.25rem] object-contain object-left min-[390px]:h-14 min-[390px]:max-w-[10.75rem]"
                      width="192" height="56"
                      decoding="async">
             </a>
 
-            <div class="flex items-center gap-2 text-[#1E1E1E] shrink-0 ml-auto">
+            <div class="flex shrink-0 items-center gap-1.5 text-[#1E1E1E]">
                 <button
                     type="button"
-                    class="inline-flex h-10 w-10 shrink-0 items-center justify-center text-[#1E1E1E] hover:text-[#7A6114]"
+                    class="inline-flex h-9 w-9 shrink-0 items-center justify-center text-[#1E1E1E] hover:text-[#7A6114]"
                     title="{{ __('storefront.search') }}"
                     aria-label="{{ __('storefront.search') }}"
                     :aria-expanded="searchOpen.toString()"
@@ -113,7 +113,7 @@
                 </button>
 
                 <a href="{{ route('account.wishlist') }}" wire:navigate
-                    class="relative inline-flex h-10 w-10 shrink-0 items-center justify-center text-[#1E1E1E] hover:text-[#7A6114]"
+                    class="relative inline-flex h-9 w-9 shrink-0 items-center justify-center text-[#1E1E1E] hover:text-[#7A6114]"
                     title="{{ __('storefront.save') }}"
                     aria-label="{{ __('storefront.save') }}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -126,7 +126,7 @@
                     @endif
                 </a>
 
-                <a href="{{ route('cart') }}" wire:navigate class="relative inline-flex h-10 w-10 shrink-0 items-center justify-center text-[#1E1E1E] hover:text-[#7A6114]" title="{{ __('storefront.cart') }}" aria-label="{{ __('storefront.cart') }}">
+                <a href="{{ route('cart') }}" wire:navigate class="relative inline-flex h-9 w-9 shrink-0 items-center justify-center text-[#1E1E1E] hover:text-[#7A6114]" title="{{ __('storefront.cart') }}" aria-label="{{ __('storefront.cart') }}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M3 5h2l1.2 9.2a2 2 0 0 0 2 1.8h8.4a2 2 0 0 0 2-1.7L20 8H7"/>
                         <circle cx="10" cy="20" r="1.25" fill="currentColor"/>
@@ -140,7 +140,7 @@
                 </a>
 
                 <label for="mobile-nav-toggle"
-                    class="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#1E1E1E]"
+                    class="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#1E1E1E]"
                     aria-label="{{ __('storefront.menu') }}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                         <rect x="4" y="6" width="16" height="2" rx="1"/>

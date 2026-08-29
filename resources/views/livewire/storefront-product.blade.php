@@ -56,13 +56,21 @@
             </div>
 
             <div>
-                @if ($product->category)
-                    <p class="mb-2 hidden text-xs uppercase tracking-wider text-[#7A6114] sm:block">{{ $product->category->name }}</p>
-                @endif
                 <h1 class="font-serif text-3xl font-semibold leading-tight">{{ $product->name }}</h1>
 
-                <div class="mt-4">
+                <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                     <x-storefront.product-price :product="$product" size="lg" />
+                    @if ($product->isInStock())
+                        <span class="text-sm font-medium text-emerald-700">{{ __('storefront.in_stock') }}</span>
+                    @else
+                        <span class="text-sm font-medium text-rose-700">{{ __('storefront.out_of_stock') }}</span>
+                    @endif
+                    @if ($product->is_new)
+                        <span class="rounded-full bg-[#F1EADB] px-2.5 py-0.5 text-xs text-[#6B6459]">{{ __('storefront.new_badge') }}</span>
+                    @endif
+                    @if ($product->is_best_seller)
+                        <span class="rounded-full bg-[#F1EADB] px-2.5 py-0.5 text-xs text-[#6B6459]">{{ __('storefront.best_seller') }}</span>
+                    @endif
                 </div>
 
                 @if ($product->review_count > 0)
@@ -75,20 +83,6 @@
                         <span>{{ number_format($product->rating_avg, 1) }} ({{ $product->review_count }})</span>
                     </div>
                 @endif
-
-                <div class="mt-4 flex flex-wrap gap-2 text-xs">
-                    @if ($product->is_new)
-                        <span class="rounded-full bg-[#F1EADB] px-3 py-1 text-[#6B6459]">{{ __('storefront.new_badge') }}</span>
-                    @endif
-                    @if ($product->is_best_seller)
-                        <span class="rounded-full bg-[#F1EADB] px-3 py-1 text-[#6B6459]">{{ __('storefront.best_seller') }}</span>
-                    @endif
-                    @if ($product->isInStock())
-                        <span class="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">{{ __('storefront.in_stock') }}</span>
-                    @else
-                        <span class="rounded-full bg-rose-50 px-3 py-1 text-rose-700">{{ __('storefront.out_of_stock') }}</span>
-                    @endif
-                </div>
 
                 {{-- Buy controls sit above the description so they are visible on small screens --}}
                 <div class="mt-6 flex flex-wrap items-center gap-3">

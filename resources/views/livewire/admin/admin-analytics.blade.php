@@ -25,4 +25,33 @@
             </a>
         @endforeach
     </div>
+
+    <div class="mt-8 rounded-xl border border-[#EFE7D6] bg-white p-5">
+        <h2 class="text-sm font-semibold text-[#1E1E1E]">Storefront tracking</h2>
+        <p class="mt-1 text-xs text-[#8C8474]">
+            IDs currently loaded from config / <code class="text-[11px]">.env</code> on this environment.
+        </p>
+        <dl class="mt-4 grid gap-4 sm:grid-cols-2">
+            <div class="rounded-lg border border-[#F0EBE0] bg-[#FAF6EF]/50 px-4 py-3">
+                <dt class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Google Analytics</dt>
+                <dd class="mt-1 font-mono text-sm tabular-nums text-[#1E1E1E] break-all">
+                    @if (filled($googleAnalyticsId))
+                        {{ $googleAnalyticsId }}
+                    @else
+                        <span class="font-sans text-[#8C8474]">Not configured</span>
+                    @endif
+                </dd>
+            </div>
+            <div class="rounded-lg border border-[#F0EBE0] bg-[#FAF6EF]/50 px-4 py-3">
+                <dt class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Meta Pixel</dt>
+                <dd class="mt-1 font-mono text-sm tabular-nums text-[#1E1E1E] break-all">
+                    @if (filled($metaPixelId))
+                        {{ $metaPixelId }}
+                    @else
+                        <span class="font-sans text-[#8C8474]">Not configured</span>
+                    @endif
+                </dd>
+            </div>
+        </dl>
+    </div>
 </div>

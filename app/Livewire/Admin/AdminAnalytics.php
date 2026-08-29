@@ -25,6 +25,8 @@ class AdminAnalytics extends Component
 
         return view('livewire.admin.admin-analytics', [
             'year' => $year,
+            'googleAnalyticsId' => (string) (config('services.google.analytics_id') ?? ''),
+            'metaPixelId' => (string) (config('services.meta.pixel_id') ?? ''),
             'tiles' => [
                 [
                     'title' => 'Profit & loss',

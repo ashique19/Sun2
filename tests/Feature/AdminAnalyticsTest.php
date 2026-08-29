@@ -374,13 +374,49 @@ class AdminAnalyticsTest extends TestCase
     }
 
     #[Test]
+    public function analytics_hub_shows_configured_tracking_ids(): void
+    {
+        config([
+            'services.google.analytics_id' => 'G-TESTANALYTICS',
+            'services.meta.pixel_id' => '999888777666555',
+        ]);
+
+        $this->actingAs($this->adminUser());
+
+        $this->get(route('admin.analytics'))
+            ->assertOk()
+            ->assertSee('Storefront tracking')
+            ->assertSee('G-TESTANALYTICS', false)
+            ->assertSee('999888777666555', false);
+    }
+
+    #[Test]
+    public function analytics_hub_shows_not_configured_when_tracking_ids_empty(): void
+    {
+        config([
+            'services.google.analytics_id' => '',
+            'services.meta.pixel_id' => '',
+        ]);
+
+        $this->actingAs($this->adminUser());
+
+        $this->get(route('admin.analytics'))
+            ->assertOk()
+            ->assertSee('Not configured')
+            ->assertDontSee('G-TESTANALYTICS', false);
+    }
+
+    #[Test]
     public function analytics_routes_are_reachable_for_admin(): void
     {
         $this->actingAs($this->adminUser());
 
         $this->get(route('admin.analytics'))
             ->assertOk()
-            ->assertSee('Analytics');
+            ->assertSee('Analytics')
+            ->assertSee('Storefront tracking')
+            ->assertSee('Google Analytics')
+            ->assertSee('Meta Pixel');
 
         $this->get(route('admin.analytics.pnl'))
             ->assertOk()

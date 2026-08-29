@@ -53,10 +53,11 @@ class StorefrontProductAddRedirectsToCartTest extends TestCase
     }
 
     #[Test]
-    public function empty_cart_also_offers_buy_more_products(): void
+    public function empty_cart_offers_view_product_list_to_home(): void
     {
         Livewire::test(StorefrontCart::class)
-            ->assertSee('আরো প্রোডাক্ট কিনুন', false)
-            ->assertSee(route('shop'), false);
+            ->assertSee('প্রোডাক্ট লিস্ট দেখুন', false)
+            ->assertSee(route('home'), false)
+            ->assertDontSee('আরো প্রোডাক্ট কিনুন', false);
     }
 }

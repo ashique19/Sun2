@@ -100,7 +100,7 @@ return [
     'subtotal' => 'সাবটোটাল',
     'estimated' => 'আনুমানিক',
     'delivery_discounts_checkout' => 'ডেলিভারি ও ডিসকাউন্ট চেকআউটে হিসাব হবে।',
-    'proceed_checkout' => 'অর্ডার কন্ফার্ম লিস্ট',
+    'proceed_checkout' => 'অর্ডার কন্ফার্ম করুন',
 
     'checkout' => 'অর্ডার করুন',
     'checkout_subtitle' => 'ক্যাশ অন ডেলিভারি · মোবাইল কোড লাগবে',

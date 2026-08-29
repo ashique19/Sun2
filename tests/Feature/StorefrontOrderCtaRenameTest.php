@@ -51,7 +51,7 @@ class StorefrontOrderCtaRenameTest extends TestCase
 
         Livewire::test(StorefrontCart::class)
             ->assertSee('অর্ডার লিস্ট', false)
-            ->assertSee('অর্ডার কন্ফার্ম লিস্ট', false)
+            ->assertSee('অর্ডার কন্ফার্ম করুন', false)
             ->assertDontSee('শপিং কার্ট', false);
     }
 

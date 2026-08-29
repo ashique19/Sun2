@@ -94,6 +94,7 @@ return [
     'shopping_cart' => 'অর্ডার লিস্ট',
     'cart_empty' => 'আপনার কার্ট খালি।',
     'continue_shopping' => 'কেনাকাটা চালিয়ে যান',
+    'buy_more_products' => 'আরো প্রোডাক্ট কিনুন',
     'each' => 'প্রতিটি',
     'remove' => 'মুছুন',
     'order_summary' => 'অর্ডার সারাংশ',

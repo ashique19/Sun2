@@ -21,8 +21,6 @@ class StorefrontProduct extends Component
 
     public int $activeImage = 0;
 
-    public ?string $addedMessage = null;
-
     public bool $isWishlisted = false;
 
     public int $reviewRating = 5;
@@ -62,8 +60,8 @@ class StorefrontProduct extends Component
         }
 
         $cart->add($this->product->id, $this->quantity);
-        $this->addedMessage = __('storefront.added_to_cart');
         $this->dispatch('cart-updated');
+        $this->redirect(route('cart'), navigate: true);
     }
 
     public function toggleWishlist(WishlistService $wishlist): void

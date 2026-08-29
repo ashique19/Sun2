@@ -113,12 +113,6 @@
                     </button>
                 </div>
 
-                @if ($addedMessage)
-                    <p class="mt-3 text-sm text-emerald-700">
-                        <a href="{{ route('cart') }}" wire:navigate class="underline">{{ __('storefront.view_cart') }}</a>
-                    </p>
-                @endif
-
                 @if ($descriptionHtml)
                     <div class="mt-6"
                         @if ($descriptionHasBoth)

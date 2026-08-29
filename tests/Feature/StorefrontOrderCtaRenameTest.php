@@ -38,9 +38,7 @@ class StorefrontOrderCtaRenameTest extends TestCase
             ->assertSee('অর্ডার করুন', false)
             ->assertDontSee('কার্টে রাখুন', false)
             ->call('addToCart')
-            ->assertSee('অর্ডার লিস্ট দেখুন', false)
-            ->assertDontSee('কার্টে রাখা হয়েছে', false)
-            ->assertDontSee('কার্ট দেখুন', false);
+            ->assertRedirect(route('cart'));
     }
 
     #[Test]

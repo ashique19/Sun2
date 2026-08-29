@@ -1,13 +1,18 @@
 <x-storefront.shell>
     <div class="mx-auto max-w-6xl px-4 py-8">
+        <a href="{{ route('shop') }}" wire:navigate
+            class="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-[#7A6114] hover:underline">
+            <span aria-hidden="true">&larr;</span>
+            {{ __('storefront.buy_more_products') }}
+        </a>
         <h1 class="font-serif text-3xl font-semibold mb-8">{{ __('storefront.shopping_cart') }}</h1>
 
         @if ($lines->isEmpty())
             <div class="rounded-xl border border-dashed border-[#D8CDB6] p-10 text-center">
                 <p class="text-[#6B6459] mb-4">{{ __('storefront.cart_empty') }}</p>
-                <a href="{{ route('home') }}#collection" wire:navigate
+                <a href="{{ route('shop') }}" wire:navigate
                    class="inline-block rounded-full bg-[#8F7218] px-8 py-3 text-sm font-semibold text-white hover:bg-[#7A6114] transition">
-                    {{ __('storefront.continue_shopping') }}
+                    {{ __('storefront.buy_more_products') }}
                 </a>
             </div>
         @else
@@ -52,6 +57,10 @@
                     <a href="{{ route('checkout') }}" wire:navigate
                         class="block w-full text-center rounded-full bg-[#8F7218] px-8 py-3 text-sm font-semibold text-white hover:bg-[#7A6114] transition">
                         {{ __('storefront.proceed_checkout') }}
+                    </a>
+                    <a href="{{ route('shop') }}" wire:navigate
+                        class="mt-3 block w-full text-center rounded-full border border-[#E0D6C2] bg-white px-8 py-3 text-sm font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#7A6114] transition">
+                        {{ __('storefront.buy_more_products') }}
                     </a>
                 </div>
             </div>

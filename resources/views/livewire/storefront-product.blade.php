@@ -16,7 +16,7 @@
     <x-seo.json-ld :data="\App\Support\JsonLd::product($product)" />
     <x-seo.json-ld :data="\App\Support\JsonLd::productBreadcrumb($product)" />
 
-    <div class="mx-auto max-w-6xl px-4 py-8 pb-24 lg:pb-0">
+    <div class="mx-auto max-w-6xl px-4 py-4 pb-24 lg:pb-0">
         <div class="mb-4 flex items-center gap-2 md:block">
             <nav class="min-w-0 flex-1 text-xs text-[#5C564C] md:mb-4" aria-label="Breadcrumb">
                 <a href="{{ route('home') }}" wire:navigate class="hover:text-[#7A6114]">{{ __('storefront.breadcrumb_home') }}</a>
@@ -31,7 +31,7 @@
             <x-storefront.product-neighbor-nav :product="$product" class="shrink-0" />
         </div>
 
-        <div class="grid lg:grid-cols-2 gap-10 mt-6">
+        <div class="mt-4 grid gap-10 lg:grid-cols-2">
             <div>
                 <div class="rounded-xl overflow-hidden bg-white border border-[#EFE7D6] aspect-square">
                     @if ($activeUrl)

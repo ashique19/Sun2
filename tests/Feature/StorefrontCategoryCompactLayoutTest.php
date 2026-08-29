@@ -67,4 +67,32 @@ class StorefrontCategoryCompactLayoutTest extends TestCase
         $response->assertSee('x-data="{ searchOpen: true }"', false);
         $response->assertSee('value="নূপুর"', false);
     }
+
+    #[Test]
+    public function product_detail_page_uses_compact_top_padding(): void
+    {
+        $category = Category::query()->create([
+            'name' => 'Earrings',
+            'slug' => 'earrings-compact',
+            'is_active' => true,
+        ]);
+
+        $product = Product::query()->create([
+            'name' => 'Jhumka',
+            'slug' => 'jhumka-compact',
+            'sku' => 'JH-1',
+            'price' => 500,
+            'purchase_price' => 200,
+            'stock_quantity' => 2,
+            'is_published' => true,
+            'display_order' => 1,
+            'category_id' => $category->id,
+        ]);
+
+        $response = $this->get(route('product.show', $product));
+
+        $response->assertOk();
+        $response->assertSee('mx-auto max-w-6xl px-4 py-4 pb-24 lg:pb-0', false);
+        $response->assertDontSee('mx-auto max-w-6xl px-4 py-8 pb-24 lg:pb-0', false);
+    }
 }

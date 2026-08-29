@@ -114,7 +114,7 @@
                 </div>
 
                 @if ($addedMessage)
-                    <p class="mt-3 text-sm text-emerald-700">{{ __('storefront.added_to_cart') }}
+                    <p class="mt-3 text-sm text-emerald-700">
                         <a href="{{ route('cart') }}" wire:navigate class="underline">{{ __('storefront.view_cart') }}</a>
                     </p>
                 @endif

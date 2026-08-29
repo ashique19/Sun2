@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Category;
 use App\Models\Product;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -59,6 +60,11 @@ class StorefrontCategoryCompactLayoutTest extends TestCase
         $response->assertSee('x-data="{ searchOpen: false }"', false);
         $response->assertSee('x-show="searchOpen"', false);
         $response->assertSee('x-ref="mobileSearch"', false);
+
+        $this->assertStringContainsString(
+            ".mobile-nav-drawer {\n        position: fixed;\n        inset: 0;\n        z-index: 100;\n        overflow: hidden;",
+            File::get(resource_path('css/app.css')),
+        );
     }
 
     #[Test]

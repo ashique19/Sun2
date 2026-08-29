@@ -387,7 +387,11 @@ class AdminAnalyticsTest extends TestCase
             ->assertOk()
             ->assertSee('Storefront tracking')
             ->assertSee('G-TESTANALYTICS', false)
-            ->assertSee('999888777666555', false);
+            ->assertSee('999888777666555', false)
+            ->assertSee('Copy Google Analytics ID', false)
+            ->assertSee('Copy Meta Pixel ID', false)
+            ->assertSee('data-copy-text="G-TESTANALYTICS"', false)
+            ->assertSee('data-copy-text="999888777666555"', false);
     }
 
     #[Test]
@@ -403,7 +407,9 @@ class AdminAnalyticsTest extends TestCase
         $this->get(route('admin.analytics'))
             ->assertOk()
             ->assertSee('Not configured')
-            ->assertDontSee('G-TESTANALYTICS', false);
+            ->assertDontSee('G-TESTANALYTICS', false)
+            ->assertDontSee('Copy Google Analytics ID', false)
+            ->assertDontSee('Copy Meta Pixel ID', false);
     }
 
     #[Test]

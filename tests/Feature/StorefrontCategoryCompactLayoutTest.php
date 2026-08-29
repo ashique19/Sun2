@@ -105,7 +105,8 @@ class StorefrontCategoryCompactLayoutTest extends TestCase
         $response->assertDontSee('mx-auto max-w-6xl px-4 py-8 pb-24 lg:pb-0', false);
         $response->assertSee('mb-2 flex items-center gap-2 md:mb-4 md:block', false);
         $response->assertSee('hidden text-[#1E1E1E] line-clamp-1 sm:inline', false);
-        $response->assertSee('mt-2 flex flex-wrap items-center gap-x-3 gap-y-1', false);
+        $response->assertSee('mt-2 flex flex-wrap items-center gap-x-2 gap-y-1', false);
+        $response->assertSee('ml-auto rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700', false);
         $response->assertSee(__('storefront.in_stock'), false);
         $response->assertDontSee('hidden text-xs uppercase tracking-wider text-[#7A6114] sm:block', false);
         $response->assertSee('aria-label="'.__('storefront.search').'"', false);

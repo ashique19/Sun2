@@ -1297,6 +1297,12 @@
                         'y' => (float) $pricedImageY,
                         'font' => (int) $pricedImageFont,
                         'position' => $pricedImagePosition,
+                        'logo' => (bool) $pricedImageLogo,
+                        'logoPosition' => $pricedImageLogoPosition,
+                        'logoSize' => (int) $pricedImageLogoSize,
+                        'logoX' => (float) $pricedImageLogoX,
+                        'logoY' => (float) $pricedImageLogoY,
+                        'logoUrl' => \App\Services\Admin\ProductPricedImageService::LOGO_PUBLIC_PATH,
                     ];
                 @endphp
                 <div class="fixed inset-0 z-[80] flex items-stretch justify-center bg-black/50 sm:items-center sm:p-4"
@@ -1375,6 +1381,69 @@
                                     aria-label="Text size in pixels"
                                     class="w-20 rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm tabular-nums">
                             </div>
+                            <div class="space-y-2 rounded-xl border border-[#EFE7D6] bg-[#FAF6EF]/60 px-3 py-2.5">
+                                <label class="flex items-center gap-2 text-sm text-[#1E1E1E]">
+                                    <input type="checkbox" x-model="logoEnabled" @change="syncToWire()"
+                                        class="rounded border-[#E0D6C2] text-[#C9A227] focus:ring-[#C9A227]">
+                                    Put logo on image
+                                </label>
+                                <div class="flex items-center gap-3" :class="{ 'opacity-60': ! logoEnabled }">
+                                    <img src="{{ \App\Services\Admin\ProductPricedImageService::LOGO_PUBLIC_PATH }}"
+                                        alt="Brand logo" class="h-7 w-auto object-contain">
+                                    <input id="priced-image-logo-size" type="range"
+                                        min="{{ \App\Services\Admin\ProductPricedImageService::LOGO_SIZE_MIN }}"
+                                        max="{{ \App\Services\Admin\ProductPricedImageService::LOGO_SIZE_MAX }}"
+                                        step="1"
+                                        x-model.number="logoSize"
+                                        @change="syncToWire()"
+                                        :disabled="! logoEnabled"
+                                        aria-label="Logo size percent"
+                                        class="min-w-0 flex-1 disabled:opacity-60">
+                                    <span class="w-10 text-right text-xs tabular-nums text-[#6B6459]" x-text="`${logoSize}%`"></span>
+                                </div>
+                                <div class="flex gap-1.5" role="group" aria-label="Logo position"
+                                    :class="{ 'opacity-60': ! logoEnabled }">
+                                    @foreach ([
+                                        'top-left' => 'Logo top left',
+                                        'top-right' => 'Logo top right',
+                                        'bottom-left' => 'Logo bottom left',
+                                        'bottom-right' => 'Logo bottom right',
+                                        'center' => 'Logo center',
+                                    ] as $value => $label)
+                                        <button type="button"
+                                            @click="snapLogo('{{ $value }}')"
+                                            title="{{ $label }}"
+                                            aria-label="{{ $label }}"
+                                            :aria-pressed="logoPosition === '{{ $value }}' ? 'true' : 'false'"
+                                            :disabled="! logoEnabled"
+                                            class="inline-flex h-9 flex-1 items-center justify-center rounded-lg border transition disabled:cursor-not-allowed"
+                                            :class="logoPosition === '{{ $value }}'
+                                                ? 'border-[#1E1E1E] bg-[#1E1E1E] text-white'
+                                                : 'border-[#E0D6C2] bg-white text-[#1E1E1E] hover:bg-[#FAF6EF]'">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                                                <rect x="2.5" y="2.5" width="15" height="15" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.45"/>
+                                                @switch($value)
+                                                    @case('top-left')
+                                                        <rect x="4" y="4" width="5.5" height="4" rx="0.75"/>
+                                                        @break
+                                                    @case('top-right')
+                                                        <rect x="10.5" y="4" width="5.5" height="4" rx="0.75"/>
+                                                        @break
+                                                    @case('bottom-left')
+                                                        <rect x="4" y="12" width="5.5" height="4" rx="0.75"/>
+                                                        @break
+                                                    @case('bottom-right')
+                                                        <rect x="10.5" y="12" width="5.5" height="4" rx="0.75"/>
+                                                        @break
+                                                    @default
+                                                        <rect x="6.5" y="7.5" width="7" height="5" rx="0.75"/>
+                                                @endswitch
+                                            </svg>
+                                            <span class="sr-only">{{ $label }}</span>
+                                        </button>
+                                    @endforeach
+                                </div>
+                            </div>
                             @error('pricedImage')
                                 <p class="text-xs text-rose-600">{{ $message }}</p>
                             @enderror
@@ -1388,6 +1457,21 @@
                                 <p class="text-xs text-rose-600">{{ $message }}</p>
                             @enderror
                             @error('pricedImageY')
+                                <p class="text-xs text-rose-600">{{ $message }}</p>
+                            @enderror
+                            @error('pricedImageLogo')
+                                <p class="text-xs text-rose-600">{{ $message }}</p>
+                            @enderror
+                            @error('pricedImageLogoPosition')
+                                <p class="text-xs text-rose-600">{{ $message }}</p>
+                            @enderror
+                            @error('pricedImageLogoSize')
+                                <p class="text-xs text-rose-600">{{ $message }}</p>
+                            @enderror
+                            @error('pricedImageLogoX')
+                                <p class="text-xs text-rose-600">{{ $message }}</p>
+                            @enderror
+                            @error('pricedImageLogoY')
                                 <p class="text-xs text-rose-600">{{ $message }}</p>
                             @enderror
                             <div class="flex flex-wrap items-center gap-2">
@@ -1446,10 +1530,22 @@
                                                 <span class="pointer-events-none h-4 w-4 rounded-sm border-2 border-[#C9A227] bg-white shadow sm:h-3 sm:w-3 sm:border"></span>
                                             </button>
                                         </div>
+                                        <div
+                                            x-show="logoEnabled"
+                                            x-cloak
+                                            class="absolute z-10 cursor-move select-none touch-none rounded-sm outline outline-1 outline-[#C9A227]/50"
+                                            :style="logoBoxStyle()"
+                                            @pointerdown="startLogoDrag($event)"
+                                            title="Drag to move logo"
+                                            role="slider"
+                                            aria-label="Logo position"
+                                        >
+                                            <img :src="logoUrl" alt="" class="pointer-events-none h-full w-full object-contain" draggable="false">
+                                        </div>
                                     </div>
                                 </div>
                                 <p class="text-xs text-[#8C8474]">
-                                    Drag the price stamp to place it. Drag the corner handle to resize. Snap buttons jump to corners.
+                                    Drag the price stamp and logo to place them. Position and size apply when you Save &amp; rebuild.
                                 </p>
                             @else
                                 <div class="rounded-xl border border-dashed border-[#E0D6C2] bg-[#FAF6EF] px-4 py-12 text-center text-sm text-[#8C8474]">

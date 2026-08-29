@@ -1,21 +1,28 @@
 <x-storefront.shell>
     <div class="mx-auto max-w-6xl px-4 py-8">
-        <a href="{{ route('shop') }}" wire:navigate
-            class="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-[#7A6114] hover:underline">
-            <span aria-hidden="true">&larr;</span>
-            {{ __('storefront.buy_more_products') }}
-        </a>
-        <h1 class="font-serif text-3xl font-semibold mb-8">{{ __('storefront.shopping_cart') }}</h1>
-
         @if ($lines->isEmpty())
+            <a href="{{ route('home') }}" wire:navigate
+                class="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-[#7A6114] hover:underline">
+                <span aria-hidden="true">&larr;</span>
+                {{ __('storefront.view_product_list') }}
+            </a>
+            <h1 class="font-serif text-3xl font-semibold mb-8">{{ __('storefront.shopping_cart') }}</h1>
+
             <div class="rounded-xl border border-dashed border-[#D8CDB6] p-10 text-center">
                 <p class="text-[#6B6459] mb-4">{{ __('storefront.cart_empty') }}</p>
-                <a href="{{ route('shop') }}" wire:navigate
+                <a href="{{ route('home') }}" wire:navigate
                    class="inline-block rounded-full bg-[#8F7218] px-8 py-3 text-sm font-semibold text-white hover:bg-[#7A6114] transition">
-                    {{ __('storefront.buy_more_products') }}
+                    {{ __('storefront.view_product_list') }}
                 </a>
             </div>
         @else
+            <a href="{{ route('shop') }}" wire:navigate
+                class="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-[#7A6114] hover:underline">
+                <span aria-hidden="true">&larr;</span>
+                {{ __('storefront.buy_more_products') }}
+            </a>
+            <h1 class="font-serif text-3xl font-semibold mb-8">{{ __('storefront.shopping_cart') }}</h1>
+
             <div class="grid lg:grid-cols-3 gap-8">
                 <div class="lg:col-span-2 space-y-4">
                     @foreach ($lines as $line)

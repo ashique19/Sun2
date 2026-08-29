@@ -2348,6 +2348,12 @@ const registerProductImageAlpineData = () => {
         stampY: typeof config.y === 'number' ? config.y : 0.12,
         stampFont: typeof config.font === 'number' ? config.font : 56,
         stampPosition: config.position || 'top-left',
+        logoEnabled: Boolean(config.logo),
+        logoPosition: config.logoPosition || 'top-right',
+        logoSize: typeof config.logoSize === 'number' ? config.logoSize : 18,
+        logoX: typeof config.logoX === 'number' ? config.logoX : 0.88,
+        logoY: typeof config.logoY === 'number' ? config.logoY : 0.12,
+        logoUrl: config.logoUrl || '/img/settings/logo.png',
         displayWidth: 0,
         displayHeight: 0,
         naturalWidth: 0,
@@ -2405,6 +2411,20 @@ const registerProductImageAlpineData = () => {
                 background: 'rgba(255, 255, 255, 0.82)',
                 color: '#000000',
                 whiteSpace: 'nowrap',
+                touchAction: 'none',
+            };
+        },
+
+        logoBoxStyle() {
+            const display = Math.max(1, this.displayWidth || this.naturalWidth || 800);
+            const widthPct = Math.max(8, Math.min(40, Number(this.logoSize) || 18));
+            const widthPx = Math.round(display * (widthPct / 100));
+
+            return {
+                left: `${this.clamp01(this.logoX) * 100}%`,
+                top: `${this.clamp01(this.logoY) * 100}%`,
+                width: `${widthPx}px`,
+                transform: 'translate(-50%, -50%)',
                 touchAction: 'none',
             };
         },
@@ -2519,6 +2539,14 @@ const registerProductImageAlpineData = () => {
                 'pricedImageFont',
                 Math.max(28, Math.min(96, Math.round(Number(this.stampFont) || 56))),
             );
+            await this.$wire.set('pricedImageLogo', Boolean(this.logoEnabled));
+            await this.$wire.set('pricedImageLogoPosition', this.logoPosition || 'top-right');
+            await this.$wire.set(
+                'pricedImageLogoSize',
+                Math.max(8, Math.min(40, Math.round(Number(this.logoSize) || 18))),
+            );
+            await this.$wire.set('pricedImageLogoX', this.clamp01(this.logoX));
+            await this.$wire.set('pricedImageLogoY', this.clamp01(this.logoY));
         },
 
         async syncAndGenerate() {
@@ -2538,6 +2566,22 @@ const registerProductImageAlpineData = () => {
             this.stampPosition = position;
             this.stampX = point[0];
             this.stampY = point[1];
+            await this.syncToWire();
+        },
+
+        async snapLogo(position) {
+            const centers = {
+                'top-left': [0.12, 0.12],
+                'top-right': [0.88, 0.12],
+                'bottom-left': [0.12, 0.88],
+                'bottom-right': [0.88, 0.88],
+                center: [0.5, 0.5],
+            };
+            const point = centers[position] || centers['top-right'];
+            this.logoEnabled = true;
+            this.logoPosition = position;
+            this.logoX = point[0];
+            this.logoY = point[1];
             await this.syncToWire();
         },
 
@@ -2576,6 +2620,41 @@ const registerProductImageAlpineData = () => {
             }
 
             this.stampPosition = 'custom';
+        },
+
+        startLogoDrag(event) {
+            if (! this.logoEnabled) {
+                return;
+            }
+
+            const stage = event.currentTarget?.closest?.('[data-priced-stamp-stage]');
+
+            if (! stage) {
+                return;
+            }
+
+            const rect = stage.getBoundingClientRect();
+            const startClientX = event.clientX;
+            const startClientY = event.clientY;
+            const startX = this.clamp01(this.logoX);
+            const startY = this.clamp01(this.logoY);
+
+            if (! this.beginOverlayGesture(event, {
+                kind: 'logo-drag',
+                onMove: (moveEvent) => {
+                    const dx = (moveEvent.clientX - startClientX) / Math.max(1, rect.width);
+                    const dy = (moveEvent.clientY - startClientY) / Math.max(1, rect.height);
+                    this.logoX = this.clamp01(startX + dx);
+                    this.logoY = this.clamp01(startY + dy);
+                },
+                onEnd: () => {
+                    this.syncToWire();
+                },
+            })) {
+                return;
+            }
+
+            this.logoPosition = 'custom';
         },
 
         startResize(event) {

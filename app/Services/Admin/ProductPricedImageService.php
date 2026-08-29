@@ -31,6 +31,14 @@ class ProductPricedImageService
 
     public const AUTO_SIZE_RATIO = 0.20;
 
+    public const LOGO_SIZE_MIN = 8;
+
+    public const LOGO_SIZE_MAX = 40;
+
+    public const LOGO_SIZE_DEFAULT = 18;
+
+    public const LOGO_PUBLIC_PATH = '/img/settings/logo.png';
+
     /**
      * Bundled HarfBuzz-shaped "/unit" PNGs (GD cannot shape Bengali).
      *
@@ -123,6 +131,11 @@ class ProductPricedImageService
             'font' => $bestFont,
             'x' => 0.5,
             'y' => 0.5,
+            'logo' => false,
+            'logo_position' => 'top-right',
+            'logo_size' => self::LOGO_SIZE_DEFAULT,
+            'logo_x' => 0.88,
+            'logo_y' => 0.12,
         ];
     }
 
@@ -140,13 +153,16 @@ class ProductPricedImageService
     }
 
     /**
-     * @return array{position: string, font: int}
+     * @return array{position: string, font: int, logo: bool, logo_position: string, logo_size: int}
      */
     public function defaultLayout(): array
     {
         return [
             'position' => 'top-left',
             'font' => self::FONT_DEFAULT,
+            'logo' => false,
+            'logo_position' => 'top-right',
+            'logo_size' => self::LOGO_SIZE_DEFAULT,
         ];
     }
 
@@ -169,7 +185,17 @@ class ProductPricedImageService
 
     /**
      * @param  array<string, mixed>  $layout
-     * @return array{position: string, font: int, x?: float, y?: float}
+     * @return array{
+     *     position: string,
+     *     font: int,
+     *     x?: float,
+     *     y?: float,
+     *     logo: bool,
+     *     logo_position: string,
+     *     logo_size: int,
+     *     logo_x?: float,
+     *     logo_y?: float
+     * }
      */
     public function normalizeLayout(array $layout): array
     {
@@ -201,9 +227,29 @@ class ProductPricedImageService
             }
         }
 
+        $logoEnabled = (bool) ($layout['logo'] ?? $defaults['logo']);
+        $logoPosition = $layout['logo_position'] ?? $defaults['logo_position'];
+
+        if (! is_string($logoPosition) || ! in_array($logoPosition, self::POSITIONS, true)) {
+            $logoPosition = $defaults['logo_position'];
+        }
+
+        $logoSize = (int) ($layout['logo_size'] ?? $defaults['logo_size']);
+        $logoSize = min(self::LOGO_SIZE_MAX, max(self::LOGO_SIZE_MIN, $logoSize));
+
+        $logoCenter = $this->extractLogoNormalizedCenter($layout);
+        if ($logoCenter === null) {
+            $logoCenter = $this->centerForPosition($logoPosition);
+        }
+
         $result = [
             'position' => $position,
             'font' => $font,
+            'logo' => $logoEnabled,
+            'logo_position' => $logoPosition,
+            'logo_size' => $logoSize,
+            'logo_x' => $logoCenter[0],
+            'logo_y' => $logoCenter[1],
         ];
 
         if ($normalizedCenter !== null) {
@@ -212,6 +258,26 @@ class ProductPricedImageService
         }
 
         return $result;
+    }
+
+    /**
+     * @param  array<string, mixed>  $layout
+     * @return array{0: float, 1: float}|null
+     */
+    private function extractLogoNormalizedCenter(array $layout): ?array
+    {
+        if (! array_key_exists('logo_x', $layout) || ! array_key_exists('logo_y', $layout)) {
+            return null;
+        }
+
+        $x = (float) $layout['logo_x'];
+        $y = (float) $layout['logo_y'];
+
+        if ($x < 0 || $x > 1 || $y < 0 || $y > 1) {
+            return null;
+        }
+
+        return [round($x, 4), round($y, 4)];
     }
 
     /**
@@ -420,8 +486,87 @@ class ProductPricedImageService
             $cursorY += $lineHeight + $lineGap;
         }
 
+        $this->blitLogo($canvas, $layout, $width, $height);
+
         CleanJpegWriter::write($canvas, $destination, 90);
         imagedestroy($canvas);
+    }
+
+    /**
+     * @param  \GdImage  $canvas
+     * @param  array{
+     *     position: string,
+     *     font: int,
+     *     x?: float,
+     *     y?: float,
+     *     logo?: bool,
+     *     logo_position?: string,
+     *     logo_size?: int,
+     *     logo_x?: float,
+     *     logo_y?: float
+     * }  $layout
+     */
+    private function blitLogo($canvas, array $layout, int $width, int $height): void
+    {
+        if (! ($layout['logo'] ?? false)) {
+            return;
+        }
+
+        $logoPath = public_path(ltrim(self::LOGO_PUBLIC_PATH, '/'));
+
+        if (! is_file($logoPath) || ! is_readable($logoPath)) {
+            return;
+        }
+
+        $logo = @imagecreatefrompng($logoPath);
+
+        if ($logo === false) {
+            return;
+        }
+
+        imagesavealpha($logo, true);
+        imagealphablending($logo, true);
+
+        $naturalW = imagesx($logo);
+        $naturalH = imagesy($logo);
+
+        if ($naturalW < 1 || $naturalH < 1) {
+            imagedestroy($logo);
+
+            return;
+        }
+
+        $sizePercent = (int) ($layout['logo_size'] ?? self::LOGO_SIZE_DEFAULT);
+        $sizePercent = min(self::LOGO_SIZE_MAX, max(self::LOGO_SIZE_MIN, $sizePercent));
+        $targetWidth = max(24, (int) round($width * ($sizePercent / 100)));
+        $scale = $targetWidth / $naturalW;
+        $targetHeight = max(1, (int) round($naturalH * $scale));
+
+        $edgePad = max(8, (int) round(min($width, $height) * 0.02));
+        $centerX = (float) ($layout['logo_x'] ?? $this->centerForPosition((string) ($layout['logo_position'] ?? 'top-right'))[0]);
+        $centerY = (float) ($layout['logo_y'] ?? $this->centerForPosition((string) ($layout['logo_position'] ?? 'top-right'))[1]);
+        $centerX = max(0, min(1, $centerX));
+        $centerY = max(0, min(1, $centerY));
+
+        $x = (int) round(($centerX * $width) - ($targetWidth / 2));
+        $y = (int) round(($centerY * $height) - ($targetHeight / 2));
+        $x = max($edgePad, min($width - $targetWidth - $edgePad, $x));
+        $y = max($edgePad, min($height - $targetHeight - $edgePad, $y));
+
+        imagecopyresampled(
+            $canvas,
+            $logo,
+            $x,
+            $y,
+            0,
+            0,
+            $targetWidth,
+            $targetHeight,
+            $naturalW,
+            $naturalH,
+        );
+
+        imagedestroy($logo);
     }
 
     /**

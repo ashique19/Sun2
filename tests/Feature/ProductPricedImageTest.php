@@ -72,11 +72,21 @@ class ProductPricedImageTest extends TestCase
         $this->assertSame([
             'position' => 'top-left',
             'font' => 64,
+            'logo' => false,
+            'logo_position' => 'top-right',
+            'logo_size' => ProductPricedImageService::LOGO_SIZE_DEFAULT,
+            'logo_x' => 0.88,
+            'logo_y' => 0.12,
         ], $service->normalizeLayout(['x' => 24, 'y' => 24, 'font' => 5]));
 
         $this->assertSame([
             'position' => 'bottom-right',
             'font' => 56,
+            'logo' => false,
+            'logo_position' => 'top-right',
+            'logo_size' => ProductPricedImageService::LOGO_SIZE_DEFAULT,
+            'logo_x' => 0.88,
+            'logo_y' => 0.12,
         ], $service->normalizeLayout(['x' => 200, 'y' => 200, 'font' => 4]));
     }
 
@@ -284,6 +294,11 @@ class ProductPricedImageTest extends TestCase
         $this->assertSame([
             'position' => 'center',
             'font' => 56,
+            'logo' => false,
+            'logo_position' => 'top-right',
+            'logo_size' => ProductPricedImageService::LOGO_SIZE_DEFAULT,
+            'logo_x' => 0.88,
+            'logo_y' => 0.12,
         ], $service->normalizeLayout(['position' => 'center', 'font' => 56]));
     }
 

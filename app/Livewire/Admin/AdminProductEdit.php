@@ -134,6 +134,16 @@ class AdminProductEdit extends Component
 
     public float $pricedImageY = 0.12;
 
+    public bool $pricedImageLogo = false;
+
+    public string $pricedImageLogoPosition = 'top-right';
+
+    public int $pricedImageLogoSize = ProductPricedImageService::LOGO_SIZE_DEFAULT;
+
+    public float $pricedImageLogoX = 0.88;
+
+    public float $pricedImageLogoY = 0.12;
+
     public int $imagesEpoch = 0;
 
     public function mount(?Product $product = null): void
@@ -271,6 +281,16 @@ class AdminProductEdit extends Component
             ->centerForPosition($value);
     }
 
+    public function updatedPricedImageLogoPosition(string $value): void
+    {
+        if ($value === 'custom') {
+            return;
+        }
+
+        [$this->pricedImageLogoX, $this->pricedImageLogoY] = app(ProductPricedImageService::class)
+            ->centerForPosition($value);
+    }
+
     public function savePricedImageLayout(): void
     {
         $this->validate([
@@ -283,6 +303,16 @@ class AdminProductEdit extends Component
             ],
             'pricedImageX' => ['required', 'numeric', 'min:0', 'max:1'],
             'pricedImageY' => ['required', 'numeric', 'min:0', 'max:1'],
+            'pricedImageLogo' => ['boolean'],
+            'pricedImageLogoPosition' => ['required', 'in:'.implode(',', ProductPricedImageService::POSITIONS)],
+            'pricedImageLogoSize' => [
+                'required',
+                'integer',
+                'min:'.ProductPricedImageService::LOGO_SIZE_MIN,
+                'max:'.ProductPricedImageService::LOGO_SIZE_MAX,
+            ],
+            'pricedImageLogoX' => ['required', 'numeric', 'min:0', 'max:1'],
+            'pricedImageLogoY' => ['required', 'numeric', 'min:0', 'max:1'],
         ]);
 
         if (! $this->product) {
@@ -295,6 +325,11 @@ class AdminProductEdit extends Component
                 'font' => $this->pricedImageFont,
                 'x' => round($this->pricedImageX, 4),
                 'y' => round($this->pricedImageY, 4),
+                'logo' => $this->pricedImageLogo,
+                'logo_position' => $this->pricedImageLogoPosition,
+                'logo_size' => $this->pricedImageLogoSize,
+                'logo_x' => round($this->pricedImageLogoX, 4),
+                'logo_y' => round($this->pricedImageLogoY, 4),
             ],
         ]);
     }
@@ -312,6 +347,11 @@ class AdminProductEdit extends Component
                 'font' => $this->pricedImageFont,
                 'x' => round($this->pricedImageX, 4),
                 'y' => round($this->pricedImageY, 4),
+                'logo' => $this->pricedImageLogo,
+                'logo_position' => $this->pricedImageLogoPosition,
+                'logo_size' => $this->pricedImageLogoSize,
+                'logo_x' => round($this->pricedImageLogoX, 4),
+                'logo_y' => round($this->pricedImageLogoY, 4),
             ]);
             $this->product->refresh();
             $this->message = 'Priced image saved.';
@@ -1623,6 +1663,20 @@ class AdminProductEdit extends Component
             $this->pricedImageY = max(0, min(1, (float) $layout['y']));
         } else {
             [$this->pricedImageX, $this->pricedImageY] = $service->centerForPosition($this->pricedImagePosition);
+        }
+
+        $this->pricedImageLogo = (bool) ($layout['logo'] ?? false);
+        $this->pricedImageLogoPosition = (string) ($layout['logo_position'] ?? 'top-right');
+        $this->pricedImageLogoSize = min(
+            ProductPricedImageService::LOGO_SIZE_MAX,
+            max(ProductPricedImageService::LOGO_SIZE_MIN, (int) ($layout['logo_size'] ?? ProductPricedImageService::LOGO_SIZE_DEFAULT)),
+        );
+
+        if (isset($layout['logo_x'], $layout['logo_y'])) {
+            $this->pricedImageLogoX = max(0, min(1, (float) $layout['logo_x']));
+            $this->pricedImageLogoY = max(0, min(1, (float) $layout['logo_y']));
+        } else {
+            [$this->pricedImageLogoX, $this->pricedImageLogoY] = $service->centerForPosition($this->pricedImageLogoPosition);
         }
     }
 }

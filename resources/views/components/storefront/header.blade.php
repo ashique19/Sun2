@@ -84,7 +84,10 @@
     </div>
 
     {{-- Small screen bar --}}
-    <div class="mx-auto max-w-6xl px-4 py-3 space-y-2 sm:hidden">
+    <div
+        class="mx-auto max-w-6xl px-4 py-3 space-y-2 sm:hidden"
+        x-data="{ searchOpen: {{ filled($query) ? 'true' : 'false' }} }"
+    >
         <div class="flex items-center gap-3">
             <a href="{{ route('home') }}" wire:navigate class="flex items-center shrink-0 min-w-[9.5rem]" aria-label="Sundoritoma">
                 <img src="/img/settings/logo.png"
@@ -95,6 +98,20 @@
             </a>
 
             <div class="flex items-center gap-2 text-[#1E1E1E] shrink-0 ml-auto">
+                <button
+                    type="button"
+                    class="inline-flex h-10 w-10 shrink-0 items-center justify-center text-[#1E1E1E] hover:text-[#7A6114]"
+                    title="{{ __('storefront.search') }}"
+                    aria-label="{{ __('storefront.search') }}"
+                    :aria-expanded="searchOpen.toString()"
+                    @click="searchOpen = !searchOpen; if (searchOpen) $nextTick(() => $refs.mobileSearch?.focus())"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="11" cy="11" r="6.25" stroke="currentColor" stroke-width="1.75"/>
+                        <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="m16.5 16.5 3 3"/>
+                    </svg>
+                </button>
+
                 <a href="{{ route('account.wishlist') }}" wire:navigate
                     class="relative inline-flex h-10 w-10 shrink-0 items-center justify-center text-[#1E1E1E] hover:text-[#7A6114]"
                     title="{{ __('storefront.save') }}"
@@ -134,10 +151,22 @@
             </div>
         </div>
 
-        <form action="{{ route('shop') }}" method="get" class="w-full">
-            <input type="search" name="q" value="{{ $query }}"
+        <form
+            action="{{ route('shop') }}"
+            method="get"
+            class="w-full"
+            x-show="searchOpen"
+            x-cloak
+            x-transition.opacity.duration.150ms
+        >
+            <input
+                type="search"
+                name="q"
+                value="{{ $query }}"
+                x-ref="mobileSearch"
                 placeholder="{{ __('storefront.search_placeholder') }}"
-                class="w-full rounded-full border border-[#E0D6C2] bg-white px-3.5 py-1 text-sm leading-tight focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]">
+                class="w-full rounded-full border border-[#E0D6C2] bg-white px-3.5 py-1 text-sm leading-tight focus:border-[#8F7218] focus:outline-none focus:ring-1 focus:ring-[#8F7218]"
+            >
         </form>
     </div>
 </header>

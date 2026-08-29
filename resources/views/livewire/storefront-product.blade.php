@@ -16,37 +16,38 @@
     <x-seo.json-ld :data="\App\Support\JsonLd::product($product)" />
     <x-seo.json-ld :data="\App\Support\JsonLd::productBreadcrumb($product)" />
 
-    <div class="mx-auto max-w-6xl px-4 py-8 pb-24 lg:pb-0">
-        <div class="mb-4 flex items-center gap-2 md:block">
+    <div class="mx-auto max-w-6xl px-4 py-4 pb-24 lg:pb-0">
+        <div class="mb-2 flex items-center gap-2 md:mb-4 md:block">
             <nav class="min-w-0 flex-1 text-xs text-[#5C564C] md:mb-4" aria-label="Breadcrumb">
                 <a href="{{ route('home') }}" wire:navigate class="hover:text-[#7A6114]">{{ __('storefront.breadcrumb_home') }}</a>
                 @if ($product->category)
                     <span class="mx-2">/</span>
                     <a href="{{ route('category.show', $product->category) }}" wire:navigate class="hover:text-[#7A6114]">{{ $product->category->name }}</a>
                 @endif
-                <span class="mx-2">/</span>
-                <span class="text-[#1E1E1E] line-clamp-1">{{ $product->name }}</span>
+                {{-- Product name is the page H1; keep it out of the mobile breadcrumb to free the row for neighbor nav --}}
+                <span class="mx-2 hidden sm:inline">/</span>
+                <span class="hidden text-[#1E1E1E] line-clamp-1 sm:inline">{{ $product->name }}</span>
             </nav>
 
             <x-storefront.product-neighbor-nav :product="$product" class="shrink-0" />
         </div>
 
-        <div class="grid lg:grid-cols-2 gap-10 mt-6">
+        <div class="grid gap-8 lg:grid-cols-2 lg:gap-10">
             <div>
-                <div class="rounded-xl overflow-hidden bg-white border border-[#EFE7D6] aspect-square">
+                <div class="overflow-hidden rounded-xl border border-[#EFE7D6] bg-white aspect-square">
                     @if ($activeUrl)
-                        <img src="{{ $activeUrl }}" alt="{{ $product->name }}" class="w-full h-full object-cover" fetchpriority="high">
+                        <img src="{{ $activeUrl }}" alt="{{ $product->name }}" class="h-full w-full object-cover" fetchpriority="high">
                     @else
-                        <div class="w-full h-full bg-[#F1EADB] flex items-center justify-center text-5xl text-[#7A6114]">&#9670;</div>
+                        <div class="flex h-full w-full items-center justify-center bg-[#F1EADB] text-5xl text-[#7A6114]">&#9670;</div>
                     @endif
                 </div>
                 @if ($images->count() > 1)
-                    <div class="mt-4 grid grid-cols-5 gap-2">
+                    <div class="mt-3 grid grid-cols-5 gap-2">
                         @foreach ($images as $index => $image)
                             @if ($thumb = \App\Support\StorefrontAssets::smallUrl($image->path) ?? \App\Support\StorefrontAssets::url($image->path))
                                 <button type="button" wire:click="selectImage({{ $index }})"
-                                    class="rounded-lg overflow-hidden border-2 aspect-square {{ $activeImage === $index ? 'border-[#C9A227]' : 'border-transparent' }}">
-                                    <img src="{{ $thumb }}" alt="" class="w-full h-full object-cover" loading="lazy" decoding="async">
+                                    class="aspect-square overflow-hidden rounded-lg border-2 {{ $activeImage === $index ? 'border-[#C9A227]' : 'border-transparent' }}">
+                                    <img src="{{ $thumb }}" alt="" class="h-full w-full object-cover" loading="lazy" decoding="async">
                                 </button>
                             @endif
                         @endforeach
@@ -56,7 +57,7 @@
 
             <div>
                 @if ($product->category)
-                    <p class="text-xs uppercase tracking-wider text-[#7A6114] mb-2">{{ $product->category->name }}</p>
+                    <p class="mb-2 hidden text-xs uppercase tracking-wider text-[#7A6114] sm:block">{{ $product->category->name }}</p>
                 @endif
                 <h1 class="font-serif text-3xl font-semibold leading-tight">{{ $product->name }}</h1>
 

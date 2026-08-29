@@ -206,6 +206,7 @@
         position: fixed;
         inset: 0;
         z-index: 100;
+        overflow: hidden;
         pointer-events: none;
         visibility: hidden;
     }

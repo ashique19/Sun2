@@ -69,7 +69,7 @@ class StorefrontCategoryCompactLayoutTest extends TestCase
     }
 
     #[Test]
-    public function product_detail_page_uses_compact_top_padding(): void
+    public function product_detail_page_uses_compact_top_layout(): void
     {
         $category = Category::query()->create([
             'name' => 'Earrings',
@@ -78,7 +78,7 @@ class StorefrontCategoryCompactLayoutTest extends TestCase
         ]);
 
         $product = Product::query()->create([
-            'name' => 'Jhumka',
+            'name' => 'Jhumka Compact',
             'slug' => 'jhumka-compact',
             'sku' => 'JH-1',
             'price' => 500,
@@ -94,5 +94,10 @@ class StorefrontCategoryCompactLayoutTest extends TestCase
         $response->assertOk();
         $response->assertSee('mx-auto max-w-6xl px-4 py-4 pb-24 lg:pb-0', false);
         $response->assertDontSee('mx-auto max-w-6xl px-4 py-8 pb-24 lg:pb-0', false);
+        $response->assertSee('mb-2 flex items-center gap-2 md:mb-4 md:block', false);
+        $response->assertSee('hidden text-[#1E1E1E] line-clamp-1 sm:inline', false);
+        $response->assertSee('hidden text-xs uppercase tracking-wider text-[#7A6114] sm:block', false);
+        $response->assertSee('aria-label="'.__('storefront.search').'"', false);
+        $response->assertSee('x-show="searchOpen"', false);
     }
 }

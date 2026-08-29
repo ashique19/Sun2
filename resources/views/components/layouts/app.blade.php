@@ -43,6 +43,7 @@
 
     <link rel="icon" type="image/png" href="/img/settings/favicon.png">
     <x-google-analytics />
+    <x-meta-pixel />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @isset($seoPreloadImage)
         <link rel="preload" as="image" href="{{ $seoPreloadImage }}" fetchpriority="high"

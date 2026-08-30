@@ -42,6 +42,12 @@ class LoggingSmsSender implements SmsSender
 
         Log::info('SMS send attempt', $context);
 
+        if (app()->hasDebugModeEnabled()) {
+            Log::info('SMS send skipped (APP_DEBUG is enabled)', $context);
+
+            return;
+        }
+
         try {
             $send();
 

@@ -19,6 +19,7 @@ class MimSmsSenderTest extends TestCase
     {
         parent::setUp();
 
+        Config::set('app.debug', false);
         Config::set('sms.driver', 'mimsms');
         Config::set('sms.from', 'Sundoritoma');
         Config::set('sms.mimsms', [

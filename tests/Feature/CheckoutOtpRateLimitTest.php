@@ -21,7 +21,7 @@ class CheckoutOtpRateLimitTest extends TestCase
         config([
             'checkout.otp_send_cooldown_seconds' => 60,
             'checkout.otp_send_max_per_hour' => 5,
-            'app.debug' => true,
+            'app.debug' => false,
             'sms.driver' => 'mimsms',
             'sms.from' => 'Sundoritoma',
             'sms.mimsms' => [
@@ -49,7 +49,7 @@ class CheckoutOtpRateLimitTest extends TestCase
         app(CheckoutOtpService::class)->send('01711112222');
 
         Http::assertSent(function ($request): bool {
-            return str_contains($request['Message'], '123456')
+            return str_contains($request['Message'], 'order confirmation OTP')
                 && $request['MobileNumber'] === '8801711112222';
         });
     }

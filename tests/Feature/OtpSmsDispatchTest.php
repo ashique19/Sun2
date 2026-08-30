@@ -25,7 +25,7 @@ class OtpSmsDispatchTest extends TestCase
         config([
             'checkout.otp_send_cooldown_seconds' => 60,
             'checkout.otp_send_max_per_hour' => 5,
-            'app.debug' => true,
+            'app.debug' => false,
             'sms.driver' => 'mimsms',
             'sms.from' => 'Sundoritoma',
             'sms.mimsms' => [
@@ -61,7 +61,7 @@ class OtpSmsDispatchTest extends TestCase
         Http::assertSent(function (Request $request): bool {
             return $request['MobileNumber'] === '8801711112222'
                 && $request['TransactionType'] === 'T'
-                && str_contains($request['Message'], '123456');
+                && str_contains($request['Message'], 'order confirmation OTP');
         });
     }
 
@@ -101,6 +101,23 @@ class OtpSmsDispatchTest extends TestCase
         $this->expectExceptionMessage('MiMSMS gateway rejected the message: Invalid sender name');
 
         app(CheckoutOtpService::class)->send('01711112222');
+    }
+
+    #[Test]
+    public function checkout_otp_skips_sms_when_app_debug_is_enabled(): void
+    {
+        config(['app.debug' => true]);
+
+        Http::fake([
+            'api.mimsms.com/*' => Http::response([
+                'status' => 'Success',
+                'responseResult' => 'SMS sent successfully',
+            ]),
+        ]);
+
+        app(CheckoutOtpService::class)->send('01711112222');
+
+        Http::assertNothingSent();
     }
 
     #[Test]

@@ -107,6 +107,7 @@ class AdminCustomersPromoSmsTest extends TestCase
 
     public function test_select_all_none_and_send_promotional_sms(): void
     {
+        Config::set('app.debug', false);
         Config::set('sms.driver', 'log');
         Log::spy();
 
@@ -141,6 +142,7 @@ class AdminCustomersPromoSmsTest extends TestCase
 
     public function test_promotional_sms_uses_mimsms_gateway_type_p(): void
     {
+        Config::set('app.debug', false);
         Config::set('sms.driver', 'mimsms');
         Config::set('sms.from', 'Sundoritoma');
         Config::set('sms.mimsms', [
@@ -191,6 +193,7 @@ class AdminCustomersPromoSmsTest extends TestCase
 
     public function test_log_driver_still_resolves_after_promotional_interface_change(): void
     {
+        Config::set('app.debug', false);
         Config::set('sms.driver', 'log');
 
         $this->assertInstanceOf(LoggingSmsSender::class, app(SmsSender::class));

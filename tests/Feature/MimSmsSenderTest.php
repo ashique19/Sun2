@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Contracts\Sms\SmsSender;
 use App\Services\Sms\LoggingSmsSender;
-use App\Services\Sms\MimSmsSender;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Config;

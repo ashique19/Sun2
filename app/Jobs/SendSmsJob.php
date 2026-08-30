@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Contracts\Sms\SmsSender;
+use App\Services\Sms\SmsDispatchService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -16,14 +17,14 @@ class SendSmsJob implements ShouldQueue
         public bool $promotional = false,
     ) {}
 
-    public function handle(SmsSender $sms): void
+    public function handle(SmsDispatchService $sms, SmsSender $sender): void
     {
         if ($this->promotional) {
-            $sms->sendPromotional($this->phone, $this->message);
+            $sender->sendPromotional($this->phone, $this->message);
 
             return;
         }
 
-        $sms->send($this->phone, $this->message);
+        $sms->sendTransactional($this->phone, $this->message);
     }
 }

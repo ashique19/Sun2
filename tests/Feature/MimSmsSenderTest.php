@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Contracts\Sms\SmsSender;
+use App\Services\Sms\LoggingSmsSender;
 use App\Services\Sms\MimSmsSender;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -31,7 +32,7 @@ class MimSmsSenderTest extends TestCase
 
     public function test_resolves_mimsms_driver_from_container(): void
     {
-        $this->assertInstanceOf(MimSmsSender::class, app(SmsSender::class));
+        $this->assertInstanceOf(LoggingSmsSender::class, app(SmsSender::class));
     }
 
     public function test_sends_otp_sms_as_transactional_with_normalized_mobile_number(): void

@@ -8,7 +8,7 @@ use App\Models\Address;
 use App\Models\City;
 use App\Models\Order;
 use App\Models\User;
-use App\Services\Sms\LogSmsSender;
+use App\Services\Sms\LoggingSmsSender;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
@@ -193,7 +193,7 @@ class AdminCustomersPromoSmsTest extends TestCase
     {
         Config::set('sms.driver', 'log');
 
-        $this->assertInstanceOf(LogSmsSender::class, app(SmsSender::class));
+        $this->assertInstanceOf(LoggingSmsSender::class, app(SmsSender::class));
         app(SmsSender::class)->sendPromotional('01750000001', 'test promo');
     }
 }

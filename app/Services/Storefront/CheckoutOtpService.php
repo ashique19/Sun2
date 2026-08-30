@@ -2,7 +2,7 @@
 
 namespace App\Services\Storefront;
 
-use App\Jobs\SendSmsJob;
+use App\Services\Sms\SmsDispatchService;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
@@ -11,6 +11,8 @@ use RuntimeException;
 class CheckoutOtpService
 {
     private const CACHE_PREFIX = 'checkout_otp:';
+
+    public function __construct(private SmsDispatchService $sms) {}
 
     public function send(string $phone): void
     {
@@ -39,7 +41,7 @@ class CheckoutOtpService
             config('checkout.otp_ttl_minutes', 10),
         );
 
-        SendSmsJob::dispatch(PhoneNumber::display($phone), $message);
+        $this->sms->sendTransactional(PhoneNumber::display($phone), $message);
     }
 
     public function verify(string $phone, string $code): bool

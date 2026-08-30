@@ -2,7 +2,7 @@
 
 namespace App\Services\Auth;
 
-use App\Jobs\SendSmsJob;
+use App\Services\Sms\SmsDispatchService;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
@@ -11,6 +11,8 @@ use RuntimeException;
 class PasswordResetOtpService
 {
     private const CACHE_PREFIX = 'password_reset_otp:';
+
+    public function __construct(private SmsDispatchService $sms) {}
 
     public function send(string $phone): void
     {
@@ -38,7 +40,7 @@ class PasswordResetOtpService
             config('checkout.otp_ttl_minutes', 10),
         );
 
-        SendSmsJob::dispatch(PhoneNumber::display($phone), $message);
+        $this->sms->sendTransactional(PhoneNumber::display($phone), $message);
     }
 
     public function verify(string $phone, string $code): bool

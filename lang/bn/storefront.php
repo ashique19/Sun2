@@ -291,4 +291,18 @@ return [
     'reseller_ref_label' => 'রিসেলার আইডি বা মোবাইল (ঐচ্ছিক)',
     'reseller_ref_placeholder' => 'রিসেলার আইডি বা ০১XXXXXXXXX',
     'reseller_not_found' => 'রিসেলার পাওয়া যায়নি। সঠিক আইডি বা মোবাইল নম্বর দিন।',
+
+    'ads_lab_title' => 'বিজ্ঞাপন পরীক্ষা',
+    'ads_lab_eyebrow' => 'অভ্যন্তরীণ পরীক্ষা',
+    'ads_lab_hero_subtitle' => 'এখানে বিভিন্ন বিজ্ঞাপন ফরম্যাট দেখে নিন — দোকানের মূল পাতায় এখনো কিছু যুক্ত করা হয়নি।',
+    'ads_lab_back_to_shop' => 'সুন্দরিতমা দোকানে ফিরে যান',
+    'ads_lab_heading' => 'বিজ্ঞাপন',
+    'ads_lab_intro' => ':network নেটওয়ার্কের ইউনিটগুলো এখানে প্রিভিউ করা হবে। .env-এ স্লট কী যোগ করলে লাইভ বিজ্ঞাপন দেখা যাবে; খালি থাকলে প্লেসহোল্ডার দেখাবে।',
+    'ads_lab_private_note' => 'এই পাতা নেভ বা ফুটারে লিংক করা নেই — শুধু সরাসরি URL দিয়ে খুলুন।',
+    'ads_lab_banner_section' => 'ব্যানার ও ইন-পেজ ইউনিট',
+    'ads_lab_script_section' => 'স্ক্রিপ্ট ভিত্তিক (পপ-আন্ডার ইত্যাদি)',
+    'ads_lab_placeholder_hint' => 'Adsterra ড্যাশবোর্ড থেকে স্লট কী .env-এ যোগ করুন',
+    'ads_lab_script_loaded' => 'স্ক্রিপ্ট লোড করা হয়েছে — ব্রাউজারে আচরণ পরীক্ষা করুন।',
+    'ads_lab_script_placeholder' => ':env এ Adsterra-র সম্পূর্ণ স্ক্রিপ্ট কোড পেস্ট করুন।',
+    'ads_lab_meta_description' => 'Sundoritoma internal ad format preview page.',
 ];

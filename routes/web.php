@@ -66,6 +66,7 @@ use App\Livewire\Reseller\ResellerOrders;
 use App\Livewire\Reseller\ResellerOrderShow;
 use App\Livewire\Reseller\ResellerWallet;
 use App\Livewire\StorefrontAccount;
+use App\Livewire\StorefrontAdsLab;
 use App\Livewire\StorefrontCart;
 use App\Livewire\StorefrontCategory;
 use App\Livewire\StorefrontChangePassword;
@@ -112,6 +113,7 @@ Route::get('/cart', StorefrontCart::class)->name('cart');
 Route::get('/checkout', StorefrontCheckout::class)->name('checkout');
 Route::get('/checkout/confirmation/{order}', StorefrontOrderConfirmation::class)->name('checkout.confirmation');
 Route::get('/page/{page:slug}', StorefrontPage::class)->name('page.show');
+Route::get('/ads-lab', StorefrontAdsLab::class)->name('ads.lab');
 Route::get('/share/products/{token}', PublicProductShare::class)
     ->where('token', '[A-Za-z0-9]{32,64}')
     ->name('share.products');

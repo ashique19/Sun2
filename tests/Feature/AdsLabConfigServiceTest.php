@@ -133,6 +133,37 @@ class AdsLabConfigServiceTest extends TestCase
     }
 
     #[Test]
+    public function saved_placements_override_config_defaults(): void
+    {
+        config([
+            'ads.placements.product_after_description' => true,
+            'ads.placements.product_video' => true,
+            'ads.product_video_src' => '//env.test/video.js',
+            'ads.lab_enabled' => true,
+        ]);
+
+        $service = app(AdsLabConfigService::class);
+        $service->seedFromDefaultsIfMissing();
+
+        $this->assertNotNull($service->productAfterDescriptionLeaderboard());
+
+        $service->savePlacements([
+            'product_after_description' => false,
+            'product_video' => true,
+            'product_video_src' => '//db.test/hilltop.js',
+            'popunder' => false,
+            'exit_interstitial' => false,
+            'lab_enabled' => false,
+        ]);
+
+        $this->assertNull($service->productAfterDescriptionLeaderboard());
+        $this->assertNull($service->productAfterDescriptionMobileBanner());
+        $this->assertSame('//db.test/hilltop.js', $service->productVideoAdSrc());
+        $this->assertNull($service->storefrontPopunder());
+        $this->assertFalse($service->labEnabled());
+    }
+
+    #[Test]
     public function storefront_popunder_returns_smartlink_when_enabled(): void
     {
         config(['ads.placements.popunder' => true]);

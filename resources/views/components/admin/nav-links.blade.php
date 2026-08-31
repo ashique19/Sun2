@@ -198,6 +198,10 @@
                 class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.sitemap') ? $active : $inactive }}">
                 Sitemap
             </a>
+            <a href="{{ route('admin.ads') }}" wire:navigate {!! $click !!}
+                class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.ads') ? $active : $inactive }}">
+                Ads
+            </a>
             <a href="{{ route('admin.image-hashes') }}" wire:navigate {!! $click !!}
                 class="{{ $linkBase }} {{ $linkPadSm }} {{ request()->routeIs('admin.image-hashes') ? $active : $inactive }}">
                 Image Hashes
@@ -235,6 +239,10 @@
                 <a href="{{ route('admin.sitemap') }}" wire:navigate
                     class="block rounded-lg px-3 {{ $linkPadSm }} {{ request()->routeIs('admin.sitemap') ? $active : $inactive }}">
                     Sitemap
+                </a>
+                <a href="{{ route('admin.ads') }}" wire:navigate
+                    class="block rounded-lg px-3 {{ $linkPadSm }} {{ request()->routeIs('admin.ads') ? $active : $inactive }}">
+                    Ads
                 </a>
                 <a href="{{ route('admin.image-hashes') }}" wire:navigate
                     class="block rounded-lg px-3 {{ $linkPadSm }} {{ request()->routeIs('admin.image-hashes') ? $active : $inactive }}">

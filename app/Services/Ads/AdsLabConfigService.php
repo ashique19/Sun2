@@ -9,7 +9,145 @@ class AdsLabConfigService
 {
     public const SETTING_KEY = 'ads.lab.units';
 
+    public const PLACEMENTS_SETTING_KEY = 'ads.placements';
+
     public const SETTING_GROUP = 'ads';
+
+    /**
+     * Default placement toggles from config/env (used when no admin override is saved).
+     *
+     * @return array{
+     *     product_after_description: bool,
+     *     product_video: bool,
+     *     product_video_src: string,
+     *     popunder: bool,
+     *     exit_interstitial: bool,
+     *     lab_enabled: bool
+     * }
+     */
+    public function placementDefaults(): array
+    {
+        return [
+            'product_after_description' => (bool) config('ads.placements.product_after_description', true),
+            'product_video' => (bool) config('ads.placements.product_video', true),
+            'product_video_src' => trim((string) config('ads.product_video_src', '')),
+            'popunder' => (bool) config('ads.placements.popunder', true),
+            'exit_interstitial' => (bool) config('ads.placements.exit_interstitial', true),
+            'lab_enabled' => (bool) config('ads.lab_enabled', true),
+        ];
+    }
+
+    /**
+     * Effective placements: admin Settings override, else config/env defaults.
+     *
+     * @return array{
+     *     product_after_description: bool,
+     *     product_video: bool,
+     *     product_video_src: string,
+     *     popunder: bool,
+     *     exit_interstitial: bool,
+     *     lab_enabled: bool
+     * }
+     */
+    public function placements(): array
+    {
+        $defaults = $this->placementDefaults();
+        $raw = Setting::getValue(self::PLACEMENTS_SETTING_KEY);
+
+        if ($raw === null || $raw === '') {
+            return $defaults;
+        }
+
+        $decoded = json_decode($raw, true);
+
+        if (! is_array($decoded)) {
+            return $defaults;
+        }
+
+        return $this->normalizePlacements(array_merge($defaults, $decoded));
+    }
+
+    public function placementEnabled(string $key): bool
+    {
+        $placements = $this->placements();
+
+        return (bool) ($placements[$key] ?? false);
+    }
+
+    public function labEnabled(): bool
+    {
+        return $this->placementEnabled('lab_enabled');
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     * @return array{
+     *     product_after_description: bool,
+     *     product_video: bool,
+     *     product_video_src: string,
+     *     popunder: bool,
+     *     exit_interstitial: bool,
+     *     lab_enabled: bool
+     * }
+     */
+    public function savePlacements(array $input): array
+    {
+        $normalized = $this->normalizePlacements(array_merge($this->placementDefaults(), $input));
+
+        Setting::putValue(
+            self::PLACEMENTS_SETTING_KEY,
+            json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            self::SETTING_GROUP,
+        );
+
+        return $normalized;
+    }
+
+    /**
+     * @return array{
+     *     product_after_description: bool,
+     *     product_video: bool,
+     *     product_video_src: string,
+     *     popunder: bool,
+     *     exit_interstitial: bool,
+     *     lab_enabled: bool
+     * }
+     */
+    public function resetPlacementsToDefaults(): array
+    {
+        Setting::query()->where('key', self::PLACEMENTS_SETTING_KEY)->delete();
+        Cache::forget('setting:'.self::PLACEMENTS_SETTING_KEY);
+
+        return $this->placementDefaults();
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     * @return array{
+     *     product_after_description: bool,
+     *     product_video: bool,
+     *     product_video_src: string,
+     *     popunder: bool,
+     *     exit_interstitial: bool,
+     *     lab_enabled: bool
+     * }
+     */
+    public function normalizePlacements(array $input): array
+    {
+        $src = trim((string) ($input['product_video_src'] ?? ''));
+        if (mb_strlen($src) > 2000) {
+            $src = mb_substr($src, 0, 2000);
+        }
+
+        return [
+            'product_after_description' => (bool) ($input['product_after_description'] ?? false),
+            'product_video' => (bool) ($input['product_video'] ?? false),
+            'product_video_src' => $src,
+            'popunder' => (bool) ($input['popunder'] ?? false),
+            'exit_interstitial' => (bool) ($input['exit_interstitial'] ?? false),
+            'lab_enabled' => (bool) ($input['lab_enabled'] ?? false),
+        ];
+    }
 
     /**
      * @return array{
@@ -102,7 +240,7 @@ class AdsLabConfigService
      */
     public function productAfterDescriptionLeaderboard(): ?array
     {
-        if (! config('ads.placements.product_after_description', true)) {
+        if (! $this->placementEnabled('product_after_description')) {
             return null;
         }
 
@@ -133,7 +271,7 @@ class AdsLabConfigService
      */
     public function productAfterDescriptionMobileBanner(): ?array
     {
-        if (! config('ads.placements.product_after_description', true)) {
+        if (! $this->placementEnabled('product_after_description')) {
             return null;
         }
 
@@ -151,11 +289,11 @@ class AdsLabConfigService
      */
     public function productVideoAdSrc(): ?string
     {
-        if (! config('ads.placements.product_video', false)) {
+        if (! $this->placementEnabled('product_video')) {
             return null;
         }
 
-        $src = trim((string) config('ads.product_video_src', ''));
+        $src = trim((string) ($this->placements()['product_video_src'] ?? ''));
 
         return $src !== '' ? $src : null;
     }
@@ -167,7 +305,7 @@ class AdsLabConfigService
      */
     public function storefrontPopunder(): ?array
     {
-        if (! config('ads.placements.popunder', false)) {
+        if (! $this->placementEnabled('popunder')) {
             return null;
         }
 
@@ -201,7 +339,7 @@ class AdsLabConfigService
      */
     public function storefrontExitInterstitialUrl(): ?string
     {
-        if (! config('ads.placements.exit_interstitial', false)) {
+        if (! $this->placementEnabled('exit_interstitial')) {
             return null;
         }
 

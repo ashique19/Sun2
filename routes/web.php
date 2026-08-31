@@ -9,6 +9,7 @@ use App\Http\Controllers\MessengerConversationSyncController;
 use App\Http\Controllers\ProductImageHashRebuildController;
 use App\Http\Controllers\RobotsController;
 use App\Http\Controllers\SitemapController;
+use App\Livewire\Admin\AdminAdsSettings;
 use App\Livewire\Admin\AdminAiPromptGroupEdit;
 use App\Livewire\Admin\AdminAiPromptGroups;
 use App\Livewire\Admin\AdminAiRecentPrompts;
@@ -298,6 +299,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/expenses', AdminExpenses::class)->name('expenses');
         Route::get('/reports/sales-by-month', AdminSalesByMonth::class)->name('reports.sales-by-month');
         Route::get('/sitemap', AdminSitemap::class)->name('sitemap');
+        Route::get('/ads', AdminAdsSettings::class)->name('ads');
         Route::get('/image-hashes', AdminProductImageHashes::class)->name('image-hashes');
         Route::get('/social-posts', AdminSocialPosts::class)->name('social-posts');
         Route::get('/social-posts/create', AdminSocialPostsCreate::class)->name('social-posts.create');

@@ -11,7 +11,7 @@ class StorefrontAdsLab extends Component
 {
     public function mount(): void
     {
-        abort_unless(config('ads.lab_enabled'), 404);
+        abort_unless(app(AdsLabConfigService::class)->labEnabled(), 404);
     }
 
     public function render(AdsLabConfigService $adsLab)

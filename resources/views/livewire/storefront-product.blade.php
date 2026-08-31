@@ -153,6 +153,18 @@
                     </p>
                 @endif
 
+                @if ($leaderboardAd)
+                    <div class="mt-6" wire:key="product-leaderboard-{{ $product->id }}">
+                        <x-storefront.ad-banner
+                            :slot-key="$leaderboardAd['slot_key']"
+                            :width="$leaderboardAd['width']"
+                            :height="$leaderboardAd['height']"
+                            :format="$leaderboardAd['format']"
+                            :invoke-host="$adInvokeHost"
+                        />
+                    </div>
+                @endif
+
                 <div class="mt-8 rounded-xl border border-[#E7DFCF] bg-white p-4 text-sm text-[#6B6459] space-y-1">
                     <p>&#10003; {{ __('storefront.cash_on_delivery') }}</p>
                     <p>&#10003; {{ __('storefront.free_delivery_dhaka') }}</p>

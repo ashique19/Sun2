@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\Product;
 use App\Models\ProductReview;
+use App\Services\Ads\AdsLabConfigService;
 use App\Services\Storefront\CartService;
 use App\Services\Storefront\WishlistService;
 use App\Support\ProductDescriptionHtml;
@@ -125,7 +126,7 @@ class StorefrontProduct extends Component
             ?: ($this->product->name.' - Sundoritoma');
     }
 
-    public function render()
+    public function render(AdsLabConfigService $adsLab)
     {
         // Prefer largest image for Messenger / WhatsApp link previews.
         $image = StorefrontAssets::largestAvailableUrl($this->product->primaryImagePath())
@@ -151,6 +152,8 @@ class StorefrontProduct extends Component
 
         return view('livewire.storefront-product', [
             'relatedProducts' => $relatedProducts,
+            'leaderboardAd' => $adsLab->productAfterDescriptionLeaderboard(),
+            'adInvokeHost' => $adsLab->invokeHost(),
         ])
             ->title($this->title())
             ->layoutData([

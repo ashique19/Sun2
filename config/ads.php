@@ -20,6 +20,14 @@ return [
     'invoke_host' => env('ADSTERRA_INVOKE_HOST', 'www.highrevenueformat.com'),
 
     /*
+    | Steady storefront placements (read unit codes from settings).
+    | product_after_description → 728×90 after product description.
+    */
+    'placements' => [
+        'product_after_description' => (bool) env('ADS_PRODUCT_AFTER_DESCRIPTION', true),
+    ],
+
+    /*
     |--------------------------------------------------------------------------
     | Default units (seeded into settings; used if DB row is missing)
     |--------------------------------------------------------------------------

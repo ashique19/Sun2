@@ -57,6 +57,64 @@ class AdsLabConfigService
         return $banners->merge($scripts)->values()->all();
     }
 
+    /**
+     * Resolve one configured unit by id (e.g. banner_728) for storefront placements.
+     *
+     * @return array{
+     *     key: string,
+     *     label: string,
+     *     description: string,
+     *     type: string,
+     *     slot_key: ?string,
+     *     width: int,
+     *     height: int,
+     *     format: string,
+     *     script_src: ?string,
+     *     smartlink_url: ?string
+     * }|null
+     */
+    public function unit(string $id): ?array
+    {
+        foreach ($this->units() as $unit) {
+            if ($unit['key'] === $id) {
+                return $unit;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Leaderboard for product page — only when the unit is live (has a slot key).
+     *
+     * @return array{
+     *     key: string,
+     *     label: string,
+     *     description: string,
+     *     type: string,
+     *     slot_key: ?string,
+     *     width: int,
+     *     height: int,
+     *     format: string,
+     *     script_src: ?string,
+     *     smartlink_url: ?string
+     * }|null
+     */
+    public function productAfterDescriptionLeaderboard(): ?array
+    {
+        if (! config('ads.placements.product_after_description', true)) {
+            return null;
+        }
+
+        $unit = $this->unit('banner_728');
+
+        if ($unit === null || $unit['type'] !== 'atoptions' || ! filled($unit['slot_key'])) {
+            return null;
+        }
+
+        return $unit;
+    }
+
     public function invokeHost(): string
     {
         return $this->payload()['invoke_host'];

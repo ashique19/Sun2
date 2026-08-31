@@ -78,26 +78,26 @@ class AdsLabConfigServiceTest extends TestCase
     }
 
     #[Test]
-    public function seed_does_not_overwrite_existing_settings(): void
+    public function product_after_description_leaderboard_returns_banner_728_when_live(): void
     {
+        config(['ads.placements.product_after_description' => true]);
         $service = app(AdsLabConfigService::class);
-        $service->save([
-            'network' => 'adsterra',
-            'banners' => [
-                'only' => [
-                    'label' => 'Kept',
-                    'type' => 'atoptions',
-                    'key' => 'keep-me',
-                    'width' => 100,
-                    'height' => 100,
-                ],
-            ],
-            'scripts' => [],
-        ]);
-
         $service->seedFromDefaultsIfMissing();
 
-        $this->assertCount(1, $service->units());
-        $this->assertSame('Kept', $service->units()[0]['label']);
+        $unit = $service->productAfterDescriptionLeaderboard();
+
+        $this->assertNotNull($unit);
+        $this->assertSame('banner_728', $unit['key']);
+        $this->assertSame('6749cdd1ebf2dbcda3384c9f4c4f8cfb', $unit['slot_key']);
+    }
+
+    #[Test]
+    public function product_after_description_leaderboard_is_null_when_placement_disabled(): void
+    {
+        config(['ads.placements.product_after_description' => false]);
+        $service = app(AdsLabConfigService::class);
+        $service->seedFromDefaultsIfMissing();
+
+        $this->assertNull($service->productAfterDescriptionLeaderboard());
     }
 }

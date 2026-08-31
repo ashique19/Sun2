@@ -27,7 +27,7 @@ return [
     */
     'placements' => [
         'product_after_description' => (bool) env('ADS_PRODUCT_AFTER_DESCRIPTION', true),
-        'product_video' => (bool) env('ADS_PRODUCT_VIDEO_ENABLED', false),
+        'product_video' => (bool) env('ADS_PRODUCT_VIDEO_ENABLED', true),
         'popunder' => (bool) env('ADS_POPUNDER_ENABLED', true),
         'exit_interstitial' => (bool) env('ADS_EXIT_INTERSTITIAL_ENABLED', true),
     ],

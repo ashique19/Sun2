@@ -15,6 +15,7 @@ class PathaoApiClient
     {
         $this->assertConfigured();
 
+        $order->refresh();
         $location = $this->resolveCityZone($order->city, $order->area);
 
         $payload = [

@@ -103,7 +103,7 @@ class AdminOrdersNetRevenueTest extends TestCase
 
         Livewire::test(AdminOrders::class, ['segment' => 'new'])
             ->assertSee('#NR-9001')
-            ->assertSee('COD')
+            ->assertSee('Collect')
             ->assertSee('600')
             ->assertSee('Net')
             ->assertSee('335')

@@ -153,6 +153,8 @@ class OrderDispatchService
      */
     private function dispatchSteadfastPayload(Order $order): array
     {
+        $order->refresh();
+
         $payload = [
             'invoice' => (string) $order->order_number,
             'recipient_name' => $order->name,

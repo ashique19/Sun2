@@ -102,7 +102,8 @@ class AdminOrderShowNetRevenueTest extends TestCase
         $order = $this->orderWithEconomics(['order_number' => 'SHOW-NR-001']);
 
         Livewire::test(AdminOrderShow::class, ['order' => $order])
-            ->assertSee('Bill to customer (COD)')
+            ->assertSee('Bill to customer')
+            ->assertSee('Amount to collect')
             ->assertSee('600')
             ->assertSee('Net revenue')
             ->assertSee('Revenue')

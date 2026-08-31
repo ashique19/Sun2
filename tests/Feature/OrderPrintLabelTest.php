@@ -207,6 +207,20 @@ class OrderPrintLabelTest extends TestCase
         $this->assertSame(2500.0, $order->collectableAmount());
     }
 
+    public function test_collectable_amount_is_zero_when_fully_paid_even_if_total_is_positive(): void
+    {
+        $order = $this->order([
+            'subtotal' => 3120,
+            'total' => 3120,
+            'cod_amount' => 0,
+            'due_amount' => 0,
+            'paid_amount' => 3120,
+            'payment_status' => 'paid',
+        ]);
+
+        $this->assertSame(0.0, $order->collectableAmount());
+    }
+
     public function test_dispatch_extracts_steadfast_consignment_id(): void
     {
         $service = app(OrderDispatchService::class);

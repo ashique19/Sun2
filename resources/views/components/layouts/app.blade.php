@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="f5ca7c844b1453e5440cee2998c4415fc1a028a8" content="f5ca7c844b1453e5440cee2998c4415fc1a028a8">
     @php
         $seoTitle = $title ?? config('seo.default_title');
         $seoOgTitle = $seoOgTitle ?? $seoTitle;

@@ -3,7 +3,6 @@
 @php
     $adsLab = app(\App\Services\Ads\AdsLabConfigService::class);
     $popunder = $adsLab->storefrontPopunder();
-    $exitSmartlink = $adsLab->storefrontExitInterstitialUrl();
 @endphp
 
 <div class="storefront-shell">
@@ -20,9 +19,5 @@
 
     @if ($popunder)
         <x-storefront.popunder :url="$popunder['url']" :script-src="$popunder['script_src']" />
-    @endif
-
-    @if ($exitSmartlink)
-        <x-storefront.exit-interstitial :url="$exitSmartlink" />
     @endif
 </div>

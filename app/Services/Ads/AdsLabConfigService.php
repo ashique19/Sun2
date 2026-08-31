@@ -150,15 +150,13 @@ class AdsLabConfigService
     }
 
     /**
-     * Exit interstitial smartlink (back / exit-intent modal — not true tab close).
+     * Exit interstitial smartlink URL when the placement is enabled (ignores route exclusions).
+     * Route exclusions are enforced in the Blade/Alpine host so the layout-mounted
+     * component can persist across Livewire wire:navigate.
      */
     public function storefrontExitInterstitialUrl(): ?string
     {
         if (! config('ads.placements.exit_interstitial', false)) {
-            return null;
-        }
-
-        if ($this->requestExcludesPopunder()) {
             return null;
         }
 
@@ -169,6 +167,27 @@ class AdsLabConfigService
         }
 
         return (string) $unit['smartlink_url'];
+    }
+
+    /**
+     * Path prefixes where exit interstitial triggers must not run (client-side gate).
+     *
+     * @return list<string>
+     */
+    public function exitInterstitialExcludedPathPrefixes(): array
+    {
+        return [
+            '/cart',
+            '/checkout',
+            '/login',
+            '/register',
+            '/forgot-password',
+            '/reset-password',
+            '/account',
+            '/admin',
+            '/reseller',
+            '/ads-lab',
+        ];
     }
 
     /**

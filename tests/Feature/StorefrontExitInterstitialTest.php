@@ -36,15 +36,17 @@ class StorefrontExitInterstitialTest extends TestCase
     }
 
     #[Test]
-    public function cart_excludes_exit_interstitial(): void
+    public function cart_keeps_exit_interstitial_host_but_lists_cart_as_excluded_path(): void
     {
         config(['ads.placements.exit_interstitial' => true]);
 
         $response = $this->get(route('cart'));
 
         $response->assertOk();
-        $response->assertDontSee('sun_exit_interstitial_shown', false);
-        $response->assertDontSee('CLOSE NOW', false);
+        // Layout-mounted host persists across Livewire navigate; triggers gate on path.
+        $response->assertSee('sun_exit_interstitial_shown', false);
+        $response->assertSee('data-sun-exit-interstitial', false);
+        $response->assertSee('/cart', false);
     }
 
     #[Test]

@@ -62,5 +62,13 @@
     {{ $slot }}
 
     <x-product-image-modal link-target="" link-label="View product" :show-external-icon="false" />
+
+    @php
+        $exitSmartlink = app(\App\Services\Ads\AdsLabConfigService::class)->storefrontExitInterstitialUrl();
+        $exitExcludedPaths = app(\App\Services\Ads\AdsLabConfigService::class)->exitInterstitialExcludedPathPrefixes();
+    @endphp
+    @if ($exitSmartlink)
+        <x-storefront.exit-interstitial :url="$exitSmartlink" :excluded-paths="$exitExcludedPaths" />
+    @endif
 </body>
 </html>

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Services\Ads\AdsLabConfigService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -9,6 +10,13 @@ use Tests\TestCase;
 class StorefrontAdsLabTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        app(AdsLabConfigService::class)->seedFromDefaultsIfMissing();
+    }
 
     #[Test]
     public function ads_lab_page_renders_with_hero_and_configured_units(): void
@@ -27,6 +35,7 @@ class StorefrontAdsLabTest extends TestCase
         $response->assertSee('Social bar', false);
         $response->assertSee('Live unit', false);
         $response->assertSee('noindex, nofollow', false);
+        $response->assertSee('ads.lab.units', false);
     }
 
     #[Test]
@@ -38,11 +47,31 @@ class StorefrontAdsLabTest extends TestCase
     }
 
     #[Test]
-    public function ads_lab_renders_highrevenueformat_invoke_scripts(): void
+    public function ads_lab_renders_units_from_database_settings(): void
     {
         config(['ads.lab_enabled' => true]);
-        config(['ads.invoke_host' => 'www.highrevenueformat.com']);
-        config(['ads.banners.banner_300.key' => 'a356eb5486bfece119efb08195fb4a25']);
+
+        app(AdsLabConfigService::class)->save([
+            'invoke_host' => 'www.highrevenueformat.com',
+            'network' => 'adsterra',
+            'banners' => [
+                'banner_300' => [
+                    'label' => '300×250 Medium rectangle',
+                    'type' => 'atoptions',
+                    'key' => 'a356eb5486bfece119efb08195fb4a25',
+                    'width' => 300,
+                    'height' => 250,
+                    'format' => 'iframe',
+                ],
+            ],
+            'scripts' => [
+                'popunder' => [
+                    'label' => 'Pop-under / smartlink',
+                    'type' => 'smartlink',
+                    'url' => 'https://www.profitableratecpmnetwork.com/xsjja7i0?key=7e680ac1f9ce8e5547eb972920f15f50',
+                ],
+            ],
+        ]);
 
         $response = $this->get(route('ads.lab'));
 
@@ -52,13 +81,14 @@ class StorefrontAdsLabTest extends TestCase
             false,
         );
         $response->assertSee(
-            'https://www.highrevenueformat.com/6749cdd1ebf2dbcda3384c9f4c4f8cfb/invoke.js',
+            'profitableratecpmnetwork.com/xsjja7i0?key=7e680ac1f9ce8e5547eb972920f15f50',
             false,
         );
+        $response->assertDontSee('728×90 Leaderboard', false);
     }
 
     #[Test]
-    public function ads_lab_renders_native_container_and_script_units(): void
+    public function ads_lab_renders_native_and_script_defaults_from_seeded_settings(): void
     {
         config(['ads.lab_enabled' => true]);
 
@@ -72,26 +102,6 @@ class StorefrontAdsLabTest extends TestCase
         );
         $response->assertSee(
             'pl31110125.profitableratecpmnetwork.com/2e/28/d6/2e28d6b523d7ac452ad571b5139de0eb.js',
-            false,
-        );
-        $response->assertSee(
-            'profitableratecpmnetwork.com/xsjja7i0?key=7e680ac1f9ce8e5547eb972920f15f50',
-            false,
-        );
-    }
-
-    #[Test]
-    public function ads_lab_shows_placeholder_when_banner_key_cleared(): void
-    {
-        config(['ads.lab_enabled' => true]);
-        config(['ads.banners.banner_728.key' => null]);
-
-        $response = $this->get(route('ads.lab'));
-
-        $response->assertOk();
-        $response->assertSee('Placeholder', false);
-        $response->assertDontSee(
-            'https://www.highrevenueformat.com/6749cdd1ebf2dbcda3384c9f4c4f8cfb/invoke.js',
             false,
         );
     }

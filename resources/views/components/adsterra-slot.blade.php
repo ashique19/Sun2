@@ -8,13 +8,16 @@
     'format' => 'iframe',
     'scriptSrc' => null,
     'smartlinkUrl' => null,
+    'invokeHost' => null,
 ])
 
 @php
     $key = filled($slotKey) ? (string) $slotKey : null;
     $src = filled($scriptSrc) ? (string) $scriptSrc : null;
     $smartlink = filled($smartlinkUrl) ? (string) $smartlinkUrl : null;
-    $invokeHost = (string) config('ads.invoke_host', 'www.highrevenueformat.com');
+    $host = filled($invokeHost)
+        ? (string) $invokeHost
+        : (string) config('ads.invoke_host', 'www.highrevenueformat.com');
     $isLive = match ($type) {
         'atoptions' => filled($key),
         'native_container' => filled($key) && filled($src),
@@ -55,7 +58,7 @@
                         'params': {}
                     };
                 </script>
-                <script type="text/javascript" src="https://{{ $invokeHost }}/{{ $key }}/invoke.js"></script>
+                <script type="text/javascript" src="https://{{ $host }}/{{ $key }}/invoke.js"></script>
             </div>
         @elseif ($type === 'native_container' && $key && $src)
             <div class="ad-slot__creative w-full max-w-full overflow-x-auto">

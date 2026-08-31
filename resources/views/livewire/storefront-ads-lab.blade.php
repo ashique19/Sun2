@@ -51,6 +51,7 @@
                         :height="$slot['height']"
                         :format="$slot['format']"
                         :script-src="$slot['script_src']"
+                        :invoke-host="$invokeHost"
                     />
                 @endforeach
             </div>
@@ -73,6 +74,7 @@
                             :height="$slot['height']"
                             :script-src="$slot['script_src']"
                             :smartlink-url="$slot['smartlink_url']"
+                            :invoke-host="$invokeHost"
                         />
                     @endforeach
                 </div>

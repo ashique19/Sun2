@@ -153,6 +153,8 @@ class StorefrontProduct extends Component
         return view('livewire.storefront-product', [
             'relatedProducts' => $relatedProducts,
             'leaderboardAd' => $adsLab->productAfterDescriptionLeaderboard(),
+            'mobileBannerAd' => $adsLab->productAfterDescriptionMobileBanner(),
+            'productVideoAdSrc' => $adsLab->productVideoAdSrc(),
             'adInvokeHost' => $adsLab->invokeHost(),
         ])
             ->title($this->title())

@@ -46,9 +46,14 @@ class StorefrontProductLeaderboardAdTest extends TestCase
         $response->assertOk();
         $response->assertSee('Handmade ring description for placement test.', false);
         $response->assertSee('storefront-ad-banner', false);
+        $response->assertSee('storefront-ad-banner__scroll', false);
         $response->assertSee('data-ad-key="6749cdd1ebf2dbcda3384c9f4c4f8cfb"', false);
+        $response->assertSee('data-ad-key="2b562aa780f28739eee1965844207030"', false);
         $response->assertSee('www.highrevenueformat.com', false);
         $response->assertSee('width: 728', false);
+        $response->assertSee('width: 320', false);
+        $response->assertSee('md:hidden', false);
+        $response->assertSee('hidden md:block', false);
         $response->assertDontSee('Live unit', false);
         $response->assertDontSee('728×90 Leaderboard', false);
     }

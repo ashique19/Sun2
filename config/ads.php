@@ -21,14 +21,25 @@ return [
 
     /*
     | Steady storefront placements (read unit codes from settings).
-    | product_after_description → 728×90 after product description.
+    | product_after_description → 728×90 (desktop) + 320×50 (mobile) after description.
+    | product_video → HilltopAds-style video loader on product detail only.
     | popunder → first click smartlink / network script (excludes checkout & auth).
     */
     'placements' => [
         'product_after_description' => (bool) env('ADS_PRODUCT_AFTER_DESCRIPTION', true),
+        'product_video' => (bool) env('ADS_PRODUCT_VIDEO_ENABLED', false),
         'popunder' => (bool) env('ADS_POPUNDER_ENABLED', true),
         'exit_interstitial' => (bool) env('ADS_EXIT_INTERSTITIAL_ENABLED', true),
     ],
+
+    /*
+    | HilltopAds video invoke script (product detail only when product_video is on).
+    | Protocol-relative //host/... URLs are fine; we normalize to https in the blade.
+    */
+    'product_video_src' => env(
+        'ADS_PRODUCT_VIDEO_SRC',
+        '//quarrelsomebitter.com/bXXfVVs.dyGKlU0AYlWhcN/xe/mr9vuoZwUGlBkpPiTscxz/NCzaEn0MMjDgk/teNNz/MY3BM_TNQvxHMuwM',
+    ),
 
     /*
     | Route name patterns where popunder / exit interstitial must not run.

@@ -116,6 +116,51 @@ class AdsLabConfigService
     }
 
     /**
+     * Compact mobile strip for product page — shown below the md breakpoint.
+     *
+     * @return array{
+     *     key: string,
+     *     label: string,
+     *     description: string,
+     *     type: string,
+     *     slot_key: ?string,
+     *     width: int,
+     *     height: int,
+     *     format: string,
+     *     script_src: ?string,
+     *     smartlink_url: ?string
+     * }|null
+     */
+    public function productAfterDescriptionMobileBanner(): ?array
+    {
+        if (! config('ads.placements.product_after_description', true)) {
+            return null;
+        }
+
+        $unit = $this->unit('banner_320');
+
+        if ($unit === null || $unit['type'] !== 'atoptions' || ! filled($unit['slot_key'])) {
+            return null;
+        }
+
+        return $unit;
+    }
+
+    /**
+     * HilltopAds (or similar) video loader — product detail pages only.
+     */
+    public function productVideoAdSrc(): ?string
+    {
+        if (! config('ads.placements.product_video', false)) {
+            return null;
+        }
+
+        $src = trim((string) config('ads.product_video_src', ''));
+
+        return $src !== '' ? $src : null;
+    }
+
+    /**
      * Storefront popunder — smartlink URL and/or network script from settings.
      *
      * @return array{url: ?string, script_src: ?string}|null

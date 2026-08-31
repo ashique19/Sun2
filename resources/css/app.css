@@ -15,6 +15,26 @@
 }
 
 @layer components {
+    /* Keep Adsterra iframes inside a horizontal scrollport on narrow viewports. */
+    .storefront-ad-banner,
+    .storefront-ad-banner__scroll {
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .storefront-ad-banner__scroll {
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+    }
+
+    .storefront-ad-banner__creative iframe,
+    .storefront-ad-banner__creative > div,
+    .storefront-ad-banner__creative ins {
+        max-width: none !important;
+    }
+
     .product-description h3 {
         font-family: var(--font-serif);
         font-size: 1.25rem;

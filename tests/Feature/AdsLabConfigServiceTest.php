@@ -99,6 +99,37 @@ class AdsLabConfigServiceTest extends TestCase
         $service->seedFromDefaultsIfMissing();
 
         $this->assertNull($service->productAfterDescriptionLeaderboard());
+        $this->assertNull($service->productAfterDescriptionMobileBanner());
+    }
+
+    #[Test]
+    public function product_after_description_mobile_banner_returns_banner_320_when_live(): void
+    {
+        config(['ads.placements.product_after_description' => true]);
+        $service = app(AdsLabConfigService::class);
+        $service->seedFromDefaultsIfMissing();
+
+        $unit = $service->productAfterDescriptionMobileBanner();
+
+        $this->assertNotNull($unit);
+        $this->assertSame('banner_320', $unit['key']);
+        $this->assertSame('2b562aa780f28739eee1965844207030', $unit['slot_key']);
+        $this->assertSame(320, $unit['width']);
+    }
+
+    #[Test]
+    public function product_video_ad_src_respects_env_toggle(): void
+    {
+        $service = app(AdsLabConfigService::class);
+
+        config([
+            'ads.placements.product_video' => false,
+            'ads.product_video_src' => '//example.test/video.js',
+        ]);
+        $this->assertNull($service->productVideoAdSrc());
+
+        config(['ads.placements.product_video' => true]);
+        $this->assertSame('//example.test/video.js', $service->productVideoAdSrc());
     }
 
     #[Test]

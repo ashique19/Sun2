@@ -33,7 +33,7 @@
         </div>
 
         <div class="grid gap-8 lg:grid-cols-2 lg:gap-10">
-            <div>
+            <div class="min-w-0">
                 <div class="overflow-hidden rounded-xl border border-[#EFE7D6] bg-white aspect-square">
                     @if ($activeUrl)
                         <img src="{{ $activeUrl }}" alt="{{ $product->name }}" class="h-full w-full object-cover" fetchpriority="high">
@@ -55,7 +55,7 @@
                 @endif
             </div>
 
-            <div>
+            <div class="min-w-0">
                 <h1 class="font-serif text-3xl font-semibold leading-tight">{{ $product->name }}</h1>
 
                 <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -153,16 +153,35 @@
                     </p>
                 @endif
 
-                @if ($leaderboardAd)
-                    <div class="mt-6" wire:key="product-leaderboard-{{ $product->id }}">
-                        <x-storefront.ad-banner
-                            :slot-key="$leaderboardAd['slot_key']"
-                            :width="$leaderboardAd['width']"
-                            :height="$leaderboardAd['height']"
-                            :format="$leaderboardAd['format']"
-                            :invoke-host="$adInvokeHost"
-                        />
+                @if ($mobileBannerAd || $leaderboardAd)
+                    <div class="mt-6 w-full min-w-0 max-w-full" wire:key="product-ads-{{ $product->id }}">
+                        @if ($mobileBannerAd)
+                            <div class="{{ $leaderboardAd ? 'md:hidden' : '' }} flex w-full min-w-0 justify-center">
+                                <x-storefront.ad-banner
+                                    :slot-key="$mobileBannerAd['slot_key']"
+                                    :width="$mobileBannerAd['width']"
+                                    :height="$mobileBannerAd['height']"
+                                    :format="$mobileBannerAd['format']"
+                                    :invoke-host="$adInvokeHost"
+                                />
+                            </div>
+                        @endif
+                        @if ($leaderboardAd)
+                            <div class="{{ $mobileBannerAd ? 'hidden md:block' : '' }} w-full min-w-0 max-w-full">
+                                <x-storefront.ad-banner
+                                    :slot-key="$leaderboardAd['slot_key']"
+                                    :width="$leaderboardAd['width']"
+                                    :height="$leaderboardAd['height']"
+                                    :format="$leaderboardAd['format']"
+                                    :invoke-host="$adInvokeHost"
+                                />
+                            </div>
+                        @endif
                     </div>
+                @endif
+
+                @if ($productVideoAdSrc)
+                    <x-storefront.product-video-ad :src="$productVideoAdSrc" wire:key="product-video-{{ $product->id }}" />
                 @endif
 
                 <div class="mt-8 rounded-xl border border-[#E7DFCF] bg-white p-4 text-sm text-[#6B6459] space-y-1">

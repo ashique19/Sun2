@@ -309,13 +309,3 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
             ->name('social-posts.show');
     });
 });
-
-// #region agent log
-Route::post('/_agent/debug-log', function (Request $request) {
-    $payload = $request->all();
-    $payload['timestamp'] = (int) round(microtime(true) * 1000);
-    file_put_contents('/opt/cursor/logs/debug.log', json_encode($payload)."\n", FILE_APPEND | LOCK_EX);
-
-    return response()->noContent();
-})->name('agent.debug-log');
-// #endregion

@@ -31,32 +31,8 @@
         storageKey: 'sun_exit_interstitial_shown',
         smartlinkUrl: @js($url),
         excludedPaths: @js($excludedPaths),
-        _uid: Math.random().toString(36).slice(2, 9),
         _onNavigated: null,
-        // #region agent log
-        _dbg(hypothesisId, message, data) {
-            try {
-                fetch('/_agent/debug-log', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                    body: JSON.stringify({
-                        hypothesisId,
-                        location: 'exit-interstitial.blade.php',
-                        message,
-                        data: Object.assign({ uid: this._uid, href: location.href, runId: window.__sunExitRunId || 'post-fix' }, data || {}),
-                        timestamp: Date.now(),
-                    }),
-                    keepalive: true,
-                }).catch(() => {});
-            } catch (e) {}
-        },
-        // #endregion
         init() {
-            // #region agent log
-            let prior = null;
-            try { prior = sessionStorage.getItem(this.storageKey); } catch (e) {}
-            this._dbg('E', 'init:start', { priorSession: prior, histState: history.state, histLen: history.length });
-            // #endregion
             try {
                 if (window.sessionStorage && sessionStorage.getItem(this.storageKey)) {
                     this.shownThisSession = true;
@@ -75,26 +51,12 @@
             document.addEventListener('livewire:navigated', this._onNavigated);
 
             if (this.shownThisSession) {
-                // #region agent log
-                this._dbg('E', 'init:skip-already-shown', {});
-                // #endregion
                 return;
             }
 
             this.ensureGlobalListeners();
-            // #region agent log
-            this._dbg('A', 'init:armed', {
-                enabled: this.enabled,
-                listenersBound: !!window.__sunExitListenersBound,
-                histHasTrap: !!(history.state && history.state.sunExitTrap),
-                pointerFine: !!(window.matchMedia && window.matchMedia('(pointer: fine)').matches),
-            });
-            // #endregion
         },
         destroy() {
-            // #region agent log
-            this._dbg('A', 'destroy', { open: this.open, shown: this.shownThisSession, isHost: window.__sunExitHost === this });
-            // #endregion
             this.clearTimers();
             if (this._onNavigated) {
                 document.removeEventListener('livewire:navigated', this._onNavigated);
@@ -109,9 +71,6 @@
             this.enabled = ! this.excludedPaths.some((prefix) => {
                 return path === prefix || path.startsWith(prefix + '/');
             });
-            // #region agent log
-            this._dbg('E', 'syncEnabled', { enabled: this.enabled, path });
-            // #endregion
             if (! this.enabled && this.open) {
                 this.dismissWithoutLink();
             }
@@ -141,30 +100,6 @@
 
             window.addEventListener('popstate', () => {
                 const host = window.__sunExitHost;
-                // #region agent log
-                try {
-                    fetch('/_agent/debug-log', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                        body: JSON.stringify({
-                            hypothesisId: 'B',
-                            location: 'exit-interstitial.blade.php',
-                            message: 'popstate:global',
-                            data: {
-                                runId: window.__sunExitRunId || 'post-fix',
-                                hasHost: !!host,
-                                hostUid: host?._uid || null,
-                                hostConnected: !!(host && host.$el && host.$el.isConnected),
-                                enabled: host?.enabled ?? null,
-                                href: location.href,
-                                histState: history.state,
-                            },
-                            timestamp: Date.now(),
-                        }),
-                        keepalive: true,
-                    }).catch(() => {});
-                } catch (e) {}
-                // #endregion
                 if (! host || ! host.$el || ! host.$el.isConnected) {
                     return;
                 }
@@ -184,9 +119,6 @@
             if (! this.enabled || this.shownThisSession || this.open) {
                 return;
             }
-            // #region agent log
-            this._dbg('B', 'handlePopState', { elConnected: !!(this.$el && this.$el.isConnected) });
-            // #endregion
             this.show();
             this.pushExitTrap();
         },
@@ -201,14 +133,8 @@
                 return;
             }
             if (event.relatedTarget) {
-                // #region agent log
-                this._dbg('D', 'exit-intent:blocked-related', { clientY: event.clientY });
-                // #endregion
                 return;
             }
-            // #region agent log
-            this._dbg('D', 'exit-intent:fire', { clientY: event.clientY });
-            // #endregion
             this.show();
         },
         show() {
@@ -216,27 +142,12 @@
                 return;
             }
             if (! this.$el || ! this.$el.isConnected) {
-                // #region agent log
-                this._dbg('A', 'show:aborted-disconnected', {});
-                // #endregion
                 return;
             }
-            // #region agent log
-            this._dbg('B', 'show', { elConnected: true });
-            // #endregion
             this.open = true;
             this.countdown = 5;
             this.markShown();
             this.startCountdown();
-            // #region agent log
-            this.$nextTick(() => {
-                this._dbg('C', 'show:after-paint', {
-                    open: this.open,
-                    elConnected: !!(this.$el && this.$el.isConnected),
-                    overlayDisplay: this.$refs.overlay ? getComputedStyle(this.$refs.overlay).display : null,
-                });
-            });
-            // #endregion
         },
         markShown() {
             this.shownThisSession = true;
@@ -245,9 +156,6 @@
                     sessionStorage.setItem(this.storageKey, '1');
                 }
             } catch (e) {}
-            // #region agent log
-            this._dbg('A', 'markShown', { elConnected: !!(this.$el && this.$el.isConnected) });
-            // #endregion
         },
         startCountdown() {
             this.clearTimers();

@@ -1,14 +1,27 @@
 @props([
-    'slotKey',
+    'type' => 'atoptions',
     'label',
     'description' => null,
+    'slotKey' => null,
     'width' => 300,
     'height' => 250,
     'format' => 'iframe',
+    'scriptSrc' => null,
+    'smartlinkUrl' => null,
 ])
 
 @php
     $key = filled($slotKey) ? (string) $slotKey : null;
+    $src = filled($scriptSrc) ? (string) $scriptSrc : null;
+    $smartlink = filled($smartlinkUrl) ? (string) $smartlinkUrl : null;
+    $invokeHost = (string) config('ads.invoke_host', 'www.highrevenueformat.com');
+    $isLive = match ($type) {
+        'atoptions' => filled($key),
+        'native_container' => filled($key) && filled($src),
+        'script_src' => filled($src),
+        'smartlink' => filled($smartlink),
+        default => false,
+    };
 @endphp
 
 <div {{ $attributes->merge(['class' => 'ad-slot rounded-xl border border-[#E0D6C2] bg-white overflow-hidden']) }}>
@@ -19,7 +32,7 @@
                 <p class="text-xs text-[#6B6459]">{{ $description }}</p>
             @endif
         </div>
-        @if ($key)
+        @if ($isLive)
             <span class="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
                 Live unit
             </span>
@@ -31,7 +44,7 @@
     </div>
 
     <div class="flex items-center justify-center p-4" style="min-height: {{ max(74, (int) $height + 24) }}px;">
-        @if ($key)
+        @if ($type === 'atoptions' && $key)
             <div class="ad-slot__creative flex max-w-full justify-center overflow-x-auto">
                 <script type="text/javascript">
                     atOptions = {
@@ -42,7 +55,26 @@
                         'params': {}
                     };
                 </script>
-                <script type="text/javascript" src="//www.highperformancedformats.com/{{ $key }}/invoke.js"></script>
+                <script type="text/javascript" src="//{{ $invokeHost }}/{{ $key }}/invoke.js"></script>
+            </div>
+        @elseif ($type === 'native_container' && $key && $src)
+            <div class="ad-slot__creative w-full max-w-full overflow-x-auto">
+                <script async="async" data-cfasync="false" src="{{ $src }}"></script>
+                <div id="container-{{ $key }}"></div>
+            </div>
+        @elseif ($type === 'script_src' && $src)
+            <div class="ad-slot__creative w-full text-center">
+                <p class="mb-3 text-xs text-[#6B6459]">{{ __('storefront.ads_lab_script_loaded') }}</p>
+                <script src="{{ $src }}"></script>
+            </div>
+        @elseif ($type === 'smartlink' && $smartlink)
+            <div class="ad-slot__creative w-full max-w-lg text-center space-y-3">
+                <p class="text-xs text-[#6B6459]">{{ __('storefront.ads_lab_smartlink_hint') }}</p>
+                <a href="{{ $smartlink }}" target="_blank" rel="noopener noreferrer sponsored"
+                    class="inline-flex items-center justify-center rounded-full border border-[#C9A227] bg-white px-5 py-2.5 text-sm font-semibold text-[#7A6114] hover:bg-[#FAF6EF] transition">
+                    {{ __('storefront.ads_lab_open_smartlink') }}
+                </a>
+                <p class="break-all font-mono text-[10px] text-[#8C8474]">{{ $smartlink }}</p>
             </div>
         @else
             <div

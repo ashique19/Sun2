@@ -38,45 +38,41 @@
             </h2>
 
             <div class="grid gap-6 lg:grid-cols-2">
-                @foreach ($bannerSlots as $slot)
+                @foreach ($bannerUnits as $slot)
                     <x-adsterra-slot
+                        :type="$slot['type']"
                         :slot-key="$slot['slot_key']"
                         :label="$slot['label']"
                         :description="$slot['description']"
                         :width="$slot['width']"
                         :height="$slot['height']"
                         :format="$slot['format']"
+                        :script-src="$slot['script_src']"
                     />
                 @endforeach
             </div>
         </section>
 
-        @if (count($scriptSlots) > 0)
+        @if (count($scriptUnits) > 0)
             <section class="space-y-6">
                 <h2 class="text-lg font-semibold text-[#1E1E1E] border-b border-[#EFE7D6] pb-2">
                     {{ __('storefront.ads_lab_script_section') }}
                 </h2>
 
-                @foreach ($scriptSlots as $slot)
-                    <div class="rounded-xl border border-[#E0D6C2] bg-white overflow-hidden">
-                        <div class="border-b border-[#EFE7D6] bg-[#FAF6EF] px-4 py-3">
-                            <p class="text-sm font-semibold text-[#1E1E1E]">{{ $slot['label'] }}</p>
-                            @if (filled($slot['description']))
-                                <p class="text-xs text-[#6B6459] mt-1">{{ $slot['description'] }}</p>
-                            @endif
-                        </div>
-                        <div class="p-4">
-                            @if (filled($slot['body']))
-                                <p class="mb-3 text-xs font-medium text-emerald-800">{{ __('storefront.ads_lab_script_loaded') }}</p>
-                                {!! $slot['body'] !!}
-                            @else
-                                <div class="rounded-lg border-2 border-dashed border-[#D9CEB8] bg-[#FAF6EF] px-4 py-8 text-center text-sm text-[#6B6459]">
-                                    {{ __('storefront.ads_lab_script_placeholder', ['env' => 'ADSTERRA_SCRIPT_POPUNDER']) }}
-                                </div>
-                            @endif
-                        </div>
-                    </div>
-                @endforeach
+                <div class="grid gap-6">
+                    @foreach ($scriptUnits as $slot)
+                        <x-adsterra-slot
+                            :type="$slot['type']"
+                            :slot-key="$slot['slot_key']"
+                            :label="$slot['label']"
+                            :description="$slot['description']"
+                            :width="$slot['width']"
+                            :height="$slot['height']"
+                            :script-src="$slot['script_src']"
+                            :smartlink-url="$slot['smartlink_url']"
+                        />
+                    @endforeach
+                </div>
             </section>
         @endif
     </div>

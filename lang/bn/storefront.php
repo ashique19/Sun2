@@ -304,5 +304,7 @@ return [
     'ads_lab_placeholder_hint' => 'Adsterra ড্যাশবোর্ড থেকে স্লট কী .env-এ যোগ করুন',
     'ads_lab_script_loaded' => 'স্ক্রিপ্ট লোড করা হয়েছে — ব্রাউজারে আচরণ পরীক্ষা করুন।',
     'ads_lab_script_placeholder' => ':env এ Adsterra-র সম্পূর্ণ স্ক্রিপ্ট কোড পেস্ট করুন।',
+    'ads_lab_smartlink_hint' => 'ল্যাব পেজে স্মার্টলিংক ম্যানুয়ালি খুলুন। সাইটওয়াইড পপ-আন্ডার এখনো চালু নেই।',
+    'ads_lab_open_smartlink' => 'স্মার্টলিংক খুলুন (টেস্ট)',
     'ads_lab_meta_description' => 'Sundoritoma internal ad format preview page.',
 ];

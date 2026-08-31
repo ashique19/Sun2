@@ -14,45 +14,76 @@ class StorefrontAdsLab extends Component
     }
 
     /**
-     * @return list<array{key: string, label: string, description: string, slot_key: ?string, width: int, height: int, format: string}>
+     * @return list<array{
+     *     key: string,
+     *     label: string,
+     *     description: string,
+     *     type: string,
+     *     slot_key: ?string,
+     *     width: int,
+     *     height: int,
+     *     format: string,
+     *     script_src: ?string,
+     *     smartlink_url: ?string
+     * }>
      */
-    public function bannerSlots(): array
+    public function units(): array
     {
-        return collect(config('ads.adsterra', []))
-            ->map(fn (array $slot, string $key): array => [
-                'key' => $key,
-                'label' => (string) ($slot['label'] ?? $key),
-                'description' => (string) ($slot['description'] ?? ''),
-                'slot_key' => filled($slot['key'] ?? null) ? (string) $slot['key'] : null,
-                'width' => (int) ($slot['width'] ?? 300),
-                'height' => (int) ($slot['height'] ?? 250),
-                'format' => (string) ($slot['format'] ?? 'iframe'),
-            ])
-            ->values()
-            ->all();
+        $banners = collect(config('ads.banners', []))
+            ->map(fn (array $slot, string $key): array => $this->normalizeUnit($key, $slot));
+
+        $scripts = collect(config('ads.scripts', []))
+            ->map(fn (array $slot, string $key): array => $this->normalizeUnit($key, $slot));
+
+        return $banners->merge($scripts)->values()->all();
     }
 
     /**
-     * @return list<array{key: string, label: string, description: string, body: ?string}>
+     * @param  array<string, mixed>  $slot
+     * @return array{
+     *     key: string,
+     *     label: string,
+     *     description: string,
+     *     type: string,
+     *     slot_key: ?string,
+     *     width: int,
+     *     height: int,
+     *     format: string,
+     *     script_src: ?string,
+     *     smartlink_url: ?string
+     * }
      */
-    public function scriptSlots(): array
+    private function normalizeUnit(string $key, array $slot): array
     {
-        return collect(config('ads.adsterra_scripts', []))
-            ->map(fn (array $slot, string $key): array => [
-                'key' => $key,
-                'label' => (string) ($slot['label'] ?? $key),
-                'description' => (string) ($slot['description'] ?? ''),
-                'body' => filled($slot['body'] ?? null) ? (string) $slot['body'] : null,
-            ])
-            ->values()
-            ->all();
+        return [
+            'key' => $key,
+            'label' => (string) ($slot['label'] ?? $key),
+            'description' => (string) ($slot['description'] ?? ''),
+            'type' => (string) ($slot['type'] ?? 'atoptions'),
+            'slot_key' => filled($slot['key'] ?? null) ? (string) $slot['key'] : null,
+            'width' => (int) ($slot['width'] ?? 300),
+            'height' => (int) ($slot['height'] ?? 250),
+            'format' => (string) ($slot['format'] ?? 'iframe'),
+            'script_src' => filled($slot['script_src'] ?? $slot['src'] ?? null)
+                ? (string) ($slot['script_src'] ?? $slot['src'])
+                : null,
+            'smartlink_url' => filled($slot['url'] ?? null) ? (string) $slot['url'] : null,
+        ];
     }
 
     public function render()
     {
+        $units = $this->units();
+
         return view('livewire.storefront-ads-lab', [
-            'bannerSlots' => $this->bannerSlots(),
-            'scriptSlots' => $this->scriptSlots(),
+            'bannerUnits' => array_values(array_filter(
+                $units,
+                fn (array $u): bool => in_array($u['type'], ['atoptions', 'native_container'], true),
+            )),
+            'scriptUnits' => array_values(array_filter(
+                $units,
+                fn (array $u): bool => in_array($u['type'], ['script_src', 'smartlink'], true),
+            )),
             'network' => (string) config('ads.network', 'adsterra'),
         ])
             ->title(__('storefront.ads_lab_title').' - Sundoritoma')

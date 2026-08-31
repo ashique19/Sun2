@@ -17,28 +17,41 @@ return [
     'network' => env('ADS_NETWORK', 'adsterra'),
 
     /*
+    | Host for Adsterra High Performance / iframe banner invoke.js
+    | (dashboard may show highrevenueformat.com or similar).
+    */
+    'invoke_host' => env('ADSTERRA_INVOKE_HOST', 'www.highrevenueformat.com'),
+
+    /*
     |--------------------------------------------------------------------------
-    | Adsterra slot keys
+    | Banner / iframe units (atOptions + invoke.js)
     |--------------------------------------------------------------------------
-    |
-    | Paste each unit key from the Adsterra dashboard (High Performance Tag).
-    | Leave blank to show a labelled placeholder on the lab page.
-    |
     */
 
-    'adsterra' => [
+    'banners' => [
         'banner_728' => [
             'label' => '728×90 Leaderboard',
             'description' => 'Wide desktop banner — common above content.',
-            'key' => env('ADSTERRA_SLOT_BANNER_728'),
+            'type' => 'atoptions',
+            'key' => env('ADSTERRA_SLOT_BANNER_728', '6749cdd1ebf2dbcda3384c9f4c4f8cfb'),
             'width' => 728,
             'height' => 90,
+            'format' => 'iframe',
+        ],
+        'banner_468' => [
+            'label' => '468×60 Banner',
+            'description' => 'Classic mid-width banner.',
+            'type' => 'atoptions',
+            'key' => env('ADSTERRA_SLOT_BANNER_468', 'fd48224ebf3f09fd56ece982c1585ddf'),
+            'width' => 468,
+            'height' => 60,
             'format' => 'iframe',
         ],
         'banner_300' => [
             'label' => '300×250 Medium rectangle',
             'description' => 'Sidebar / in-content rectangle — works on mobile and desktop.',
-            'key' => env('ADSTERRA_SLOT_BANNER_300'),
+            'type' => 'atoptions',
+            'key' => env('ADSTERRA_SLOT_BANNER_300', 'a356eb5486bfece119efb08195fb4a25'),
             'width' => 300,
             'height' => 250,
             'format' => 'iframe',
@@ -46,47 +59,77 @@ return [
         'banner_320' => [
             'label' => '320×50 Mobile banner',
             'description' => 'Compact mobile strip.',
-            'key' => env('ADSTERRA_SLOT_BANNER_320'),
+            'type' => 'atoptions',
+            'key' => env('ADSTERRA_SLOT_BANNER_320', '2b562aa780f28739eee1965844207030'),
             'width' => 320,
             'height' => 50,
             'format' => 'iframe',
         ],
-        'native' => [
-            'label' => 'Native banner',
-            'description' => 'Blends with content styling.',
-            'key' => env('ADSTERRA_SLOT_NATIVE'),
-            'width' => 300,
-            'height' => 250,
+        'skyscraper_160_600' => [
+            'label' => '160×600 Wide skyscraper',
+            'description' => 'Tall sidebar unit — best on desktop layouts.',
+            'type' => 'atoptions',
+            'key' => env('ADSTERRA_SLOT_SKY_160_600', 'e142d88c96eac091e3874ed87e55e37c'),
+            'width' => 160,
+            'height' => 600,
             'format' => 'iframe',
         ],
-        'social_bar' => [
-            'label' => 'Social bar',
-            'description' => 'Sticky bottom or side bar unit.',
-            'key' => env('ADSTERRA_SLOT_SOCIAL_BAR'),
-            'width' => 728,
-            'height' => 90,
-            'format' => 'iframe',
-        ],
-        'video_slider' => [
-            'label' => 'Video / in-page push',
-            'description' => 'Video-style slider or in-page push unit.',
-            'key' => env('ADSTERRA_SLOT_VIDEO'),
-            'width' => 400,
+        'skyscraper_160_300' => [
+            'label' => '160×300 Half skyscraper',
+            'description' => 'Shorter sidebar skyscraper.',
+            'type' => 'atoptions',
+            'key' => env('ADSTERRA_SLOT_SKY_160_300', '4b1ba3480be15d58894a81dd7321ed51'),
+            'width' => 160,
             'height' => 300,
             'format' => 'iframe',
+        ],
+        'native' => [
+            'label' => 'Native banner',
+            'description' => 'Container-based native unit (profitableratecpmnetwork).',
+            'type' => 'native_container',
+            'key' => env('ADSTERRA_SLOT_NATIVE', '0150ba9fc718f1f7f103b72a3757ae25'),
+            'script_src' => env(
+                'ADSTERRA_NATIVE_SCRIPT_SRC',
+                'https://pl31110128.profitableratecpmnetwork.com/0150ba9fc718f1f7f103b72a3757ae25/invoke.js',
+            ),
+            'width' => 300,
+            'height' => 250,
         ],
     ],
 
     /*
-    | Full script snippets for formats that are not key-based (e.g. popunder).
-    | Paste the exact code block from Adsterra when ready.
+    |--------------------------------------------------------------------------
+    | Script / URL units (social bar, popunder, smartlink)
+    |--------------------------------------------------------------------------
     */
 
-    'adsterra_scripts' => [
+    'scripts' => [
+        'social_bar' => [
+            'label' => 'Social bar',
+            'description' => 'Sticky social-bar style script — observe placement and intensity.',
+            'type' => 'script_src',
+            'src' => env(
+                'ADSTERRA_SCRIPT_SOCIAL_BAR',
+                'https://pl31110125.profitableratecpmnetwork.com/2e/28/d6/2e28d6b523d7ac452ad571b5139de0eb.js',
+            ),
+        ],
+        'in_page_push' => [
+            'label' => 'In-page push / sticky',
+            'description' => 'Second script unit from Adsterra — confirm label in dashboard if unsure.',
+            'type' => 'script_src',
+            'src' => env(
+                'ADSTERRA_SCRIPT_IN_PAGE',
+                'https://pl31110126.profitableratecpmnetwork.com/4f/ea/13/4fea13c4d55a8b0a9e2b9903cdb09c34.js',
+            ),
+        ],
         'popunder' => [
-            'label' => 'Pop-under',
-            'description' => 'Opens in a new tab on trigger — test carefully; browsers may block.',
-            'body' => env('ADSTERRA_SCRIPT_POPUNDER'),
+            'label' => 'Pop-under / smartlink',
+            'description' => 'Smartlink URL — opens on click in lab; do not enable sitewide without observation.',
+            'type' => 'smartlink',
+            'url' => env(
+                'ADSTERRA_POPUNDER_URL',
+                'https://www.profitableratecpmnetwork.com/xsjja7i0?key=7e680ac1f9ce8e5547eb972920f15f50',
+            ),
         ],
     ],
 

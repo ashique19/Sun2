@@ -100,4 +100,25 @@ class AdsLabConfigServiceTest extends TestCase
 
         $this->assertNull($service->productAfterDescriptionLeaderboard());
     }
+
+    #[Test]
+    public function storefront_popunder_returns_smartlink_when_enabled(): void
+    {
+        config(['ads.placements.popunder' => true]);
+        $this->get(route('home'));
+
+        $popunder = app(AdsLabConfigService::class)->storefrontPopunder();
+
+        $this->assertNotNull($popunder);
+        $this->assertStringContainsString('profitableratecpmnetwork.com/xsjja7i0', (string) $popunder['url']);
+    }
+
+    #[Test]
+    public function storefront_popunder_is_null_on_excluded_checkout_route(): void
+    {
+        config(['ads.placements.popunder' => true]);
+        $this->get(route('checkout'));
+
+        $this->assertNull(app(AdsLabConfigService::class)->storefrontPopunder());
+    }
 }

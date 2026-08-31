@@ -115,6 +115,54 @@ class AdsLabConfigService
         return $unit;
     }
 
+    /**
+     * Storefront popunder — smartlink URL and/or network script from settings.
+     *
+     * @return array{url: ?string, script_src: ?string}|null
+     */
+    public function storefrontPopunder(): ?array
+    {
+        if (! config('ads.placements.popunder', false)) {
+            return null;
+        }
+
+        if ($this->requestExcludesPopunder()) {
+            return null;
+        }
+
+        $unit = $this->unit('popunder');
+
+        if ($unit === null) {
+            return null;
+        }
+
+        $url = filled($unit['smartlink_url'] ?? null) ? (string) $unit['smartlink_url'] : null;
+        $scriptSrc = filled($unit['script_src'] ?? null) ? (string) $unit['script_src'] : null;
+
+        if ($url === null && $scriptSrc === null) {
+            return null;
+        }
+
+        return [
+            'url' => $url,
+            'script_src' => $scriptSrc,
+        ];
+    }
+
+    public function requestExcludesPopunder(): bool
+    {
+        $patterns = array_values(array_filter(
+            (array) config('ads.popunder_excluded_routes', []),
+            fn (mixed $pattern): bool => is_string($pattern) && $pattern !== '',
+        ));
+
+        if ($patterns === [] || request()->route() === null) {
+            return false;
+        }
+
+        return request()->routeIs(...$patterns);
+    }
+
     public function invokeHost(): string
     {
         return $this->payload()['invoke_host'];

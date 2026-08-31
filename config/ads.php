@@ -22,9 +22,29 @@ return [
     /*
     | Steady storefront placements (read unit codes from settings).
     | product_after_description → 728×90 after product description.
+    | popunder → first click smartlink / network script (excludes checkout & auth).
     */
     'placements' => [
         'product_after_description' => (bool) env('ADS_PRODUCT_AFTER_DESCRIPTION', true),
+        'popunder' => (bool) env('ADS_POPUNDER_ENABLED', true),
+    ],
+
+    /*
+    | Route name patterns where popunder must not run (checkout, account, lab, etc.).
+    */
+    'popunder_excluded_routes' => [
+        'cart',
+        'checkout',
+        'checkout.*',
+        'login',
+        'register',
+        'password.*',
+        'account',
+        'account.*',
+        'logout',
+        'admin.*',
+        'reseller.*',
+        'ads.lab',
     ],
 
     /*

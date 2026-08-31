@@ -27,10 +27,11 @@ return [
     'placements' => [
         'product_after_description' => (bool) env('ADS_PRODUCT_AFTER_DESCRIPTION', true),
         'popunder' => (bool) env('ADS_POPUNDER_ENABLED', true),
+        'exit_interstitial' => (bool) env('ADS_EXIT_INTERSTITIAL_ENABLED', true),
     ],
 
     /*
-    | Route name patterns where popunder must not run (checkout, account, lab, etc.).
+    | Route name patterns where popunder / exit interstitial must not run.
     */
     'popunder_excluded_routes' => [
         'cart',
@@ -138,6 +139,11 @@ return [
             'type' => 'smartlink',
             'url' => 'https://www.profitableratecpmnetwork.com/xsjja7i0?key=7e680ac1f9ce8e5547eb972920f15f50',
         ],
+        'exit_smartlink' => [
+            'label' => 'Exit interstitial smartlink',
+            'description' => 'Opened via CLOSE NOW on the exit countdown modal (back / exit-intent).',
+            'type' => 'smartlink',
+            'url' => 'https://www.profitableratecpmnetwork.com/m75pp2jm?key=31573655d658b411102f48a4813350a7',
+        ],
     ],
-
 ];

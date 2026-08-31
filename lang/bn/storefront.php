@@ -308,4 +308,9 @@ return [
     'ads_lab_smartlink_hint' => 'ল্যাব পেজে স্মার্টলিংক ম্যানুয়ালি খুলুন। সাইটওয়াইড পপ-আন্ডার এখনো চালু নেই।',
     'ads_lab_open_smartlink' => 'স্মার্টলিংক খুলুন (টেস্ট)',
     'ads_lab_meta_description' => 'Sundoritoma internal ad format preview page.',
+
+    'exit_securely_closing' => 'Securely closing in',
+    'exit_securely_closing_zero' => 'Securely closing in 0…',
+    'exit_interstitial_hint' => 'আপনি চলে যাচ্ছেন। অপেক্ষা করুন, অথবা এখনই বন্ধ করুন।',
+    'exit_close_now' => 'CLOSE NOW',
 ];

@@ -149,6 +149,65 @@ class AdsLabConfigService
         ];
     }
 
+    /**
+     * Exit interstitial smartlink (back / exit-intent modal — not true tab close).
+     */
+    public function storefrontExitInterstitialUrl(): ?string
+    {
+        if (! config('ads.placements.exit_interstitial', false)) {
+            return null;
+        }
+
+        if ($this->requestExcludesPopunder()) {
+            return null;
+        }
+
+        $unit = $this->unit('exit_smartlink');
+
+        if ($unit === null || ! filled($unit['smartlink_url'] ?? null)) {
+            return null;
+        }
+
+        return (string) $unit['smartlink_url'];
+    }
+
+    /**
+     * Merge missing default script/banner keys into the stored settings payload.
+     *
+     * @return array{
+     *     invoke_host: string,
+     *     network: string,
+     *     banners: array<string, array<string, mixed>>,
+     *     scripts: array<string, array<string, mixed>>
+     * }
+     */
+    public function mergeMissingDefaults(): array
+    {
+        $current = $this->payload();
+        $defaults = $this->defaults();
+        $changed = false;
+
+        foreach ($defaults['banners'] as $key => $slot) {
+            if (! array_key_exists($key, $current['banners'])) {
+                $current['banners'][$key] = $slot;
+                $changed = true;
+            }
+        }
+
+        foreach ($defaults['scripts'] as $key => $slot) {
+            if (! array_key_exists($key, $current['scripts'])) {
+                $current['scripts'][$key] = $slot;
+                $changed = true;
+            }
+        }
+
+        if ($changed) {
+            return $this->save($current);
+        }
+
+        return $current;
+    }
+
     public function requestExcludesPopunder(): bool
     {
         $patterns = array_values(array_filter(

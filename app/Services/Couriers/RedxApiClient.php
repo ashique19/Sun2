@@ -15,6 +15,7 @@ class RedxApiClient
     {
         $this->assertConfigured();
 
+        $order->refresh();
         $area = $this->resolveDeliveryArea($order->city, $order->area);
         $order->loadMissing('items');
 

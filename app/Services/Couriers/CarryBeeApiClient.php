@@ -14,6 +14,7 @@ class CarryBeeApiClient
     {
         $this->assertConfigured();
 
+        $order->refresh();
         $location = $this->resolveCityZone($order);
         $order->loadMissing('items');
 

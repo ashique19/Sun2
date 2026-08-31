@@ -229,9 +229,19 @@
                             <div class="flex justify-between gap-3 text-emerald-700"><span>− Discounts / coupons</span><span class="tabular-nums">&#2547; {{ number_format($order->discount, 0) }}</span></div>
                         @endif
                         <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 font-semibold">
-                            <span>Bill to customer (COD)</span>
+                            <span>Bill to customer</span>
                             <span class="tabular-nums">&#2547; {{ number_format($money->billToCustomer, 0) }}</span>
                         </div>
+                        <div class="flex justify-between gap-3 font-semibold text-[#C9A227]">
+                            <span>Amount to collect</span>
+                            <span class="tabular-nums">&#2547; {{ number_format($order->collectableAmount(), 0) }}</span>
+                        </div>
+                        @if ((float) $order->paid_amount > 0)
+                            <p class="text-xs text-[#8C8474]">
+                                After &#2547;{{ number_format($order->paid_amount, 0) }} paid
+                                (due &#2547;{{ number_format($order->due_amount, 0) }}).
+                            </p>
+                        @endif
                     </div>
 
                     @php($lastCourierChargeLog = $order->adjustmentLogs->firstWhere('field', 'courier_charge'))

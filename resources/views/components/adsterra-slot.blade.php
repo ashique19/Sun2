@@ -55,7 +55,7 @@
                         'params': {}
                     };
                 </script>
-                <script type="text/javascript" src="//{{ $invokeHost }}/{{ $key }}/invoke.js"></script>
+                <script type="text/javascript" src="https://{{ $invokeHost }}/{{ $key }}/invoke.js"></script>
             </div>
         @elseif ($type === 'native_container' && $key && $src)
             <div class="ad-slot__creative w-full max-w-full overflow-x-auto">

@@ -48,11 +48,11 @@ class StorefrontAdsLabTest extends TestCase
 
         $response->assertOk();
         $response->assertSee(
-            'www.highrevenueformat.com/a356eb5486bfece119efb08195fb4a25/invoke.js',
+            'https://www.highrevenueformat.com/a356eb5486bfece119efb08195fb4a25/invoke.js',
             false,
         );
         $response->assertSee(
-            'www.highrevenueformat.com/6749cdd1ebf2dbcda3384c9f4c4f8cfb/invoke.js',
+            'https://www.highrevenueformat.com/6749cdd1ebf2dbcda3384c9f4c4f8cfb/invoke.js',
             false,
         );
     }
@@ -91,7 +91,7 @@ class StorefrontAdsLabTest extends TestCase
         $response->assertOk();
         $response->assertSee('Placeholder', false);
         $response->assertDontSee(
-            'www.highrevenueformat.com/6749cdd1ebf2dbcda3384c9f4c4f8cfb/invoke.js',
+            'https://www.highrevenueformat.com/6749cdd1ebf2dbcda3384c9f4c4f8cfb/invoke.js',
             false,
         );
     }

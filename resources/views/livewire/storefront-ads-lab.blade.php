@@ -30,6 +30,9 @@
             <p class="text-xs text-[#8C8474]">
                 {{ __('storefront.ads_lab_private_note') }}
             </p>
+            <p class="text-xs text-[#8C8474]">
+                {{ __('storefront.ads_lab_fill_note') }}
+            </p>
         </header>
 
         <section class="space-y-6">

@@ -62,7 +62,7 @@ class ExchangePairEconomicsTest extends TestCase
             'external_id' => 'cod:settlement:order:'.$original->id,
         ]);
 
-        $item = OrderProduct::query()->create([
+        OrderProduct::query()->create([
             'order_id' => $original->id,
             'name' => 'Kurti',
             'quantity' => 1,
@@ -110,18 +110,30 @@ class ExchangePairEconomicsTest extends TestCase
     }
 
     #[Test]
-    public function pair_economics_combine_write_off_cogs_and_fees(): void
+    public function pair_economics_sum_independent_order_totals_without_write_off(): void
     {
         [$original, $replacement] = $this->linkedPair();
+
+        $this->assertEquals(1180.0, (float) $original->total);
+        $this->assertSame(0, (int) $original->items->first()->returned_quantity);
+        $this->assertEquals(0, OrderAdjustment::query()
+            ->where('order_id', $original->id)
+            ->where('source', 'partial_return_writeoff')
+            ->count());
 
         $pair = $original->exchangePairEconomics();
         $this->assertNotNull($pair);
         $this->assertCount(2, $pair['orders']);
         $this->assertEquals(1180.0, $pair['collected']);
-        $this->assertEquals(1100.0, $pair['write_off']);
+        $this->assertEquals(0.0, $pair['write_off']);
+        // Original merchandise COGS only — free replacement contributes 0.
         $this->assertEquals(400.0, $pair['cogs']);
         $this->assertEquals(42.0, $pair['packaging']);
         $this->assertEquals(120.0, $pair['courier']);
+
+        $expectedGross = $original->moneyTotals()->grossProfit
+            + $replacement->moneyTotals()->grossProfit;
+        $this->assertEquals($expectedGross, $pair['gross_profit']);
 
         $fromReplacement = $replacement->exchangePairEconomics();
         $this->assertNotNull($fromReplacement);
@@ -155,12 +167,7 @@ class ExchangePairEconomicsTest extends TestCase
             ->assertSee('Exchange pair P/L')
             ->assertSee('PAIR-ORIG')
             ->assertSee('PAIR-EXC')
-            ->assertSee('Returned write-off');
-
-        $writeOff = OrderAdjustment::query()
-            ->where('order_id', $original->id)
-            ->where('source', 'partial_return_writeoff')
-            ->first();
-        $this->assertNotNull($writeOff);
+            ->assertSee('Original sale kept')
+            ->assertDontSee('Returned write-off');
     }
 }

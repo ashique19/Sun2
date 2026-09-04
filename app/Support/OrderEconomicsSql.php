@@ -11,16 +11,24 @@ class OrderEconomicsSql
 {
     /**
      * Per-order COGS: sum((qty - returned) × COALESCE(unit_cost, purchase_price)).
+     * Free exchange replacements (is_replacement + subtotal ≤ 0) contribute 0 merchandise COGS.
      */
     public static function cogsExpression(string $ordersAlias = 'orders'): string
     {
         $qty = self::greatest('(order_products.quantity - COALESCE(order_products.returned_quantity, 0))', '0');
 
-        return "COALESCE((
+        $merchandise = "COALESCE((
             SELECT SUM({$qty} * COALESCE(order_products.unit_cost, order_products.purchase_price, 0))
             FROM order_products
             WHERE order_products.order_id = {$ordersAlias}.id
         ), 0)";
+
+        return "CASE
+            WHEN COALESCE({$ordersAlias}.is_replacement, 0) = 1
+                AND COALESCE({$ordersAlias}.subtotal, 0) <= 0
+            THEN 0
+            ELSE {$merchandise}
+        END";
     }
 
     /**

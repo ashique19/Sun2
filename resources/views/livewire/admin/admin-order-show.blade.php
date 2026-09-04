@@ -338,14 +338,13 @@
                         <div class="space-y-2 border-t border-[#E7DFCF] pt-3">
                             <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Exchange pair P/L</p>
                             <p class="text-xs text-[#8C8474]">
-                                Original + replacement as one event:
+                                Original sale kept; replacement adds its own logistics. Combined:
                                 @foreach ($exchangePair['orders'] as $member)
                                     <a href="{{ route('admin.orders.show', $member) }}" wire:navigate
                                         class="font-medium text-sky-700 hover:underline">#{{ $member->order_number }}</a>@if (! $loop->last), @endif
                                 @endforeach
                             </p>
                             <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Collected</span><span class="tabular-nums">&#2547; {{ number_format($exchangePair['collected'], 0) }}</span></div>
-                            <div class="flex justify-between gap-3 text-emerald-700"><span>− Returned write-off</span><span class="tabular-nums">&#2547; {{ number_format($exchangePair['write_off'], 0) }}</span></div>
                             <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Combined COGS</span><span class="tabular-nums">&#2547; {{ number_format($exchangePair['cogs'], 0) }}</span></div>
                             <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Combined packaging</span><span class="tabular-nums">&#2547; {{ number_format($exchangePair['packaging'], 0) }}</span></div>
                             <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Combined courier</span><span class="tabular-nums">&#2547; {{ number_format($exchangePair['courier'], 0) }}</span></div>

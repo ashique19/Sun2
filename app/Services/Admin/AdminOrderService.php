@@ -421,7 +421,8 @@ class AdminOrderService
     }
 
     /**
-     * First time an original is linked (create or later edit), settle its returned qty.
+     * First time an original is linked (create or later edit), flag H/R on it
+     * without rewriting its bill, COD collection, or COGS.
      */
     private function settleLinkedExchangeOriginal(Order $replacement, ?int $previousExchangeOfId): void
     {

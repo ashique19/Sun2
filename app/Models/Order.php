@@ -186,7 +186,8 @@ class Order extends Model
     }
 
     /**
-     * Original + replacements as one commercial event (null when this order is unlinked).
+     * Original + replacements as independent commercial events (null when unlinked).
+     * Each member keeps its own sale economics; the pair is their sum.
      *
      * @return array{
      *     orders: Collection<int, Order>,
@@ -196,7 +197,8 @@ class Order extends Model
      *     packaging: float,
      *     courier: float,
      *     cod: float,
-     *     gross_profit: float
+     *     gross_profit: float,
+     *     net_revenue: float
      * }|null
      */
     public function exchangePairEconomics(): ?array
@@ -208,36 +210,36 @@ class Order extends Model
         }
 
         $collected = 0.0;
-        $writeOff = 0.0;
         $cogs = 0.0;
         $packaging = 0.0;
         $courier = 0.0;
         $cod = 0.0;
         $grossProfit = 0.0;
+        $netRevenue = 0.0;
 
         foreach ($members as $member) {
             $member->loadMissing(['items', 'adjustments', 'courier']);
             $totals = $member->moneyTotals();
             $collected += (float) ($member->collected_amount ?? 0);
-            $writeOff += (float) $member->adjustments
-                ->where('source', 'partial_return_writeoff')
-                ->sum('amount');
             $cogs += $totals->cogs;
             $packaging += $totals->packagingCost;
             $courier += $totals->courierCharge;
             $cod += $totals->codCharge;
             $grossProfit += $totals->grossProfit;
+            $netRevenue += $totals->netRevenue;
         }
 
         return [
             'orders' => $members,
             'collected' => round($collected, 2),
-            'write_off' => round($writeOff, 2),
+            // Legacy key kept for callers; exchange linking no longer applies write-offs.
+            'write_off' => 0.0,
             'cogs' => round($cogs, 2),
             'packaging' => round($packaging, 2),
             'courier' => round($courier, 2),
             'cod' => round($cod, 2),
             'gross_profit' => round($grossProfit, 2),
+            'net_revenue' => round($netRevenue, 2),
         ];
     }
 
@@ -310,13 +312,31 @@ class Order extends Model
      * COGS = sum(unit_cost × effective_quantity) over order lines
      * (falls back to purchase_price on legacy lines).
      * Effective quantity = quantity - returned_quantity when returns apply.
+     * Free exchange replacements exclude merchandise COGS (logistics only).
      * Requires items to be loaded.
      */
     public function cogs(): float
     {
+        if ($this->isFreeExchangeReplacement()) {
+            return 0.0;
+        }
+
         $this->loadMissing('items');
 
         return app(OrderTotalCalculator::class)->cogsFromItems($this->items);
+    }
+
+    /**
+     * Free replacement parcel: merchandise was already sold on the original;
+     * this order's P/L is packaging + courier (and any billed delivery) only.
+     */
+    public function isFreeExchangeReplacement(): bool
+    {
+        if (! (bool) $this->is_replacement) {
+            return false;
+        }
+
+        return round((float) $this->subtotal, 2) <= 0.0;
     }
 
     /**
@@ -381,12 +401,22 @@ class Order extends Model
             $expectedCod = $this->collectableAmount();
         }
 
+        // Free exchange: merchandise COGS already recognized on the original sale.
+        $itemsForCogs = $this->isFreeExchangeReplacement()
+            ? $this->items->map(fn ($item) => [
+                'unit_cost' => 0,
+                'purchase_price' => 0,
+                'quantity' => (int) $item->quantity,
+                'returned_quantity' => 0,
+            ])
+            : $this->items;
+
         return app(OrderTotalCalculator::class)->calculate(
             subtotal: (float) $this->subtotal,
             deliveryCharge: (float) $this->delivery_charge,
             courierCharge: (float) ($this->courier_charge ?? 0),
             adjustments: $adjustments,
-            items: $this->items,
+            items: $itemsForCogs,
             collectedAmount: (float) ($this->collected_amount ?? 0),
             courierSlug: $this->courier?->slug,
             codPercentage: (float) ($this->courier?->cod_percentage ?? 1),

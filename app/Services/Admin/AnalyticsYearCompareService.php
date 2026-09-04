@@ -158,9 +158,13 @@ class AnalyticsYearCompareService
             '0',
         );
         $cogsPerOrder = DB::table('order_products')
-            ->selectRaw('order_id')
-            ->selectRaw("COALESCE(SUM({$qty} * COALESCE(order_products.unit_cost, order_products.purchase_price, 0)), 0) as cogs")
-            ->groupBy('order_id');
+            ->join('orders as cogs_orders', 'cogs_orders.id', '=', 'order_products.order_id')
+            ->selectRaw('order_products.order_id')
+            ->selectRaw("CASE
+                WHEN COALESCE(cogs_orders.is_replacement, 0) = 1 AND COALESCE(cogs_orders.subtotal, 0) <= 0 THEN 0
+                ELSE COALESCE(SUM({$qty} * COALESCE(order_products.unit_cost, order_products.purchase_price, 0)), 0)
+            END as cogs")
+            ->groupBy('order_products.order_id', 'cogs_orders.is_replacement', 'cogs_orders.subtotal');
 
         $steadfastBase = OrderEconomicsSql::greatest(
             '(COALESCE(orders.collected_amount, 0) - COALESCE(orders.delivery_charge, 0))',

@@ -169,15 +169,15 @@ class AdminOrderExchangeLinkTest extends TestCase
         $original->refresh()->load(['items', 'adjustments']);
         $this->assertTrue($original->has_return);
         $this->assertSame('delivered', $original->status);
-        $this->assertSame(1, (int) $original->items->firstWhere('id', $item->id)->returned_quantity);
-        $this->assertEquals(80.0, (float) $original->total);
+        $this->assertSame(0, (int) $original->items->firstWhere('id', $item->id)->returned_quantity);
+        $this->assertEquals(1180.0, (float) $original->total);
+        $this->assertEquals(1180.0, (float) $original->collected_amount);
 
         $writeOff = OrderAdjustment::query()
             ->where('order_id', $original->id)
             ->where('source', 'partial_return_writeoff')
             ->first();
-        $this->assertNotNull($writeOff);
-        $this->assertEquals(1100.0, (float) $writeOff->amount);
+        $this->assertNull($writeOff);
     }
 
     #[Test]
@@ -233,7 +233,7 @@ class AdminOrderExchangeLinkTest extends TestCase
     }
 
     #[Test]
-    public function matching_product_qty_is_returned_on_original(): void
+    public function linking_exchange_flags_hr_without_rewriting_original_bill(): void
     {
         $this->actingAs($this->adminUser());
         $product = $this->product();
@@ -271,13 +271,13 @@ class AdminOrderExchangeLinkTest extends TestCase
         );
 
         $original->refresh()->load('items');
-        $this->assertSame(1, (int) $original->items->firstWhere('id', $item->id)->returned_quantity);
+        $this->assertSame(0, (int) $original->items->firstWhere('id', $item->id)->returned_quantity);
         $this->assertTrue($original->has_return);
-        $this->assertEquals(1180.0, (float) $original->total);
+        $this->assertEquals(2280.0, (float) $original->total);
     }
 
     #[Test]
-    public function unmatched_products_return_all_remaining_original_qty(): void
+    public function unmatched_products_still_keep_original_bill_intact(): void
     {
         $this->actingAs($this->adminUser());
         [$original, $item] = $this->deliveredOriginal();
@@ -312,12 +312,13 @@ class AdminOrderExchangeLinkTest extends TestCase
         );
 
         $original->refresh()->load('items');
-        $this->assertSame(1, (int) $original->items->firstWhere('id', $item->id)->returned_quantity);
-        $this->assertEquals(80.0, (float) $original->total);
+        $this->assertSame(0, (int) $original->items->firstWhere('id', $item->id)->returned_quantity);
+        $this->assertEquals(1180.0, (float) $original->total);
+        $this->assertTrue($original->has_return);
     }
 
     #[Test]
-    public function relinking_the_same_original_does_not_double_the_write_off(): void
+    public function relinking_the_same_original_does_not_create_a_write_off(): void
     {
         $this->actingAs($this->adminUser());
         $this->mockCustomerLookup();
@@ -360,8 +361,8 @@ class AdminOrderExchangeLinkTest extends TestCase
             ->where('order_id', $original->id)
             ->where('source', 'partial_return_writeoff')
             ->get();
-        $this->assertCount(1, $writeOffs);
-        $this->assertEquals(1100.0, (float) $writeOffs->first()->amount);
+        $this->assertCount(0, $writeOffs);
+        $this->assertEquals(1180.0, (float) $original->fresh()->total);
     }
 
     #[Test]

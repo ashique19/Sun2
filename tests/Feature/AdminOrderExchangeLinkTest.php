@@ -167,7 +167,7 @@ class AdminOrderExchangeLinkTest extends TestCase
         $this->assertStringContainsString('[EXCHANGE PARCEL]', (string) $replacement->address);
 
         $original->refresh()->load(['items', 'adjustments']);
-        $this->assertTrue($original->has_return);
+        $this->assertFalse($original->has_return);
         $this->assertSame('delivered', $original->status);
         $this->assertSame(0, (int) $original->items->firstWhere('id', $item->id)->returned_quantity);
         $this->assertEquals(1180.0, (float) $original->total);
@@ -272,7 +272,7 @@ class AdminOrderExchangeLinkTest extends TestCase
 
         $original->refresh()->load('items');
         $this->assertSame(0, (int) $original->items->firstWhere('id', $item->id)->returned_quantity);
-        $this->assertTrue($original->has_return);
+        $this->assertFalse($original->has_return);
         $this->assertEquals(2280.0, (float) $original->total);
     }
 
@@ -314,7 +314,7 @@ class AdminOrderExchangeLinkTest extends TestCase
         $original->refresh()->load('items');
         $this->assertSame(0, (int) $original->items->firstWhere('id', $item->id)->returned_quantity);
         $this->assertEquals(1180.0, (float) $original->total);
-        $this->assertTrue($original->has_return);
+        $this->assertFalse($original->has_return);
     }
 
     #[Test]

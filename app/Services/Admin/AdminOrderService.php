@@ -421,8 +421,9 @@ class AdminOrderService
     }
 
     /**
-     * First time an original is linked (create or later edit), flag H/R on it
-     * without rewriting its bill, COD collection, or COGS.
+     * First time an original is linked (create or later edit): do not rewrite money.
+     * H/R on the original is deferred until the exchange parcel is delivered
+     * (or applied immediately when the linked exchange is already delivered).
      */
     private function settleLinkedExchangeOriginal(Order $replacement, ?int $previousExchangeOfId): void
     {

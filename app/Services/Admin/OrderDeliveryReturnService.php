@@ -288,10 +288,9 @@ class OrderDeliveryReturnService
     }
 
     /**
-     * When a replacement parcel is linked, flag the original for a physical return (H/R).
-     *
-     * The original sale stands: do not reverse the bill, COD collection, or COGS.
-     * Replacement logistics cost lives on the exchange order itself.
+     * When a replacement parcel is linked: never rewrite the original sale.
+     * If the exchange is already delivered, flag the original for the return
+     * parcel expected back; otherwise that flag is set on delivery.
      */
     public function settleOriginalForExchange(Order $original, Order $replacement, ?int $changedBy = null): Order
     {
@@ -303,12 +302,48 @@ class OrderDeliveryReturnService
             return $original;
         }
 
-        // Ops only — Return Hub already supports H/R without returned_quantity.
-        // $changedBy is retained for call-site parity with other settle methods.
         unset($changedBy);
-        $this->setHasReturn($original, true);
+
+        if ($replacement->status === 'delivered') {
+            $this->flagOriginalReturnExpectedForExchange($original);
+        }
 
         return $original->fresh(['items', 'adjustments']);
+    }
+
+    /**
+     * After an exchange parcel is delivered, the defective original unit is expected
+     * back — flag H/R on the linked original without changing its money scalars.
+     */
+    public function flagOriginalReturnExpectedForExchange(Order $original): Order
+    {
+        if (in_array($original->status, ['cancelled', 'returned'], true)) {
+            return $original;
+        }
+
+        if ($original->has_return) {
+            return $original->fresh(['items', 'adjustments']);
+        }
+
+        return $this->setHasReturn($original, true);
+    }
+
+    /**
+     * When a linked exchange parcel reaches delivered, expect a return on the original.
+     */
+    public function flagOriginalReturnAfterExchangeDelivery(Order $exchange): void
+    {
+        if (! (bool) $exchange->is_replacement || ! $exchange->exchange_of_order_id) {
+            return;
+        }
+
+        $original = Order::query()->find((int) $exchange->exchange_of_order_id);
+
+        if (! $original) {
+            return;
+        }
+
+        $this->flagOriginalReturnExpectedForExchange($original);
     }
 
     /**

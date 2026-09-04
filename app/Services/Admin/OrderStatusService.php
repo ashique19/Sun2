@@ -31,7 +31,14 @@ class OrderStatusService
             $order->update(['actual_delivery_date' => now()]);
         }
 
-        return $order->fresh();
+        $fresh = $order->fresh();
+
+        // Linked exchange delivered ⇒ expect the original defective parcel back (H/R).
+        if ($status === 'delivered') {
+            app(OrderDeliveryReturnService::class)->flagOriginalReturnAfterExchangeDelivery($fresh);
+        }
+
+        return $fresh;
     }
 
     public function record(Order $order, string $note, ?int $changedBy = null): void

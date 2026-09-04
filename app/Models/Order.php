@@ -312,23 +312,21 @@ class Order extends Model
      * COGS = sum(unit_cost × effective_quantity) over order lines
      * (falls back to purchase_price on legacy lines).
      * Effective quantity = quantity - returned_quantity when returns apply.
-     * Free exchange replacements exclude merchandise COGS (logistics only).
+     * Exchange parcels are independent: free swap lines (price ≤ 0) do not add
+     * merchandise COGS; billed add-on lines do. Charges/discounts use normal math.
      * Requires items to be loaded.
      */
     public function cogs(): float
     {
-        if ($this->isFreeExchangeReplacement()) {
-            return 0.0;
-        }
-
         $this->loadMissing('items');
 
-        return app(OrderTotalCalculator::class)->cogsFromItems($this->items);
+        return app(OrderTotalCalculator::class)->cogsFromItems(
+            $this->itemsForMerchandiseCogs(),
+        );
     }
 
     /**
-     * Free replacement parcel: merchandise was already sold on the original;
-     * this order's P/L is packaging + courier (and any billed delivery) only.
+     * Free replacement parcel with no billed merchandise (subtotal ≤ 0).
      */
     public function isFreeExchangeReplacement(): bool
     {
@@ -337,6 +335,32 @@ class Order extends Model
         }
 
         return round((float) $this->subtotal, 2) <= 0.0;
+    }
+
+    /**
+     * Lines used for merchandise COGS. On exchange parcels, warranty/swap units
+     * priced at 0 are excluded so add-on products keep independent P/L.
+     *
+     * @return Collection<int, OrderProduct|array{unit_cost: float|int, purchase_price?: float|int, quantity: int, returned_quantity: int}>
+     */
+    public function itemsForMerchandiseCogs()
+    {
+        $this->loadMissing('items');
+
+        if (! (bool) $this->is_replacement) {
+            return $this->items;
+        }
+
+        return $this->items->map(function ($item) {
+            $billed = round((float) $item->price, 2) > 0.0;
+
+            return [
+                'unit_cost' => $billed ? $item->effectiveUnitCost() : 0,
+                'purchase_price' => $billed ? (float) ($item->purchase_price ?? 0) : 0,
+                'quantity' => (int) $item->quantity,
+                'returned_quantity' => (int) ($item->returned_quantity ?? 0),
+            ];
+        });
     }
 
     /**
@@ -401,22 +425,12 @@ class Order extends Model
             $expectedCod = $this->collectableAmount();
         }
 
-        // Free exchange: merchandise COGS already recognized on the original sale.
-        $itemsForCogs = $this->isFreeExchangeReplacement()
-            ? $this->items->map(fn ($item) => [
-                'unit_cost' => 0,
-                'purchase_price' => 0,
-                'quantity' => (int) $item->quantity,
-                'returned_quantity' => 0,
-            ])
-            : $this->items;
-
         return app(OrderTotalCalculator::class)->calculate(
             subtotal: (float) $this->subtotal,
             deliveryCharge: (float) $this->delivery_charge,
             courierCharge: (float) ($this->courier_charge ?? 0),
             adjustments: $adjustments,
-            items: $itemsForCogs,
+            items: $this->itemsForMerchandiseCogs(),
             collectedAmount: (float) ($this->collected_amount ?? 0),
             courierSlug: $this->courier?->slug,
             codPercentage: (float) ($this->courier?->cod_percentage ?? 1),

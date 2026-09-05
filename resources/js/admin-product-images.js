@@ -907,6 +907,22 @@ const registerProductImageAlpineData = () => {
             return Math.max(0, Math.min(1, Number(value) || 0));
         },
 
+        /**
+         * Bounding box for overlay % / drag math: the image frame (not the padded stage).
+         * Stage padding exists so outside resize handles stay tappable; coordinates must
+         * match the canvas/GD bake space (0–1 of the image itself).
+         */
+        overlayImageFrameRect(fromEl) {
+            const stage = fromEl?.closest?.(
+                '[data-text-overlay-stage], [data-priced-stamp-stage]',
+            );
+            const frame = stage?.querySelector?.('[data-overlay-image-frame]')
+                ?? stage?.querySelector?.('img')
+                ?? stage;
+
+            return frame?.getBoundingClientRect?.() ?? null;
+        },
+
         isPrimaryPointer(event) {
             if (typeof event?.isPrimary === 'boolean' && ! event.isPrimary) {
                 return false;
@@ -1125,25 +1141,24 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
-            const stage = event.currentTarget?.closest?.('[data-text-overlay-stage]');
+            const rect = this.overlayImageFrameRect(event.currentTarget);
 
-            if (! stage) {
+            if (! rect) {
                 return;
             }
 
-            const rect = stage.getBoundingClientRect();
             const startClientX = event.clientX;
             const startClientY = event.clientY;
             const startX = this.clamp01(this.overlayTextX);
             const startY = this.clamp01(this.overlayTextY);
-            const stageWidth = Math.max(1, rect.width);
-            const stageHeight = Math.max(1, rect.height);
+            const frameWidth = Math.max(1, rect.width);
+            const frameHeight = Math.max(1, rect.height);
 
             if (! this.beginOverlayGesture(event, {
                 kind: 'text-drag',
                 onMove: (moveEvent) => {
-                    const dx = (moveEvent.clientX - startClientX) / stageWidth;
-                    const dy = (moveEvent.clientY - startClientY) / stageHeight;
+                    const dx = (moveEvent.clientX - startClientX) / frameWidth;
+                    const dy = (moveEvent.clientY - startClientY) / frameHeight;
                     this.overlayTextX = this.clamp01(startX + dx);
                     this.overlayTextY = this.clamp01(startY + dy);
                 },
@@ -1210,25 +1225,24 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
-            const stage = event.currentTarget?.closest?.('[data-text-overlay-stage]');
+            const rect = this.overlayImageFrameRect(event.currentTarget);
 
-            if (! stage) {
+            if (! rect) {
                 return;
             }
 
-            const rect = stage.getBoundingClientRect();
             const startClientX = event.clientX;
             const startClientY = event.clientY;
             const startX = this.clamp01(this.overlayLogoX);
             const startY = this.clamp01(this.overlayLogoY);
-            const stageWidth = Math.max(1, rect.width);
-            const stageHeight = Math.max(1, rect.height);
+            const frameWidth = Math.max(1, rect.width);
+            const frameHeight = Math.max(1, rect.height);
 
             if (! this.beginOverlayGesture(event, {
                 kind: 'logo-drag',
                 onMove: (moveEvent) => {
-                    const dx = (moveEvent.clientX - startClientX) / stageWidth;
-                    const dy = (moveEvent.clientY - startClientY) / stageHeight;
+                    const dx = (moveEvent.clientX - startClientX) / frameWidth;
+                    const dy = (moveEvent.clientY - startClientY) / frameHeight;
                     this.overlayLogoX = this.clamp01(startX + dx);
                     this.overlayLogoY = this.clamp01(startY + dy);
                 },
@@ -1373,25 +1387,24 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
-            const stage = event.currentTarget?.closest?.('[data-text-overlay-stage]');
+            const rect = this.overlayImageFrameRect(event.currentTarget);
 
-            if (! stage) {
+            if (! rect) {
                 return;
             }
 
-            const rect = stage.getBoundingClientRect();
             const startClientX = event.clientX;
             const startClientY = event.clientY;
             const startX = this.clamp01(this.overlayImageX);
             const startY = this.clamp01(this.overlayImageY);
-            const stageWidth = Math.max(1, rect.width);
-            const stageHeight = Math.max(1, rect.height);
+            const frameWidth = Math.max(1, rect.width);
+            const frameHeight = Math.max(1, rect.height);
 
             this.beginOverlayGesture(event, {
                 kind: 'image-drag',
                 onMove: (moveEvent) => {
-                    const dx = (moveEvent.clientX - startClientX) / stageWidth;
-                    const dy = (moveEvent.clientY - startClientY) / stageHeight;
+                    const dx = (moveEvent.clientX - startClientX) / frameWidth;
+                    const dy = (moveEvent.clientY - startClientY) / frameHeight;
                     this.overlayImageX = this.clamp01(startX + dx);
                     this.overlayImageY = this.clamp01(startY + dy);
                 },
@@ -2377,6 +2390,17 @@ const registerProductImageAlpineData = () => {
             return Math.max(0, Math.min(1, Number(value) || 0));
         },
 
+        overlayImageFrameRect(fromEl) {
+            const stage = fromEl?.closest?.(
+                '[data-text-overlay-stage], [data-priced-stamp-stage]',
+            );
+            const frame = stage?.querySelector?.('[data-overlay-image-frame]')
+                ?? stage?.querySelector?.('img')
+                ?? stage;
+
+            return frame?.getBoundingClientRect?.() ?? null;
+        },
+
         onStageImageLoad(event) {
             const image = event?.target;
 
@@ -2590,25 +2614,24 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
-            const stage = event.currentTarget?.closest?.('[data-priced-stamp-stage]');
+            const rect = this.overlayImageFrameRect(event.currentTarget);
 
-            if (! stage) {
+            if (! rect) {
                 return;
             }
 
-            const rect = stage.getBoundingClientRect();
             const startClientX = event.clientX;
             const startClientY = event.clientY;
             const startX = this.clamp01(this.stampX);
             const startY = this.clamp01(this.stampY);
-            const stageWidth = Math.max(1, rect.width);
-            const stageHeight = Math.max(1, rect.height);
+            const frameWidth = Math.max(1, rect.width);
+            const frameHeight = Math.max(1, rect.height);
 
             if (! this.beginOverlayGesture(event, {
                 kind: 'stamp-drag',
                 onMove: (moveEvent) => {
-                    const dx = (moveEvent.clientX - startClientX) / stageWidth;
-                    const dy = (moveEvent.clientY - startClientY) / stageHeight;
+                    const dx = (moveEvent.clientX - startClientX) / frameWidth;
+                    const dy = (moveEvent.clientY - startClientY) / frameHeight;
                     this.stampX = this.clamp01(startX + dx);
                     this.stampY = this.clamp01(startY + dy);
                 },
@@ -2627,23 +2650,24 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
-            const stage = event.currentTarget?.closest?.('[data-priced-stamp-stage]');
+            const rect = this.overlayImageFrameRect(event.currentTarget);
 
-            if (! stage) {
+            if (! rect) {
                 return;
             }
 
-            const rect = stage.getBoundingClientRect();
             const startClientX = event.clientX;
             const startClientY = event.clientY;
             const startX = this.clamp01(this.logoX);
             const startY = this.clamp01(this.logoY);
+            const frameWidth = Math.max(1, rect.width);
+            const frameHeight = Math.max(1, rect.height);
 
             if (! this.beginOverlayGesture(event, {
                 kind: 'logo-drag',
                 onMove: (moveEvent) => {
-                    const dx = (moveEvent.clientX - startClientX) / Math.max(1, rect.width);
-                    const dy = (moveEvent.clientY - startClientY) / Math.max(1, rect.height);
+                    const dx = (moveEvent.clientX - startClientX) / frameWidth;
+                    const dy = (moveEvent.clientY - startClientY) / frameHeight;
                     this.logoX = this.clamp01(startX + dx);
                     this.logoY = this.clamp01(startY + dy);
                 },

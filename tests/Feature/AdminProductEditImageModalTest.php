@@ -143,6 +143,7 @@ class AdminProductEditImageModalTest extends TestCase
             ->assertSeeHtml('startOverlayLogoDrag')
             ->assertSeeHtml('startOverlayLogoResize')
             ->assertSeeHtml('data-text-overlay-stage')
+            ->assertSeeHtml('data-overlay-image-frame')
             ->assertSeeHtml('min="12" max="200"')
             ->assertDontSeeHtml('name="overlay-text-position"')
             ->assertDontSeeHtml('name="overlay-logo-position"');
@@ -174,6 +175,13 @@ class AdminProductEditImageModalTest extends TestCase
         $this->assertStringContainsString('overlayGestureActive', $source);
         $this->assertStringContainsString("pointerType === 'touch'", $source);
         $this->assertStringContainsString('pricedImageStampEditor', $source);
+        $this->assertStringContainsString('overlayImageFrameRect', $source);
+        $this->assertStringContainsString("querySelector?.('[data-overlay-image-frame]')", $source);
+        $this->assertStringContainsString('this.overlayImageFrameRect(event.currentTarget)', $source);
+        $this->assertStringNotContainsString(
+            "closest?.('[data-text-overlay-stage]');\n\n            if (! stage) {\n                return;\n            }\n\n            const rect = stage.getBoundingClientRect();",
+            $source,
+        );
     }
 
     #[Test]
@@ -259,6 +267,7 @@ class AdminProductEditImageModalTest extends TestCase
             ->assertSet('showPricedImageModal', true)
             ->assertSeeHtml('pricedImageStampEditor')
             ->assertSeeHtml('data-priced-stamp-stage')
+            ->assertSeeHtml('data-overlay-image-frame')
             ->assertSeeHtml('startDrag($event)')
             ->assertSeeHtml('startResize($event)')
             ->assertSeeHtml("snap('center')")

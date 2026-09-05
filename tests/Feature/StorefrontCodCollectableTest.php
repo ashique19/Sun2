@@ -113,9 +113,8 @@ class StorefrontCodCollectableTest extends TestCase
     }
 
     #[Test]
-    public function stale_zero_total_with_positive_line_bill_yields_collectable_zero(): void
+    public function stale_zero_total_with_positive_line_bill_yields_collectable_from_invoice(): void
     {
-        // Hypothesis A: orders.total/cod/due wiped to 0 while line economics still bill 580.
         $order = $this->placeStorefrontOrder(500);
         $order->forceFill([
             'total' => 0,
@@ -132,28 +131,29 @@ class StorefrontCodCollectableTest extends TestCase
 
         $this->assertSame(580.0, $bill);
         $this->assertSame(0.0, (float) $order->total);
-        $this->assertSame(0.0, $collectable);
+        $this->assertSame(580.0, $collectable);
     }
 
     #[Test]
-    public function payment_sync_with_zero_total_zeros_cod_and_due_caches(): void
+    public function payment_sync_with_zero_total_heals_total_and_restores_cod_due(): void
     {
-        // Hypothesis B: OrderPaymentSync while total=0 overwrites placer-set cod/due.
         $order = $this->placeStorefrontOrder(500);
-        $order->forceFill(['total' => 0])->save();
+        $order->forceFill(['total' => 0, 'cod_amount' => 0, 'due_amount' => 0])->save();
 
         app(OrderPaymentSync::class)->sync($order->fresh());
         $order = $order->fresh();
 
+        $this->assertSame(580.0, (float) $order->total);
         $this->assertSame(0.0, (float) $order->paid_amount);
-        $this->assertSame(0.0, (float) $order->due_amount);
-        $this->assertSame(0.0, (float) $order->cod_amount);
-        $this->assertSame(0.0, $order->collectableAmount());
+        $this->assertSame(580.0, (float) $order->due_amount);
+        $this->assertSame(580.0, (float) $order->cod_amount);
+        $this->assertSame('unpaid', $order->payment_status);
+        $this->assertSame(580.0, $order->collectableAmount());
         $this->assertSame(580.0, $order->moneyTotals()->billToCustomer);
     }
 
     #[Test]
-    public function admin_order_show_surfaces_collectable_mismatch_when_total_stale(): void
+    public function admin_order_show_displays_matching_bill_and_collectable_after_heal(): void
     {
         $admin = User::factory()->create();
         $admin->assignRole('admin');
@@ -166,12 +166,76 @@ class StorefrontCodCollectableTest extends TestCase
             'paid_amount' => 0,
         ])->save();
 
+        app(OrderPaymentSync::class)->sync($order->fresh());
+        $order = $order->fresh();
+
+        $this->assertSame(580.0, (float) $order->total);
+        $this->assertSame(580.0, $order->collectableAmount());
+        $this->assertSame(580.0, $order->moneyTotals()->billToCustomer);
+
         $this->actingAs($admin);
 
-        Livewire::test(AdminOrderShow::class, ['order' => $order->fresh()])
+        Livewire::test(AdminOrderShow::class, ['order' => $order])
             ->assertSee('Bill to customer')
             ->assertSee('Amount to collect')
-            ->assertSeeHtml('&#2547; 580')
-            ->assertSeeHtml('&#2547; 0');
+            ->assertSeeHtml('<span>Bill to customer</span>')
+            ->assertSeeHtml('<span>Amount to collect</span>')
+            ->assertSeeHtml('&#2547; 580');
+    }
+
+    #[Test]
+    public function free_replacement_with_zero_bill_stays_collectable_zero(): void
+    {
+        $order = Order::query()->create([
+            'order_number' => 'FREE-'.uniqid(),
+            'name' => 'Free Replacement',
+            'phone' => '01710000000',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'area' => 'Gulshan',
+            'status' => 'new',
+            'subtotal' => 0,
+            'delivery_charge' => 0,
+            'charge' => 0,
+            'discount' => 0,
+            'total' => 0,
+            'cod_amount' => 0,
+            'due_amount' => 0,
+            'paid_amount' => 0,
+            'payment_status' => 'unpaid',
+            'payment_method' => 'cod',
+            'is_replacement' => true,
+            'placed_at' => now(),
+            'placed_via' => Order::PLACED_VIA_ADMIN,
+        ]);
+
+        $this->assertSame(0.0, $order->reconstructedInvoiceBill());
+        $this->assertSame(0.0, $order->collectableAmount());
+
+        app(OrderPaymentSync::class)->sync($order->fresh());
+        $order->refresh();
+
+        $this->assertSame(0.0, (float) $order->total);
+        $this->assertSame(0.0, (float) $order->cod_amount);
+        $this->assertSame(0.0, (float) $order->due_amount);
+        $this->assertSame(0.0, $order->collectableAmount());
+    }
+
+    #[Test]
+    public function paid_with_stale_zero_total_uses_invoice_minus_paid(): void
+    {
+        $order = $this->placeStorefrontOrder(500);
+        $order->forceFill([
+            'total' => 0,
+            'cod_amount' => 0,
+            'due_amount' => 0,
+            'paid_amount' => 200,
+            'payment_status' => 'partial',
+        ])->save();
+
+        $order = $order->fresh(['items', 'adjustments']);
+
+        $this->assertSame(580.0, $order->reconstructedInvoiceBill());
+        $this->assertSame(380.0, $order->collectableAmount());
     }
 }

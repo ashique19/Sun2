@@ -392,38 +392,6 @@ class AdminOrderShow extends Component
             ->orderBy('name')
             ->get();
 
-        // #region agent log
-        $order = $this->order->relationLoaded('items')
-            ? $this->order
-            : $this->order->load(['items', 'adjustments', 'paymentTransactions', 'courier']);
-        $money = $order->moneyTotals();
-        $collectable = $order->collectableAmount();
-        file_put_contents('/opt/cursor/logs/debug.log', json_encode([
-            'id' => 'log_admin_show_'.uniqid(),
-            'timestamp' => (int) (microtime(true) * 1000),
-            'location' => 'AdminOrderShow.php:render',
-            'message' => 'Admin order show money panel',
-            'hypothesisId' => 'A,B,C,E',
-            'data' => [
-                'order_id' => $order->id,
-                'total' => (float) $order->total,
-                'paid_amount' => (float) ($order->paid_amount ?? 0),
-                'due_amount' => (float) ($order->due_amount ?? 0),
-                'cod_amount' => (float) ($order->cod_amount ?? 0),
-                'payment_status' => $order->payment_status,
-                'status' => $order->status,
-                'placed_via' => $order->placed_via,
-                'billToCustomer' => $money->billToCustomer,
-                'collectable' => $collectable,
-                'bill_vs_total_diverged' => abs($money->billToCustomer - (float) $order->total) >= 0.01,
-                'collectable_mismatch' => abs($collectable - $money->billToCustomer) >= 0.01,
-                'payment_txn_count' => $order->paymentTransactions->count(),
-                'is_replacement' => (bool) $order->is_replacement,
-                'exchange_of_order_id' => $order->exchange_of_order_id,
-            ],
-        ], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND | LOCK_EX);
-        // #endregion
-
         return view('livewire.admin.admin-order-show', [
             'couriers' => Courier::query()->where('is_active', true)->orderBy('name')->get(),
             'apiCouriers' => $apiCouriers,

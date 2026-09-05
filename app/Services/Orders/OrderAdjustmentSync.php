@@ -227,28 +227,6 @@ class OrderAdjustmentSync
         $order->total = $totals->total;
         $order->save();
 
-        // #region agent log
-        if ($totals->total <= 0.009 && ((float) $order->subtotal + (float) $order->delivery_charge) >= 0.01) {
-            file_put_contents('/opt/cursor/logs/debug.log', json_encode([
-                'id' => 'log_adj_zero_total_'.uniqid(),
-                'timestamp' => (int) (microtime(true) * 1000),
-                'location' => 'OrderAdjustmentSync.php:syncOrderScalars',
-                'message' => 'Adjustment sync wrote zero/negative total with positive bill inputs',
-                'hypothesisId' => 'A,B',
-                'data' => [
-                    'order_id' => $order->id,
-                    'subtotal' => (float) $order->subtotal,
-                    'delivery_charge' => (float) $order->delivery_charge,
-                    'charges' => $charges,
-                    'discounts' => $discounts,
-                    'new_total' => $totals->total,
-                    'adjustment_count' => $adjustments->count(),
-                    'adjustment_types' => $adjustments->pluck('type')->all(),
-                ],
-            ], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND | LOCK_EX);
-        }
-        // #endregion
-
         // Log the batch replace summary with before/after order totals
         $this->auditor->log($order, null, array_merge($beforeSnapshot, $this->auditor->orderSnapshotAfter($order), [
             'action' => 'replaced_set',

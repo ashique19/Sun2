@@ -47,26 +47,6 @@ class OrderPaymentRecorder
         if ($reference !== null) {
             $existing = $this->findByMethodAndExternalId($method, $reference);
             if ($existing) {
-                // #region agent log
-                file_put_contents('/opt/cursor/logs/debug.log', json_encode([
-                    'id' => 'log_payrec_idem_'.uniqid(),
-                    'timestamp' => (int) (microtime(true) * 1000),
-                    'location' => 'OrderPaymentRecorder.php:record:idempotentHit',
-                    'message' => 'PaymentRecorder found existing external_id',
-                    'hypothesisId' => 'C,D',
-                    'data' => [
-                        'target_order_id' => $order->id,
-                        'existing_txn_id' => $existing->id,
-                        'existing_order_id' => $existing->order_id,
-                        'method' => $method,
-                        'amount_requested' => round($amount, 2),
-                        'existing_amount' => (float) $existing->amount,
-                        'kind' => $kind,
-                        'reference' => $reference,
-                        'order_id_mismatch' => (int) $existing->order_id !== (int) $order->id,
-                    ],
-                ], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND | LOCK_EX);
-                // #endregion
                 $order->load('paymentTransactions');
                 $this->paymentSync->sync($order);
 
@@ -109,27 +89,6 @@ class OrderPaymentRecorder
         // Reload transactions relation so sync sees the new row
         $order->load('paymentTransactions');
         $this->paymentSync->sync($order);
-
-        // #region agent log
-        file_put_contents('/opt/cursor/logs/debug.log', json_encode([
-            'id' => 'log_payrec_new_'.uniqid(),
-            'timestamp' => (int) (microtime(true) * 1000),
-            'location' => 'OrderPaymentRecorder.php:record:created',
-            'message' => 'PaymentRecorder created transaction',
-            'hypothesisId' => 'C,D',
-            'data' => [
-                'order_id' => $order->id,
-                'txn_id' => $transaction->id,
-                'method' => $method,
-                'amount' => round($amount, 2),
-                'kind' => $kind,
-                'reference' => $reference,
-                'order_total' => (float) $order->total,
-                'order_paid_after_sync' => (float) ($order->fresh()->paid_amount ?? 0),
-                'order_due_after_sync' => (float) ($order->fresh()->due_amount ?? 0),
-            ],
-        ], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND | LOCK_EX);
-        // #endregion
 
         return $transaction;
     }

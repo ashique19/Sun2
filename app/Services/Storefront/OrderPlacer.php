@@ -63,6 +63,29 @@ class OrderPlacer
                 'placed_at' => now(),
             ]);
 
+            // #region agent log
+            file_put_contents('/opt/cursor/logs/debug.log', json_encode([
+                'id' => 'log_placer_create_'.uniqid(),
+                'timestamp' => (int) (microtime(true) * 1000),
+                'location' => 'OrderPlacer.php:place:afterCreate',
+                'message' => 'Storefront order created (pre adjustments/payment sync)',
+                'hypothesisId' => 'A,D',
+                'data' => [
+                    'order_id' => $order->id,
+                    'pricing_total' => $pricing->total,
+                    'pricing_subtotal' => $pricing->subtotal,
+                    'pricing_delivery' => $pricing->deliveryCharge,
+                    'pricing_discount' => $pricing->discount,
+                    'adjustment_line_count' => count($pricing->adjustmentLines),
+                    'total' => (float) $order->total,
+                    'paid_amount' => (float) ($order->paid_amount ?? 0),
+                    'due_amount' => (float) $order->due_amount,
+                    'cod_amount' => (float) $order->cod_amount,
+                    'payment_status' => $order->payment_status,
+                ],
+            ], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND | LOCK_EX);
+            // #endregion
+
             $order->update(['order_number' => (string) $order->id]);
 
             app(OrderStatusService::class)->recordPlacement($order);
@@ -116,6 +139,33 @@ class OrderPlacer
             session(['checkout.last_order_id' => $order->id]);
 
             $order = $order->fresh(['items', 'adjustments', 'paymentTransactions']);
+
+            // #region agent log
+            $bill = $order->moneyTotals()->billToCustomer;
+            $collectable = $order->collectableAmount();
+            file_put_contents('/opt/cursor/logs/debug.log', json_encode([
+                'id' => 'log_placer_return_'.uniqid(),
+                'timestamp' => (int) (microtime(true) * 1000),
+                'location' => 'OrderPlacer.php:place:beforeReturn',
+                'message' => 'Storefront order ready to return',
+                'hypothesisId' => 'A,B,C,D',
+                'data' => [
+                    'order_id' => $order->id,
+                    'total' => (float) $order->total,
+                    'paid_amount' => (float) ($order->paid_amount ?? 0),
+                    'due_amount' => (float) $order->due_amount,
+                    'cod_amount' => (float) $order->cod_amount,
+                    'payment_status' => $order->payment_status,
+                    'billToCustomer' => $bill,
+                    'collectable' => $collectable,
+                    'bill_vs_total_diverged' => abs($bill - (float) $order->total) >= 0.01,
+                    'collectable_mismatch' => abs($collectable - $bill) >= 0.01,
+                    'payment_txn_count' => $order->paymentTransactions->count(),
+                    'item_count' => $order->items->count(),
+                    'adjustment_count' => $order->adjustments->count(),
+                ],
+            ], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND | LOCK_EX);
+            // #endregion
 
             if ($accountUser !== null && auth()->guest()) {
                 app(GuestCheckoutAccountService::class)->login($accountUser);

@@ -23,6 +23,14 @@ class OrderPaymentSync
 {
     public function sync(Order $order): void
     {
+        $before = [
+            'total' => round((float) $order->total, 2),
+            'paid_amount' => round((float) ($order->paid_amount ?? 0), 2),
+            'due_amount' => round((float) ($order->due_amount ?? 0), 2),
+            'cod_amount' => round((float) ($order->cod_amount ?? 0), 2),
+            'payment_status' => $order->payment_status,
+        ];
+
         $transactions = $order->paymentTransactions()
             ->whereIn('status', PaymentTransaction::SUCCESSFUL_STATUSES)
             ->get();
@@ -63,6 +71,40 @@ class OrderPaymentSync
         }
 
         $order->save();
+
+        // #region agent log
+        file_put_contents('/opt/cursor/logs/debug.log', json_encode([
+            'id' => 'log_paysync_'.uniqid(),
+            'timestamp' => (int) (microtime(true) * 1000),
+            'location' => 'OrderPaymentSync.php:sync',
+            'message' => 'OrderPaymentSync completed',
+            'hypothesisId' => 'B,C,D',
+            'data' => [
+                'order_id' => $order->id,
+                'before' => $before,
+                'after' => [
+                    'total' => $total,
+                    'paid_amount' => $paidAmount,
+                    'due_amount' => $dueAmount,
+                    'cod_amount' => $codAmount,
+                    'payment_status' => $paymentStatus,
+                    'collected_amount' => $collectedAmount,
+                    'payment_method' => $order->payment_method,
+                ],
+                'successful_txn_count' => $transactions->count(),
+                'successful_txn_amounts' => $transactions->map(fn ($t) => [
+                    'id' => $t->id,
+                    'method' => $t->method,
+                    'amount' => (float) $t->amount,
+                    'kind' => $t->kind,
+                    'status' => $t->status,
+                    'external_id' => $t->external_id,
+                ])->values()->all(),
+                'zeroed_cod_due_while_total_positive' => $total > 0 && $codAmount <= 0 && $dueAmount <= 0,
+                'zeroed_all_from_zero_total' => $total <= 0 && $codAmount <= 0 && $dueAmount <= 0,
+            ],
+        ], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND | LOCK_EX);
+        // #endregion
     }
 
     /**

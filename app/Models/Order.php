@@ -511,20 +511,73 @@ class Order extends Model
     {
         $total = round((float) $this->total, 2);
         $paid = round((float) ($this->paid_amount ?? 0), 2);
+        $cod = round((float) ($this->cod_amount ?? 0), 2);
+        $due = round((float) ($this->due_amount ?? 0), 2);
+        $result = 0.0;
+        $branch = 'zero_fallback';
 
         if ($paid > 0) {
-            return round(max(0.0, $total - $paid), 2);
-        }
-
-        foreach ([$this->cod_amount, $this->due_amount, $this->total] as $amount) {
-            $value = round((float) $amount, 2);
-
-            if ($value > 0) {
-                return $value;
+            $result = round(max(0.0, $total - $paid), 2);
+            $branch = 'paid_residual';
+        } else {
+            foreach ([$cod, $due, $total] as $idx => $value) {
+                if ($value > 0) {
+                    $result = $value;
+                    $branch = ['cod_amount', 'due_amount', 'total'][$idx];
+                    break;
+                }
             }
         }
 
-        return 0.0;
+        // #region agent log
+        $txnCount = null;
+        try {
+            $txnCount = $this->relationLoaded('paymentTransactions')
+                ? $this->paymentTransactions->count()
+                : $this->paymentTransactions()->count();
+        } catch (\Throwable) {
+            $txnCount = -1;
+        }
+        $bill = null;
+        try {
+            // Avoid recursion via moneyTotals()->collectableAmount: compute bill from scalars only.
+            $charges = (float) ($this->charge ?? 0);
+            $discounts = (float) ($this->discount ?? 0);
+            if ($this->relationLoaded('adjustments') && $this->adjustments->isNotEmpty()) {
+                $charges = (float) $this->adjustments->where('type', 'charge')->sum('amount');
+                $discounts = (float) $this->adjustments->whereIn('type', ['discount', 'coupon'])->sum('amount');
+            }
+            $bill = round(max(0.0, (float) $this->subtotal + (float) $this->delivery_charge + $charges - $discounts), 2);
+        } catch (\Throwable) {
+            $bill = -1.0;
+        }
+        file_put_contents('/opt/cursor/logs/debug.log', json_encode([
+            'id' => 'log_collectable_'.uniqid(),
+            'timestamp' => (int) (microtime(true) * 1000),
+            'location' => 'Order.php:collectableAmount',
+            'message' => 'collectableAmount evaluated',
+            'hypothesisId' => 'A,B,C',
+            'data' => [
+                'order_id' => $this->id,
+                'total' => $total,
+                'paid_amount' => $paid,
+                'due_amount' => $due,
+                'cod_amount' => $cod,
+                'payment_status' => $this->payment_status,
+                'status' => $this->status,
+                'placed_via' => $this->placed_via,
+                'subtotal' => (float) $this->subtotal,
+                'delivery_charge' => (float) $this->delivery_charge,
+                'billApprox' => $bill,
+                'bill_vs_total_diverged' => $bill !== null && $bill >= 0 && abs($bill - $total) >= 0.01,
+                'collectable' => $result,
+                'branch' => $branch,
+                'payment_txn_count' => $txnCount,
+            ],
+        ], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND | LOCK_EX);
+        // #endregion
+
+        return $result;
     }
 
     public function scopeMatchingPhone(Builder $query, string $phone): Builder

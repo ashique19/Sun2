@@ -499,11 +499,14 @@ class Order extends Model
      * Amount the courier should collect (cash on delivery).
      *
      * When any successful payment is on the order (advance / partial / settlement
-     * caches on paid_amount), residual is always total − paid. Never fall back to
-     * the full bill after advances — that previously sent the initial amount to
-     * couriers even when due/cod were correctly zeroed by OrderPaymentSync.
+     * caches on paid_amount), residual is total − paid when total is healthy.
+     * If total is stale at 0 while the reconstructed invoice bill is positive,
+     * residual is invoiceBill − paid so advances still leave the correct COD.
      *
-     * Legacy unpaid rows with empty cod/due still fall back to total (print labels).
+     * Unpaid rows prefer cod → due → total; when all are ≤0, fall back to the
+     * reconstructed invoice bill (same inputs as billToCustomer). Intentional
+     * free/replacement orders (bill also 0) stay at collectable 0.
+     *
      * Compare as floats — Laravel's decimal cast yields "0.00", which is truthy
      * for ?: and would incorrectly fall through.
      */
@@ -511,20 +514,52 @@ class Order extends Model
     {
         $total = round((float) $this->total, 2);
         $paid = round((float) ($this->paid_amount ?? 0), 2);
+        $cod = round((float) ($this->cod_amount ?? 0), 2);
+        $due = round((float) ($this->due_amount ?? 0), 2);
 
         if ($paid > 0) {
-            return round(max(0.0, $total - $paid), 2);
+            if ($total > 0) {
+                return round(max(0.0, $total - $paid), 2);
+            }
+
+            $invoiceBill = $this->reconstructedInvoiceBill();
+            if ($invoiceBill > 0) {
+                return round(max(0.0, $invoiceBill - $paid), 2);
+            }
+
+            return 0.0;
         }
 
-        foreach ([$this->cod_amount, $this->due_amount, $this->total] as $amount) {
-            $value = round((float) $amount, 2);
-
+        foreach ([$cod, $due, $total] as $value) {
             if ($value > 0) {
                 return $value;
             }
         }
 
-        return 0.0;
+        return $this->reconstructedInvoiceBill();
+    }
+
+    /**
+     * Customer invoice bill from merchandise scalars (same inputs as billToCustomer).
+     *
+     * Does not call moneyTotals()/collectableAmount() — safe to use from either.
+     */
+    public function reconstructedInvoiceBill(): float
+    {
+        $this->loadMissing('adjustments');
+
+        $adjustments = $this->adjustments->isNotEmpty()
+            ? $this->adjustments
+            : collect([
+                ['type' => 'charge', 'amount' => (float) $this->charge],
+                ['type' => 'discount', 'amount' => (float) $this->discount],
+            ])->filter(fn (array $line) => $line['amount'] > 0)->values();
+
+        return app(OrderTotalCalculator::class)->customerTotal(
+            (float) $this->subtotal,
+            (float) $this->delivery_charge,
+            $adjustments,
+        );
     }
 
     public function scopeMatchingPhone(Builder $query, string $phone): Builder

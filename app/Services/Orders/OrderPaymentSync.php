@@ -18,6 +18,9 @@ use Illuminate\Database\Eloquent\Collection;
  * 3. payment_status = unpaid | partial | paid
  * 4. cod_amount   = due_amount (residual intended for courier collection)
  * 5. payment_method (compat summary) = primary method or 'mixed'
+ *
+ * When orders.total is stale at ~0 but the reconstructed invoice bill is positive,
+ * total is healed to that bill before deriving due/cod (unpaid COD merchandise).
  */
 class OrderPaymentSync
 {
@@ -38,6 +41,16 @@ class OrderPaymentSync
         );
 
         $total = round((float) $order->total, 2);
+
+        // Heal stale zero total from merchandise bill before deriving due/cod.
+        if ($total <= 0) {
+            $invoiceBill = $order->reconstructedInvoiceBill();
+            if ($invoiceBill > 0) {
+                $order->total = $invoiceBill;
+                $total = $invoiceBill;
+            }
+        }
+
         $dueAmount = round(max(0.0, $total - $paidAmount), 2);
 
         $paymentStatus = match (true) {

@@ -6,6 +6,7 @@ use App\Livewire\Concerns\ManagesProductImagePreview;
 use App\Models\Courier;
 use App\Models\Order;
 use App\Models\PaymentMethod;
+use App\Services\Admin\OrderDeliveryReturnService;
 use App\Services\Admin\OrderDispatchService;
 use App\Services\Admin\OrderStatusService;
 use App\Services\Channels\ChannelOrderDraftService;
@@ -55,6 +56,23 @@ class AdminOrderShow extends Component
     public bool $showConversation = false;
 
     public string $replyText = '';
+
+    public bool $showPartialModal = false;
+
+    /** @var array<int|string, int|string> */
+    public array $partialReturns = [];
+
+    public string $partialCollectedTk = '0';
+
+    public string $partialExpectedCod = '0';
+
+    public string $partialCourierCharge = '0';
+
+    /** dispatched = rider partial; delivered = post-delivery H/R. */
+    public string $partialMode = 'dispatched';
+
+    /** @var list<array{id:int,name:string,quantity:int,image:?string}> */
+    public array $partialItems = [];
 
     public function mount(Order $order, CourierApiRegistry $courierRegistry, OrderCourierChargeSync $courierChargeSync): void
     {
@@ -382,6 +400,251 @@ class AdminOrderShow extends Component
         $this->courierChargeOverride = (string) (int) round((float) $this->order->courier_charge);
         $this->courierChargeReason = '';
         $this->message = 'Courier charge confirmed.';
+    }
+
+    public function markDelivered(OrderDeliveryReturnService $settlement): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        if ($this->order->status !== 'dispatched') {
+            $this->error = 'Only dispatched orders can be marked delivered.';
+
+            return;
+        }
+
+        $settlement->markDelivered($this->order);
+        $this->refreshOrderAfterSettlement('Marked delivered.');
+    }
+
+    public function cancelAndReturn(OrderDeliveryReturnService $settlement): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        if ($this->order->status !== 'dispatched') {
+            $this->error = 'Only dispatched orders can be cancelled and returned.';
+
+            return;
+        }
+
+        $settlement->cancelAndReturn($this->order);
+        $this->refreshOrderAfterSettlement('Cancelled and returned. Net is courier + packaging loss unless delivery cash was collected.');
+    }
+
+    public function markReturnReceived(OrderDeliveryReturnService $settlement): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        if (! $this->order->has_return) {
+            $this->error = 'This order is not flagged for return.';
+
+            return;
+        }
+
+        $settlement->markReturnReceived($this->order);
+        $this->refreshOrderAfterSettlement('Return received. Stock restored where return qty was set.');
+    }
+
+    public function undoReturnReceived(OrderDeliveryReturnService $settlement): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        $settlement->undoReturnReceived($this->order);
+        $this->refreshOrderAfterSettlement('Return received undone.');
+    }
+
+    public function toggleHasReturn(OrderDeliveryReturnService $settlement): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        $this->order->refresh();
+
+        if ($this->order->status === 'delivered' && ! $this->order->has_return) {
+            $this->openDeliveredHasReturn();
+
+            return;
+        }
+
+        if (! $this->order->has_return) {
+            $this->error = 'H/R can only be toggled on return-pending or delivered orders.';
+
+            return;
+        }
+
+        $next = ! (bool) $this->order->has_return;
+        $settlement->setHasReturn($this->order, $next);
+        $this->refreshOrderAfterSettlement($next ? 'Flagged has return.' : 'Cleared has return.');
+    }
+
+    public function openPartialReturn(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        $order = $this->order->fresh(['items']);
+
+        if (! $order || $order->status !== 'dispatched') {
+            $this->error = 'Partial return is only available for dispatched orders.';
+
+            return;
+        }
+
+        $this->partialExpectedCod = (string) (int) round($order->collectableAmount());
+        $this->partialCourierCharge = (string) (int) round((float) ($order->courier_charge ?? 0));
+        $this->partialCollectedTk = $this->partialExpectedCod;
+        $this->partialReturns = [];
+        $this->partialItems = [];
+
+        foreach ($order->items as $item) {
+            $this->partialItems[] = [
+                'id' => (int) $item->id,
+                'name' => (string) $item->name,
+                'quantity' => (int) $item->quantity,
+                'image' => $item->imageUrl(),
+            ];
+            $this->partialReturns[$item->id] = 0;
+        }
+
+        $this->partialMode = 'dispatched';
+        $this->showPartialModal = true;
+        $this->resetErrorBag();
+    }
+
+    public function openDeliveredHasReturn(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $order = $this->order->fresh(['items']);
+
+        if (! $order || $order->status !== 'delivered' || $order->has_return) {
+            return;
+        }
+
+        $this->partialExpectedCod = '0';
+        $this->partialCourierCharge = '0';
+        $this->partialCollectedTk = '0';
+        $this->partialMode = 'delivered';
+        $this->partialReturns = [];
+        $this->partialItems = [];
+
+        foreach ($order->items as $item) {
+            $this->partialItems[] = [
+                'id' => (int) $item->id,
+                'name' => (string) $item->name,
+                'quantity' => (int) $item->quantity,
+                'image' => $item->imageUrl(),
+            ];
+            $this->partialReturns[$item->id] = (int) $item->returned_quantity;
+        }
+
+        $this->showPartialModal = true;
+        $this->resetErrorBag();
+    }
+
+    public function closePartialModal(): void
+    {
+        $this->showPartialModal = false;
+        $this->partialReturns = [];
+        $this->partialItems = [];
+        $this->partialCollectedTk = '0';
+        $this->partialExpectedCod = '0';
+        $this->partialCourierCharge = '0';
+        $this->partialMode = 'dispatched';
+        $this->resetErrorBag();
+    }
+
+    public function submitPartialReturn(OrderDeliveryReturnService $settlement): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        if ($this->partialMode === 'delivered') {
+            $this->submitDeliveredHasReturn($settlement);
+
+            return;
+        }
+
+        $this->validate([
+            'partialCollectedTk' => ['required', 'numeric', 'min:0'],
+            'partialReturns' => ['required', 'array'],
+            'partialReturns.*' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $order = $this->order->fresh();
+
+        if (! $order || $order->status !== 'dispatched') {
+            $this->closePartialModal();
+
+            return;
+        }
+
+        $returned = [];
+        foreach ($this->partialReturns as $itemId => $qty) {
+            $returned[(int) $itemId] = (int) $qty;
+        }
+
+        $settlement->partialReturn($order, $returned, (float) $this->partialCollectedTk);
+        $this->closePartialModal();
+        $this->refreshOrderAfterSettlement('Partial return saved. Kept items stay delivered; all returned becomes cancelled.');
+    }
+
+    private function submitDeliveredHasReturn(OrderDeliveryReturnService $settlement): void
+    {
+        $this->validate([
+            'partialReturns' => ['required', 'array'],
+            'partialReturns.*' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $order = $this->order->fresh();
+
+        if (! $order || $order->status !== 'delivered' || $order->has_return) {
+            $this->closePartialModal();
+
+            return;
+        }
+
+        $returned = [];
+        foreach ($this->partialReturns as $itemId => $qty) {
+            $returned[(int) $itemId] = (int) $qty;
+        }
+
+        $settlement->flagDeliveredReturn($order, $returned);
+        $this->closePartialModal();
+        $this->refreshOrderAfterSettlement('Return flagged (H/R). Order stays delivered until return is received.');
+    }
+
+    private function refreshOrderAfterSettlement(string $message): void
+    {
+        $this->order->refresh()->load([
+            'items.product:id,slug,name',
+            'items.product.images:id,product_id,path,is_primary,sort_order',
+            'adjustments',
+            'adjustmentLogs.actor',
+            'paymentTransactions.receivedBy',
+            'courier',
+            'statusHistory.changedBy',
+            'courierLogs.courier',
+        ]);
+        $this->status = (string) $this->order->status;
+        $this->message = $message;
     }
 
     public function render(CourierApiRegistry $courierRegistry)

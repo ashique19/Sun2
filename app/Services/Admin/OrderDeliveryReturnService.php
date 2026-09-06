@@ -196,7 +196,7 @@ class OrderDeliveryReturnService
             // Write off returned merchandise (and delivery when nothing was kept) so the
             // bill matches what the rider should have collected — otherwise residual due
             // looks like a wrong "recorded" COD (e.g. 2320 − 1220 → 1100).
-            $this->applyReturnWriteOff($order->fresh(['items', 'adjustments']), $allReturned, $actor);
+            $this->applyReturnWriteOff($order->fresh(['items', 'adjustments']), $allReturned, $actor, $collectedTk);
 
             // $collectedTk is what the rider collected from the customer (gross).
             // Do not subtract courier_charge here — that fee is applied in receivable math only.
@@ -453,7 +453,7 @@ class OrderDeliveryReturnService
     /**
      * Reduce the customer bill for returned merchandise (and delivery when nothing was kept).
      */
-    private function applyReturnWriteOff(Order $order, bool $allReturned, ?User $actor): void
+    private function applyReturnWriteOff(Order $order, bool $allReturned, ?User $actor, float $collectedTk = 0.0): void
     {
         $returnedMerchandise = 0.0;
 
@@ -464,7 +464,10 @@ class OrderDeliveryReturnService
         $writeOff = $returnedMerchandise;
 
         if ($allReturned) {
-            $writeOff += max(0.0, (float) $order->delivery_charge);
+            $delivery = max(0.0, (float) $order->delivery_charge);
+            // Keep delivery on the bill to the extent the rider collected cash (usually delivery charge).
+            // Writing off the full delivery when cash was collected zeros due and clamps collection to 0.
+            $writeOff += max(0.0, $delivery - max(0.0, $collectedTk));
         }
 
         if ($writeOff <= 0) {

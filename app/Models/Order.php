@@ -364,9 +364,9 @@ class Order extends Model
     }
 
     /**
-     * Net revenue = subtotal - COGS + charges - discounts + delivery_charge - courier_charge - packaging_cost - COD charge.
-     * Requires items loaded. Prefer adjustment lines; fall back to order scalars when
-     * adjustments are empty (legacy rows / pre-backfill) so admin never shows wrong 0.
+     * Net revenue for admin economics.
+     * Delivered/open: merchandise formula (subtotal − COGS ± adjustments + delivery − courier − packaging − COD %).
+     * Cancelled/returned: logistics only (cash collected − courier − packaging − COD %).
      */
     public function netRevenue(): float
     {
@@ -425,7 +425,7 @@ class Order extends Model
             $expectedCod = $this->collectableAmount();
         }
 
-        return app(OrderTotalCalculator::class)->calculate(
+        $totals = app(OrderTotalCalculator::class)->calculate(
             subtotal: (float) $this->subtotal,
             deliveryCharge: (float) $this->delivery_charge,
             courierCharge: (float) ($this->courier_charge ?? 0),
@@ -437,6 +437,38 @@ class Order extends Model
             packagingCost: (float) ($this->packaging_cost ?? 0),
             expectedCodRemittance: $expectedCod,
         );
+
+        // Cancelled/returned net is logistics-only: cash collected − courier − packaging − COD %.
+        // Merchandise write-offs must not invent revenue/loss after dispatch failure.
+        if (in_array($this->status, ['cancelled', 'returned'], true)) {
+            $logisticsNet = round(
+                $totals->remittanceBase
+                - $totals->courierCharge
+                - $totals->packagingCost
+                - $totals->codCharge,
+                2
+            );
+
+            return new OrderTotals(
+                subtotal: $totals->subtotal,
+                deliveryCharge: $totals->deliveryCharge,
+                courierCharge: $totals->courierCharge,
+                packagingCost: $totals->packagingCost,
+                codCharge: $totals->codCharge,
+                charges: $totals->charges,
+                discounts: $totals->discounts,
+                total: $totals->total,
+                cogs: $totals->cogs,
+                netRevenue: $logisticsNet,
+                deliveryMargin: $totals->deliveryMargin,
+                billToCustomer: $totals->billToCustomer,
+                remittanceBase: $totals->remittanceBase,
+                courierReceivable: $totals->courierReceivable,
+                grossProfit: $totals->grossProfit,
+            );
+        }
+
+        return $totals;
     }
 
     public function isDispatchable(): bool

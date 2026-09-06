@@ -42,7 +42,8 @@ readonly class OrderTotals
 
         /**
          * Net revenue (admin business metric).
-         * netRevenue = subtotal - cogs + charges - discounts + deliveryCharge - courierCharge - packagingCost - codCharge
+         * Default: subtotal - cogs + charges - discounts + deliveryCharge - courierCharge - packagingCost - codCharge
+         * Cancelled/returned: remittanceBase - courierCharge - packagingCost - codCharge (logistics only).
          * May be negative — do NOT clamp.
          *
          * Equivalent to grossProfit when remittance is the customer bill (typical unpaid COD).

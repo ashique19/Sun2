@@ -58,6 +58,58 @@
                         <path fill="#6B6459" d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
                     </svg>
                 </a>
+                @if ($order->status === 'dispatched')
+                    <button type="button"
+                        wire:click="markDelivered"
+                        wire:confirm="Mark order #{{ $order->order_number }} as delivered?"
+                        class="inline-flex h-9 items-center rounded-lg border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 sm:px-4">
+                        Delivered
+                    </button>
+                    <button type="button"
+                        wire:click="openPartialReturn"
+                        class="inline-flex h-9 items-center rounded-lg border border-[#E0D6C2] bg-white px-3 text-sm font-semibold text-[#6B6459] hover:bg-[#FAF6EF] sm:px-4">
+                        Partial
+                    </button>
+                    <button type="button"
+                        wire:click="cancelAndReturn"
+                        wire:confirm="Cancel &amp; return order #{{ $order->order_number }} with no delivery charge collected?"
+                        class="inline-flex h-9 items-center rounded-lg border border-rose-200 bg-white px-3 text-sm font-semibold text-rose-700 hover:bg-rose-50 sm:px-4">
+                        Cancel/Return
+                    </button>
+                @endif
+                @if ($order->status === 'delivered' && ! $order->has_return)
+                    <button type="button"
+                        wire:click="toggleHasReturn"
+                        class="inline-flex h-9 items-center rounded-lg border border-[#E0D6C2] bg-white px-3 text-sm font-semibold text-[#6B6459] hover:bg-[#FAF6EF] sm:px-4"
+                        title="Flag returned units (moves to Return Pending)">
+                        H/R
+                    </button>
+                @endif
+                @if ($order->has_return)
+                    @php($hasPendingReturn = $order->items->contains(fn ($item) => (int) $item->returned_quantity > 0 && ! $item->return_received))
+                    @php($hasReceivedReturn = $order->items->contains(fn ($item) => (bool) $item->return_received))
+                    <button type="button"
+                        wire:click="markReturnReceived"
+                        @disabled(! $hasPendingReturn)
+                        class="inline-flex h-9 items-center rounded-lg border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 sm:px-4">
+                        Received
+                    </button>
+                    <button type="button"
+                        wire:click="undoReturnReceived"
+                        @disabled(! $hasReceivedReturn)
+                        class="inline-flex h-9 items-center rounded-lg border border-amber-200 bg-white px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-40 sm:px-4">
+                        Undo
+                    </button>
+                    <button type="button"
+                        wire:click="toggleHasReturn"
+                        @class([
+                            'inline-flex h-9 items-center rounded-lg border px-3 text-sm font-semibold sm:px-4',
+                            'border-[#C9A227] bg-[#C9A227] text-white' => $order->has_return,
+                            'border-[#E0D6C2] bg-white text-[#6B6459] hover:bg-[#FAF6EF]' => ! $order->has_return,
+                        ])>
+                        H/R
+                    </button>
+                @endif
                 <a href="{{ route('admin.orders.edit', $order) }}"
                     class="inline-flex h-9 items-center rounded-lg border border-[#E0D6C2] bg-white px-3 text-sm text-[#6B6459] hover:bg-[#FAF6EF] sm:px-4">
                     Edit order
@@ -246,53 +298,137 @@
 
                     @php($lastCourierChargeLog = $order->adjustmentLogs->firstWhere('field', 'courier_charge'))
 
+                    @php($isCancelReturn = in_array($order->status, ['cancelled', 'returned'], true))
+                    @php($hasPartialReturns = $order->items->contains(fn ($item) => (int) ($item->returned_quantity ?? 0) > 0))
+                    @php($keptMerchandise = max(0.0, (float) $money->subtotal - (float) $money->discounts + (float) $money->charges))
+
                     <div class="space-y-2 border-t border-[#E7DFCF] pt-3">
-                        <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Net revenue</p>
-                        <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Revenue</span><span class="tabular-nums">&#2547; {{ number_format($money->subtotal, 0) }}</span></div>
-                        @if ($money->cogs > 0)
-                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− COGS</span><span class="tabular-nums">&#2547; {{ number_format($money->cogs, 0) }}</span></div>
-                        @endif
-                        @foreach ($order->adjustments->where('type', 'charge') as $adj)
-                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ {{ $adj->label }}</span><span class="tabular-nums">&#2547; {{ number_format($adj->amount, 0) }}</span></div>
-                        @endforeach
-                        @if ($order->adjustments->isEmpty() && (float) $order->charge > 0)
-                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ Charges</span><span class="tabular-nums">&#2547; {{ number_format($order->charge, 0) }}</span></div>
-                        @endif
-                        @foreach ($order->adjustments->whereIn('type', ['discount', 'coupon']) as $adj)
-                            <div class="flex justify-between gap-3 text-emerald-700"><span>− {{ $adj->label }}</span><span class="tabular-nums">&#2547; {{ number_format($adj->amount, 0) }}</span></div>
-                        @endforeach
-                        @if ($order->adjustments->isEmpty() && (float) $order->discount > 0)
-                            <div class="flex justify-between gap-3 text-emerald-700"><span>− Discounts / coupons</span><span class="tabular-nums">&#2547; {{ number_format($order->discount, 0) }}</span></div>
-                        @endif
-                        @if ($money->deliveryCharge > 0)
-                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ Customer delivery</span><span class="tabular-nums">&#2547; {{ number_format($money->deliveryCharge, 0) }}</span></div>
-                        @endif
-                        @if ($money->courierCharge > 0)
+                        @if ($isCancelReturn)
+                            <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">After cancel / return</p>
+                            <p class="text-xs text-[#8C8474]">
+                                Parcel was dispatched then cancelled or fully returned. Net is cash collected (usually delivery only) minus courier and packaging — not merchandise write-offs.
+                            </p>
                             <div class="flex justify-between gap-3">
-                                <span class="text-[#6B6459]">
-                                    − Courier cost
-                                    @if ($lastCourierChargeLog?->phase)
-                                        <span class="text-[11px] font-normal text-[#8C8474]">({{ $lastCourierChargeLog->phase }})</span>
-                                    @endif
-                                </span>
-                                <span class="tabular-nums">&#2547; {{ number_format($money->courierCharge, 0) }}</span>
+                                <span class="text-[#6B6459]">Cash collected</span>
+                                <span class="tabular-nums">&#2547; {{ number_format($money->remittanceBase, 0) }}</span>
                             </div>
-                        @endif
-                        @if ($money->packagingCost > 0)
-                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Packaging</span><span class="tabular-nums">&#2547; {{ number_format($money->packagingCost, 0) }}</span></div>
-                        @endif
-                        @if ($money->codCharge > 0)
-                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− COD charge</span><span class="tabular-nums">&#2547; {{ number_format($money->codCharge, 2) }}</span></div>
-                        @endif
-                        <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 text-base font-semibold">
-                            <span>Net revenue</span>
-                            <span @class(['tabular-nums', 'text-rose-600' => $money->netRevenue < 0])>&#2547; {{ number_format($money->netRevenue, 0) }}</span>
-                        </div>
-                        @if ($money->deliveryCharge > 0 || $money->courierCharge > 0)
-                            <div class="flex justify-between gap-3 text-xs text-[#8C8474]">
-                                <span>Delivery margin</span>
-                                <span @class(['tabular-nums', 'text-rose-600' => $money->deliveryMargin < 0])>&#2547; {{ number_format($money->deliveryMargin, 0) }}</span>
+                            @if ($money->courierCharge > 0)
+                                <div class="flex justify-between gap-3">
+                                    <span class="text-[#6B6459]">
+                                        − Courier cost
+                                        @if ($lastCourierChargeLog?->phase)
+                                            <span class="text-[11px] font-normal text-[#8C8474]">({{ $lastCourierChargeLog->phase }})</span>
+                                        @endif
+                                    </span>
+                                    <span class="tabular-nums">&#2547; {{ number_format($money->courierCharge, 0) }}</span>
+                                </div>
+                            @endif
+                            @if ($money->packagingCost > 0)
+                                <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Packaging</span><span class="tabular-nums">&#2547; {{ number_format($money->packagingCost, 0) }}</span></div>
+                            @endif
+                            @if ($money->codCharge > 0)
+                                <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− COD charge</span><span class="tabular-nums">&#2547; {{ number_format($money->codCharge, 2) }}</span></div>
+                            @endif
+                            <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 text-base font-semibold">
+                                <span>Net</span>
+                                <span @class(['tabular-nums', 'text-rose-600' => $money->netRevenue < 0])>&#2547; {{ number_format($money->netRevenue, 0) }}</span>
                             </div>
+                            @if ((float) ($order->collected_amount ?? 0) <= 0)
+                                <p class="text-xs text-[#8C8474]">No cash collected → net equals −(courier + packaging).</p>
+                            @else
+                                <p class="text-xs text-[#8C8474]">Collected delivery cash − courier − packaging (and COD % if any).</p>
+                            @endif
+                        @elseif ($hasPartialReturns)
+                            <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">After partial delivery</p>
+                            <p class="text-xs text-[#8C8474]">
+                                Some items kept after dispatch; returned lines are written off. Rider collection drives remittance.
+                            </p>
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Original merchandise</span><span class="tabular-nums">&#2547; {{ number_format($money->subtotal, 0) }}</span></div>
+                            @foreach ($order->adjustments->whereIn('type', ['discount', 'coupon']) as $adj)
+                                <div class="flex justify-between gap-3 text-emerald-700"><span>− {{ $adj->label }}</span><span class="tabular-nums">&#2547; {{ number_format($adj->amount, 0) }}</span></div>
+                            @endforeach
+                            @if ($order->adjustments->whereIn('type', ['discount', 'coupon'])->isEmpty() && (float) $order->discount > 0)
+                                <div class="flex justify-between gap-3 text-emerald-700"><span>− Returned / discounts</span><span class="tabular-nums">&#2547; {{ number_format($order->discount, 0) }}</span></div>
+                            @endif
+                            @if ($money->cogs > 0)
+                                <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− COGS (kept)</span><span class="tabular-nums">&#2547; {{ number_format($money->cogs, 0) }}</span></div>
+                            @endif
+                            @foreach ($order->adjustments->where('type', 'charge') as $adj)
+                                <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ {{ $adj->label }}</span><span class="tabular-nums">&#2547; {{ number_format($adj->amount, 0) }}</span></div>
+                            @endforeach
+                            @if ($money->deliveryCharge > 0)
+                                <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ Customer delivery</span><span class="tabular-nums">&#2547; {{ number_format($money->deliveryCharge, 0) }}</span></div>
+                            @endif
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Cash collected</span><span class="tabular-nums">&#2547; {{ number_format($money->remittanceBase, 0) }}</span></div>
+                            @if ($money->courierCharge > 0)
+                                <div class="flex justify-between gap-3">
+                                    <span class="text-[#6B6459]">
+                                        − Courier cost
+                                        @if ($lastCourierChargeLog?->phase)
+                                            <span class="text-[11px] font-normal text-[#8C8474]">({{ $lastCourierChargeLog->phase }})</span>
+                                        @endif
+                                    </span>
+                                    <span class="tabular-nums">&#2547; {{ number_format($money->courierCharge, 0) }}</span>
+                                </div>
+                            @endif
+                            @if ($money->packagingCost > 0)
+                                <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Packaging</span><span class="tabular-nums">&#2547; {{ number_format($money->packagingCost, 0) }}</span></div>
+                            @endif
+                            @if ($money->codCharge > 0)
+                                <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− COD charge</span><span class="tabular-nums">&#2547; {{ number_format($money->codCharge, 2) }}</span></div>
+                            @endif
+                            <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 text-base font-semibold">
+                                <span>Net revenue</span>
+                                <span @class(['tabular-nums', 'text-rose-600' => $money->netRevenue < 0])>&#2547; {{ number_format($money->netRevenue, 0) }}</span>
+                            </div>
+                        @else
+                            <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Net revenue</p>
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Revenue</span><span class="tabular-nums">&#2547; {{ number_format($money->subtotal, 0) }}</span></div>
+                            @if ($money->cogs > 0)
+                                <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− COGS</span><span class="tabular-nums">&#2547; {{ number_format($money->cogs, 0) }}</span></div>
+                            @endif
+                            @foreach ($order->adjustments->where('type', 'charge') as $adj)
+                                <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ {{ $adj->label }}</span><span class="tabular-nums">&#2547; {{ number_format($adj->amount, 0) }}</span></div>
+                            @endforeach
+                            @if ($order->adjustments->isEmpty() && (float) $order->charge > 0)
+                                <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ Charges</span><span class="tabular-nums">&#2547; {{ number_format($order->charge, 0) }}</span></div>
+                            @endif
+                            @foreach ($order->adjustments->whereIn('type', ['discount', 'coupon']) as $adj)
+                                <div class="flex justify-between gap-3 text-emerald-700"><span>− {{ $adj->label }}</span><span class="tabular-nums">&#2547; {{ number_format($adj->amount, 0) }}</span></div>
+                            @endforeach
+                            @if ($order->adjustments->isEmpty() && (float) $order->discount > 0)
+                                <div class="flex justify-between gap-3 text-emerald-700"><span>− Discounts / coupons</span><span class="tabular-nums">&#2547; {{ number_format($order->discount, 0) }}</span></div>
+                            @endif
+                            @if ($money->deliveryCharge > 0)
+                                <div class="flex justify-between gap-3"><span class="text-[#6B6459]">+ Customer delivery</span><span class="tabular-nums">&#2547; {{ number_format($money->deliveryCharge, 0) }}</span></div>
+                            @endif
+                            @if ($money->courierCharge > 0)
+                                <div class="flex justify-between gap-3">
+                                    <span class="text-[#6B6459]">
+                                        − Courier cost
+                                        @if ($lastCourierChargeLog?->phase)
+                                            <span class="text-[11px] font-normal text-[#8C8474]">({{ $lastCourierChargeLog->phase }})</span>
+                                        @endif
+                                    </span>
+                                    <span class="tabular-nums">&#2547; {{ number_format($money->courierCharge, 0) }}</span>
+                                </div>
+                            @endif
+                            @if ($money->packagingCost > 0)
+                                <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Packaging</span><span class="tabular-nums">&#2547; {{ number_format($money->packagingCost, 0) }}</span></div>
+                            @endif
+                            @if ($money->codCharge > 0)
+                                <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− COD charge</span><span class="tabular-nums">&#2547; {{ number_format($money->codCharge, 2) }}</span></div>
+                            @endif
+                            <div class="flex justify-between gap-3 border-t border-[#F0EBE0] pt-2 text-base font-semibold">
+                                <span>Net revenue</span>
+                                <span @class(['tabular-nums', 'text-rose-600' => $money->netRevenue < 0])>&#2547; {{ number_format($money->netRevenue, 0) }}</span>
+                            </div>
+                            @if ($money->deliveryCharge > 0 || $money->courierCharge > 0)
+                                <div class="flex justify-between gap-3 text-xs text-[#8C8474]">
+                                    <span>Delivery margin</span>
+                                    <span @class(['tabular-nums', 'text-rose-600' => $money->deliveryMargin < 0])>&#2547; {{ number_format($money->deliveryMargin, 0) }}</span>
+                                </div>
+                            @endif
                         @endif
                     </div>
 
@@ -662,4 +798,82 @@
             @endunless
         </div>
     </div>
+
+    @unless ($readOnly)
+        @if ($showPartialModal)
+            <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" wire:click.self="closePartialModal">
+                <div class="w-full max-w-lg space-y-4 max-h-[85vh] overflow-y-auto rounded-xl border border-[#EFE7D6] bg-white p-6 shadow-xl" wire:click.stop>
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h2 class="text-lg font-semibold">
+                                {{ $partialMode === 'delivered' ? 'Flag return (H/R)' : 'Partial return' }}
+                            </h2>
+                            <p class="mt-1 text-xs text-[#8C8474]">Order #{{ $order->order_number }}</p>
+                        </div>
+                        <button type="button" wire:click="closePartialModal" class="text-sm text-[#8C8474] hover:text-[#1E1E1E]">Close</button>
+                    </div>
+
+                    <div class="space-y-3">
+                        @forelse ($partialItems as $item)
+                            <div wire:key="show-partial-item-{{ $item['id'] }}" class="flex items-center gap-3 rounded-lg border border-[#EFE7D6] px-3 py-2">
+                                @if ($item['image'])
+                                    <img src="{{ $item['image'] }}" alt="" class="h-10 w-10 rounded object-cover">
+                                @else
+                                    <div class="h-10 w-10 rounded bg-[#FAF6EF]"></div>
+                                @endif
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate text-sm font-medium">{{ $item['name'] }}</p>
+                                    <p class="text-xs text-[#8C8474]">Ordered: {{ $item['quantity'] }}</p>
+                                </div>
+                                <div class="w-24">
+                                    <label class="mb-0.5 block text-[10px] uppercase tracking-wide text-[#8C8474]">Returned</label>
+                                    <input type="number" min="0" max="{{ $item['quantity'] }}"
+                                        wire:model="partialReturns.{{ $item['id'] }}"
+                                        class="w-full rounded-lg border border-[#E0D6C2] px-2 py-1.5 text-sm">
+                                </div>
+                            </div>
+                        @empty
+                            <p class="text-sm text-[#8C8474]">No products on this order.</p>
+                        @endforelse
+                        @error('partialReturns') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
+                        @error('partialReturns.*') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
+                    </div>
+
+                    @if ($partialMode === 'delivered')
+                        <p class="text-xs text-[#8C8474]">
+                            Status stays Delivered. Returned value is written off and the order moves to Return Pending until stock is received.
+                        </p>
+                    @else
+                        <div>
+                            <label class="mb-1 block text-sm font-medium">Collected Tk</label>
+                            <input type="number" min="0" step="1" wire:model="partialCollectedTk"
+                                class="w-full rounded-lg border border-[#E0D6C2] px-4 py-2 text-sm">
+                            @error('partialCollectedTk') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                            <p class="mt-1 text-xs text-[#8C8474]">
+                                Amount the rider collected (gross). Courier fee is not subtracted here.
+                            </p>
+                            <p class="mt-1 text-xs text-[#8C8474]">
+                                Expected COD &#2547;{{ number_format((float) $partialExpectedCod, 0) }}
+                                · Courier charge &#2547;{{ number_format((float) $partialCourierCharge, 0) }}
+                            </p>
+                            <p class="mt-1 text-xs text-[#8C8474]">
+                                All products returned → Cancelled (net = collected − courier − packaging). Some kept → Delivered.
+                            </p>
+                        </div>
+                    @endif
+
+                    <div class="flex flex-wrap gap-3 pt-1">
+                        <button type="button" wire:click="submitPartialReturn"
+                            class="rounded-full bg-[#1E1E1E] px-6 py-2.5 text-sm font-semibold text-white hover:bg-black">
+                            {{ $partialMode === 'delivered' ? 'Flag return' : 'Submit partial' }}
+                        </button>
+                        <button type="button" wire:click="closePartialModal"
+                            class="rounded-full border border-[#E0D6C2] px-6 py-2.5 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF]">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        @endif
+    @endunless
 </div>

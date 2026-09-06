@@ -15,6 +15,7 @@ use App\Services\Storefront\CouponService;
 use App\Services\Storefront\GuestCheckoutAccountService;
 use App\Services\Storefront\GuestCheckoutStaffPhoneException;
 use App\Services\Storefront\OrderPlacer;
+use App\Support\Bangla;
 use App\Support\PhoneNumber;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -210,7 +211,7 @@ class StorefrontCheckout extends Component
         if ($result && $result['capped']) {
             $this->couponMessage = __('storefront.coupon_capped', [
                 'code' => $coupon->code,
-                'amount' => number_format((float) $result['amount'], 0),
+                'amount' => Bangla::money((float) $result['amount']),
             ]);
         } else {
             $this->couponMessage = __('storefront.coupon_applied');

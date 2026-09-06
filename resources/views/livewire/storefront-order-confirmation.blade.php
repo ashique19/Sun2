@@ -15,7 +15,7 @@
         <div class="rounded-xl border border-[#EFE7D6] bg-white p-6 text-left text-sm space-y-3 mb-8">
             <div class="flex justify-between">
                 <span class="text-[#5C564C]">{{ __('storefront.payment') }}</span>
-                <span>{{ __('storefront.payment_cod_amount', ['amount' => number_format($order->total, 0)]) }}</span>
+                <span>{{ __('storefront.payment_cod_amount', ['amount' => \App\Support\Bangla::money($order->total)]) }}</span>
             </div>
             <div class="flex justify-between">
                 <span class="text-[#5C564C]">{{ __('storefront.mobile') }}</span>
@@ -29,13 +29,13 @@
                 @foreach ($order->items as $item)
                     <div class="flex justify-between gap-4">
                         <span class="line-clamp-1">{{ $item->name }} &times; {{ $item->quantity }}</span>
-                        <span class="shrink-0">&#2547; {{ number_format($item->line_total, 0) }}</span>
+                        <span class="shrink-0">&#2547; {{ \App\Support\Bangla::money($item->line_total) }}</span>
                     </div>
                 @endforeach
             </div>
             <div class="border-t border-[#E7DFCF] pt-3 flex justify-between font-semibold">
                 <span>{{ __('storefront.total') }}</span>
-                <span>&#2547; {{ number_format($order->total, 0) }}</span>
+                <span>&#2547; {{ \App\Support\Bangla::money($order->total) }}</span>
             </div>
         </div>
 

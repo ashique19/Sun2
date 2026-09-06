@@ -111,9 +111,9 @@
                                             <li class="flex items-center justify-between gap-3 rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2">
                                                 <div class="min-w-0">
                                                     <p class="font-medium">{{ $result['code'] }}</p>
-                                                    <p class="text-emerald-700">− &#2547; {{ number_format($result['amount'], 0) }}</p>
+                                                    <p class="text-emerald-700">− &#2547; {{ \App\Support\Bangla::money($result['amount']) }}</p>
                                                     @if ($result['capped'])
-                                                        <p class="text-xs text-amber-700 mt-1">{{ __('storefront.coupon_capped', ['code' => $result['code'], 'amount' => number_format($result['amount'], 0)]) }}</p>
+                                                        <p class="text-xs text-amber-700 mt-1">{{ __('storefront.coupon_capped', ['code' => $result['code'], 'amount' => \App\Support\Bangla::money($result['amount'])]) }}</p>
                                                     @endif
                                                 </div>
                                                 <button type="button" wire:click="removeCoupon('{{ $result['code'] }}')"
@@ -193,7 +193,7 @@
                         @foreach ($lines as $line)
                             <div class="flex justify-between gap-4">
                                 <span class="text-[#6B6459] line-clamp-1">{{ $line['product']->name }} &times; {{ $line['quantity'] }}</span>
-                                <span class="shrink-0">&#2547; {{ number_format($line['line_total'], 0) }}</span>
+                                <span class="shrink-0">&#2547; {{ \App\Support\Bangla::money($line['line_total']) }}</span>
                             </div>
                         @endforeach
                     </div>

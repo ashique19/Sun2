@@ -15,7 +15,7 @@
     <div class="space-y-2 text-sm">
         <div class="flex justify-between">
             <span class="text-[#6B6459]">{{ __('storefront.subtotal') }}</span>
-            <span>&#2547; {{ number_format($pricing->subtotal, 0) }}</span>
+            <span>&#2547; {{ \App\Support\Bangla::money($pricing->subtotal) }}</span>
         </div>
         <div class="flex justify-between">
             <span class="text-[#6B6459]">{{ __('storefront.delivery_charge') }}</span>
@@ -23,7 +23,7 @@
                 @if ($pricing->deliveryCharge <= 0)
                     <span class="text-emerald-700">{{ __('storefront.free') }}</span>
                 @else
-                    &#2547; {{ number_format($pricing->deliveryCharge, 0) }}
+                    &#2547; {{ \App\Support\Bangla::money($pricing->deliveryCharge) }}
                 @endif
             </span>
         </div>
@@ -38,27 +38,27 @@
                         {{ $line['label'] }}
                     @endif
                 </span>
-                <span>− &#2547; {{ number_format($line['amount'], 0) }}</span>
+                <span>− &#2547; {{ \App\Support\Bangla::money($line['amount']) }}</span>
             </div>
         @endforeach
         @if ($pricing->discount > 0 && $pricing->adjustmentLines === [])
             <div class="flex justify-between text-emerald-700">
                 <span>{{ __('storefront.discount') }}</span>
-                <span>− &#2547; {{ number_format($pricing->discount, 0) }}</span>
+                <span>− &#2547; {{ \App\Support\Bangla::money($pricing->discount) }}</span>
             </div>
         @endif
     </div>
     <div class="border-t border-[#E7DFCF] mt-4 pt-4 flex justify-between font-semibold text-lg">
         <span>{{ __('storefront.total_cod') }}</span>
-        <span>&#2547; {{ number_format($pricing->total, 0) }}</span>
+        <span>&#2547; {{ \App\Support\Bangla::money($pricing->total) }}</span>
     </div>
     @unless ($compact)
         <p class="mt-4 text-xs text-[#5C564C] leading-relaxed">
             @if ($selectedArea)
                 {{ __('storefront.delivery_for_area', [
                     'area' => $selectedArea->name,
-                    'upto5' => number_format($selectedArea->delivery_charge_upto_5, 0),
-                    'over5' => number_format($selectedArea->delivery_charge_over_5, 0),
+                    'upto5' => \App\Support\Bangla::money($selectedArea->delivery_charge_upto_5),
+                    'over5' => \App\Support\Bangla::money($selectedArea->delivery_charge_over_5),
                 ]) }}
                 @if ($itemCount > 0)
                     {{ __('storefront.your_cart_items', ['count' => $itemCount]) }}

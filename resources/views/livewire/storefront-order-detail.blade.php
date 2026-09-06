@@ -57,7 +57,7 @@
                                         </p>
                                     </div>
                                 </div>
-                                <span class="shrink-0 font-medium">&#2547; {{ number_format($item->line_total, 0) }}</span>
+                                <span class="shrink-0 font-medium">&#2547; {{ \App\Support\Bangla::money($item->line_total) }}</span>
                             </div>
                         @endforeach
                     </div>
@@ -75,7 +75,7 @@
                                             <span class="text-[#5C564C]">({{ __('storefront.item_count', ['count' => $itemCount]) }})</span>
                                         @endif
                                     </span>
-                                    <span>&#2547; {{ number_format($order->subtotal, 0) }}</span>
+                                    <span>&#2547; {{ \App\Support\Bangla::money($order->subtotal) }}</span>
                                 </div>
                                 <div class="flex justify-between gap-4">
                                     <span class="text-[#6B6459]">{{ __('storefront.delivery_charge') }}</span>
@@ -83,14 +83,14 @@
                                         @if ((float) $order->delivery_charge <= 0)
                                             <span class="text-emerald-700">{{ __('storefront.free') }}</span>
                                         @else
-                                            &#2547; {{ number_format($order->delivery_charge, 0) }}
+                                            &#2547; {{ \App\Support\Bangla::money($order->delivery_charge) }}
                                         @endif
                                     </span>
                                 </div>
                                 @if ($order->charge > 0)
                                     <div class="flex justify-between gap-4">
                                         <span class="text-[#6B6459]">{{ __('storefront.charges') }}</span>
-                                        <span>&#2547; {{ number_format($order->charge, 0) }}</span>
+                                        <span>&#2547; {{ \App\Support\Bangla::money($order->charge) }}</span>
                                     </div>
                                 @endif
                                 @if ($order->relationLoaded('adjustments') && $order->adjustments->isNotEmpty())
@@ -104,12 +104,12 @@
                                                         {{ __('storefront.adjustment_discount', ['label' => $adjustment->label]) }}
                                                     @endif
                                                 </span>
-                                                <span>− &#2547; {{ number_format($adjustment->amount, 0) }}</span>
+                                                <span>− &#2547; {{ \App\Support\Bangla::money($adjustment->amount) }}</span>
                                             </div>
                                         @elseif ($adjustment->type === 'charge')
                                             <div class="flex justify-between gap-4">
                                                 <span class="text-[#6B6459]">{{ __('storefront.adjustment_charge', ['label' => $adjustment->label]) }}</span>
-                                                <span>&#2547; {{ number_format($adjustment->amount, 0) }}</span>
+                                                <span>&#2547; {{ \App\Support\Bangla::money($adjustment->amount) }}</span>
                                             </div>
                                         @endif
                                     @endforeach
@@ -122,7 +122,7 @@
                                                 {{ __('storefront.discount') }}
                                             @endif
                                         </span>
-                                        <span>− &#2547; {{ number_format($order->discount, 0) }}</span>
+                                        <span>− &#2547; {{ \App\Support\Bangla::money($order->discount) }}</span>
                                     </div>
                                 @endif
                             </div>
@@ -133,7 +133,7 @@
                                 <p class="font-medium text-emerald-900">{{ $order->coupon->code }}</p>
                                 <div class="flex justify-between gap-4">
                                     <span class="text-emerald-800">{{ $order->coupon->summaryLabel() }}</span>
-                                    <span class="font-medium text-emerald-900">&#2547; {{ number_format($order->discount, 0) }}</span>
+                                    <span class="font-medium text-emerald-900">&#2547; {{ \App\Support\Bangla::money($order->discount) }}</span>
                                 </div>
                             </div>
                         @endif
@@ -141,21 +141,21 @@
                         <div class="border-t border-[#E7DFCF] pt-4 space-y-2 text-sm">
                             <div class="flex justify-between font-semibold text-base">
                                 <span>{{ $order->payment_method === 'cod' ? __('storefront.total_cod') : __('storefront.total') }}</span>
-                                <span>&#2547; {{ number_format($order->total, 0) }}</span>
+                                <span>&#2547; {{ \App\Support\Bangla::money($order->total) }}</span>
                             </div>
                             @if ($order->payment_status === 'partial')
                                 <div class="flex justify-between text-emerald-700">
                                     <span>{{ __('storefront.payment') }}</span>
-                                    <span>&#2547; {{ number_format($order->paid_amount, 0) }}</span>
+                                    <span>&#2547; {{ \App\Support\Bangla::money($order->paid_amount) }}</span>
                                 </div>
                                 <div class="flex justify-between">
                                     <span class="text-[#6B6459]">{{ __('storefront.total') }}</span>
-                                    <span>&#2547; {{ number_format($order->due_amount, 0) }}</span>
+                                    <span>&#2547; {{ \App\Support\Bangla::money($order->due_amount) }}</span>
                                 </div>
                             @elseif ($order->payment_status === 'paid' && (float) $order->paid_amount > 0)
                                 <div class="flex justify-between text-emerald-700">
                                     <span>{{ __('storefront.payment') }}</span>
-                                    <span>&#2547; {{ number_format($order->paid_amount, 0) }}</span>
+                                    <span>&#2547; {{ \App\Support\Bangla::money($order->paid_amount) }}</span>
                                 </div>
                             @endif
                         </div>

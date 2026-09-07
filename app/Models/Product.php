@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Str;
 
 class Product extends Model
 {
@@ -29,6 +30,32 @@ class Product extends Model
             'is_new' => 'boolean',
             'is_best_seller' => 'boolean',
         ];
+    }
+
+    /**
+     * Return $desired when free, otherwise the next free suffix ($base-1, $base-2, …).
+     */
+    public static function uniqueSlug(string $desired, ?int $ignoreId = null): string
+    {
+        $base = Str::slug($desired);
+        if ($base === '') {
+            $base = 'product';
+        }
+
+        $slug = $base;
+        $suffix = 1;
+
+        while (
+            static::query()
+                ->when($ignoreId !== null, fn (Builder $query) => $query->where('id', '!=', $ignoreId))
+                ->where('slug', $slug)
+                ->exists()
+        ) {
+            $slug = $base.'-'.$suffix;
+            $suffix++;
+        }
+
+        return $slug;
     }
 
     /** Common Bangla price units for stamps / catalog. */

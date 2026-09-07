@@ -786,19 +786,10 @@ class AdminOrderForm extends Component
             'newProductCategoryId' => ['nullable', 'integer', 'exists:categories,id'],
         ]);
 
-        $slugBase = Str::slug($this->newProductName) ?: 'product';
-        $slug = $slugBase;
-        $i = 1;
-
-        while (Product::query()->where('slug', $slug)->exists()) {
-            $slug = $slugBase.'-'.$i;
-            $i++;
-        }
-
         $product = Product::query()->create([
             'category_id' => $this->newProductCategoryId,
             'name' => $this->newProductName,
-            'slug' => $slug,
+            'slug' => Product::uniqueSlug(Str::slug($this->newProductName) ?: 'product'),
             'sku' => strtoupper(Str::random(8)),
             'price' => (float) $this->newProductPrice,
             'purchase_price' => 0,

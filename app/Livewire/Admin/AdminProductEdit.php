@@ -197,7 +197,7 @@ class AdminProductEdit extends Component
             return;
         }
 
-        $this->slug = Str::slug($value);
+        $this->slug = Product::uniqueSlug(Str::slug($value) ?: 'product');
     }
 
     public function openAiGenerateModal(): void
@@ -1301,14 +1301,15 @@ class AdminProductEdit extends Component
      */
     private function persistProduct(): array
     {
-        $slugUnique = $this->product
-            ? 'unique:products,slug,'.$this->product->id
-            : 'unique:products,slug';
+        $slugRules = ['required', 'string', 'max:255'];
+        if ($this->product) {
+            $slugRules[] = 'unique:products,slug,'.$this->product->id;
+        }
 
         $validated = $this->validate([
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             'name' => ['required', 'string', 'max:255'],
-            'slug' => ['required', 'string', 'max:255', $slugUnique],
+            'slug' => $slugRules,
             'sku' => ['nullable', 'string', 'max:64'],
             'meta_title' => ['nullable', 'string', 'max:255'],
             'meta_description' => ['nullable', 'string', 'max:500'],
@@ -1332,6 +1333,11 @@ class AdminProductEdit extends Component
 
         if ($validated['slug'] === '') {
             $validated['slug'] = Str::slug($validated['name']);
+        }
+
+        if (! $this->product) {
+            $validated['slug'] = Product::uniqueSlug($validated['slug']);
+            $this->slug = $validated['slug'];
         }
 
         $validated['price'] = (int) round((float) $validated['price']);

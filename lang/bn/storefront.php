@@ -243,6 +243,7 @@ return [
     'print_list' => 'প্রিন্ট',
     'delete' => 'মুছুন',
     'share_no_img' => 'ছবি নেই',
+    'share_enlarge_image' => 'বড় করে দেখুন',
     'share_remove_confirm' => 'এই পণ্য তালিকা থেকে বাদ দেবেন?',
 
     'shared_cart_title' => 'শেয়ার করা কার্ট',

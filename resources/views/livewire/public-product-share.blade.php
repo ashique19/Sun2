@@ -70,16 +70,38 @@
             <div class="space-y-3">
                 @foreach ($items as $item)
                     @php
-                        $thumb = ! empty($item['image'])
-                            ? (\App\Support\StorefrontAssets::smallUrl($item['image'])
-                                ?? \App\Support\StorefrontAssets::variantUrl($item['image'], 'xs')
-                                ?? $item['image'])
+                        $sourceImage = $item['image'] ?? null;
+                        $thumb = ! empty($sourceImage)
+                            ? (\App\Support\StorefrontAssets::smallUrl($sourceImage)
+                                ?? \App\Support\StorefrontAssets::variantUrl($sourceImage, 'xs')
+                                ?? $sourceImage)
+                            : null;
+                        $large = ! empty($sourceImage)
+                            ? (\App\Support\StorefrontAssets::largestAvailableUrl($sourceImage)
+                                ?? \App\Support\StorefrontAssets::url($sourceImage)
+                                ?? $sourceImage)
                             : null;
                     @endphp
                     <div wire:key="share-item-{{ $item['key'] }}"
                         class="flex items-start gap-3 rounded-xl border border-[#EFE7D6] bg-white p-3 sm:gap-4 sm:p-4">
                         <div class="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] sm:h-24 sm:w-24">
-                            @if ($thumb)
+                            @if ($thumb && $large)
+                                <button type="button"
+                                    class="h-full w-full cursor-zoom-in p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A227]"
+                                    title="{{ __('storefront.share_enlarge_image') }}"
+                                    aria-label="{{ __('storefront.share_enlarge_image') }}"
+                                    @click="$dispatch('open-product-image', {
+                                        imageUrl: @js($large),
+                                        productName: @js($item['name'] ?? ''),
+                                        productUrl: ''
+                                    })">
+                                    <img src="{{ $thumb }}"
+                                        alt="{{ $item['name'] ?? '' }}"
+                                        class="pointer-events-none h-full w-full object-cover"
+                                        loading="lazy"
+                                        decoding="async">
+                                </button>
+                            @elseif ($thumb)
                                 <img src="{{ $thumb }}"
                                     alt="{{ $item['name'] ?? '' }}"
                                     class="h-full w-full object-cover"

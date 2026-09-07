@@ -44,7 +44,7 @@
                                 </div>
                             </div>
                             <div class="text-right font-semibold shrink-0">
-                                &#2547; {{ number_format($line['line_total'], 0) }}
+                                &#2547; {{ \App\Support\Bangla::money($line['line_total']) }}
                             </div>
                         </div>
                     @endforeach
@@ -54,12 +54,12 @@
                     <h2 class="font-semibold mb-4">{{ __('storefront.order_summary') }}</h2>
                     <div class="flex justify-between text-sm mb-2">
                         <span class="text-[#6B6459]">{{ __('storefront.subtotal') }}</span>
-                        <span>&#2547; {{ number_format($subtotal, 0) }}</span>
+                        <span>&#2547; {{ \App\Support\Bangla::money($subtotal) }}</span>
                     </div>
                     <p class="text-xs text-[#5C564C] mb-4">{{ __('storefront.delivery_discounts_checkout') }}</p>
                     <div class="border-t border-[#E7DFCF] pt-4 flex justify-between font-semibold text-lg mb-6">
                         <span>{{ __('storefront.estimated') }}</span>
-                        <span>&#2547; {{ number_format($subtotal, 0) }}</span>
+                        <span>&#2547; {{ \App\Support\Bangla::money($subtotal) }}</span>
                     </div>
                     <a href="{{ route('checkout') }}" wire:navigate
                         class="block w-full text-center rounded-full bg-[#8F7218] px-8 py-3 text-sm font-semibold text-white hover:bg-[#7A6114] transition">

@@ -2372,19 +2372,85 @@ const registerProductImageAlpineData = () => {
         naturalWidth: 0,
         naturalHeight: 0,
         overlayGesture: null,
+        // #region agent log
+        _dbgInstanceId: `pie_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        _dbgStyleLogCount: 0,
+        _agentDbg(hypothesisId, location, message, data = {}) {
+            try {
+                fetch('/__agent_debug_log', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                    body: JSON.stringify({
+                        hypothesisId,
+                        location,
+                        message,
+                        data: { instanceId: this._dbgInstanceId, ...data },
+                        timestamp: Date.now(),
+                    }),
+                    keepalive: true,
+                }).catch(() => {});
+            } catch {
+                // ignore
+            }
+        },
+        // #endregion
 
         init() {
+            // #region agent log
+            window.__pricedStampInitCount = (window.__pricedStampInitCount || 0) + 1;
+            this._agentDbg('A', 'pricedImageStampEditor:init', 'Alpine init with @js config', {
+                initCount: window.__pricedStampInitCount,
+                configX: config.x,
+                configY: config.y,
+                configFont: config.font,
+                configPosition: config.position,
+                stampX: this.stampX,
+                stampY: this.stampY,
+                stampFont: this.stampFont,
+                stampPosition: this.stampPosition,
+                displayWidth: this.displayWidth,
+                naturalWidth: this.naturalWidth,
+                wireX: this.$wire?.pricedImageX,
+                wireY: this.$wire?.pricedImageY,
+                wireFont: this.$wire?.pricedImageFont,
+                wirePosition: this.$wire?.pricedImagePosition,
+            });
+            // #endregion
+
             this.$watch(
                 () => this.$wire?.pricedImageFont,
                 (value) => {
                     const next = Number(value);
 
                     if (Number.isFinite(next)) {
+                        // #region agent log
+                        this._agentDbg('A', 'pricedImageStampEditor:fontWatch', 'wire font watch fired', {
+                            from: this.stampFont,
+                            to: next,
+                            displayWidth: this.displayWidth,
+                            naturalWidth: this.naturalWidth,
+                            displayFontPx: this.displayFontPx(),
+                        });
+                        // #endregion
                         this.stampFont = next;
                     }
                 },
             );
         },
+
+        // #region agent log
+        destroy() {
+            this._agentDbg('A', 'pricedImageStampEditor:destroy', 'Alpine destroy (remount/morph)', {
+                stampX: this.stampX,
+                stampY: this.stampY,
+                stampFont: this.stampFont,
+                stampPosition: this.stampPosition,
+                displayWidth: this.displayWidth,
+                naturalWidth: this.naturalWidth,
+                initCount: window.__pricedStampInitCount || 0,
+            });
+        },
+        // #endregion
 
         clamp01(value) {
             return Math.max(0, Math.min(1, Number(value) || 0));
@@ -2408,10 +2474,35 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
+            // #region agent log
+            const prev = {
+                displayWidth: this.displayWidth,
+                displayHeight: this.displayHeight,
+                naturalWidth: this.naturalWidth,
+                naturalHeight: this.naturalHeight,
+                stampFont: this.stampFont,
+            };
+            // #endregion
+
             this.displayWidth = image.clientWidth || image.naturalWidth || 0;
             this.displayHeight = image.clientHeight || image.naturalHeight || 0;
             this.naturalWidth = image.naturalWidth || this.displayWidth;
             this.naturalHeight = image.naturalHeight || this.displayHeight;
+
+            // #region agent log
+            this._agentDbg('C', 'pricedImageStampEditor:onStageImageLoad', 'stage image measured', {
+                prev,
+                next: {
+                    displayWidth: this.displayWidth,
+                    displayHeight: this.displayHeight,
+                    naturalWidth: this.naturalWidth,
+                    naturalHeight: this.naturalHeight,
+                },
+                displayFontPx: this.displayFontPx(),
+                stampX: this.stampX,
+                stampY: this.stampY,
+            });
+            // #endregion
         },
 
         displayFontPx() {
@@ -2423,6 +2514,23 @@ const registerProductImageAlpineData = () => {
 
         stampBoxStyle() {
             const fontPx = this.displayFontPx();
+
+            // #region agent log
+            this._dbgStyleLogCount = (this._dbgStyleLogCount || 0) + 1;
+            if (this._dbgStyleLogCount <= 8 || this._dbgStyleLogCount % 25 === 0) {
+                this._agentDbg('C', 'pricedImageStampEditor:stampBoxStyle', 'stamp style computed', {
+                    n: this._dbgStyleLogCount,
+                    fontPx,
+                    stampFont: this.stampFont,
+                    stampX: this.stampX,
+                    stampY: this.stampY,
+                    stampPosition: this.stampPosition,
+                    displayWidth: this.displayWidth,
+                    naturalWidth: this.naturalWidth,
+                    displayWasZero: this.displayWidth === 0,
+                });
+            }
+            // #endregion
 
             return {
                 left: `${this.clamp01(this.stampX) * 100}%`,
@@ -2556,9 +2664,48 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
+            // #region agent log
+            const syncId = `sync_${Date.now()}`;
+            const localBefore = {
+                stampX: this.stampX,
+                stampY: this.stampY,
+                stampFont: this.stampFont,
+                stampPosition: this.stampPosition,
+                displayWidth: this.displayWidth,
+                naturalWidth: this.naturalWidth,
+                displayFontPx: this.displayFontPx(),
+            };
+            this._agentDbg('B', 'pricedImageStampEditor:syncToWire:start', 'syncToWire begin (9 sets)', {
+                syncId,
+                localBefore,
+                wireBefore: {
+                    x: this.$wire?.pricedImageX,
+                    y: this.$wire?.pricedImageY,
+                    font: this.$wire?.pricedImageFont,
+                    position: this.$wire?.pricedImagePosition,
+                },
+            });
+            // #endregion
+
             await this.$wire.set('pricedImageX', this.clamp01(this.stampX));
+            // #region agent log
+            this._agentDbg('B', 'pricedImageStampEditor:syncToWire:afterX', 'after set X', {
+                syncId,
+                local: { stampX: this.stampX, stampY: this.stampY, stampPosition: this.stampPosition, stampFont: this.stampFont },
+                wire: { x: this.$wire?.pricedImageX, y: this.$wire?.pricedImageY, position: this.$wire?.pricedImagePosition, font: this.$wire?.pricedImageFont },
+                initCount: window.__pricedStampInitCount || 0,
+            });
+            // #endregion
             await this.$wire.set('pricedImageY', this.clamp01(this.stampY));
             await this.$wire.set('pricedImagePosition', this.stampPosition);
+            // #region agent log
+            this._agentDbg('B', 'pricedImageStampEditor:syncToWire:afterPosition', 'after set position (may remorph)', {
+                syncId,
+                local: { stampX: this.stampX, stampY: this.stampY, stampPosition: this.stampPosition, stampFont: this.stampFont, displayWidth: this.displayWidth },
+                wire: { x: this.$wire?.pricedImageX, y: this.$wire?.pricedImageY, position: this.$wire?.pricedImagePosition, font: this.$wire?.pricedImageFont },
+                initCount: window.__pricedStampInitCount || 0,
+            });
+            // #endregion
             await this.$wire.set(
                 'pricedImageFont',
                 Math.max(28, Math.min(96, Math.round(Number(this.stampFont) || 56))),
@@ -2571,6 +2718,32 @@ const registerProductImageAlpineData = () => {
             );
             await this.$wire.set('pricedImageLogoX', this.clamp01(this.logoX));
             await this.$wire.set('pricedImageLogoY', this.clamp01(this.logoY));
+
+            // #region agent log
+            this._agentDbg('B', 'pricedImageStampEditor:syncToWire:end', 'syncToWire complete', {
+                syncId,
+                localAfter: {
+                    stampX: this.stampX,
+                    stampY: this.stampY,
+                    stampFont: this.stampFont,
+                    stampPosition: this.stampPosition,
+                    displayWidth: this.displayWidth,
+                    naturalWidth: this.naturalWidth,
+                    displayFontPx: this.displayFontPx(),
+                },
+                wireAfter: {
+                    x: this.$wire?.pricedImageX,
+                    y: this.$wire?.pricedImageY,
+                    font: this.$wire?.pricedImageFont,
+                    position: this.$wire?.pricedImagePosition,
+                },
+                initCount: window.__pricedStampInitCount || 0,
+                driftedFromStart: localBefore.stampX !== this.stampX
+                    || localBefore.stampY !== this.stampY
+                    || localBefore.stampFont !== this.stampFont
+                    || localBefore.displayWidth !== this.displayWidth,
+            });
+            // #endregion
         },
 
         async syncAndGenerate() {

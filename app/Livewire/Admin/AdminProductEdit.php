@@ -273,12 +273,45 @@ class AdminProductEdit extends Component
 
     public function updatedPricedImagePosition(string $value): void
     {
+        // #region agent log
+        $beforeX = $this->pricedImageX;
+        $beforeY = $this->pricedImageY;
+        // #endregion
+
         if ($value === 'custom') {
+            // #region agent log
+            file_put_contents('/opt/cursor/logs/debug.log', json_encode([
+                'id' => 'log_'.uniqid(),
+                'timestamp' => (int) (microtime(true) * 1000),
+                'location' => 'AdminProductEdit.php:updatedPricedImagePosition',
+                'message' => 'position hook skipped for custom',
+                'data' => ['value' => $value, 'x' => $beforeX, 'y' => $beforeY],
+                'hypothesisId' => 'D',
+            ], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND | LOCK_EX);
+            // #endregion
+
             return;
         }
 
         [$this->pricedImageX, $this->pricedImageY] = app(ProductPricedImageService::class)
             ->centerForPosition($value);
+
+        // #region agent log
+        file_put_contents('/opt/cursor/logs/debug.log', json_encode([
+            'id' => 'log_'.uniqid(),
+            'timestamp' => (int) (microtime(true) * 1000),
+            'location' => 'AdminProductEdit.php:updatedPricedImagePosition',
+            'message' => 'position hook overwrote x/y',
+            'data' => [
+                'value' => $value,
+                'beforeX' => $beforeX,
+                'beforeY' => $beforeY,
+                'afterX' => $this->pricedImageX,
+                'afterY' => $this->pricedImageY,
+            ],
+            'hypothesisId' => 'D',
+        ], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND | LOCK_EX);
+        // #endregion
     }
 
     public function updatedPricedImageLogoPosition(string $value): void

@@ -281,6 +281,66 @@ class AdminProductEdit extends Component
             ->centerForPosition($value);
     }
 
+    /**
+     * Apply stamp/logo layout in one round-trip so Alpine is not remounted mid-sync.
+     *
+     * @param  array{
+     *     x?: mixed,
+     *     y?: mixed,
+     *     position?: mixed,
+     *     font?: mixed,
+     *     logo?: mixed,
+     *     logo_position?: mixed,
+     *     logo_size?: mixed,
+     *     logo_x?: mixed,
+     *     logo_y?: mixed
+     * }  $layout
+     */
+    public function applyPricedImageStampLayout(array $layout): void
+    {
+        $service = app(ProductPricedImageService::class);
+
+        $position = (string) ($layout['position'] ?? $this->pricedImagePosition);
+        if (! in_array($position, ProductPricedImageService::POSITIONS, true)) {
+            $position = 'top-left';
+        }
+
+        $logoPosition = (string) ($layout['logo_position'] ?? $this->pricedImageLogoPosition);
+        if (! in_array($logoPosition, ProductPricedImageService::POSITIONS, true)) {
+            $logoPosition = 'top-right';
+        }
+
+        $this->pricedImagePosition = $position;
+        $this->pricedImageFont = min(
+            ProductPricedImageService::FONT_MAX,
+            max(ProductPricedImageService::FONT_MIN, (int) ($layout['font'] ?? $this->pricedImageFont)),
+        );
+
+        if ($position === 'custom') {
+            $this->pricedImageX = max(0, min(1, (float) ($layout['x'] ?? $this->pricedImageX)));
+            $this->pricedImageY = max(0, min(1, (float) ($layout['y'] ?? $this->pricedImageY)));
+        } else {
+            [$this->pricedImageX, $this->pricedImageY] = $service->centerForPosition($position);
+        }
+
+        $this->pricedImageLogo = (bool) ($layout['logo'] ?? $this->pricedImageLogo);
+        $this->pricedImageLogoPosition = $logoPosition;
+        $this->pricedImageLogoSize = min(
+            ProductPricedImageService::LOGO_SIZE_MAX,
+            max(
+                ProductPricedImageService::LOGO_SIZE_MIN,
+                (int) ($layout['logo_size'] ?? $this->pricedImageLogoSize),
+            ),
+        );
+
+        if ($logoPosition === 'custom') {
+            $this->pricedImageLogoX = max(0, min(1, (float) ($layout['logo_x'] ?? $this->pricedImageLogoX)));
+            $this->pricedImageLogoY = max(0, min(1, (float) ($layout['logo_y'] ?? $this->pricedImageLogoY)));
+        } else {
+            [$this->pricedImageLogoX, $this->pricedImageLogoY] = $service->centerForPosition($logoPosition);
+        }
+    }
+
     public function updatedPricedImageLogoPosition(string $value): void
     {
         if ($value === 'custom') {

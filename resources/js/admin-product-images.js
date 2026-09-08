@@ -2372,6 +2372,8 @@ const registerProductImageAlpineData = () => {
         naturalWidth: 0,
         naturalHeight: 0,
         overlayGesture: null,
+        generating: false,
+        _stageResizeObserver: null,
 
         init() {
             this.$watch(
@@ -2384,10 +2386,67 @@ const registerProductImageAlpineData = () => {
                     }
                 },
             );
+
+            this.$nextTick(() => {
+                this.measureStageImage();
+                this.observeStageFrame();
+            });
+        },
+
+        destroy() {
+            this._stageResizeObserver?.disconnect?.();
+            this._stageResizeObserver = null;
+            this.endOverlayGesture();
         },
 
         clamp01(value) {
             return Math.max(0, Math.min(1, Number(value) || 0));
+        },
+
+        stageImageEl() {
+            const root = this.$el;
+
+            return root?.querySelector?.('[data-overlay-image-frame] img')
+                ?? root?.querySelector?.('[data-priced-stamp-stage] img')
+                ?? null;
+        },
+
+        applyStageImageMetrics(image) {
+            if (! image) {
+                return;
+            }
+
+            this.displayWidth = image.clientWidth || image.naturalWidth || 0;
+            this.displayHeight = image.clientHeight || image.naturalHeight || 0;
+            this.naturalWidth = image.naturalWidth || this.displayWidth;
+            this.naturalHeight = image.naturalHeight || this.displayHeight;
+        },
+
+        measureStageImage() {
+            const image = this.stageImageEl();
+
+            if (! image) {
+                return;
+            }
+
+            if (image.complete && (image.naturalWidth > 0 || image.clientWidth > 0)) {
+                this.applyStageImageMetrics(image);
+            }
+        },
+
+        observeStageFrame() {
+            const frame = this.$el?.querySelector?.('[data-overlay-image-frame]')
+                ?? this.$el?.querySelector?.('[data-priced-stamp-stage]');
+
+            if (! frame || typeof ResizeObserver === 'undefined') {
+                return;
+            }
+
+            this._stageResizeObserver?.disconnect?.();
+            this._stageResizeObserver = new ResizeObserver(() => {
+                this.measureStageImage();
+            });
+            this._stageResizeObserver.observe(frame);
         },
 
         overlayImageFrameRect(fromEl) {
@@ -2408,10 +2467,7 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
-            this.displayWidth = image.clientWidth || image.naturalWidth || 0;
-            this.displayHeight = image.clientHeight || image.naturalHeight || 0;
-            this.naturalWidth = image.naturalWidth || this.displayWidth;
-            this.naturalHeight = image.naturalHeight || this.displayHeight;
+            this.applyStageImageMetrics(image);
         },
 
         displayFontPx() {
@@ -2556,26 +2612,32 @@ const registerProductImageAlpineData = () => {
                 return;
             }
 
-            await this.$wire.set('pricedImageX', this.clamp01(this.stampX));
-            await this.$wire.set('pricedImageY', this.clamp01(this.stampY));
-            await this.$wire.set('pricedImagePosition', this.stampPosition);
-            await this.$wire.set(
-                'pricedImageFont',
-                Math.max(28, Math.min(96, Math.round(Number(this.stampFont) || 56))),
-            );
-            await this.$wire.set('pricedImageLogo', Boolean(this.logoEnabled));
-            await this.$wire.set('pricedImageLogoPosition', this.logoPosition || 'top-right');
-            await this.$wire.set(
-                'pricedImageLogoSize',
-                Math.max(8, Math.min(40, Math.round(Number(this.logoSize) || 18))),
-            );
-            await this.$wire.set('pricedImageLogoX', this.clamp01(this.logoX));
-            await this.$wire.set('pricedImageLogoY', this.clamp01(this.logoY));
+            await this.$wire.applyPricedImageStampLayout({
+                x: this.clamp01(this.stampX),
+                y: this.clamp01(this.stampY),
+                position: this.stampPosition,
+                font: Math.max(28, Math.min(96, Math.round(Number(this.stampFont) || 56))),
+                logo: Boolean(this.logoEnabled),
+                logo_position: this.logoPosition || 'top-right',
+                logo_size: Math.max(8, Math.min(40, Math.round(Number(this.logoSize) || 18))),
+                logo_x: this.clamp01(this.logoX),
+                logo_y: this.clamp01(this.logoY),
+            });
         },
 
         async syncAndGenerate() {
-            await this.syncToWire();
-            await this.$wire.generatePricedImage();
+            if (this.generating) {
+                return;
+            }
+
+            this.generating = true;
+
+            try {
+                await this.syncToWire();
+                await this.$wire.generatePricedImage();
+            } finally {
+                this.generating = false;
+            }
         },
 
         async snap(position) {

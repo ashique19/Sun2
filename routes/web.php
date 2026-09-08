@@ -94,27 +94,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
-// #region agent log
-Route::post('/__agent_debug_log', function (Request $request) {
-    $payload = [
-        'id' => 'log_'.uniqid(),
-        'timestamp' => (int) ($request->input('timestamp') ?: (int) (microtime(true) * 1000)),
-        'location' => (string) $request->input('location', ''),
-        'message' => (string) $request->input('message', ''),
-        'data' => $request->input('data', []),
-        'hypothesisId' => (string) $request->input('hypothesisId', ''),
-    ];
-
-    file_put_contents(
-        '/opt/cursor/logs/debug.log',
-        json_encode($payload, JSON_UNESCAPED_UNICODE)."\n",
-        FILE_APPEND | LOCK_EX,
-    );
-
-    return response()->noContent();
-})->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class]);
-// #endregion
-
 Route::get('/robots.txt', RobotsController::class)->name('robots');
 Route::get('/sitemap.xml', [SitemapController::class, 'index'])->name('sitemap');
 Route::get('/sitemaps/{file}', [SitemapController::class, 'child'])

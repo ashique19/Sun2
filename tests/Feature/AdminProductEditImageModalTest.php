@@ -266,11 +266,121 @@ class AdminProductEditImageModalTest extends TestCase
             ->call('openPricedImageModal')
             ->assertSet('showPricedImageModal', true)
             ->assertSeeHtml('pricedImageStampEditor')
+            ->assertSeeHtml('data-priced-stamp-editor-host')
+            ->assertSeeHtml('wire:ignore')
             ->assertSeeHtml('data-priced-stamp-stage')
             ->assertSeeHtml('data-overlay-image-frame')
             ->assertSeeHtml('startDrag($event)')
             ->assertSeeHtml('startResize($event)')
             ->assertSeeHtml("snap('center')")
             ->assertSee('Drag the price stamp');
+    }
+
+    #[Test]
+    public function priced_image_modal_wraps_stamp_editor_in_wire_ignore(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $product = Product::query()->create([
+            'name' => 'Necklace Set',
+            'slug' => 'necklace-set',
+            'price' => 2500,
+            'is_published' => true,
+        ]);
+
+        $html = Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->call('openPricedImageModal')
+            ->html();
+
+        $this->assertMatchesRegularExpression(
+            '/wire:ignore[^>]*data-priced-stamp-editor-host|data-priced-stamp-editor-host[^>]*wire:ignore/s',
+            $html,
+        );
+        $this->assertStringContainsString('pricedImageStampEditor', $html);
+        $this->assertStringContainsString('wire:click="closePricedImageModal"', $html);
+    }
+
+    #[Test]
+    public function apply_priced_image_stamp_layout_updates_all_props_in_one_call(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $product = Product::query()->create([
+            'name' => 'Necklace Set',
+            'slug' => 'necklace-set',
+            'price' => 2500,
+            'is_published' => true,
+        ]);
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->call('openPricedImageModal')
+            ->call('applyPricedImageStampLayout', [
+                'x' => 0.42,
+                'y' => 0.63,
+                'position' => 'custom',
+                'font' => 72,
+                'logo' => true,
+                'logo_position' => 'custom',
+                'logo_size' => 24,
+                'logo_x' => 0.31,
+                'logo_y' => 0.77,
+            ])
+            ->assertSet('pricedImageX', 0.42)
+            ->assertSet('pricedImageY', 0.63)
+            ->assertSet('pricedImagePosition', 'custom')
+            ->assertSet('pricedImageFont', 72)
+            ->assertSet('pricedImageLogo', true)
+            ->assertSet('pricedImageLogoPosition', 'custom')
+            ->assertSet('pricedImageLogoSize', 24)
+            ->assertSet('pricedImageLogoX', 0.31)
+            ->assertSet('pricedImageLogoY', 0.77);
+    }
+
+    #[Test]
+    public function apply_priced_image_stamp_layout_centers_non_custom_positions(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $product = Product::query()->create([
+            'name' => 'Necklace Set',
+            'slug' => 'necklace-set',
+            'price' => 2500,
+            'is_published' => true,
+        ]);
+
+        Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->call('openPricedImageModal')
+            ->call('applyPricedImageStampLayout', [
+                'x' => 0.42,
+                'y' => 0.63,
+                'position' => 'bottom-right',
+                'font' => 64,
+                'logo' => true,
+                'logo_position' => 'top-left',
+                'logo_size' => 20,
+                'logo_x' => 0.31,
+                'logo_y' => 0.77,
+            ])
+            ->assertSet('pricedImagePosition', 'bottom-right')
+            ->assertSet('pricedImageX', 0.88)
+            ->assertSet('pricedImageY', 0.88)
+            ->assertSet('pricedImageLogoPosition', 'top-left')
+            ->assertSet('pricedImageLogoX', 0.12)
+            ->assertSet('pricedImageLogoY', 0.12)
+            ->assertSet('pricedImageFont', 64)
+            ->assertSet('pricedImageLogoSize', 20);
+    }
+
+    #[Test]
+    public function priced_image_stamp_editor_syncs_via_batched_livewire_method(): void
+    {
+        $source = file_get_contents(resource_path('js/admin-product-images.js'));
+        $this->assertIsString($source);
+        $this->assertStringContainsString('applyPricedImageStampLayout', $source);
+        $this->assertStringContainsString('measureStageImage', $source);
+        $this->assertStringContainsString('observeStageFrame', $source);
+        $this->assertStringNotContainsString("await this.\$wire.set('pricedImageX'", $source);
+        $this->assertStringNotContainsString("await this.\$wire.set('pricedImageY'", $source);
+        $this->assertStringNotContainsString('/__agent_debug_log', $source);
     }
 }

@@ -1453,10 +1453,10 @@
                                                 @endforeach
                                             </div>
                                         </div>
-                                        <div class="flex flex-wrap items-center gap-2" data-priced-image-actions>
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center" data-priced-image-actions>
                                             <button type="button"
                                                 @click="syncAndGenerate()"
-                                                class="rounded-full bg-[#1E1E1E] px-5 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
+                                                class="inline-flex w-full items-center justify-center rounded-full bg-[#1E1E1E] px-5 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60 sm:w-auto"
                                                 :disabled="generating || deleting"
                                                 :aria-busy="generating ? 'true' : 'false'">
                                                 <span x-show="! generating" x-text="hasPricedImage ? 'Save & rebuild' : 'Save & generate'"></span>
@@ -1466,7 +1466,7 @@
                                                 x-show="hasPricedImage"
                                                 x-cloak
                                                 @click="deletePricedImage()"
-                                                class="rounded-full border border-rose-300 px-5 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                                                class="inline-flex w-full items-center justify-center rounded-full border border-rose-300 px-5 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60 sm:w-auto"
                                                 :disabled="generating || deleting"
                                                 :aria-busy="deleting ? 'true' : 'false'">
                                                 <span x-show="! deleting">Delete</span>

@@ -2367,12 +2367,14 @@ const registerProductImageAlpineData = () => {
         logoX: typeof config.logoX === 'number' ? config.logoX : 0.88,
         logoY: typeof config.logoY === 'number' ? config.logoY : 0.12,
         logoUrl: config.logoUrl || '/img/settings/logo.png',
+        hasPricedImage: Boolean(config.hasPricedImage),
         displayWidth: 0,
         displayHeight: 0,
         naturalWidth: 0,
         naturalHeight: 0,
         overlayGesture: null,
         generating: false,
+        deleting: false,
         _stageResizeObserver: null,
 
         init() {
@@ -2626,7 +2628,7 @@ const registerProductImageAlpineData = () => {
         },
 
         async syncAndGenerate() {
-            if (this.generating) {
+            if (this.generating || this.deleting) {
                 return;
             }
 
@@ -2635,8 +2637,28 @@ const registerProductImageAlpineData = () => {
             try {
                 await this.syncToWire();
                 await this.$wire.generatePricedImage();
+                this.hasPricedImage = true;
             } finally {
                 this.generating = false;
+            }
+        },
+
+        async deletePricedImage() {
+            if (this.generating || this.deleting || ! this.hasPricedImage) {
+                return;
+            }
+
+            if (! window.confirm('Delete this priced image? Position and size settings are kept for next time.')) {
+                return;
+            }
+
+            this.deleting = true;
+
+            try {
+                await this.$wire.deletePricedImage();
+                this.hasPricedImage = false;
+            } finally {
+                this.deleting = false;
             }
         },
 

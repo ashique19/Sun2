@@ -200,7 +200,8 @@ class ProductPricedImageTest extends TestCase
             ->assertSet('showPricedImageModal', true)
             ->assertSeeHtml('x-teleport="body"')
             ->assertSeeHtml('h-dvh')
-            ->assertSeeHtml('shrink-0 space-y-3 border-b')
+            ->assertSeeHtml('data-priced-image-modal-scroll')
+            ->assertSeeHtml('space-y-3 border-b border-[#EFE7D6]')
             ->assertSeeHtml('role="group" aria-label="Text position"')
             ->assertSeeHtml('aria-label="Top left"')
             ->assertSeeHtml('aria-label="Top right"')
@@ -354,13 +355,13 @@ class ProductPricedImageTest extends TestCase
 
         Livewire::test(AdminProductEdit::class, ['product' => $product->fresh(['images'])])
             ->call('openPricedImageModal')
-            ->assertSee('Save & rebuild')
-            ->assertSeeHtml('wire:click="deletePricedImage"')
+            ->assertSeeHtml("hasPricedImage ? 'Save & rebuild' : 'Save & generate'")
+            ->assertSeeHtml('deletePricedImage()')
+            ->assertSeeHtml('hasPricedImage')
             ->assertDontSee('writes the position, text size, and priced image')
             ->call('deletePricedImage')
             ->assertSet('message', 'Priced image deleted.')
-            ->assertDontSeeHtml('wire:click="deletePricedImage"')
-            ->assertSee('Save & generate');
+            ->assertSeeHtml("hasPricedImage ? 'Save & rebuild' : 'Save & generate'");
 
         $product->refresh();
         $this->assertNull($product->priced_image_path);

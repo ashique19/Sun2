@@ -270,10 +270,47 @@ class AdminProductEditImageModalTest extends TestCase
             ->assertSeeHtml('wire:ignore')
             ->assertSeeHtml('data-priced-stamp-stage')
             ->assertSeeHtml('data-overlay-image-frame')
+            ->assertSeeHtml('data-priced-image-modal-scroll')
+            ->assertSeeHtml('data-priced-image-actions')
             ->assertSeeHtml('startDrag($event)')
             ->assertSeeHtml('startResize($event)')
             ->assertSeeHtml("snap('center')")
+            ->assertSeeHtml('deletePricedImage()')
+            ->assertSeeHtml('hasPricedImage ? \'Save & rebuild\' : \'Save & generate\'')
             ->assertSee('Drag the price stamp');
+    }
+
+    #[Test]
+    public function priced_image_modal_keeps_save_and_delete_in_same_action_row(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $product = Product::query()->create([
+            'name' => 'Necklace Set',
+            'slug' => 'necklace-set',
+            'price' => 2500,
+            'is_published' => true,
+            'priced_image_path' => 'img/products-priced/1/demo.jpg',
+            'priced_image_layout' => [
+                'position' => 'top-left',
+                'font' => 56,
+                'x' => 0.12,
+                'y' => 0.12,
+            ],
+        ]);
+
+        $html = Livewire::test(AdminProductEdit::class, ['product' => $product])
+            ->call('openPricedImageModal')
+            ->html();
+
+        $this->assertStringContainsString('data-priced-image-actions', $html);
+        $this->assertStringContainsString('data-priced-image-modal-scroll', $html);
+        $this->assertStringContainsString('deletePricedImage()', $html);
+        $this->assertStringContainsString("hasPricedImage ? 'Save & rebuild' : 'Save & generate'", $html);
+        $this->assertDoesNotMatchRegularExpression(
+            '/data-priced-stamp-editor-host[^>]*(?:flex-1|min-h-0)/',
+            $html,
+        );
     }
 
     #[Test]

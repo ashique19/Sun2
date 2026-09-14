@@ -14,6 +14,7 @@ use App\Services\Channels\ChannelReplyService;
 use App\Services\Couriers\CourierApiRegistry;
 use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderPaymentRecorder;
+use App\Services\Orders\OrderPaymentSync;
 use App\Support\AdminAccess;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -74,7 +75,7 @@ class AdminOrderShow extends Component
     /** @var list<array{id:int,name:string,quantity:int,image:?string}> */
     public array $partialItems = [];
 
-    public function mount(Order $order, CourierApiRegistry $courierRegistry, OrderCourierChargeSync $courierChargeSync): void
+    public function mount(Order $order, CourierApiRegistry $courierRegistry, OrderCourierChargeSync $courierChargeSync, OrderPaymentSync $paymentSync): void
     {
         AdminAccess::ensureCanViewOrder($order);
 
@@ -95,16 +96,40 @@ class AdminOrderShow extends Component
             'replacements:id,order_number,exchange_of_order_id',
             'user:id,name,phone',
         ]);
-        $this->status = (string) $order->status;
-        $this->adminNote = (string) ($order->admin_note ?? '');
-        $this->customerNote = (string) ($order->customer_note ?? '');
-        $this->courierId = $order->courier_id
+
+        // Heal stale paid/due/cod caches that disagree with the payment ledger
+        // (storefront COD often showed Bill ৳bill / Collect ৳0 / After ৳bill paid).
+        if ($this->order->paymentCachesDisagreeWithLedger()) {
+            $paymentSync->sync($this->order);
+            $this->order = $this->order->fresh([
+                'items.product:id,slug,name',
+                'items.product.images:id,product_id,path,is_primary,sort_order',
+                'coupon',
+                'adjustments',
+                'adjustmentLogs.actor',
+                'paymentTransactions.receivedBy',
+                'courier',
+                'courierChargeConfirmedBy:id,name',
+                'createdBy:id,name',
+                'statusHistory.changedBy',
+                'courierLogs.courier',
+                'channelConversation.messages',
+                'exchangeOf:id,order_number',
+                'replacements:id,order_number,exchange_of_order_id',
+                'user:id,name,phone',
+            ]);
+        }
+
+        $this->status = (string) $this->order->status;
+        $this->adminNote = (string) ($this->order->admin_note ?? '');
+        $this->customerNote = (string) ($this->order->customer_note ?? '');
+        $this->courierId = $this->order->courier_id
             ?? Courier::query()->where('is_active', true)->where('is_default', true)->value('id')
             ?? Courier::query()->where('is_active', true)->where('slug', 'steadfast')->value('id')
             ?? Courier::query()->where('is_active', true)->orderBy('name')->value('id');
 
-        $chargeDefault = $order->isCourierChargeConfirmed()
-            ? (float) $order->courier_charge
+        $chargeDefault = $this->order->isCourierChargeConfirmed()
+            ? (float) $this->order->courier_charge
             : $courierChargeSync->suggestedConfirmAmount($this->order);
         $this->courierChargeOverride = (string) (int) round($chargeDefault);
 

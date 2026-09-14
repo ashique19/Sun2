@@ -288,9 +288,9 @@
                             <span>Amount to collect</span>
                             <span class="tabular-nums">&#2547; {{ number_format($order->collectableAmount(), 0) }}</span>
                         </div>
-                        @if ((float) $order->paid_amount > 0)
+                        @if ($order->trustedPaidAmount() > 0)
                             <p class="text-xs text-[#8C8474]">
-                                After &#2547;{{ number_format($order->paid_amount, 0) }} paid
+                                After &#2547;{{ number_format($order->trustedPaidAmount(), 0) }} paid
                                 (due &#2547;{{ number_format($order->due_amount, 0) }}).
                             </p>
                         @endif

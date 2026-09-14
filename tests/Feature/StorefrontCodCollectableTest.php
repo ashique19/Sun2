@@ -6,6 +6,7 @@ use App\Livewire\Admin\AdminOrderShow;
 use App\Models\Area;
 use App\Models\City;
 use App\Models\Order;
+use App\Models\PaymentTransaction;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\Orders\OrderPaymentSync;
@@ -225,6 +226,16 @@ class StorefrontCodCollectableTest extends TestCase
     public function paid_with_stale_zero_total_uses_invoice_minus_paid(): void
     {
         $order = $this->placeStorefrontOrder(500);
+
+        PaymentTransaction::query()->create([
+            'order_id' => $order->id,
+            'method' => 'bkash',
+            'amount' => 200,
+            'status' => 'completed',
+            'kind' => 'advance',
+            'paid_at' => now(),
+        ]);
+
         $order->forceFill([
             'total' => 0,
             'cod_amount' => 0,
@@ -233,9 +244,75 @@ class StorefrontCodCollectableTest extends TestCase
             'payment_status' => 'partial',
         ])->save();
 
-        $order = $order->fresh(['items', 'adjustments']);
+        $order = $order->fresh(['items', 'adjustments', 'paymentTransactions']);
 
         $this->assertSame(580.0, $order->reconstructedInvoiceBill());
         $this->assertSame(380.0, $order->collectableAmount());
+    }
+
+    #[Test]
+    public function false_full_paid_cache_without_ledger_keeps_collectable_equal_to_bill(): void
+    {
+        $order = $this->placeStorefrontOrder(500);
+        $order->forceFill([
+            'paid_amount' => 580,
+            'due_amount' => 0,
+            'cod_amount' => 0,
+            'payment_status' => 'paid',
+        ])->save();
+
+        $order = $order->fresh(['items', 'adjustments', 'paymentTransactions']);
+
+        $this->assertSame(0, $order->paymentTransactions->count());
+        $this->assertSame(580.0, $order->moneyTotals()->billToCustomer);
+        $this->assertSame(0.0, $order->trustedPaidAmount());
+        $this->assertSame(580.0, $order->collectableAmount());
+    }
+
+    #[Test]
+    public function unpaid_status_with_false_paid_cache_keeps_collectable_equal_to_bill(): void
+    {
+        $order = $this->placeStorefrontOrder(500);
+        $order->forceFill([
+            'paid_amount' => 580,
+            'due_amount' => 0,
+            'cod_amount' => 0,
+            'payment_status' => 'unpaid',
+        ])->save();
+
+        $order = $order->fresh(['items', 'adjustments', 'paymentTransactions']);
+
+        $this->assertSame(580.0, $order->collectableAmount());
+        $this->assertSame(0.0, $order->trustedPaidAmount());
+    }
+
+    #[Test]
+    public function admin_order_show_heals_false_paid_cache_and_hides_after_paid_note(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $order = $this->placeStorefrontOrder(500);
+        $order->forceFill([
+            'paid_amount' => 580,
+            'due_amount' => 0,
+            'cod_amount' => 0,
+            'payment_status' => 'paid',
+        ])->save();
+
+        $this->actingAs($admin);
+
+        Livewire::test(AdminOrderShow::class, ['order' => $order->fresh()])
+            ->assertSee('Bill to customer')
+            ->assertSee('Amount to collect')
+            ->assertSeeHtml('&#2547; 580')
+            ->assertDontSee('After &#2547;580 paid');
+
+        $order->refresh();
+        $this->assertSame(0.0, (float) $order->paid_amount);
+        $this->assertSame(580.0, (float) $order->due_amount);
+        $this->assertSame(580.0, (float) $order->cod_amount);
+        $this->assertSame('unpaid', $order->payment_status);
+        $this->assertSame(580.0, $order->collectableAmount());
     }
 }

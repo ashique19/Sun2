@@ -539,6 +539,10 @@ class Order extends Model
      * reconstructed invoice bill (same inputs as billToCustomer). Intentional
      * free/replacement orders (bill also 0) stay at collectable 0.
      *
+     * Stale paid_amount caches (common after bad syncs / repairs) are ignored when
+     * payment_status is still unpaid or the payment ledger has no successful rows —
+     * otherwise storefront COD shows “After ৳bill paid” with Amount to collect ৳0.
+     *
      * Compare as floats — Laravel's decimal cast yields "0.00", which is truthy
      * for ?: and would incorrectly fall through.
      */
@@ -548,6 +552,10 @@ class Order extends Model
         $paid = round((float) ($this->paid_amount ?? 0), 2);
         $cod = round((float) ($this->cod_amount ?? 0), 2);
         $due = round((float) ($this->due_amount ?? 0), 2);
+
+        if ($paid > 0) {
+            $paid = $this->trustedPaidAmount($paid);
+        }
 
         if ($paid > 0) {
             if ($total > 0) {
@@ -569,6 +577,85 @@ class Order extends Model
         }
 
         return $this->reconstructedInvoiceBill();
+    }
+
+    /**
+     * Paid cache used for COD residual — 0 when status/ledger say nothing was paid.
+     *
+     * Partial advances keep trusting paid_amount (ledger and cache stay in sync via
+     * OrderPaymentSync). Only when the cache claims the order is fully paid do we
+     * re-check the ledger — that is the storefront false-paid failure mode.
+     */
+    public function trustedPaidAmount(?float $cachedPaid = null): float
+    {
+        $cachedPaid = round($cachedPaid ?? (float) ($this->paid_amount ?? 0), 2);
+
+        if ($cachedPaid <= 0) {
+            return 0.0;
+        }
+
+        if (strtolower((string) ($this->payment_status ?? '')) === 'unpaid') {
+            return 0.0;
+        }
+
+        $total = round((float) $this->total, 2);
+        $bill = max($this->reconstructedInvoiceBill(), $total);
+
+        // Cache says fully paid (collectable would be 0) — confirm against ledger.
+        if ($bill >= 0.01 && $cachedPaid + 0.009 >= $bill) {
+            return $this->successfulPaymentLedgerTotal();
+        }
+
+        return $cachedPaid;
+    }
+
+    /**
+     * Sum of successful payment_transactions (ledger source of truth for paid_amount).
+     */
+    public function successfulPaymentLedgerTotal(): float
+    {
+        if ($this->relationLoaded('paymentTransactions')) {
+            return round(
+                (float) $this->paymentTransactions
+                    ->filter(fn (PaymentTransaction $tx) => $tx->isSuccessful())
+                    ->sum(fn (PaymentTransaction $tx) => (float) $tx->amount),
+                2,
+            );
+        }
+
+        return round(
+            (float) $this->paymentTransactions()
+                ->whereIn('status', PaymentTransaction::SUCCESSFUL_STATUSES)
+                ->sum('amount'),
+            2,
+        );
+    }
+
+    /**
+     * True when paid_amount / due / payment_status disagree with the payment ledger.
+     */
+    public function paymentCachesDisagreeWithLedger(): bool
+    {
+        $ledgerPaid = $this->successfulPaymentLedgerTotal();
+        $cachedPaid = round((float) ($this->paid_amount ?? 0), 2);
+
+        if (abs($ledgerPaid - $cachedPaid) >= 0.01) {
+            return true;
+        }
+
+        if ($ledgerPaid <= 0 && strtolower((string) ($this->payment_status ?? '')) === 'unpaid') {
+            $due = round((float) ($this->due_amount ?? 0), 2);
+            $cod = round((float) ($this->cod_amount ?? 0), 2);
+            $total = round((float) $this->total, 2);
+            $invoiceBill = $this->reconstructedInvoiceBill();
+
+            // Unpaid COD with empty ledger but zeroed due/cod while bill remains — needs heal.
+            if ($invoiceBill >= 0.01 && $due < 0.01 && $cod < 0.01 && ($total < 0.01 || abs($total - $invoiceBill) >= 0.01)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

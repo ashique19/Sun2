@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Courier;
 use App\Models\CourierData;
 use App\Models\Order;
+use App\Models\PaymentTransaction;
 use App\Models\User;
 use App\Services\Admin\OrderDispatchService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -217,6 +218,17 @@ class OrderPrintLabelTest extends TestCase
             'paid_amount' => 3120,
             'payment_status' => 'paid',
         ]);
+
+        PaymentTransaction::query()->create([
+            'order_id' => $order->id,
+            'method' => 'bkash',
+            'amount' => 3120,
+            'status' => 'completed',
+            'kind' => 'settlement',
+            'paid_at' => now(),
+        ]);
+
+        $order = $order->fresh(['paymentTransactions']);
 
         $this->assertSame(0.0, $order->collectableAmount());
     }

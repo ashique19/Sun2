@@ -9,6 +9,18 @@ return [
 
     'timeout' => (int) env('STEADFAST_TIMEOUT', 30),
 
+    /*
+    | Merchant-panel fraud check (fallback when Packzy /fraud_check fails or is unavailable).
+    | Uses the same email/password as https://steadfast.com.bd login.
+    */
+    'fraud' => [
+        'panel_url' => rtrim(env('STEADFAST_FRAUD_PANEL_URL', 'https://steadfast.com.bd'), '/'),
+
+        'email' => env('STEADFAST_EMAIL', env('STEADFAST_FRAUD_EMAIL', env('STEADFAST_FRAUD_CHECKER_EMAIL', env('STEADFAST_USER')))),
+
+        'password' => env('STEADFAST_PASSWORD', env('STEADFAST_FRAUD_PASSWORD', env('STEADFAST_FRAUD_CHECKER_PASSWORD'))),
+    ],
+
     'webhook' => [
         'enabled' => (bool) env('STEADFAST_WEBHOOK_ENABLED', true),
 

@@ -4,7 +4,6 @@ namespace App\Services\Admin;
 
 use App\Models\Order;
 use App\Models\User;
-use App\Services\Couriers\CourierApiRegistry;
 use App\Services\Couriers\SteadfastApiClient;
 use App\Support\PhoneNumber;
 use Illuminate\Database\QueryException;
@@ -15,7 +14,6 @@ class CustomerLookupService
 {
     public function __construct(
         private SteadfastApiClient $steadfast,
-        private CourierApiRegistry $courierRegistry,
         private OrderPasteParser $pasteParser,
     ) {}
 
@@ -142,8 +140,8 @@ class CustomerLookupService
      */
     private function steadfastStats(string $phone): array
     {
-        if (! $this->courierRegistry->isConfigured('steadfast')) {
-            return [null, 'Steadfast API is not configured.'];
+        if (! $this->steadfast->isFraudCheckAvailable()) {
+            return [null, 'Steadfast fraud check is not configured.'];
         }
 
         try {

@@ -4,6 +4,7 @@ namespace App\Services\Couriers;
 
 use App\Support\PhoneNumber;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -60,10 +61,9 @@ class SteadfastApiClient
     /**
      * Customer delivery stats used by admin order forms.
      *
-     * Tries the Packzy API first (`/fraud_check/{phone}`), then falls back to the
-     * merchant panel (`/user/frauds/check/{phone}`) when panel credentials are set.
-     * Steadfast's documented API payload uses `Total_parcels` (capital T); we
-     * normalize keys so the UI always receives lowercase totals + success_ratio.
+     * Prefers the merchant panel when STEADFAST_EMAIL / STEADFAST_PASSWORD are set
+     * (Packzy `/fraud_check` now often returns empty zeros). Falls back to the API
+     * only when the panel is unavailable or fails.
      *
      * @return array{
      *     total_parcels: int,
@@ -76,28 +76,49 @@ class SteadfastApiClient
     public function fraudCheck(string $phone): array
     {
         $digits = $this->fraudCheckPhoneDigits($phone);
+        $errors = [];
 
-        $apiError = null;
-
-        if ($this->hasApiCredentials()) {
+        if ($this->hasFraudPanelCredentials()) {
             try {
-                return $this->normalizeFraudResponse(
-                    $this->request('get', '/fraud_check/'.$digits)
-                );
+                return $this->fraudCheckViaPanel($digits);
             } catch (\Throwable $e) {
-                $apiError = $e;
+                $errors[] = $e->getMessage();
             }
         }
 
-        if ($this->hasFraudPanelCredentials()) {
-            return $this->fraudCheckViaPanel($digits);
+        if ($this->hasApiCredentials()) {
+            try {
+                return $this->fraudCheckViaApi($digits);
+            } catch (\Throwable $e) {
+                $errors[] = $e->getMessage();
+            }
         }
 
-        if ($apiError !== null) {
-            throw $apiError;
+        if ($errors !== []) {
+            throw new RuntimeException(implode(' | ', $errors));
         }
 
         throw new RuntimeException('Steadfast fraud check is not configured.');
+    }
+
+    /**
+     * @return array{
+     *     total_parcels: int,
+     *     total_delivered: int,
+     *     total_cancelled: int,
+     *     total_fraud_reports: mixed,
+     *     success_ratio: int
+     * }
+     */
+    private function fraudCheckViaApi(string $phoneDigits): array
+    {
+        $response = $this->request('get', '/fraud_check/'.$phoneDigits);
+
+        if (! $this->hasFraudCountKeys($response)) {
+            throw new RuntimeException('Steadfast API fraud_check response was missing delivery counts.');
+        }
+
+        return $this->normalizeFraudResponse($response);
     }
 
     /**
@@ -116,7 +137,7 @@ class SteadfastApiClient
         $password = (string) config('steadfast.fraud.password');
         $domain = parse_url($panelUrl, PHP_URL_HOST) ?: 'steadfast.com.bd';
 
-        $loginPage = $this->panelClient($panelUrl)->get('/login');
+        $loginPage = $this->panelBrowserClient($panelUrl)->get('/login');
 
         if (! $loginPage->successful()) {
             throw new RuntimeException('Steadfast fraud panel login page is unavailable.');
@@ -128,48 +149,93 @@ class SteadfastApiClient
             throw new RuntimeException('Steadfast fraud panel CSRF token was not found.');
         }
 
-        $cookies = $this->cookieMap($loginPage->cookies());
+        $preLoginCookies = $this->cookieMap($loginPage->cookies());
 
-        $loginResponse = $this->panelClient($panelUrl)
-            ->withCookies($cookies, $domain)
+        // Do not follow the 302 — the authenticated session cookie is set on that response.
+        $loginResponse = $this->panelBrowserClient($panelUrl)
+            ->withCookies($preLoginCookies, $domain)
+            ->withHeaders([
+                'Referer' => $panelUrl.'/login',
+                'Origin' => $panelUrl,
+            ])
             ->asForm()
+            ->withoutRedirecting()
             ->post('/login', [
                 '_token' => $csrfToken,
                 'email' => $email,
                 'password' => $password,
             ]);
 
-        if (! ($loginResponse->successful() || $loginResponse->redirect())) {
+        $location = (string) $loginResponse->header('Location');
+
+        if (! $loginResponse->redirect() || str_contains($location, '/login')) {
             throw new RuntimeException('Steadfast fraud panel login failed. Check STEADFAST_EMAIL / STEADFAST_PASSWORD.');
         }
 
-        $sessionCookies = $this->cookieMap($loginResponse->cookies());
-
-        if ($sessionCookies === []) {
-            $sessionCookies = $cookies;
-        }
+        $sessionCookies = array_merge($preLoginCookies, $this->cookieMap($loginResponse->cookies()));
 
         try {
-            $fraudResponse = $this->panelClient($panelUrl)
-                ->withCookies($sessionCookies, $domain)
-                ->get('/user/frauds/check/'.$phoneDigits);
-
-            if (! $fraudResponse->successful()) {
-                throw new RuntimeException(
-                    'Steadfast fraud panel error ('.$fraudResponse->status().'): '.$fraudResponse->body()
-                );
-            }
-
-            $json = $fraudResponse->json();
-
-            if (! is_array($json)) {
-                throw new RuntimeException('Steadfast fraud panel returned an unexpected response.');
-            }
-
-            return $this->normalizeFraudResponse($json);
+            return $this->fetchPanelFraudStats($panelUrl, $domain, $sessionCookies, $phoneDigits);
         } finally {
             $this->logoutFromPanel($panelUrl, $domain, $sessionCookies);
         }
+    }
+
+    /**
+     * @param  array<string, string>  $cookies
+     * @return array{
+     *     total_parcels: int,
+     *     total_delivered: int,
+     *     total_cancelled: int,
+     *     total_fraud_reports: mixed,
+     *     success_ratio: int
+     * }
+     */
+    private function fetchPanelFraudStats(string $panelUrl, string $domain, array $cookies, string $phoneDigits): array
+    {
+        $paths = [
+            '/user/frauds/check/'.$phoneDigits,
+            '/user/consignment/getbyphone/'.$phoneDigits,
+        ];
+
+        $errors = [];
+
+        foreach ($paths as $path) {
+            $response = $this->panelJsonClient($panelUrl)
+                ->withCookies($cookies, $domain)
+                ->withHeaders([
+                    'Referer' => $panelUrl.'/user/frauds/check',
+                    'X-Requested-With' => 'XMLHttpRequest',
+                ])
+                ->get($path);
+
+            if (! $response->successful()) {
+                $errors[] = $path.' HTTP '.$response->status();
+
+                continue;
+            }
+
+            if (! $this->isJsonFraudResponse($response)) {
+                $errors[] = $path.' returned non-JSON (likely an unauthenticated redirect)';
+
+                continue;
+            }
+
+            /** @var array<string, mixed> $json */
+            $json = $response->json();
+
+            if (! $this->hasFraudCountKeys($json)) {
+                $errors[] = $path.' missing delivery count keys';
+
+                continue;
+            }
+
+            return $this->normalizeFraudResponse($json);
+        }
+
+        throw new RuntimeException(
+            'Steadfast fraud panel returned no usable stats ('.implode('; ', $errors).').'
+        );
     }
 
     /**
@@ -178,7 +244,7 @@ class SteadfastApiClient
     private function logoutFromPanel(string $panelUrl, string $domain, array $cookies): void
     {
         try {
-            $page = $this->panelClient($panelUrl)
+            $page = $this->panelBrowserClient($panelUrl)
                 ->withCookies($cookies, $domain)
                 ->get('/user/frauds/check');
 
@@ -192,7 +258,7 @@ class SteadfastApiClient
                 return;
             }
 
-            $this->panelClient($panelUrl)
+            $this->panelBrowserClient($panelUrl)
                 ->withCookies($cookies, $domain)
                 ->asForm()
                 ->post('/logout', [
@@ -203,14 +269,38 @@ class SteadfastApiClient
         }
     }
 
-    private function panelClient(string $panelUrl): PendingRequest
+    private function panelBrowserClient(string $panelUrl): PendingRequest
     {
         return Http::baseUrl($panelUrl)
             ->timeout((int) config('steadfast.timeout', 30))
             ->withHeaders([
-                'Accept' => 'application/json, text/html, */*',
-                'User-Agent' => 'Mozilla/5.0 (compatible; Sun2FraudCheck/1.0)',
+                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+                'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language' => 'en-US,en;q=0.9',
             ]);
+    }
+
+    private function panelJsonClient(string $panelUrl): PendingRequest
+    {
+        return Http::baseUrl($panelUrl)
+            ->timeout((int) config('steadfast.timeout', 30))
+            ->withHeaders([
+                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+                'Accept' => 'application/json, text/plain, */*',
+                'Accept-Language' => 'en-US,en;q=0.9',
+            ]);
+    }
+
+    private function isJsonFraudResponse(Response $response): bool
+    {
+        $contentType = strtolower((string) $response->header('Content-Type'));
+
+        if (str_contains($contentType, 'json')) {
+            return is_array($response->json());
+        }
+
+        // Some panel endpoints omit Content-Type; accept real JSON bodies only.
+        return is_array($response->json());
     }
 
     private function extractCsrfToken(string $html): ?string
@@ -255,6 +345,28 @@ class SteadfastApiClient
 
     /**
      * @param  array<string, mixed>  $response
+     */
+    private function hasFraudCountKeys(array $response): bool
+    {
+        $payload = $response;
+
+        if (isset($response['data']) && is_array($response['data'])) {
+            $payload = array_merge($response, $response['data']);
+        }
+
+        $lower = [];
+        foreach ($payload as $key => $value) {
+            if (is_string($key)) {
+                $lower[strtolower($key)] = $value;
+            }
+        }
+
+        return array_key_exists('total_delivered', $lower)
+            && array_key_exists('total_cancelled', $lower);
+    }
+
+    /**
+     * @param  array<string, mixed>  $response
      * @return array{
      *     total_parcels: int,
      *     total_delivered: int,
@@ -282,7 +394,7 @@ class SteadfastApiClient
         $totalCancelled = (int) ($lower['total_cancelled'] ?? 0);
         $totalParcels = (int) ($lower['total_parcels'] ?? 0);
 
-        if ($totalParcels <= 0 && ($totalDelivered > 0 || $totalCancelled > 0)) {
+        if ($totalParcels <= 0) {
             $totalParcels = $totalDelivered + $totalCancelled;
         }
 
@@ -294,7 +406,7 @@ class SteadfastApiClient
             'total_parcels' => $totalParcels,
             'total_delivered' => $totalDelivered,
             'total_cancelled' => $totalCancelled,
-            'total_fraud_reports' => $lower['total_fraud_reports'] ?? [],
+            'total_fraud_reports' => $lower['total_fraud_reports'] ?? ($lower['frauds'] ?? []),
             'success_ratio' => $successRatio,
         ];
     }

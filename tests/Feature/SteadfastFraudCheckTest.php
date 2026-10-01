@@ -69,46 +69,78 @@ class SteadfastFraudCheckTest extends TestCase
     }
 
     #[Test]
-    public function fraud_check_falls_back_to_merchant_panel_when_api_fails(): void
+    public function fraud_check_prefers_panel_over_empty_api_zeros(): void
     {
         config([
             'steadfast.fraud.email' => 'merchant@example.com',
             'steadfast.fraud.password' => 'secret',
         ]);
 
-        Http::fake([
-            'portal.packzy.com/api/v1/fraud_check/*' => Http::response(['message' => 'Gone'], 404),
-            'steadfast.com.bd/login' => Http::sequence()
-                ->push('<html><input type="hidden" name="_token" value="csrf-login"></html>', 200)
-                ->push('', 302, ['Set-Cookie' => 'steadfast_session=abc; Path=/; HttpOnly']),
-            'steadfast.com.bd/user/frauds/check/01712345678' => Http::response([
-                'total_delivered' => 5,
-                'total_cancelled' => 1,
-            ], 200),
-            'steadfast.com.bd/user/frauds/check' => Http::response(
-                '<html><meta name="csrf-token" content="csrf-logout"></html>',
-                200
-            ),
-            'steadfast.com.bd/logout' => Http::response('', 302),
-        ]);
+        Http::fake(function ($request) {
+            $url = $request->url();
 
-        $stats = app(SteadfastApiClient::class)->fraudCheck('01712345678');
+            if (str_contains($url, 'portal.packzy.com')) {
+                return Http::response([
+                    'total_delivered' => 0,
+                    'total_cancelled' => 0,
+                    'Total_parcels' => 0,
+                ], 200);
+            }
 
-        $this->assertSame(6, $stats['total_parcels']);
-        $this->assertSame(5, $stats['total_delivered']);
-        $this->assertSame(1, $stats['total_cancelled']);
-        $this->assertSame(83, $stats['success_ratio']);
+            if ($url === 'https://steadfast.com.bd/login' && $request->method() === 'GET') {
+                return Http::response(
+                    '<html><input type="hidden" name="_token" value="csrf-login"></html>',
+                    200,
+                    ['Set-Cookie' => 'XSRF-TOKEN=xsrf; Path=/']
+                );
+            }
 
-        Http::assertSent(function ($request) {
-            return $request->url() === 'https://portal.packzy.com/api/v1/fraud_check/01712345678';
+            if ($url === 'https://steadfast.com.bd/login' && $request->method() === 'POST') {
+                return Http::response('', 302, [
+                    'Location' => 'https://steadfast.com.bd/user/orders',
+                    'Set-Cookie' => 'steadfast_session=abc; Path=/; HttpOnly',
+                ]);
+            }
+
+            if ($url === 'https://steadfast.com.bd/user/frauds/check/01712075185') {
+                return Http::response([
+                    'total_delivered' => 9,
+                    'total_cancelled' => 3,
+                    'frauds' => [],
+                ], 200, ['Content-Type' => 'application/json']);
+            }
+
+            if ($url === 'https://steadfast.com.bd/user/frauds/check') {
+                return Http::response(
+                    '<html><meta name="csrf-token" content="csrf-logout"></html>',
+                    200
+                );
+            }
+
+            if ($url === 'https://steadfast.com.bd/logout') {
+                return Http::response('', 302);
+            }
+
+            return Http::response('unexpected '.$url, 500);
+        });
+
+        $stats = app(SteadfastApiClient::class)->fraudCheck('01712075185');
+
+        $this->assertSame(12, $stats['total_parcels']);
+        $this->assertSame(9, $stats['total_delivered']);
+        $this->assertSame(3, $stats['total_cancelled']);
+        $this->assertSame(75, $stats['success_ratio']);
+
+        Http::assertNotSent(function ($request) {
+            return str_contains($request->url(), 'portal.packzy.com');
         });
         Http::assertSent(function ($request) {
-            return $request->url() === 'https://steadfast.com.bd/user/frauds/check/01712345678';
+            return $request->url() === 'https://steadfast.com.bd/user/frauds/check/01712075185';
         });
     }
 
     #[Test]
-    public function fraud_check_uses_panel_when_only_panel_credentials_are_configured(): void
+    public function fraud_check_falls_back_to_getbyphone_when_frauds_check_fails(): void
     {
         config([
             'steadfast.api_key' => null,
@@ -117,32 +149,90 @@ class SteadfastFraudCheckTest extends TestCase
             'steadfast.fraud.password' => 'secret',
         ]);
 
-        Http::fake([
-            'steadfast.com.bd/login' => Http::sequence()
-                ->push('<html><meta name="csrf-token" content="csrf-login"></html>', 200)
-                ->push('', 302, ['Set-Cookie' => 'steadfast_session=xyz; Path=/']),
-            'steadfast.com.bd/user/frauds/check/01812345678' => Http::response([
-                'total_delivered' => 2,
-                'total_cancelled' => 2,
-            ], 200),
-            'steadfast.com.bd/user/frauds/check' => Http::response(
-                '<html><meta name="csrf-token" content="csrf-logout"></html>',
-                200
-            ),
-            'steadfast.com.bd/logout' => Http::response('', 302),
-        ]);
+        Http::fake(function ($request) {
+            $url = $request->url();
 
-        $client = app(SteadfastApiClient::class);
+            if ($url === 'https://steadfast.com.bd/login' && $request->method() === 'GET') {
+                return Http::response(
+                    '<html><meta name="csrf-token" content="csrf-login"></html>',
+                    200
+                );
+            }
 
-        $this->assertTrue($client->isFraudCheckAvailable());
+            if ($url === 'https://steadfast.com.bd/login' && $request->method() === 'POST') {
+                return Http::response('', 302, [
+                    'Location' => 'https://steadfast.com.bd/user/dashboard',
+                    'Set-Cookie' => 'steadfast_session=xyz; Path=/',
+                ]);
+            }
 
-        $stats = $client->fraudCheck('01812345678');
+            if ($url === 'https://steadfast.com.bd/user/frauds/check/01812345678') {
+                return Http::response('<html>login</html>', 200, ['Content-Type' => 'text/html']);
+            }
+
+            if ($url === 'https://steadfast.com.bd/user/consignment/getbyphone/01812345678') {
+                return Http::response([
+                    'total_delivered' => 2,
+                    'total_cancelled' => 2,
+                ], 200, ['Content-Type' => 'application/json']);
+            }
+
+            if ($url === 'https://steadfast.com.bd/user/frauds/check') {
+                return Http::response(
+                    '<html><meta name="csrf-token" content="csrf-logout"></html>',
+                    200
+                );
+            }
+
+            if ($url === 'https://steadfast.com.bd/logout') {
+                return Http::response('', 302);
+            }
+
+            return Http::response('unexpected '.$url, 500);
+        });
+
+        $stats = app(SteadfastApiClient::class)->fraudCheck('01812345678');
 
         $this->assertSame(4, $stats['total_parcels']);
         $this->assertSame(50, $stats['success_ratio']);
-        Http::assertNotSent(function ($request) {
-            return str_contains($request->url(), 'portal.packzy.com');
-        });
+    }
+
+    #[Test]
+    public function fraud_check_rejects_api_payload_without_count_keys(): void
+    {
+        Http::fake([
+            'portal.packzy.com/api/v1/fraud_check/*' => Http::response([
+                'status' => 200,
+                'message' => 'ok',
+            ], 200),
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('missing delivery counts');
+
+        app(SteadfastApiClient::class)->fraudCheck('01712345678');
+    }
+
+    #[Test]
+    public function fraud_check_rejects_login_redirect_back_to_login(): void
+    {
+        config([
+            'steadfast.api_key' => null,
+            'steadfast.secret_key' => null,
+            'steadfast.fraud.email' => 'merchant@example.com',
+            'steadfast.fraud.password' => 'wrong',
+        ]);
+
+        Http::fake([
+            'steadfast.com.bd/login' => Http::sequence()
+                ->push('<html><input type="hidden" name="_token" value="csrf-login"></html>', 200)
+                ->push('', 302, ['Location' => 'https://steadfast.com.bd/login']),
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('STEADFAST_EMAIL / STEADFAST_PASSWORD');
+
+        app(SteadfastApiClient::class)->fraudCheck('01712345678');
     }
 
     #[Test]

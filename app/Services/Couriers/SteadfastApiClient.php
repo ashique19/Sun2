@@ -61,34 +61,30 @@ class SteadfastApiClient
     /**
      * Customer delivery stats used by admin order forms.
      *
-     * Prefers the merchant panel when STEADFAST_EMAIL / STEADFAST_PASSWORD are set
-     * (Packzy `/fraud_check` now often returns empty zeros). Falls back to the API
-     * only when the panel is unavailable or fails.
+     * Primary path: Packzy `GET /fraud_check/score/{phone}` (ratios + volume band).
+     * The older `/fraud_check/{phone}` counts endpoint is deprecated and stops
+     * returning counts after 27 Sep 2026 — do not rely on it.
      *
-     * @return array{
-     *     total_parcels: int,
-     *     total_delivered: int,
-     *     total_cancelled: int,
-     *     total_fraud_reports: mixed,
-     *     success_ratio: int
-     * }
+     * Falls back to the merchant panel only when the score API is unavailable.
+     *
+     * @return array<string, mixed>
      */
     public function fraudCheck(string $phone): array
     {
         $digits = $this->fraudCheckPhoneDigits($phone);
         $errors = [];
 
-        if ($this->hasFraudPanelCredentials()) {
+        if ($this->hasApiCredentials()) {
             try {
-                return $this->fraudCheckViaPanel($digits);
+                return $this->fraudCheckViaScoreApi($digits);
             } catch (\Throwable $e) {
                 $errors[] = $e->getMessage();
             }
         }
 
-        if ($this->hasApiCredentials()) {
+        if ($this->hasFraudPanelCredentials()) {
             try {
-                return $this->fraudCheckViaApi($digits);
+                return $this->fraudCheckViaPanel($digits);
             } catch (\Throwable $e) {
                 $errors[] = $e->getMessage();
             }
@@ -102,33 +98,50 @@ class SteadfastApiClient
     }
 
     /**
-     * @return array{
-     *     total_parcels: int,
-     *     total_delivered: int,
-     *     total_cancelled: int,
-     *     total_fraud_reports: mixed,
-     *     success_ratio: int
-     * }
+     * @return array<string, mixed>
      */
-    private function fraudCheckViaApi(string $phoneDigits): array
+    private function fraudCheckViaScoreApi(string $phoneDigits): array
     {
-        $response = $this->request('get', '/fraud_check/'.$phoneDigits);
+        $response = $this->request('get', '/fraud_check/score/'.$phoneDigits);
+        $payload = $this->flattenFraudPayload($response);
 
-        if (! $this->hasFraudCountKeys($response)) {
-            throw new RuntimeException('Steadfast API fraud_check response was missing delivery counts.');
+        if (! array_key_exists('delivery_ratio', $payload) && ! array_key_exists('volume_band', $payload)) {
+            throw new RuntimeException('Steadfast fraud score response was missing delivery_ratio / volume_band.');
         }
 
-        return $this->normalizeFraudResponse($response);
+        $deliveryRatio = $this->nullableInt($payload['delivery_ratio'] ?? null);
+        $cancellationRatio = $this->nullableInt($payload['cancellation_ratio'] ?? null);
+        $volumeBand = isset($payload['volume_band']) && is_string($payload['volume_band'])
+            ? $payload['volume_band']
+            : null;
+
+        $fraudCategories = $payload['fraud_categories'] ?? [];
+        if (! is_array($fraudCategories)) {
+            $fraudCategories = [];
+        }
+
+        return [
+            'data_type' => 'score',
+            'phone' => is_string($payload['phone'] ?? null) ? $payload['phone'] : $phoneDigits,
+            'delivery_ratio' => $deliveryRatio,
+            'cancellation_ratio' => $cancellationRatio,
+            // Alias for older UI / tests that read success_ratio.
+            'success_ratio' => $deliveryRatio,
+            'volume_band' => $volumeBand,
+            'volume_band_label' => $this->volumeBandLabel($volumeBand),
+            'total_reports' => (int) ($payload['total_reports'] ?? 0),
+            'fraud_categories' => $fraudCategories,
+            'scoring_disabled' => (bool) ($payload['scoring_disabled'] ?? true),
+            'doubtful_reports' => (bool) ($payload['doubtful_reports'] ?? false),
+            'total_delivered' => null,
+            'total_parcels' => null,
+            'total_cancelled' => null,
+            'total_fraud_reports' => $fraudCategories,
+        ];
     }
 
     /**
-     * @return array{
-     *     total_parcels: int,
-     *     total_delivered: int,
-     *     total_cancelled: int,
-     *     total_fraud_reports: mixed,
-     *     success_ratio: int
-     * }
+     * @return array<string, mixed>
      */
     private function fraudCheckViaPanel(string $phoneDigits): array
     {
@@ -151,7 +164,6 @@ class SteadfastApiClient
 
         $preLoginCookies = $this->cookieMap($loginPage->cookies());
 
-        // Do not follow the 302 — the authenticated session cookie is set on that response.
         $loginResponse = $this->panelBrowserClient($panelUrl)
             ->withCookies($preLoginCookies, $domain)
             ->withHeaders([
@@ -183,13 +195,7 @@ class SteadfastApiClient
 
     /**
      * @param  array<string, string>  $cookies
-     * @return array{
-     *     total_parcels: int,
-     *     total_delivered: int,
-     *     total_cancelled: int,
-     *     total_fraud_reports: mixed,
-     *     success_ratio: int
-     * }
+     * @return array<string, mixed>
      */
     private function fetchPanelFraudStats(string $panelUrl, string $domain, array $cookies, string $phoneDigits): array
     {
@@ -224,13 +230,13 @@ class SteadfastApiClient
             /** @var array<string, mixed> $json */
             $json = $response->json();
 
-            if (! $this->hasFraudCountKeys($json)) {
+            if (! $this->hasLegacyCountKeys($json)) {
                 $errors[] = $path.' missing delivery count keys';
 
                 continue;
             }
 
-            return $this->normalizeFraudResponse($json);
+            return $this->normalizeLegacyCountResponse($json);
         }
 
         throw new RuntimeException(
@@ -299,7 +305,6 @@ class SteadfastApiClient
             return is_array($response->json());
         }
 
-        // Some panel endpoints omit Content-Type; accept real JSON bodies only.
         return is_array($response->json());
     }
 
@@ -345,8 +350,9 @@ class SteadfastApiClient
 
     /**
      * @param  array<string, mixed>  $response
+     * @return array<string, mixed>
      */
-    private function hasFraudCountKeys(array $response): bool
+    private function flattenFraudPayload(array $response): array
     {
         $payload = $response;
 
@@ -354,7 +360,17 @@ class SteadfastApiClient
             $payload = array_merge($response, $response['data']);
         }
 
+        return $payload;
+    }
+
+    /**
+     * @param  array<string, mixed>  $response
+     */
+    private function hasLegacyCountKeys(array $response): bool
+    {
+        $payload = $this->flattenFraudPayload($response);
         $lower = [];
+
         foreach ($payload as $key => $value) {
             if (is_string($key)) {
                 $lower[strtolower($key)] = $value;
@@ -367,23 +383,13 @@ class SteadfastApiClient
 
     /**
      * @param  array<string, mixed>  $response
-     * @return array{
-     *     total_parcels: int,
-     *     total_delivered: int,
-     *     total_cancelled: int,
-     *     total_fraud_reports: mixed,
-     *     success_ratio: int
-     * }
+     * @return array<string, mixed>
      */
-    private function normalizeFraudResponse(array $response): array
+    private function normalizeLegacyCountResponse(array $response): array
     {
-        $payload = $response;
-
-        if (isset($response['data']) && is_array($response['data'])) {
-            $payload = array_merge($response, $response['data']);
-        }
-
+        $payload = $this->flattenFraudPayload($response);
         $lower = [];
+
         foreach ($payload as $key => $value) {
             if (is_string($key)) {
                 $lower[strtolower($key)] = $value;
@@ -400,15 +406,51 @@ class SteadfastApiClient
 
         $successRatio = $totalParcels > 0
             ? (int) round(($totalDelivered / $totalParcels) * 100)
-            : (int) ($lower['success_ratio'] ?? 0);
+            : null;
 
         return [
+            'data_type' => 'counts',
+            'delivery_ratio' => $successRatio,
+            'cancellation_ratio' => $totalParcels > 0
+                ? (int) round(($totalCancelled / $totalParcels) * 100)
+                : null,
+            'success_ratio' => $successRatio,
+            'volume_band' => null,
+            'volume_band_label' => null,
+            'total_reports' => is_countable($lower['total_fraud_reports'] ?? null)
+                ? count($lower['total_fraud_reports'])
+                : (int) ($lower['total_reports'] ?? 0),
+            'fraud_categories' => [],
             'total_parcels' => $totalParcels,
             'total_delivered' => $totalDelivered,
             'total_cancelled' => $totalCancelled,
             'total_fraud_reports' => $lower['total_fraud_reports'] ?? ($lower['frauds'] ?? []),
-            'success_ratio' => $successRatio,
         ];
+    }
+
+    private function nullableInt(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (! is_numeric($value)) {
+            return null;
+        }
+
+        return (int) $value;
+    }
+
+    private function volumeBandLabel(?string $band): ?string
+    {
+        return match ($band) {
+            'none' => 'none (0 finished)',
+            'low' => 'low (1–5)',
+            'medium' => 'medium (6–20)',
+            'high' => 'high (21–200)',
+            'very_high' => 'very high (200+)',
+            default => $band,
+        };
     }
 
     private function fraudCheckPhoneDigits(string $phone): string
@@ -458,6 +500,10 @@ class SteadfastApiClient
             'get' => $pending->get($url),
             default => $pending->asJson()->post($url, $payload),
         };
+
+        if ($response->status() === 429) {
+            throw new RuntimeException('Steadfast fraud check rate limit reached (HTTP 429). Try again later.');
+        }
 
         if (! $response->successful()) {
             throw new RuntimeException('Steadfast API error ('.$response->status().'): '.$response->body());

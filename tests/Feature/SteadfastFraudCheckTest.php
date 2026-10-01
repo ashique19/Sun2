@@ -2,11 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Livewire\Admin\AdminOrderForm;
+use App\Models\User;
 use App\Services\Admin\CustomerLookupService;
 use App\Services\Couriers\SteadfastApiClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Livewire\Livewire;
+use Mockery;
 use PHPUnit\Framework\Attributes\Test;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class SteadfastFraudCheckTest extends TestCase
@@ -28,48 +33,70 @@ class SteadfastFraudCheckTest extends TestCase
     }
 
     #[Test]
-    public function fraud_check_normalizes_capitalized_total_parcels_from_api(): void
+    public function fraud_check_uses_score_endpoint_ratios_and_volume_band(): void
     {
         Http::fake([
-            'portal.packzy.com/api/v1/fraud_check/01712345678' => Http::response([
-                'Total_parcels' => 17,
-                'total_delivered' => 7,
-                'total_cancelled' => 10,
-                'total_fraud_reports' => [],
+            'portal.packzy.com/api/v1/fraud_check/score/01712345678' => Http::response([
+                'status' => 200,
+                'phone' => '01712345678',
+                'delivery_ratio' => 92,
+                'cancellation_ratio' => 7,
+                'volume_band' => 'high',
+                'total_reports' => 0,
+                'fraud_categories' => [],
+                'score' => null,
+                'level' => null,
+                'reasons' => [],
+                'scoring_disabled' => true,
+                'doubtful_reports' => false,
             ], 200),
         ]);
 
         $stats = app(SteadfastApiClient::class)->fraudCheck('01712345678');
 
-        $this->assertSame(17, $stats['total_parcels']);
-        $this->assertSame(7, $stats['total_delivered']);
-        $this->assertSame(10, $stats['total_cancelled']);
-        $this->assertSame(41, $stats['success_ratio']);
+        $this->assertSame('score', $stats['data_type']);
+        $this->assertSame(92, $stats['delivery_ratio']);
+        $this->assertSame(92, $stats['success_ratio']);
+        $this->assertSame(7, $stats['cancellation_ratio']);
+        $this->assertSame('high', $stats['volume_band']);
+        $this->assertSame('high (21–200)', $stats['volume_band_label']);
+        $this->assertNull($stats['total_delivered']);
+        $this->assertNull($stats['total_parcels']);
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://portal.packzy.com/api/v1/fraud_check/score/01712345678';
+        });
+        Http::assertNotSent(function ($request) {
+            return str_contains($request->url(), '/fraud_check/017');
+        });
     }
 
     #[Test]
-    public function fraud_check_reads_nested_data_payload(): void
+    public function fraud_check_preserves_null_ratios_for_unknown_customers(): void
     {
         Http::fake([
-            'portal.packzy.com/api/v1/fraud_check/*' => Http::response([
+            'portal.packzy.com/api/v1/fraud_check/score/*' => Http::response([
                 'status' => 200,
-                'data' => [
-                    'Total_parcels' => 4,
-                    'total_delivered' => 3,
-                    'total_cancelled' => 1,
-                ],
+                'phone' => '01712075185',
+                'delivery_ratio' => null,
+                'cancellation_ratio' => null,
+                'volume_band' => 'none',
+                'total_reports' => 0,
+                'fraud_categories' => [],
+                'scoring_disabled' => true,
             ], 200),
         ]);
 
-        $stats = app(SteadfastApiClient::class)->fraudCheck('+8801712345678');
+        $stats = app(SteadfastApiClient::class)->fraudCheck('01712075185');
 
-        $this->assertSame(4, $stats['total_parcels']);
-        $this->assertSame(3, $stats['total_delivered']);
-        $this->assertSame(75, $stats['success_ratio']);
+        $this->assertNull($stats['delivery_ratio']);
+        $this->assertNull($stats['cancellation_ratio']);
+        $this->assertNull($stats['success_ratio']);
+        $this->assertSame('none', $stats['volume_band']);
     }
 
     #[Test]
-    public function fraud_check_prefers_panel_over_empty_api_zeros(): void
+    public function fraud_check_falls_back_to_panel_when_score_api_fails(): void
     {
         config([
             'steadfast.fraud.email' => 'merchant@example.com',
@@ -79,19 +106,14 @@ class SteadfastFraudCheckTest extends TestCase
         Http::fake(function ($request) {
             $url = $request->url();
 
-            if (str_contains($url, 'portal.packzy.com')) {
-                return Http::response([
-                    'total_delivered' => 0,
-                    'total_cancelled' => 0,
-                    'Total_parcels' => 0,
-                ], 200);
+            if (str_contains($url, '/fraud_check/score/')) {
+                return Http::response(['message' => 'Gone'], 404);
             }
 
             if ($url === 'https://steadfast.com.bd/login' && $request->method() === 'GET') {
                 return Http::response(
                     '<html><input type="hidden" name="_token" value="csrf-login"></html>',
-                    200,
-                    ['Set-Cookie' => 'XSRF-TOKEN=xsrf; Path=/']
+                    200
                 );
             }
 
@@ -106,7 +128,6 @@ class SteadfastFraudCheckTest extends TestCase
                 return Http::response([
                     'total_delivered' => 9,
                     'total_cancelled' => 3,
-                    'frauds' => [],
                 ], 200, ['Content-Type' => 'application/json']);
             }
 
@@ -126,147 +147,142 @@ class SteadfastFraudCheckTest extends TestCase
 
         $stats = app(SteadfastApiClient::class)->fraudCheck('01712075185');
 
+        $this->assertSame('counts', $stats['data_type']);
         $this->assertSame(12, $stats['total_parcels']);
         $this->assertSame(9, $stats['total_delivered']);
-        $this->assertSame(3, $stats['total_cancelled']);
         $this->assertSame(75, $stats['success_ratio']);
-
-        Http::assertNotSent(function ($request) {
-            return str_contains($request->url(), 'portal.packzy.com');
-        });
-        Http::assertSent(function ($request) {
-            return $request->url() === 'https://steadfast.com.bd/user/frauds/check/01712075185';
-        });
     }
 
     #[Test]
-    public function fraud_check_falls_back_to_getbyphone_when_frauds_check_fails(): void
-    {
-        config([
-            'steadfast.api_key' => null,
-            'steadfast.secret_key' => null,
-            'steadfast.fraud.email' => 'merchant@example.com',
-            'steadfast.fraud.password' => 'secret',
-        ]);
-
-        Http::fake(function ($request) {
-            $url = $request->url();
-
-            if ($url === 'https://steadfast.com.bd/login' && $request->method() === 'GET') {
-                return Http::response(
-                    '<html><meta name="csrf-token" content="csrf-login"></html>',
-                    200
-                );
-            }
-
-            if ($url === 'https://steadfast.com.bd/login' && $request->method() === 'POST') {
-                return Http::response('', 302, [
-                    'Location' => 'https://steadfast.com.bd/user/dashboard',
-                    'Set-Cookie' => 'steadfast_session=xyz; Path=/',
-                ]);
-            }
-
-            if ($url === 'https://steadfast.com.bd/user/frauds/check/01812345678') {
-                return Http::response('<html>login</html>', 200, ['Content-Type' => 'text/html']);
-            }
-
-            if ($url === 'https://steadfast.com.bd/user/consignment/getbyphone/01812345678') {
-                return Http::response([
-                    'total_delivered' => 2,
-                    'total_cancelled' => 2,
-                ], 200, ['Content-Type' => 'application/json']);
-            }
-
-            if ($url === 'https://steadfast.com.bd/user/frauds/check') {
-                return Http::response(
-                    '<html><meta name="csrf-token" content="csrf-logout"></html>',
-                    200
-                );
-            }
-
-            if ($url === 'https://steadfast.com.bd/logout') {
-                return Http::response('', 302);
-            }
-
-            return Http::response('unexpected '.$url, 500);
-        });
-
-        $stats = app(SteadfastApiClient::class)->fraudCheck('01812345678');
-
-        $this->assertSame(4, $stats['total_parcels']);
-        $this->assertSame(50, $stats['success_ratio']);
-    }
-
-    #[Test]
-    public function fraud_check_rejects_api_payload_without_count_keys(): void
+    public function fraud_check_surfaces_rate_limit_errors(): void
     {
         Http::fake([
-            'portal.packzy.com/api/v1/fraud_check/*' => Http::response([
+            'portal.packzy.com/api/v1/fraud_check/score/*' => Http::response(['message' => 'Too Many Requests'], 429),
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('rate limit');
+
+        app(SteadfastApiClient::class)->fraudCheck('01712345678');
+    }
+
+    #[Test]
+    public function customer_lookup_surfaces_score_stats(): void
+    {
+        Http::fake([
+            'portal.packzy.com/api/v1/fraud_check/score/01712345678' => Http::response([
                 'status' => 200,
-                'message' => 'ok',
-            ], 200),
-        ]);
-
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('missing delivery counts');
-
-        app(SteadfastApiClient::class)->fraudCheck('01712345678');
-    }
-
-    #[Test]
-    public function fraud_check_rejects_login_redirect_back_to_login(): void
-    {
-        config([
-            'steadfast.api_key' => null,
-            'steadfast.secret_key' => null,
-            'steadfast.fraud.email' => 'merchant@example.com',
-            'steadfast.fraud.password' => 'wrong',
-        ]);
-
-        Http::fake([
-            'steadfast.com.bd/login' => Http::sequence()
-                ->push('<html><input type="hidden" name="_token" value="csrf-login"></html>', 200)
-                ->push('', 302, ['Location' => 'https://steadfast.com.bd/login']),
-        ]);
-
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('STEADFAST_EMAIL / STEADFAST_PASSWORD');
-
-        app(SteadfastApiClient::class)->fraudCheck('01712345678');
-    }
-
-    #[Test]
-    public function customer_lookup_surfaces_normalized_steadfast_stats(): void
-    {
-        Http::fake([
-            'portal.packzy.com/api/v1/fraud_check/01712345678' => Http::response([
-                'Total_parcels' => 10,
-                'total_delivered' => 8,
-                'total_cancelled' => 2,
+                'phone' => '01712345678',
+                'delivery_ratio' => 80,
+                'cancellation_ratio' => 20,
+                'volume_band' => 'medium',
+                'total_reports' => 1,
+                'fraud_categories' => ['no_response' => 1],
+                'scoring_disabled' => true,
             ], 200),
         ]);
 
         $result = app(CustomerLookupService::class)->lookup('01712345678');
 
         $this->assertNull($result['steadfast_error']);
-        $this->assertSame(10, $result['steadfast']['total_parcels']);
-        $this->assertSame(80, $result['steadfast']['success_ratio']);
+        $this->assertSame('score', $result['steadfast']['data_type']);
+        $this->assertSame(80, $result['steadfast']['delivery_ratio']);
+        $this->assertSame('medium (6–20)', $result['steadfast']['volume_band_label']);
     }
 
     #[Test]
-    public function customer_lookup_reports_when_fraud_check_is_not_configured(): void
+    public function order_form_shows_unknown_when_delivery_ratio_is_null(): void
     {
-        config([
-            'steadfast.api_key' => null,
-            'steadfast.secret_key' => null,
-            'steadfast.fraud.email' => null,
-            'steadfast.fraud.password' => null,
+        Role::findOrCreate('admin');
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $lookup = Mockery::mock(CustomerLookupService::class);
+        $lookup->shouldReceive('lookup')->andReturn([
+            'phone' => '01712075185',
+            'valid' => true,
+            'user' => null,
+            'last_order' => null,
+            'order_count' => 0,
+            'orders' => collect(),
+            'steadfast' => [
+                'data_type' => 'score',
+                'delivery_ratio' => null,
+                'cancellation_ratio' => null,
+                'success_ratio' => null,
+                'volume_band' => 'none',
+                'volume_band_label' => 'none (0 finished)',
+                'total_reports' => 0,
+                'fraud_categories' => [],
+            ],
+            'steadfast_error' => null,
         ]);
+        $lookup->shouldReceive('formDefaultsFromOrder')->andReturn([
+            'name' => '',
+            'email' => '',
+            'address' => '',
+            'cityId' => null,
+            'areaId' => null,
+            'location_hint' => null,
+        ]);
+        $this->app->instance(CustomerLookupService::class, $lookup);
 
-        $result = app(CustomerLookupService::class)->lookup('01712345678');
+        $this->actingAs($admin);
 
-        $this->assertNull($result['steadfast']);
-        $this->assertSame('Steadfast fraud check is not configured.', $result['steadfast_error']);
+        Livewire::test(AdminOrderForm::class)
+            ->set('phone', '01712075185')
+            ->call('lookupPhone')
+            ->assertSee('Steadfast: no finished parcels yet')
+            ->assertDontSee('Steadfast delivery success: 0%')
+            ->assertSee('Volume none (0 finished)');
+    }
+
+    #[Test]
+    public function order_form_shows_score_ratios_and_reports(): void
+    {
+        Role::findOrCreate('admin');
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $lookup = Mockery::mock(CustomerLookupService::class);
+        $lookup->shouldReceive('lookup')->andReturn([
+            'phone' => '01712345678',
+            'valid' => true,
+            'user' => null,
+            'last_order' => null,
+            'order_count' => 0,
+            'orders' => collect(),
+            'steadfast' => [
+                'data_type' => 'score',
+                'delivery_ratio' => 92,
+                'cancellation_ratio' => 7,
+                'success_ratio' => 92,
+                'volume_band' => 'high',
+                'volume_band_label' => 'high (21–200)',
+                'total_reports' => 2,
+                'fraud_categories' => ['no_response' => 2],
+            ],
+            'steadfast_error' => null,
+        ]);
+        $lookup->shouldReceive('formDefaultsFromOrder')->andReturn([
+            'name' => '',
+            'email' => '',
+            'address' => '',
+            'cityId' => null,
+            'areaId' => null,
+            'location_hint' => null,
+        ]);
+        $this->app->instance(CustomerLookupService::class, $lookup);
+
+        $this->actingAs($admin);
+
+        Livewire::test(AdminOrderForm::class)
+            ->set('phone', '01712345678')
+            ->call('lookupPhone')
+            ->assertSee('Steadfast delivery: 92%')
+            ->assertSee('Cancelled 7%')
+            ->assertSee('Volume high (21–200)')
+            ->assertSee('Reports 2');
     }
 
     #[Test]

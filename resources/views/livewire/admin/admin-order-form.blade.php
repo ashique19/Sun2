@@ -81,14 +81,45 @@
 
                             @if ($steadfastStats)
                                 <div class="mt-3 rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2 text-xs">
-                                    <p class="font-medium text-[#1E1E1E]">Steadfast delivery success: {{ $steadfastStats['success_ratio'] ?? 0 }}%</p>
-                                    <p class="text-[#6B6459] mt-1">
-                                        Delivered {{ $steadfastStats['total_delivered'] ?? 0 }}
-                                        / {{ $steadfastStats['total_parcels'] ?? 0 }}
-                                        @if (($steadfastStats['total_cancelled'] ?? 0) > 0)
-                                            &middot; Cancelled {{ $steadfastStats['total_cancelled'] }}
+                                    @if (($steadfastStats['data_type'] ?? 'counts') === 'score')
+                                        @if (($steadfastStats['delivery_ratio'] ?? null) === null)
+                                            <p class="font-medium text-[#1E1E1E]">Steadfast: no finished parcels yet</p>
+                                            <p class="text-[#6B6459] mt-1">
+                                                Unknown delivery record
+                                                @if (! empty($steadfastStats['volume_band_label']))
+                                                    &middot; Volume {{ $steadfastStats['volume_band_label'] }}
+                                                @endif
+                                            </p>
+                                        @else
+                                            <p class="font-medium text-[#1E1E1E]">
+                                                Steadfast delivery: {{ $steadfastStats['delivery_ratio'] }}%
+                                            </p>
+                                            <p class="text-[#6B6459] mt-1">
+                                                Cancelled {{ $steadfastStats['cancellation_ratio'] ?? 0 }}%
+                                                @if (! empty($steadfastStats['volume_band_label']))
+                                                    &middot; Volume {{ $steadfastStats['volume_band_label'] }}
+                                                @endif
+                                                @if (($steadfastStats['total_reports'] ?? 0) > 0)
+                                                    &middot; Reports {{ $steadfastStats['total_reports'] }}
+                                                @endif
+                                            </p>
                                         @endif
-                                    </p>
+                                    @else
+                                        @if (($steadfastStats['success_ratio'] ?? $steadfastStats['delivery_ratio'] ?? null) === null)
+                                            <p class="font-medium text-[#1E1E1E]">Steadfast: no finished parcels yet</p>
+                                        @else
+                                            <p class="font-medium text-[#1E1E1E]">
+                                                Steadfast delivery success: {{ $steadfastStats['success_ratio'] ?? $steadfastStats['delivery_ratio'] }}%
+                                            </p>
+                                            <p class="text-[#6B6459] mt-1">
+                                                Delivered {{ $steadfastStats['total_delivered'] ?? 0 }}
+                                                / {{ $steadfastStats['total_parcels'] ?? 0 }}
+                                                @if (($steadfastStats['total_cancelled'] ?? 0) > 0)
+                                                    &middot; Cancelled {{ $steadfastStats['total_cancelled'] }}
+                                                @endif
+                                            </p>
+                                        @endif
+                                    @endif
                                 </div>
                             @elseif ($steadfastStatsError && \App\Support\PhoneNumber::isValidDisplayMobile($phone))
                                 <p class="text-xs text-[#8C8474] mt-2">{{ $steadfastStatsError }}</p>

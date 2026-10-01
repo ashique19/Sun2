@@ -140,7 +140,7 @@ class SteadfastApiClient
             ]);
 
         if (! ($loginResponse->successful() || $loginResponse->redirect())) {
-            throw new RuntimeException('Steadfast fraud panel login failed. Check STEADFAST_FRAUD_EMAIL / STEADFAST_FRAUD_PASSWORD.');
+            throw new RuntimeException('Steadfast fraud panel login failed. Check STEADFAST_EMAIL / STEADFAST_PASSWORD.');
         }
 
         $sessionCookies = $this->cookieMap($loginResponse->cookies());

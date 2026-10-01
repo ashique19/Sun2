@@ -178,4 +178,26 @@ class SteadfastFraudCheckTest extends TestCase
         $this->assertNull($result['steadfast']);
         $this->assertSame('Steadfast fraud check is not configured.', $result['steadfast_error']);
     }
+
+    #[Test]
+    public function config_maps_steadfast_email_and_password_env_keys(): void
+    {
+        putenv('STEADFAST_EMAIL=merchant@example.com');
+        putenv('STEADFAST_PASSWORD=panel-secret');
+        putenv('STEADFAST_FRAUD_EMAIL=ignored-fraud@example.com');
+        putenv('STEADFAST_FRAUD_PASSWORD=ignored-fraud-secret');
+        $_ENV['STEADFAST_EMAIL'] = 'merchant@example.com';
+        $_ENV['STEADFAST_PASSWORD'] = 'panel-secret';
+        $_ENV['STEADFAST_FRAUD_EMAIL'] = 'ignored-fraud@example.com';
+        $_ENV['STEADFAST_FRAUD_PASSWORD'] = 'ignored-fraud-secret';
+        $_SERVER['STEADFAST_EMAIL'] = 'merchant@example.com';
+        $_SERVER['STEADFAST_PASSWORD'] = 'panel-secret';
+        $_SERVER['STEADFAST_FRAUD_EMAIL'] = 'ignored-fraud@example.com';
+        $_SERVER['STEADFAST_FRAUD_PASSWORD'] = 'ignored-fraud-secret';
+
+        $config = require config_path('steadfast.php');
+
+        $this->assertSame('merchant@example.com', $config['fraud']['email']);
+        $this->assertSame('panel-secret', $config['fraud']['password']);
+    }
 }

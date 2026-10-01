@@ -16,9 +16,9 @@ return [
     'fraud' => [
         'panel_url' => rtrim(env('STEADFAST_FRAUD_PANEL_URL', 'https://steadfast.com.bd'), '/'),
 
-        'email' => env('STEADFAST_FRAUD_EMAIL', env('STEADFAST_FRAUD_CHECKER_EMAIL', env('STEADFAST_USER'))),
+        'email' => env('STEADFAST_EMAIL', env('STEADFAST_FRAUD_EMAIL', env('STEADFAST_FRAUD_CHECKER_EMAIL', env('STEADFAST_USER')))),
 
-        'password' => env('STEADFAST_FRAUD_PASSWORD', env('STEADFAST_FRAUD_CHECKER_PASSWORD', env('STEADFAST_PASSWORD'))),
+        'password' => env('STEADFAST_PASSWORD', env('STEADFAST_FRAUD_PASSWORD', env('STEADFAST_FRAUD_CHECKER_PASSWORD'))),
     ],
 
     'webhook' => [

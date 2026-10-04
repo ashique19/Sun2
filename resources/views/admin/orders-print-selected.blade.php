@@ -37,8 +37,8 @@
         .slip {
             width: 100%;
             min-width: 100%;
-            margin: 0.5in 0;
-            padding: 0 2vw;
+            margin: 0;
+            padding: 0.5in 2vw;
             text-align: center;
             page-break-after: auto;
             break-after: auto;
@@ -88,7 +88,8 @@
                 width: 100% !important;
                 min-width: 100% !important;
                 max-width: none !important;
-                margin: 0.5in 0 !important;
+                margin: 0 !important;
+                padding: 0.5in 2vw !important;
                 page-break-after: auto !important;
                 break-after: auto !important;
                 page-break-inside: avoid !important;

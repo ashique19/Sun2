@@ -156,8 +156,10 @@ class OrderPrintLabelTest extends TestCase
         $response->assertSee('Alyssa Russo', false);
         $response->assertSee('Karim Hossain', false);
         $response->assertSee('page-break-after: auto', false);
+        $response->assertSee('margin: 0.5in 0', false);
         $response->assertDontSee('page-break-after: always', false);
         $response->assertDontSee('break-after: page', false);
+        $response->assertDontSee('border-top: 0.4vw dashed', false);
         $response->assertDontSee('TOTAL DUE', false);
         $response->assertDontSee('CALL:', false);
     }

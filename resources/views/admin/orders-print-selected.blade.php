@@ -38,15 +38,12 @@
             width: 100%;
             min-width: 100%;
             margin: 0;
-            padding: 3vw 2vw 4vw;
+            padding: 0.5in 2vw;
             text-align: center;
             page-break-after: auto;
             break-after: auto;
-            page-break-inside: auto;
-            break-inside: auto;
-        }
-        .slip + .slip {
-            border-top: 0.4vw dashed #000;
+            page-break-inside: avoid;
+            break-inside: avoid;
         }
         .parcel-label {
             font-size: clamp(22px, 6vw, 48px);
@@ -81,19 +78,24 @@
         }
         @media print {
             .screen-actions { display: none !important; }
-            html, body, .slip {
+            html, body {
                 width: 100% !important;
                 min-width: 100% !important;
                 max-width: none !important;
                 margin: 0 !important;
             }
-            @page { margin: 0; size: auto; }
             .slip {
+                width: 100% !important;
+                min-width: 100% !important;
+                max-width: none !important;
+                margin: 0 !important;
+                padding: 0.5in 2vw !important;
                 page-break-after: auto !important;
                 break-after: auto !important;
-                page-break-inside: auto !important;
-                break-inside: auto !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
             }
+            @page { margin: 0; size: auto; }
         }
     </style>
 </head>

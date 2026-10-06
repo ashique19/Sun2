@@ -158,6 +158,10 @@ class OrderPrintLabelTest extends TestCase
         $response->assertSee('page-break-after: always', false);
         $response->assertSee('break-after: page', false);
         $response->assertSee('padding: 0.5in 2vw', false);
+        $response->assertSee('pos-cut-mode', false);
+        $response->assertSee('afterprint', false);
+        $response->assertSee('Print (cut after each)', false);
+        $response->assertSee('printCutEach', false);
         $response->assertDontSee('border-top: 0.4vw dashed', false);
         $response->assertDontSee('TOTAL DUE', false);
         $response->assertDontSee('CALL:', false);

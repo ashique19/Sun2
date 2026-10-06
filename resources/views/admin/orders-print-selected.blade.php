@@ -40,10 +40,14 @@
             margin: 0;
             padding: 0.5in 2vw;
             text-align: center;
-            page-break-after: auto;
-            break-after: auto;
+            page-break-after: always;
+            break-after: page;
             page-break-inside: avoid;
             break-inside: avoid;
+        }
+        .slip:last-child {
+            page-break-after: auto;
+            break-after: auto;
         }
         .parcel-label {
             font-size: clamp(22px, 6vw, 48px);
@@ -90,10 +94,14 @@
                 max-width: none !important;
                 margin: 0 !important;
                 padding: 0.5in 2vw !important;
-                page-break-after: auto !important;
-                break-after: auto !important;
+                page-break-after: always !important;
+                break-after: page !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
+            }
+            .slip:last-child {
+                page-break-after: auto !important;
+                break-after: auto !important;
             }
             @page { margin: 0; size: auto; }
         }

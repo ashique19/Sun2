@@ -155,10 +155,9 @@ class OrderPrintLabelTest extends TestCase
         $response->assertSee('Sundoritoma.com', false);
         $response->assertSee('Alyssa Russo', false);
         $response->assertSee('Karim Hossain', false);
-        $response->assertSee('page-break-after: auto', false);
+        $response->assertSee('page-break-after: always', false);
+        $response->assertSee('break-after: page', false);
         $response->assertSee('padding: 0.5in 2vw', false);
-        $response->assertDontSee('page-break-after: always', false);
-        $response->assertDontSee('break-after: page', false);
         $response->assertDontSee('border-top: 0.4vw dashed', false);
         $response->assertDontSee('TOTAL DUE', false);
         $response->assertDontSee('CALL:', false);

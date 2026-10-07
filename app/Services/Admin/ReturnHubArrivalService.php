@@ -40,9 +40,9 @@ class ReturnHubArrivalService
     /**
      * Stamp hub arrival when a Steadfast webhook/tracking message matches.
      * Applies to every Has Return order (`has_return`), including exchange / H/R-only.
-     * If H/R was not set yet but this order clearly expects a return (linked exchange
-     * original, replacement parcel, or partial-delivery signal), auto-flag H/R first
-     * so the dashboard return-arrival list is not missed.
+     * If H/R was not set yet but this is an exchange original/replacement, auto-flag
+     * H/R first so the dashboard return-arrival list is not missed.
+     * Partial delivery waits for admin to enter returned quantities (partialReturn).
      */
     public function observeMessage(Order $order, string $message, mixed $timestamp = null): bool
     {
@@ -66,7 +66,7 @@ class ReturnHubArrivalService
     }
 
     /**
-     * Orders that should expect a physical return even before admin settles qty.
+     * Exchange parcels expect a return without a qty modal; partial delivery does not.
      */
     public function shouldAutoFlagReturnPending(Order $order): bool
     {
@@ -74,11 +74,7 @@ class ReturnHubArrivalService
             return true;
         }
 
-        if (Order::query()->where('exchange_of_order_id', $order->id)->exists()) {
-            return true;
-        }
-
-        return app(OrderDeliveryReturnService::class)->orderHadPartialDeliverySignal($order);
+        return Order::query()->where('exchange_of_order_id', $order->id)->exists();
     }
 
     /**

@@ -87,12 +87,11 @@ class PartialExchangeReturnPendingTest extends TestCase
     }
 
     #[Test]
-    public function mark_delivered_after_partial_webhook_flags_return_pending(): void
+    public function partial_webhook_alone_does_not_flag_return_pending(): void
     {
-        $this->actingAs($this->adminUser());
         $order = $this->dispatchedOrder([
-            'order_number' => 'PRP-PARTIAL',
-            'courier_tracker' => 'SFR_PARTIAL_RP',
+            'order_number' => 'PRP-PARTIAL-ATTN',
+            'courier_tracker' => 'SFR_PARTIAL_ATTN',
         ]);
         OrderProduct::query()->create([
             'order_id' => $order->id,
@@ -122,24 +121,101 @@ class PartialExchangeReturnPendingTest extends TestCase
         ]);
 
         $this->assertSame('dispatched', $order->fresh()->status);
-        $this->assertTrue((bool) $order->fresh()->has_return);
+        $this->assertFalse((bool) $order->fresh()->has_return);
         $this->assertTrue(
             AdminAttentionItem::query()
                 ->where('order_id', $order->id)
                 ->get()
                 ->contains(fn (AdminAttentionItem $item) => (bool) ($item->data['is_partial_delivery'] ?? false))
         );
+    }
+
+    #[Test]
+    public function submitting_returned_quantities_flags_return_pending(): void
+    {
+        $this->actingAs($this->adminUser());
+        $order = $this->dispatchedOrder([
+            'order_number' => 'PRP-PARTIAL-QTY',
+            'courier_tracker' => 'SFR_PARTIAL_QTY',
+        ]);
+        $kept = OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Item A',
+            'quantity' => 1,
+            'price' => 1000,
+            'purchase_price' => 400,
+            'line_total' => 1000,
+        ]);
+        $returned = OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Item B',
+            'quantity' => 1,
+            'price' => 1000,
+            'purchase_price' => 400,
+            'line_total' => 1000,
+        ]);
+
+        $this->postWebhook([
+            'notification_type' => 'delivery_status',
+            'invoice' => $order->order_number,
+            'tracking_id' => $order->courier_tracker,
+            'status' => 'partial_delivered',
+            'collected_amount' => 1080,
+            'updated_at' => now()->toDateTimeString(),
+            'tracking_message' => 'Partial delivered',
+        ]);
+        $this->assertFalse((bool) $order->fresh()->has_return);
+
+        app(OrderDeliveryReturnService::class)->partialReturn(
+            $order->fresh(),
+            [(int) $kept->id => 0, (int) $returned->id => 1],
+            1080.0,
+        );
+
+        $order->refresh()->load('items');
+        $this->assertSame('delivered', $order->status);
+        $this->assertTrue((bool) $order->has_return);
+        $this->assertSame(0, (int) $order->items->firstWhere('id', $kept->id)->returned_quantity);
+        $this->assertSame(1, (int) $order->items->firstWhere('id', $returned->id)->returned_quantity);
         $this->assertTrue(
             AdminOrderSegment::apply(Order::query(), 'return-pending')
                 ->whereKey($order->id)
                 ->exists()
         );
+    }
+
+    #[Test]
+    public function mark_delivered_after_partial_webhook_without_qty_does_not_flag(): void
+    {
+        $this->actingAs($this->adminUser());
+        $order = $this->dispatchedOrder([
+            'order_number' => 'PRP-PARTIAL-DELIVER',
+            'courier_tracker' => 'SFR_PARTIAL_DELIVER',
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Item',
+            'quantity' => 1,
+            'price' => 2000,
+            'purchase_price' => 800,
+            'line_total' => 2000,
+        ]);
+
+        $this->postWebhook([
+            'notification_type' => 'delivery_status',
+            'invoice' => $order->order_number,
+            'tracking_id' => $order->courier_tracker,
+            'status' => 'partial_delivered',
+            'collected_amount' => 1080,
+            'updated_at' => now()->toDateTimeString(),
+            'tracking_message' => 'Partial delivered',
+        ]);
 
         app(OrderDeliveryReturnService::class)->markDelivered($order->fresh(), collectedAmount: 1080.0);
 
         $order->refresh();
         $this->assertSame('delivered', $order->status);
-        $this->assertTrue((bool) $order->has_return);
+        $this->assertFalse((bool) $order->has_return);
     }
 
     #[Test]
@@ -284,19 +360,28 @@ class PartialExchangeReturnPendingTest extends TestCase
     }
 
     #[Test]
-    public function partial_delivery_then_rampura_hub_appears_on_return_arrival_list(): void
+    public function returned_qty_then_rampura_hub_appears_on_return_arrival_list(): void
     {
+        $this->actingAs($this->adminUser());
         $order = $this->dispatchedOrder([
             'order_number' => 'PRP-HUB-PARTIAL',
             'courier_tracker' => 'SFR_HUB_PARTIAL',
         ]);
-        OrderProduct::query()->create([
+        $kept = OrderProduct::query()->create([
             'order_id' => $order->id,
-            'name' => 'Item',
-            'quantity' => 2,
+            'name' => 'Kept',
+            'quantity' => 1,
             'price' => 1000,
             'purchase_price' => 400,
-            'line_total' => 2000,
+            'line_total' => 1000,
+        ]);
+        $returned = OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Returned',
+            'quantity' => 1,
+            'price' => 1000,
+            'purchase_price' => 400,
+            'line_total' => 1000,
         ]);
 
         $this->postWebhook([
@@ -308,7 +393,13 @@ class PartialExchangeReturnPendingTest extends TestCase
             'updated_at' => now()->toDateTimeString(),
             'tracking_message' => 'Partial delivered',
         ]);
+        $this->assertFalse((bool) $order->fresh()->has_return);
 
+        app(OrderDeliveryReturnService::class)->partialReturn(
+            $order->fresh(),
+            [(int) $kept->id => 0, (int) $returned->id => 1],
+            1080.0,
+        );
         $this->assertTrue((bool) $order->fresh()->has_return);
 
         $this->postWebhook([
@@ -381,22 +472,23 @@ class PartialExchangeReturnPendingTest extends TestCase
     }
 
     #[Test]
-    public function rampura_before_has_return_backfills_when_partial_attention_created(): void
+    public function rampura_before_qty_backfills_when_admin_submits_partial_return(): void
     {
+        $this->actingAs($this->adminUser());
         $order = $this->dispatchedOrder([
             'order_number' => 'PRP-HUB-RACE',
             'courier_tracker' => 'SFR_HUB_RACE',
         ]);
-        OrderProduct::query()->create([
+        $item = OrderProduct::query()->create([
             'order_id' => $order->id,
             'name' => 'Item',
-            'quantity' => 1,
-            'price' => 2000,
-            'purchase_price' => 800,
+            'quantity' => 2,
+            'price' => 1000,
+            'purchase_price' => 400,
             'line_total' => 2000,
         ]);
 
-        // Hub arrival first (before partial flag) — previously dropped forever.
+        // Hub arrival first — stamped only after admin enters returned qty.
         $this->postWebhook([
             'notification_type' => 'tracking_update',
             'invoice' => $order->order_number,
@@ -416,6 +508,14 @@ class PartialExchangeReturnPendingTest extends TestCase
             'updated_at' => now()->toDateTimeString(),
             'tracking_message' => 'Partial delivered',
         ]);
+        $this->assertFalse((bool) $order->fresh()->has_return);
+        $this->assertNull($order->fresh()->return_hub_arrived_at);
+
+        app(OrderDeliveryReturnService::class)->partialReturn(
+            $order->fresh(),
+            [(int) $item->id => 1],
+            1000.0,
+        );
 
         $order->refresh();
         $this->assertTrue((bool) $order->has_return);

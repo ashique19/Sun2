@@ -37,17 +37,22 @@ class OrderStatusService
 
         $fresh = $order->fresh();
 
+        // Linked exchange delivered ⇒ expect the original defective parcel back (H/R).
+        // Partial delivery H/R is set only when admin submits returned quantities
+        // via partialReturn — not on a bare Deliver click.
         if ($status === 'delivered') {
-            $returns = app(OrderDeliveryReturnService::class);
-            // Linked exchange delivered ⇒ expect the original defective parcel back (H/R).
-            $returns->flagOriginalReturnAfterExchangeDelivery($fresh);
-            // Courier partial delivery ⇒ this order expects a return parcel (Return Pending).
-            $returns->flagReturnPendingAfterPartialDelivery($fresh->fresh());
+            app(OrderDeliveryReturnService::class)->flagOriginalReturnAfterExchangeDelivery($fresh);
             $fresh = $fresh->fresh();
         }
 
         if ((bool) $fresh->has_return !== $hadReturn) {
             Cache::forget(AdminOrderSegment::COUNTS_CACHE_KEY);
+
+            // Partial Return sets has_return via extras; backfill any prior Rampura stamps.
+            if ((bool) $fresh->has_return) {
+                app(ReturnHubArrivalService::class)->syncFromCourierLogs($fresh);
+                $fresh = $fresh->fresh();
+            }
         }
 
         return $fresh;

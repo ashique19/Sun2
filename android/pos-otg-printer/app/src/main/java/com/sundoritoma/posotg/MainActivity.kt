@@ -3,6 +3,7 @@ package com.sundoritoma.posotg
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.sundoritoma.posotg.data.PrintJob
@@ -30,11 +31,17 @@ class MainActivity : AppCompatActivity() {
                 binding.statusText.text = message
             }
         }
+        printer.onConnectionChanged = {
+            runOnUiThread { refreshUi() }
+        }
         printer.register()
 
         binding.connectButton.setOnClickListener {
-            printer.requestConnect()
-            binding.printButton.isEnabled = printer.isConnected() && job != null
+            showConnectChooser()
+        }
+
+        binding.refreshDevicesButton.setOnClickListener {
+            refreshDeviceListStatus(toastIfEmpty = true)
         }
 
         binding.loadUrlButton.setOnClickListener {
@@ -54,11 +61,13 @@ class MainActivity : AppCompatActivity() {
             }
             if (!printer.isConnected()) {
                 toast("Connect the USB printer first")
+                showConnectChooser()
                 return@setOnClickListener
             }
             printJob(current)
         }
 
+        refreshDeviceListStatus(toastIfEmpty = false)
         handleIntent(intent)
     }
 
@@ -82,6 +91,54 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showConnectChooser() {
+        val devices = printer.listDevices()
+        if (devices.isEmpty()) {
+            refreshDeviceListStatus(toastIfEmpty = true)
+            return
+        }
+
+        if (devices.size == 1) {
+            toast("Connecting…")
+            printer.requestConnect(devices[0])
+            return
+        }
+
+        val labels = devices.map { UsbEscPosPrinter.deviceLabel(it) }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Select USB printer")
+            .setItems(labels) { _, which ->
+                toast("Connecting…")
+                printer.requestConnect(devices[which])
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun refreshDeviceListStatus(toastIfEmpty: Boolean) {
+        if (printer.isConnected()) {
+            binding.statusText.text = printer.connectedLabel()
+            refreshUi()
+            return
+        }
+        val summary = printer.describeDeviceList()
+        binding.statusText.text = summary
+        binding.deviceListText.text = summary
+        if (toastIfEmpty && printer.listDevices().isEmpty()) {
+            toast("No USB devices found")
+        }
+        refreshUi()
+    }
+
+    private fun refreshUi() {
+        binding.printButton.isEnabled = printer.isConnected() && job != null
+        binding.deviceListText.text = if (printer.isConnected()) {
+            printer.connectedLabel()
+        } else {
+            printer.describeDeviceList()
+        }
+    }
+
     private fun loadSlips(url: String) {
         binding.statusText.text = "Loading slips…"
         lifecycleScope.launch {
@@ -92,9 +149,9 @@ class MainActivity : AppCompatActivity() {
                     "#${slip.orderNumber} ${slip.parcelId ?: "-"} ${slip.name} ৳${slip.dueTk}"
                 }
                 binding.statusText.text = "Loaded ${loaded.slips.size} slip(s). Connect printer, then Print."
-                binding.printButton.isEnabled = printer.isConnected()
+                refreshUi()
                 if (!printer.isConnected()) {
-                    printer.requestConnect()
+                    showConnectChooser()
                 }
             } catch (e: Exception) {
                 job = null
@@ -117,7 +174,7 @@ class MainActivity : AppCompatActivity() {
                 binding.statusText.text = "Print failed: ${e.message}"
                 toast(e.message ?: "Print failed")
             } finally {
-                binding.printButton.isEnabled = printer.isConnected() && job != null
+                refreshUi()
             }
         }
     }

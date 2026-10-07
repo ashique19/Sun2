@@ -43,5 +43,7 @@ You can also paste the signed URL into the app manually.
 ## Notes
 
 - First USB attach may prompt for permission; accept and optionally “always”.
-- If no device appears, try another OTG cable and confirm the printer shows under USB host.
+- The app lists every USB device it can see. Use **Refresh USB devices**, then **Connect**.
+- If Connect does nothing / no permission dialog (especially Android 14+), reinstall this build — permission intents must target the app package.
+- If the list is empty: try another **data** OTG cable/adapter, power the printer, and accept any phone OTG prompt.
 - Cut command is ESC/POS `GS V 1` (partial cut). Full-cut printers usually still cut.

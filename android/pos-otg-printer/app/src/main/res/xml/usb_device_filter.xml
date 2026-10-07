@@ -1,7 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Broad filter: many ESC/POS USB printers use vendor-class or misc class. -->
+<!--
+  Broad attach filter so Android offers this app when a USB printer (or common
+  ESC/POS clone / USB-serial bridge) is plugged in. Runtime connect still lists
+  every UsbManager device — this only affects the attach intent.
+-->
 <resources>
-    <usb-device class="255" subclass="66" protocol="1" />
-    <usb-device class="7" subclass="1" protocol="2" />
+    <!-- USB printer class -->
     <usb-device class="7" subclass="1" protocol="1" />
+    <usb-device class="7" subclass="1" protocol="2" />
+    <!-- Vendor-specific (ADB-like subclass sometimes reused by clones) -->
+    <usb-device class="255" subclass="66" protocol="1" />
+    <usb-device class="255" />
+    <!-- CDC / communications (some serial-bridge printers) -->
+    <usb-device class="2" />
+    <!-- Common ESC/POS + USB-serial vendor IDs -->
+    <usb-device vendor-id="1208" />  <!-- 0x04b8 Epson -->
+    <usb-device vendor-id="1305" />  <!-- 0x0519 Star -->
+    <usb-device vendor-id="1046" />  <!-- 0x0416 Winbond / Chinese POS -->
+    <usb-device vendor-id="1155" />  <!-- 0x0483 STMicro -->
+    <usb-device vendor-id="1317" />  <!-- 0x0525 -->
+    <usb-device vendor-id="5455" />  <!-- 0x154f -->
+    <usb-device vendor-id="10473" /> <!-- 0x28e9 -->
+    <usb-device vendor-id="6790" />  <!-- 0x1a86 QinHeng CH340 -->
+    <usb-device vendor-id="1659" />  <!-- 0x067b Prolific -->
+    <usb-device vendor-id="1367" />  <!-- 0x0557 -->
+    <usb-device vendor-id="26728" /> <!-- 0x6868 -->
+    <usb-device vendor-id="4070" />  <!-- 0x0fe6 -->
+    <usb-device vendor-id="4437" />  <!-- 0x1155 -->
+    <usb-device vendor-id="5380" />  <!-- 0x1504 -->
 </resources>

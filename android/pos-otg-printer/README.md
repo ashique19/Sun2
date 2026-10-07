@@ -13,9 +13,17 @@ Browser “Print” often scales HTML as if it were A4 onto the roll. This app s
 
 ## Build & install
 
-1. Open `android/pos-otg-printer` in **Android Studio** (Ladybug+ / AGP 8.7).
-2. Let Gradle sync, then **Run** on a device (USB debugging).
-3. Or: `./gradlew :app:assembleDebug` then `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
+```bash
+# Needs JDK 17 + Android SDK (platforms;android-35, build-tools)
+printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Or open `android/pos-otg-printer` in **Android Studio** (Ladybug+ / AGP 8.7) and Run.
+
+Debug APK output: `app/build/outputs/apk/debug/app-debug.apk`  
+(Cloud build artifact: `sundoritoma-pos-otg-debug.apk`)
 
 ## How staff print
 

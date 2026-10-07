@@ -4,6 +4,8 @@ namespace App\Services\Admin;
 
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
+use App\Support\AdminOrderSegment;
+use Illuminate\Support\Facades\Cache;
 
 class OrderStatusService
 {
@@ -17,6 +19,8 @@ class OrderStatusService
         ?int $changedBy = null,
         array $extraAttributes = [],
     ): Order {
+        $hadReturn = (bool) $order->has_return;
+
         $order->update(array_merge(['status' => $status], $extraAttributes));
 
         OrderStatusHistory::query()->create([
@@ -33,9 +37,17 @@ class OrderStatusService
 
         $fresh = $order->fresh();
 
-        // Linked exchange delivered ⇒ expect the original defective parcel back (H/R).
         if ($status === 'delivered') {
-            app(OrderDeliveryReturnService::class)->flagOriginalReturnAfterExchangeDelivery($fresh);
+            $returns = app(OrderDeliveryReturnService::class);
+            // Linked exchange delivered ⇒ expect the original defective parcel back (H/R).
+            $returns->flagOriginalReturnAfterExchangeDelivery($fresh);
+            // Courier partial delivery ⇒ this order expects a return parcel (Return Pending).
+            $returns->flagReturnPendingAfterPartialDelivery($fresh->fresh());
+            $fresh = $fresh->fresh();
+        }
+
+        if ((bool) $fresh->has_return !== $hadReturn) {
+            Cache::forget(AdminOrderSegment::COUNTS_CACHE_KEY);
         }
 
         return $fresh;

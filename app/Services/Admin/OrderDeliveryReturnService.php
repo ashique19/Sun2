@@ -2,7 +2,9 @@
 
 namespace App\Services\Admin;
 
+use App\Models\AdminAttentionItem;
 use App\Models\Order;
+use App\Models\OrderStatusHistory;
 use App\Models\User;
 use App\Services\Orders\OrderAdjustmentSync;
 use App\Services\Orders\OrderCourierChargeSync;
@@ -344,6 +346,45 @@ class OrderDeliveryReturnService
         }
 
         $this->flagOriginalReturnExpectedForExchange($original);
+    }
+
+    /**
+     * After delivery: if courier reported a partial delivery for this order, flag Return
+     * Pending (H/R) so the expected return parcel is tracked — even when admin settles
+     * via Deliver instead of the Partial Return modal.
+     */
+    public function flagReturnPendingAfterPartialDelivery(Order $order): void
+    {
+        if ($order->has_return) {
+            return;
+        }
+
+        if (! $this->orderHadPartialDeliverySignal($order)) {
+            return;
+        }
+
+        $this->setHasReturn($order, true);
+    }
+
+    /**
+     * Courier partial-delivery attention and/or status-history notes.
+     */
+    public function orderHadPartialDeliverySignal(Order $order): bool
+    {
+        $hadAttention = AdminAttentionItem::query()
+            ->where('order_id', $order->id)
+            ->where('issue_type', AdminAttentionItem::ISSUE_TYPE_COD_MISMATCH)
+            ->get()
+            ->contains(fn (AdminAttentionItem $item) => (bool) ($item->data['is_partial_delivery'] ?? false));
+
+        if ($hadAttention) {
+            return true;
+        }
+
+        return OrderStatusHistory::query()
+            ->where('order_id', $order->id)
+            ->where('note', 'like', '%Partial delivery reported%')
+            ->exists();
     }
 
     /**

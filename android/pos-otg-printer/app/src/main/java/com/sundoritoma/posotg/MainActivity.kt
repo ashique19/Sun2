@@ -146,7 +146,9 @@ class MainActivity : AppCompatActivity() {
                 val loaded = withContext(Dispatchers.IO) { repository.fetchJob(url) }
                 job = loaded
                 binding.slipSummary.text = loaded.slips.joinToString("\n") { slip ->
-                    "#${slip.orderNumber} ${slip.parcelId ?: "-"} ${slip.name} ৳${slip.dueTk}"
+                    listOfNotNull(slip.parcelId?.takeIf { it.isNotBlank() }, slip.name)
+                        .joinToString(" — ")
+                        .ifBlank { "#${slip.orderNumber}" }
                 }
                 binding.statusText.text = "Loaded ${loaded.slips.size} slip(s). Connect printer, then Print."
                 refreshUi()

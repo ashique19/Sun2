@@ -35,6 +35,18 @@ The `slips_url` is a **30‑minute signed** Laravel URL (`GET /print-slips`) —
 
 You can also paste the signed URL into the app manually.
 
+## Slip layout
+
+Same minimal layout as admin **Print selected**:
+
+```
+PARCEL ID
+<parcel id>
+
+Sundoritoma.com
+<customer name>
+```
+
 ## Paper width
 
 - **80mm** → 576 dots (default)

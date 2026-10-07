@@ -11,7 +11,8 @@ import android.text.TextPaint
 import com.sundoritoma.posotg.data.PrintSlip
 
 /**
- * Renders a shipping slip as a 1-bit-friendly bitmap for thermal width.
+ * Minimal shipping slip (matches admin print-selected):
+ * PARCEL ID / id / Sundoritoma.com / customer name.
  * 80mm ≈ 576 dots; 58mm ≈ 384 dots at 203dpi.
  */
 object SlipBitmapRenderer {
@@ -30,6 +31,9 @@ object SlipBitmapRenderer {
         var totalHeight = padding.toFloat()
 
         fun addBlock(text: String, sizeSp: Float, spacingAfter: Float = 10f) {
+            if (text.isBlank()) {
+                return
+            }
             paint.textSize = sizeSp
             val layout = StaticLayout.Builder
                 .obtain(text, 0, text.length, paint, contentWidth)
@@ -43,14 +47,10 @@ object SlipBitmapRenderer {
 
         if (!slip.parcelId.isNullOrBlank()) {
             addBlock("PARCEL ID", width * 0.055f, 4f)
-            addBlock(slip.parcelId, width * 0.12f, 16f)
+            addBlock(slip.parcelId, width * 0.14f, 22f)
         }
-        addBlock(slip.brand, width * 0.08f, 6f)
-        addBlock(slip.helpline, width * 0.05f, 16f)
-        addBlock(slip.name, width * 0.07f, 8f)
-        addBlock(slip.phone, width * 0.065f, 8f)
-        addBlock(slip.address, width * 0.055f, 16f)
-        addBlock("TOTAL DUE  ${"%,d".format(slip.dueTk)} Tk", width * 0.07f, 8f)
+        addBlock(slip.brand.ifBlank { "Sundoritoma.com" }, width * 0.09f, 18f)
+        addBlock(slip.name, width * 0.09f, 8f)
 
         totalHeight += padding + 8
 

@@ -23,7 +23,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 Or open `android/pos-otg-printer` in **Android Studio** (Ladybug+ / AGP 8.7) and Run.
 
 Debug APK output: `app/build/outputs/apk/debug/app-debug.apk`  
-(Cloud build artifact: `sundoritoma-pos-otg-debug.apk`)
+Committed debug APK: [`dist/sundoritoma-pos-otg-debug.apk`](dist/sundoritoma-pos-otg-debug.apk)
 
 ## How staff print
 

@@ -6,6 +6,8 @@
 /app/build/
 /captures/
 .DS_Store
-*.apk
 *.ap_
 *.aab
+# Ignore build APKs, but keep committed release under dist/
+*.apk
+!dist/*.apk

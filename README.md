@@ -34,6 +34,11 @@ The schema is a clean redesign of the legacy database, built to **intake** the l
 columns; all money normalized to `DECIMAL`, all tables `utf8mb4`). See the migrations in
 `database/migrations/`.
 
+## Android POS OTG printer
+
+Admin shipping slips can print on a USB thermal printer via OTG (cut after each slip).
+See `android/pos-otg-printer/README.md`. From **Print selected**, use **Print via OTG app**.
+
 ## Status
 
 Scaffold + redesigned schema + storefront foundation. Buyer's panel (catalog → PDP →

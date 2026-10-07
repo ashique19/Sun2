@@ -128,6 +128,15 @@
         <button type="button" id="print-cut-each" onclick="printCutEach()">Print (cut after each)</button>
         <button type="button" id="print-next" onclick="printNextManual()">Next invoice</button>
         <button type="button" id="print-one-job" onclick="printOneJob()">Print as one job</button>
+        @if (! empty($otgDeepLink))
+            <a id="print-otg-app" href="{{ $otgDeepLink }}"
+                style="display:inline-block;font:inherit;font-size:14px;padding:8px 16px;border:1px solid #1E1E1E;background:#1E1E1E;color:#fff;border-radius:6px;margin:0 4px 8px;text-decoration:none;">
+                Print via OTG app
+            </a>
+            <p style="font-size:12px;color:#666;margin-top:4px;">
+                Opens the Sundoritoma POS OTG app (USB thermal). Install from <code>android/pos-otg-printer</code>.
+            </p>
+        @endif
     </div>
 
     @foreach ($orders as $order)

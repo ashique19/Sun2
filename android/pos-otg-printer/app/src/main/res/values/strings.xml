@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sundoritoma POS OTG</string>
+    <string name="connect_printer">Connect USB printer</string>
+    <string name="print_slips">Print slips</string>
+    <string name="status_idle">Plug in a thermal printer via OTG, then connect.</string>
+    <string name="paper_80mm">80mm</string>
+    <string name="paper_58mm">58mm</string>
+</resources>

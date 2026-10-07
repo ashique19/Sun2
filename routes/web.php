@@ -90,12 +90,40 @@ use App\Livewire\StorefrontWishlist;
 use App\Models\Order;
 use App\Models\Product;
 use App\Support\AdminAccess;
+use App\Support\OrderPrintSlip;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\URL;
 
 Route::get('/robots.txt', RobotsController::class)->name('robots');
 Route::get('/sitemap.xml', [SitemapController::class, 'index'])->name('sitemap');
+
+/**
+ * Short-lived signed JSON for the Android OTG POS printer app.
+ * No session cookie required — opened via sundoritoma://print?slips_url=...
+ */
+Route::get('/print-slips', function (Request $request) {
+    $ids = collect(explode(',', (string) $request->query('ids', '')))
+        ->map(fn ($id) => (int) trim($id))
+        ->filter(fn (int $id) => $id > 0)
+        ->unique()
+        ->values();
+
+    abort_if($ids->isEmpty(), 404);
+
+    $slips = OrderPrintSlip::collectionFromIds($ids);
+
+    abort_if($slips === [], 404);
+
+    return response()
+        ->json([
+            'slips' => $slips,
+            'cut_after_each' => true,
+        ])
+        ->header('Cache-Control', 'no-store');
+})->middleware('signed')->name('print-slips');
+
 Route::get('/sitemaps/{file}', [SitemapController::class, 'child'])
     ->where('file', '[A-Za-z0-9._-]+\.xml')
     ->name('sitemap.child');
@@ -187,29 +215,39 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
             AdminAccess::ensureCanViewOrder($order);
         }
 
+        $slipsUrl = URL::temporarySignedRoute(
+            'print-slips',
+            now()->addMinutes(30),
+            ['ids' => $ids->implode(',')],
+        );
+        $otgDeepLink = 'sundoritoma://print?slips_url='.rawurlencode($slipsUrl);
+
         return response()
             ->view('admin.orders-print-selected', [
                 'orders' => $orders,
+                'otgDeepLink' => $otgDeepLink,
+                'slipsUrl' => $slipsUrl,
             ])
             ->header('Cache-Control', 'no-store');
     })->name('orders.print-selected');
     Route::get('/orders/{order}/print', function (Order $order) {
         AdminAccess::ensureCanViewOrder($order);
 
-        $shippingAddress = collect([
-            $order->address,
-            $order->area,
-            $order->city,
-            $order->state,
-        ])->filter(fn ($part) => filled($part))
-            ->unique()
-            ->implode(', ');
+        $slip = OrderPrintSlip::fromOrder($order);
+
+        $slipsUrl = URL::temporarySignedRoute(
+            'print-slips',
+            now()->addMinutes(30),
+            ['ids' => (string) $order->id],
+        );
+        $otgDeepLink = 'sundoritoma://print?slips_url='.rawurlencode($slipsUrl);
 
         return response()
             ->view('admin.order-print-label', [
                 'order' => $order,
-                'shippingAddress' => $shippingAddress,
-                'parcelId' => $order->printParcelId(),
+                'shippingAddress' => $slip['address'],
+                'parcelId' => $slip['parcel_id'],
+                'otgDeepLink' => $otgDeepLink,
             ])
             ->header('Cache-Control', 'no-store');
     })->whereNumber('order')->name('orders.print');

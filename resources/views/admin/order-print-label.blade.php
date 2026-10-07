@@ -130,6 +130,12 @@
 <body>
     <div class="screen-actions">
         <button type="button" onclick="window.print()">Print</button>
+        @if (! empty($otgDeepLink))
+            <a href="{{ $otgDeepLink }}"
+                style="display:inline-block;font:inherit;font-size:14px;padding:8px 16px;margin-left:8px;border:1px solid #1E1E1E;background:#1E1E1E;color:#fff;border-radius:6px;text-decoration:none;">
+                Print via OTG app
+            </a>
+        @endif
     </div>
 
     <div class="sheet">

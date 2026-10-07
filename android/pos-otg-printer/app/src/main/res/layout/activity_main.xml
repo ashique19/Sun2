@@ -54,12 +54,35 @@
             android:text="@string/connect_printer" />
 
         <Button
+            android:id="@+id/refreshDevicesButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/refresh_devices" />
+
+        <Button
             android:id="@+id/printButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:enabled="false"
             android:text="@string/print_slips" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/usb_devices_heading"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/deviceListText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/status_idle"
+            android:textSize="13sp"
+            android:typeface="monospace" />
 
         <TextView
             android:layout_width="match_parent"

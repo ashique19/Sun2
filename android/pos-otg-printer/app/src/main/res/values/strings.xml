@@ -5,7 +5,7 @@
     <string name="refresh_devices">Refresh USB devices</string>
     <string name="print_slips">Print slips</string>
     <string name="usb_devices_heading">USB devices</string>
-    <string name="status_idle">Plug in a thermal printer via OTG, then Connect. If nothing appears, use Refresh USB devices.</string>
+    <string name="status_idle">Plug in a thermal printer via OTG, then Connect. Print from this app (Print slips) — Chrome’s printer list will not show this USB printer.</string>
     <string name="paper_80mm">80mm</string>
     <string name="paper_58mm">58mm</string>
 </resources>

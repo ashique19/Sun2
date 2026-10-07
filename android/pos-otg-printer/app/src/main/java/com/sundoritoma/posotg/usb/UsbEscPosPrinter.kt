@@ -232,7 +232,11 @@ class UsbEscPosPrinter(private val context: Context) {
         connection = conn
         usbInterface = iface
         outEndpoint = endpoint
-        onStatus?.invoke(connectedLabel())
+        onStatus?.invoke(
+            connectedLabel() +
+                "\nReady. Use admin → Print via OTG app (or Load slips URL), then Print slips here." +
+                "\nChrome print preview will not list this printer.",
+        )
         onConnectionChanged?.invoke()
     }
 

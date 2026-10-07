@@ -86,6 +86,21 @@ class OrderPrintSlipsApiTest extends TestCase
             ->assertOk()
             ->assertSee('print-otg-app', false)
             ->assertSee('sundoritoma://print?slips_url=', false)
-            ->assertSee('Print via OTG app', false);
+            ->assertSee('Print via OTG app', false)
+            ->assertSee('Chrome’s printer list will stay empty', false);
+    }
+
+    public function test_single_order_print_label_includes_otg_deep_link_without_auto_browser_print(): void
+    {
+        $this->actingAs($this->adminUser());
+        $order = $this->order();
+
+        $this->get(route('admin.orders.print', $order))
+            ->assertOk()
+            ->assertSee('print-otg-app', false)
+            ->assertSee('sundoritoma://print?slips_url=', false)
+            ->assertSee('Print via OTG app', false)
+            ->assertSee('Browser print (not USB OTG)', false)
+            ->assertDontSee('setTimeout(function () { window.print(); }, 150);', false);
     }
 }

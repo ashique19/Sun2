@@ -104,6 +104,13 @@
         .screen-actions {
             text-align: center;
             margin: 16px 0 8px;
+            padding: 0 12px;
+        }
+        .screen-actions p {
+            font-size: 13px;
+            color: #444;
+            margin: 0 0 10px;
+            line-height: 1.4;
         }
         .screen-actions button {
             font: inherit;
@@ -113,6 +120,7 @@
             border: 1px solid #ccc;
             background: #f7f7f7;
             border-radius: 6px;
+            margin: 0 4px 8px;
         }
         @media print {
             .screen-actions { display: none !important; }
@@ -129,12 +137,19 @@
 </head>
 <body>
     <div class="screen-actions">
-        <button type="button" onclick="window.print()">Print</button>
         @if (! empty($otgDeepLink))
-            <a href="{{ $otgDeepLink }}"
-                style="display:inline-block;font:inherit;font-size:14px;padding:8px 16px;margin-left:8px;border:1px solid #1E1E1E;background:#1E1E1E;color:#fff;border-radius:6px;text-decoration:none;">
+            <p>
+                For the USB thermal printer, tap <strong>Print via OTG app</strong>.
+                Chrome’s printer list will be empty — the OTG printer is not selectable there.
+            </p>
+            <a id="print-otg-app" href="{{ $otgDeepLink }}"
+                style="display:inline-block;font:inherit;font-size:15px;font-weight:700;padding:10px 18px;border:1px solid #1E1E1E;background:#1E1E1E;color:#fff;border-radius:6px;margin:0 4px 8px;text-decoration:none;">
                 Print via OTG app
             </a>
+            <p style="font-size:12px;color:#888;">Then in the app: Connect → <strong>Print slips</strong>.</p>
+            <button type="button" onclick="window.print()">Browser print (not USB OTG)</button>
+        @else
+            <button type="button" onclick="window.print()">Print</button>
         @endif
     </div>
 
@@ -169,7 +184,11 @@
 
     <script>
         window.addEventListener('load', function () {
-            setTimeout(function () { window.print(); }, 150);
+            // Don't auto-open Chrome print when OTG is available — that dialog
+            // never lists the USB thermal printer and confuses staff.
+            @if (empty($otgDeepLink))
+                setTimeout(function () { window.print(); }, 150);
+            @endif
         });
     </script>
 </body>

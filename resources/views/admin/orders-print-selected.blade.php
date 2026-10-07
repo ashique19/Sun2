@@ -120,23 +120,29 @@
 </head>
 <body data-slip-count="{{ $orders->count() }}">
     <div class="screen-actions">
-        <p>
-            POS printers cut at the end of each print job, not on a CSS page break.
-            This page prints <strong>one invoice per job</strong> so the cutter can fire after each slip.
-        </p>
+        @if (! empty($otgDeepLink))
+            <p>
+                For the USB thermal printer, use the OTG app — Chrome’s printer list will stay empty
+                (this printer is not a system/Bluetooth printer).
+            </p>
+            <a id="print-otg-app" href="{{ $otgDeepLink }}"
+                style="display:inline-block;font:inherit;font-size:15px;font-weight:700;padding:10px 18px;border:1px solid #1E1E1E;background:#1E1E1E;color:#fff;border-radius:6px;margin:0 4px 10px;text-decoration:none;">
+                Print via OTG app
+            </a>
+            <p style="font-size:12px;color:#666;margin-bottom:14px;">
+                Opens Sundoritoma POS OTG → Connect (if needed) → <strong>Print slips</strong>.
+            </p>
+            <p style="font-size:12px;color:#888;margin-bottom:8px;">Browser print (optional — not for USB OTG):</p>
+        @else
+            <p>
+                POS printers cut at the end of each print job, not on a CSS page break.
+                This page prints <strong>one invoice per job</strong> so the cutter can fire after each slip.
+            </p>
+        @endif
         <p id="print-progress"></p>
         <button type="button" id="print-cut-each" onclick="printCutEach()">Print (cut after each)</button>
         <button type="button" id="print-next" onclick="printNextManual()">Next invoice</button>
         <button type="button" id="print-one-job" onclick="printOneJob()">Print as one job</button>
-        @if (! empty($otgDeepLink))
-            <a id="print-otg-app" href="{{ $otgDeepLink }}"
-                style="display:inline-block;font:inherit;font-size:14px;padding:8px 16px;border:1px solid #1E1E1E;background:#1E1E1E;color:#fff;border-radius:6px;margin:0 4px 8px;text-decoration:none;">
-                Print via OTG app
-            </a>
-            <p style="font-size:12px;color:#666;margin-top:4px;">
-                Opens the Sundoritoma POS OTG app (USB thermal). Install from <code>android/pos-otg-printer</code>.
-            </p>
-        @endif
     </div>
 
     @foreach ($orders as $order)

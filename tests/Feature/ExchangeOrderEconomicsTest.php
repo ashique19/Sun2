@@ -99,7 +99,7 @@ class ExchangeOrderEconomicsTest extends TestCase
     {
         [$original, $replacement] = $this->userScenarioPair('new');
 
-        $this->assertFalse($original->has_return);
+        $this->assertTrue($original->has_return);
         $this->assertSame(0, (int) $original->items->first()->returned_quantity);
         $this->assertEquals(1000.0, (float) $original->total);
         $this->assertEquals(1000.0, (float) $original->collected_amount);
@@ -130,10 +130,10 @@ class ExchangeOrderEconomicsTest extends TestCase
     }
 
     #[Test]
-    public function delivering_exchange_flags_original_for_return_parcel(): void
+    public function delivering_exchange_keeps_original_return_flag_and_sale_intact(): void
     {
         [$original, $replacement] = $this->userScenarioPair('dispatched');
-        $this->assertFalse($original->has_return);
+        $this->assertTrue($original->has_return);
 
         app(OrderDeliveryReturnService::class)->markDelivered(
             $replacement->fresh(),

@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\User;
 use App\Services\Admin\OrderDeliveryReturnService;
+use App\Services\Admin\ReturnHubArrivalService;
 use App\Support\AdminOrderSegment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -121,12 +122,17 @@ class PartialExchangeReturnPendingTest extends TestCase
         ]);
 
         $this->assertSame('dispatched', $order->fresh()->status);
-        $this->assertFalse((bool) $order->fresh()->has_return);
+        $this->assertTrue((bool) $order->fresh()->has_return);
         $this->assertTrue(
             AdminAttentionItem::query()
                 ->where('order_id', $order->id)
                 ->get()
                 ->contains(fn (AdminAttentionItem $item) => (bool) ($item->data['is_partial_delivery'] ?? false))
+        );
+        $this->assertTrue(
+            AdminOrderSegment::apply(Order::query(), 'return-pending')
+                ->whereKey($order->id)
+                ->exists()
         );
 
         app(OrderDeliveryReturnService::class)->markDelivered($order->fresh(), collectedAmount: 1080.0);
@@ -134,11 +140,6 @@ class PartialExchangeReturnPendingTest extends TestCase
         $order->refresh();
         $this->assertSame('delivered', $order->status);
         $this->assertTrue((bool) $order->has_return);
-        $this->assertTrue(
-            AdminOrderSegment::apply(Order::query(), 'return-pending')
-                ->whereKey($order->id)
-                ->exists()
-        );
     }
 
     #[Test]
@@ -257,7 +258,11 @@ class PartialExchangeReturnPendingTest extends TestCase
             'line_total' => 0,
         ]);
 
-        $this->assertFalse((bool) $original->fresh()->has_return);
+        app(OrderDeliveryReturnService::class)->settleOriginalForExchange(
+            $original->fresh(),
+            $exchange->fresh(),
+        );
+        $this->assertTrue((bool) $original->fresh()->has_return);
 
         $this->postWebhook([
             'notification_type' => 'delivery_status',
@@ -276,5 +281,146 @@ class PartialExchangeReturnPendingTest extends TestCase
                 ->whereKey($original->id)
                 ->exists()
         );
+    }
+
+    #[Test]
+    public function partial_delivery_then_rampura_hub_appears_on_return_arrival_list(): void
+    {
+        $order = $this->dispatchedOrder([
+            'order_number' => 'PRP-HUB-PARTIAL',
+            'courier_tracker' => 'SFR_HUB_PARTIAL',
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Item',
+            'quantity' => 2,
+            'price' => 1000,
+            'purchase_price' => 400,
+            'line_total' => 2000,
+        ]);
+
+        $this->postWebhook([
+            'notification_type' => 'delivery_status',
+            'invoice' => $order->order_number,
+            'tracking_id' => $order->courier_tracker,
+            'status' => 'partial_delivered',
+            'collected_amount' => 1080,
+            'updated_at' => now()->toDateTimeString(),
+            'tracking_message' => 'Partial delivered',
+        ]);
+
+        $this->assertTrue((bool) $order->fresh()->has_return);
+
+        $this->postWebhook([
+            'notification_type' => 'tracking_update',
+            'invoice' => $order->order_number,
+            'tracking_id' => $order->courier_tracker,
+            'tracking_message' => 'Consignment has been received at RAMPURA.',
+            'updated_at' => now()->toDateTimeString(),
+        ]);
+
+        $this->assertNotNull($order->fresh()->return_hub_arrived_at);
+        $awaiting = app(ReturnHubArrivalService::class)->ordersAwaitingReceive();
+        $this->assertTrue($awaiting->contains('id', $order->id));
+    }
+
+    #[Test]
+    public function exchange_link_then_rampura_on_original_appears_on_return_arrival_list(): void
+    {
+        $original = Order::query()->create([
+            'order_number' => 'PRP-HUB-ORIG',
+            'name' => 'Exchange Customer',
+            'phone' => '01710000903',
+            'address' => 'Dhaka',
+            'status' => 'delivered',
+            'subtotal' => 1000,
+            'total' => 1000,
+            'collected_amount' => 1000,
+            'has_return' => false,
+            'courier_tracker' => 'SFR_HUB_ORIG',
+            'actual_delivery_date' => now()->subDay(),
+            'placed_at' => now()->subDays(2),
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $original->id,
+            'name' => 'Dress',
+            'quantity' => 1,
+            'price' => 1000,
+            'purchase_price' => 400,
+            'line_total' => 1000,
+        ]);
+
+        $exchange = $this->dispatchedOrder([
+            'order_number' => 'PRP-HUB-EXC',
+            'courier_tracker' => 'SFR_HUB_EXC',
+            'is_replacement' => true,
+            'exchange_of_order_id' => $original->id,
+            'subtotal' => 0,
+            'total' => 0,
+            'due_amount' => 0,
+            'cod_amount' => 0,
+        ]);
+
+        app(OrderDeliveryReturnService::class)->settleOriginalForExchange(
+            $original->fresh(),
+            $exchange->fresh(),
+        );
+        $this->assertTrue((bool) $original->fresh()->has_return);
+
+        $this->postWebhook([
+            'notification_type' => 'tracking_update',
+            'invoice' => $original->order_number,
+            'tracking_id' => $original->courier_tracker,
+            'tracking_message' => 'Consignment has been received at RAMPURA.',
+            'updated_at' => now()->toDateTimeString(),
+        ]);
+
+        $this->assertNotNull($original->fresh()->return_hub_arrived_at);
+        $awaiting = app(ReturnHubArrivalService::class)->ordersAwaitingReceive();
+        $this->assertTrue($awaiting->contains('id', $original->id));
+    }
+
+    #[Test]
+    public function rampura_before_has_return_backfills_when_partial_attention_created(): void
+    {
+        $order = $this->dispatchedOrder([
+            'order_number' => 'PRP-HUB-RACE',
+            'courier_tracker' => 'SFR_HUB_RACE',
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Item',
+            'quantity' => 1,
+            'price' => 2000,
+            'purchase_price' => 800,
+            'line_total' => 2000,
+        ]);
+
+        // Hub arrival first (before partial flag) — previously dropped forever.
+        $this->postWebhook([
+            'notification_type' => 'tracking_update',
+            'invoice' => $order->order_number,
+            'tracking_id' => $order->courier_tracker,
+            'tracking_message' => 'Consignment has been received at RAMPURA.',
+            'updated_at' => now()->subMinute()->toDateTimeString(),
+        ]);
+        $this->assertNull($order->fresh()->return_hub_arrived_at);
+        $this->assertFalse((bool) $order->fresh()->has_return);
+
+        $this->postWebhook([
+            'notification_type' => 'delivery_status',
+            'invoice' => $order->order_number,
+            'tracking_id' => $order->courier_tracker,
+            'status' => 'partial_delivered',
+            'collected_amount' => 1000,
+            'updated_at' => now()->toDateTimeString(),
+            'tracking_message' => 'Partial delivered',
+        ]);
+
+        $order->refresh();
+        $this->assertTrue((bool) $order->has_return);
+        $this->assertNotNull($order->return_hub_arrived_at);
+        $awaiting = app(ReturnHubArrivalService::class)->ordersAwaitingReceive();
+        $this->assertTrue($awaiting->contains('id', $order->id));
     }
 }

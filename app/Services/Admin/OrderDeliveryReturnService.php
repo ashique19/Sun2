@@ -291,8 +291,9 @@ class OrderDeliveryReturnService
 
     /**
      * When a replacement parcel is linked: never rewrite the original sale.
-     * If the exchange is already delivered, flag the original for the return
-     * parcel expected back; otherwise that flag is set on delivery.
+     * Flag the original for Return Pending immediately so hub-arrival webhooks
+     * (and the dashboard return-arrival list) are not missed while the exchange
+     * is still in transit. Delivery still re-flags as a safety net.
      */
     public function settleOriginalForExchange(Order $original, Order $replacement, ?int $changedBy = null): Order
     {
@@ -304,11 +305,9 @@ class OrderDeliveryReturnService
             return $original;
         }
 
-        unset($changedBy);
+        unset($changedBy, $replacement);
 
-        if ($replacement->status === 'delivered') {
-            $this->flagOriginalReturnExpectedForExchange($original);
-        }
+        $this->flagOriginalReturnExpectedForExchange($original);
 
         return $original->fresh(['items', 'adjustments']);
     }
@@ -425,7 +424,16 @@ class OrderDeliveryReturnService
         $order->update(['has_return' => $hasReturn]);
         Cache::forget(AdminOrderSegment::COUNTS_CACHE_KEY);
 
-        return $order->refresh();
+        $order = $order->refresh();
+
+        // Hub-arrival webhooks often land before H/R was set; backfill from logs
+        // so the order appears on the dashboard return-arrival list.
+        if ($hasReturn) {
+            app(ReturnHubArrivalService::class)->syncFromCourierLogs($order);
+            $order = $order->refresh();
+        }
+
+        return $order;
     }
 
     /**
@@ -447,8 +455,7 @@ class OrderDeliveryReturnService
         }
 
         if (! $order->has_return) {
-            $order->update(['has_return' => true]);
-            Cache::forget(AdminOrderSegment::COUNTS_CACHE_KEY);
+            $this->setHasReturn($order, true);
         }
 
         return $order->refresh();

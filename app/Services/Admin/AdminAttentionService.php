@@ -63,16 +63,24 @@ class AdminAttentionService
                 'data' => $data,
             ]);
 
-            return $existing->refresh();
+            $item = $existing->refresh();
+        } else {
+            $item = AdminAttentionItem::query()->create([
+                'order_id' => $order->id,
+                'issue_type' => AdminAttentionItem::ISSUE_TYPE_COD_MISMATCH,
+                'title' => $title,
+                'description' => $description,
+                'data' => $data,
+            ]);
         }
 
-        return AdminAttentionItem::query()->create([
-            'order_id' => $order->id,
-            'issue_type' => AdminAttentionItem::ISSUE_TYPE_COD_MISMATCH,
-            'title' => $title,
-            'description' => $description,
-            'data' => $data,
-        ]);
+        // Partial delivery ⇒ expect a return parcel. Flag Return Pending now so
+        // Rampura hub-arrival tracking is not skipped while the order stays dispatched.
+        if ($isPartial && ! $order->has_return) {
+            app(OrderDeliveryReturnService::class)->setHasReturn($order->fresh(), true);
+        }
+
+        return $item;
     }
 
     /**

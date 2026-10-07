@@ -84,6 +84,54 @@ class ReturnHubArrivalServiceTest extends TestCase
     }
 
     #[Test]
+    public function observe_message_auto_flags_linked_exchange_original_then_stamps(): void
+    {
+        $original = Order::query()->create([
+            'order_number' => 'RH-EX-ORIG',
+            'name' => 'Exchange Original',
+            'phone' => '01710000021',
+            'address' => 'Dhaka',
+            'status' => 'delivered',
+            'subtotal' => 1000,
+            'total' => 1000,
+            'has_return' => false,
+            'placed_at' => now()->subDay(),
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $original->id,
+            'name' => 'Dress',
+            'quantity' => 1,
+            'price' => 1000,
+            'purchase_price' => 400,
+            'line_total' => 1000,
+        ]);
+
+        Order::query()->create([
+            'order_number' => 'RH-EX-REP',
+            'name' => 'Exchange Original',
+            'phone' => '01710000021',
+            'address' => '[EXCHANGE PARCEL] Dhaka',
+            'status' => 'dispatched',
+            'subtotal' => 0,
+            'total' => 0,
+            'is_replacement' => true,
+            'exchange_of_order_id' => $original->id,
+            'has_return' => false,
+            'placed_at' => now(),
+            'dispatch_date' => now(),
+        ]);
+
+        $this->assertTrue($this->service()->observeMessage(
+            $original->fresh(),
+            'Consignment has been received at RAMPURA.',
+        ));
+
+        $original->refresh();
+        $this->assertTrue((bool) $original->has_return);
+        $this->assertNotNull($original->return_hub_arrived_at);
+    }
+
+    #[Test]
     public function sync_from_courier_logs_backfills_existing_webhook_data(): void
     {
         $order = $this->returnPendingOrder();

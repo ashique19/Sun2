@@ -422,8 +422,7 @@ class AdminOrderService
 
     /**
      * First time an original is linked (create or later edit): do not rewrite money.
-     * H/R on the original is deferred until the exchange parcel is delivered
-     * (or applied immediately when the linked exchange is already delivered).
+     * H/R on the original is set immediately so return-hub arrival is not missed.
      */
     private function settleLinkedExchangeOriginal(Order $replacement, ?int $previousExchangeOfId): void
     {

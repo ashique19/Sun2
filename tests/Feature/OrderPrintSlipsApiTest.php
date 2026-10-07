@@ -102,7 +102,6 @@ class OrderPrintSlipsApiTest extends TestCase
             ->assertSee('sundoritoma://print?slips_url=', false)
             ->assertSee('Print via OTG app', false)
             ->assertSee('Browser print (not USB OTG)', false)
-            ->assertDontSee('setTimeout(function () { window.print();', false)
             ->assertDontSee('setTimeout(function () { window.print();', false);
     }
 }

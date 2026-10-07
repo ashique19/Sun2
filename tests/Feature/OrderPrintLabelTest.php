@@ -162,6 +162,7 @@ class OrderPrintLabelTest extends TestCase
         $response->assertSee('afterprint', false);
         $response->assertSee('Print (cut after each)', false);
         $response->assertSee('printCutEach', false);
+        $response->assertDontSee('window.setTimeout(window.printCutEach', false);
         $response->assertDontSee('border-top: 0.4vw dashed', false);
         $response->assertDontSee('TOTAL DUE', false);
         $response->assertDontSee('CALL:', false);

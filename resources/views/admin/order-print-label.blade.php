@@ -182,14 +182,5 @@
         </table>
     </div>
 
-    <script>
-        window.addEventListener('load', function () {
-            // Don't auto-open Chrome print when OTG is available — that dialog
-            // never lists the USB thermal printer and confuses staff.
-            @if (empty($otgDeepLink))
-                setTimeout(function () { window.print(); }, 150);
-            @endif
-        });
-    </script>
 </body>
 </html>

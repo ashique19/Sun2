@@ -236,9 +236,8 @@
                 window.setTimeout(window.printCurrentSlip, 400);
             });
 
-            window.addEventListener('load', function () {
-                window.setTimeout(window.printCutEach, 150);
-            });
+            // Do not auto-open browser print on load — Chrome never lists the
+            // USB OTG printer. Staff use "Print via OTG app" or a print button.
         })();
     </script>
 </body>

@@ -42,21 +42,25 @@ class OrderTotalCalculator
         [$charges, $discounts] = $this->sumAdjustments($adjustments);
         $total = max(0.0, $subtotal + $deliveryCharge + $charges - $discounts);
         $cogs = $this->cogsFromItems($items);
-        $codCharge = $this->codCharge(
-            collectedAmount: $collectedAmount,
-            deliveryCharge: $deliveryCharge,
-            courierSlug: $courierSlug,
-            codPercentage: $codPercentage,
-        );
         $packaging = max(0.0, $packagingCost);
-        $netRevenue = $subtotal - $cogs + $charges - $discounts + $deliveryCharge - $courierCharge - $packaging - $codCharge;
         $deliveryMargin = $deliveryCharge - $courierCharge;
 
-        // Prefer actual COD collection; otherwise expected amount the courier will handle.
+        // Prefer actual COD collection; otherwise expected amount the courier will handle
+        // (collectable residual — 0 when prepaid / fully paid).
         $collected = max(0.0, $collectedAmount);
         $remittanceBase = $collected > 0
             ? $collected
             : max(0.0, $expectedCodRemittance ?? $total);
+
+        // COD % applies to the same remittance base (not a stale collected_amount when
+        // Amount to collect is already 0).
+        $codCharge = $this->codCharge(
+            collectedAmount: $remittanceBase,
+            deliveryCharge: $deliveryCharge,
+            courierSlug: $courierSlug,
+            codPercentage: $codPercentage,
+        );
+        $netRevenue = $subtotal - $cogs + $charges - $discounts + $deliveryCharge - $courierCharge - $packaging - $codCharge;
         $courierReceivable = $remittanceBase - $courierCharge - $codCharge;
         $grossProfit = $courierReceivable - $cogs - $packaging;
 

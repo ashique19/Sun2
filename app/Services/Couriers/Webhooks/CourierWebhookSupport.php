@@ -10,6 +10,7 @@ use App\Services\Admin\OrderDeliveryReturnService;
 use App\Services\Admin\OrderStatusService;
 use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderDeliverySettlement;
+use App\Services\Orders\OrderPaymentSync;
 use App\Services\Reseller\ResellerCommissionService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,7 @@ class CourierWebhookSupport
         private readonly ResellerCommissionService $resellerCommissions,
         private readonly OrderCourierChargeSync $courierChargeSync,
         private readonly OrderDeliverySettlement $deliverySettlement,
+        private readonly OrderPaymentSync $paymentSync,
         private readonly OrderDeliveryReturnService $deliveryReturns,
         private readonly AdminAttentionService $adminAttention,
     ) {}
@@ -130,6 +132,8 @@ class CourierWebhookSupport
         }
 
         if ($mappedStatus === 'delivered') {
+            $this->paymentSync->sync($order);
+            $order = $order->fresh();
             $expected = $order->collectableAmount();
             $isPartial = $this->isPartialDeliveryPayload($payload);
             $cod = $this->adminAttention->resolveCollectedAmountFromPayload(
@@ -152,13 +156,15 @@ class CourierWebhookSupport
                 return;
             }
 
+            $deliveredAt = $this->parseTimestamp($payload['updated_at'] ?? $payload['timestamp'] ?? null) ?? now();
+            $order->forceFill(['actual_delivery_date' => $order->actual_delivery_date ?? $deliveredAt])->save();
             $this->deliverySettlement->recordCollection(
-                order: $order,
+                order: $order->fresh(),
                 amount: $cod,
                 actor: null,
                 meta: ['source' => 'webhook', 'payload_event' => $payload['event'] ?? null],
             );
-            $extra['actual_delivery_date'] = $this->parseTimestamp($payload['updated_at'] ?? $payload['timestamp'] ?? null) ?? now();
+            $extra['actual_delivery_date'] = $deliveredAt;
         }
 
         if ($mappedStatus === $order->status && $extra === []) {

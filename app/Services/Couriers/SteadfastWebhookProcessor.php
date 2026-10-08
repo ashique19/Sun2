@@ -12,6 +12,7 @@ use App\Services\Admin\OrderStatusService;
 use App\Services\Admin\ReturnHubArrivalService;
 use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderDeliverySettlement;
+use App\Services\Orders\OrderPaymentSync;
 use App\Services\Reseller\ResellerCommissionService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +25,7 @@ class SteadfastWebhookProcessor
         private readonly ResellerCommissionService $resellerCommissions,
         private readonly OrderCourierChargeSync $courierChargeSync,
         private readonly OrderDeliverySettlement $deliverySettlement,
+        private readonly OrderPaymentSync $paymentSync,
         private readonly AdminAttentionService $adminAttention,
         private readonly ReturnHubArrivalService $returnHubArrival,
         private readonly OrderDeliveryReturnService $deliveryReturns,
@@ -142,6 +144,8 @@ class SteadfastWebhookProcessor
         // Handle delivery status with COD validation / partial-delivery review.
         if ($mappedStatus === 'delivered') {
             $order->refresh();
+            $this->paymentSync->sync($order);
+            $order = $order->fresh();
             $expectedAmount = $order->collectableAmount();
             $isPartial = $this->isPartialDeliveryStatus($steadfastStatus);
             $collectedAmount = $this->adminAttention->resolveCollectedAmountFromPayload(
@@ -178,13 +182,17 @@ class SteadfastWebhookProcessor
             }
 
             // Full delivery with matching COD — proceed normally.
+            // Mark delivery date before recording COD so PaymentSync counts the settlement
+            // (courier COD settlements are ignored while the parcel is still "out").
+            $deliveredAt = $this->parseTimestamp($payload['updated_at'] ?? null) ?? now();
+            $order->forceFill(['actual_delivery_date' => $order->actual_delivery_date ?? $deliveredAt])->save();
             $this->deliverySettlement->recordCollection(
-                order: $order,
+                order: $order->fresh(),
                 amount: $collectedAmount,
                 actor: null,
                 meta: ['source' => 'steadfast_webhook'],
             );
-            $extra['actual_delivery_date'] = $this->parseTimestamp($payload['updated_at'] ?? null) ?? now();
+            $extra['actual_delivery_date'] = $deliveredAt;
         }
 
         if ($mappedStatus === $order->status && empty($extra)) {
@@ -221,6 +229,8 @@ class SteadfastWebhookProcessor
 
         if (preg_match('/delivered successfully/i', $message) && $order->status !== 'delivered') {
             $order->refresh();
+            $this->paymentSync->sync($order);
+            $order = $order->fresh();
             $expectedAmount = $order->collectableAmount();
             $collectedAmount = $this->adminAttention->resolveCollectedAmountFromPayload(
                 $payload,
@@ -253,15 +263,17 @@ class SteadfastWebhookProcessor
                 return;
             }
 
+            $deliveredAt = $this->parseTimestamp($payload['updated_at'] ?? null) ?? now();
+            $order->forceFill(['actual_delivery_date' => $order->actual_delivery_date ?? $deliveredAt])->save();
             $this->deliverySettlement->recordCollection(
-                order: $order,
+                order: $order->fresh(),
                 amount: $collectedAmount,
                 actor: null,
                 meta: ['source' => 'steadfast_tracking'],
             );
 
-            $this->orderStatus->update($order, 'delivered', $message, null, [
-                'actual_delivery_date' => $this->parseTimestamp($payload['updated_at'] ?? null) ?? now(),
+            $this->orderStatus->update($order->fresh(), 'delivered', $message, null, [
+                'actual_delivery_date' => $deliveredAt,
             ]);
 
             $this->resellerCommissions->creditOnDelivered($order->fresh(['items']));

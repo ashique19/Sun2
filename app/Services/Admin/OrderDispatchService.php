@@ -11,6 +11,7 @@ use App\Services\Couriers\PathaoApiClient;
 use App\Services\Couriers\RedxApiClient;
 use App\Services\Couriers\SteadfastApiClient;
 use App\Services\Orders\OrderCourierChargeSync;
+use App\Services\Orders\OrderPaymentSync;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -26,6 +27,7 @@ class OrderDispatchService
         private readonly OrderStatusService $statusService,
         private readonly CourierBalanceService $courierBalances,
         private readonly OrderCourierChargeSync $courierChargeSync,
+        private readonly OrderPaymentSync $paymentSync,
     ) {}
 
     public function dispatchViaApi(Order $order, string $slug, ?int $changedBy = null, bool $markDispatched = true): Order
@@ -44,6 +46,8 @@ class OrderDispatchService
         if (! $courier) {
             throw new RuntimeException(ucfirst($slug).' courier is not active in the database.');
         }
+
+        $order = $this->orderReadyForCodDispatch($order);
 
         [$response, $trackingCode] = match ($slug) {
             'steadfast' => $this->dispatchSteadfastPayload($order),
@@ -151,10 +155,21 @@ class OrderDispatchService
     /**
      * @return array{0: array<string, mixed>, 1: string}
      */
+    /**
+     * Heal paid/COD caches before reading collectableAmount for the courier API.
+     *
+     * False paid rows and premature courier COD settlements otherwise dispatch COD ৳0.
+     */
+    private function orderReadyForCodDispatch(Order $order): Order
+    {
+        $order->refresh()->loadMissing(['paymentTransactions', 'items', 'adjustments']);
+        $this->paymentSync->sync($order);
+
+        return $order->fresh(['paymentTransactions', 'items', 'adjustments']);
+    }
+
     private function dispatchSteadfastPayload(Order $order): array
     {
-        $order->refresh();
-
         $payload = [
             'invoice' => (string) $order->order_number,
             'recipient_name' => $order->name,

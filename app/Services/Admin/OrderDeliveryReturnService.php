@@ -205,20 +205,23 @@ class OrderDeliveryReturnService
                 $this->courierBalances->settleAfterPartialReturn($order->courier, $order, (int) round($collectedTk), $changedBy);
             }
 
+            $extras = [
+                'has_return' => true,
+            ];
+
+            if ($status === 'delivered') {
+                $deliveredAt = $order->actual_delivery_date ?? now();
+                $extras['actual_delivery_date'] = $deliveredAt;
+                // Recognize delivery before COD settlement sync so Amount to collect updates.
+                $order->forceFill(['actual_delivery_date' => $deliveredAt])->save();
+            }
+
             $this->deliverySettlement->recordCollection(
                 order: $order->fresh(),
                 amount: $collectedTk,
                 actor: $actor,
                 meta: ['source' => 'admin_partial_return'],
             );
-
-            $extras = [
-                'has_return' => true,
-            ];
-
-            if ($status === 'delivered') {
-                $extras['actual_delivery_date'] = $order->actual_delivery_date ?? now();
-            }
 
             return $this->statusService->update($order->fresh(), $status, $note, $changedBy, $extras);
         });

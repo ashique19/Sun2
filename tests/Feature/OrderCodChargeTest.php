@@ -6,7 +6,10 @@ use App\Livewire\Admin\AdminOrderShow;
 use App\Models\Courier;
 use App\Models\Order;
 use App\Models\OrderProduct;
+use App\Models\PaymentMethod;
 use App\Models\User;
+use App\Services\Orders\OrderDeliverySettlement;
+use App\Services\Orders\OrderPaymentRecorder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
@@ -29,6 +32,11 @@ class OrderCodChargeTest extends TestCase
 
     private function makeOrder(Courier $courier, float $collected, float $delivery): Order
     {
+        PaymentMethod::query()->firstOrCreate(
+            ['code' => 'cod'],
+            ['name' => 'COD', 'is_active' => true],
+        );
+
         $order = Order::query()->create([
             'order_number' => 'COD-'.uniqid(),
             'name' => 'COD Customer',
@@ -38,9 +46,14 @@ class OrderCodChargeTest extends TestCase
             'subtotal' => 1000,
             'delivery_charge' => $delivery,
             'courier_charge' => 60,
-            'collected_amount' => $collected,
+            'collected_amount' => 0,
             'total' => 1000 + $delivery,
+            'due_amount' => 1000 + $delivery,
+            'cod_amount' => 1000 + $delivery,
+            'paid_amount' => 0,
+            'payment_status' => 'unpaid',
             'courier_id' => $courier->id,
+            'actual_delivery_date' => now(),
             'placed_at' => now(),
         ]);
 
@@ -53,7 +66,15 @@ class OrderCodChargeTest extends TestCase
             'line_total' => 1000,
         ]);
 
-        return $order->fresh(['items', 'courier']);
+        app(OrderPaymentRecorder::class)->record(
+            order: $order->fresh(),
+            method: 'cod',
+            amount: $collected,
+            kind: 'settlement',
+            reference: OrderDeliverySettlement::settlementExternalId((int) $order->id),
+        );
+
+        return $order->fresh(['items', 'courier', 'paymentTransactions']);
     }
 
     #[Test]

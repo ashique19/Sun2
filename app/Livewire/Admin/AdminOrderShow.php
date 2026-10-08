@@ -97,28 +97,27 @@ class AdminOrderShow extends Component
             'user:id,name,phone',
         ]);
 
-        // Heal stale paid/due/cod caches that disagree with the payment ledger
-        // (storefront COD often showed Bill ৳bill / Collect ৳0 / After ৳bill paid).
-        if ($this->order->paymentCachesDisagreeWithLedger()) {
-            $paymentSync->sync($this->order);
-            $this->order = $this->order->fresh([
-                'items.product:id,slug,name',
-                'items.product.images:id,product_id,path,is_primary,sort_order',
-                'coupon',
-                'adjustments',
-                'adjustmentLogs.actor',
-                'paymentTransactions.receivedBy',
-                'courier',
-                'courierChargeConfirmedBy:id,name',
-                'createdBy:id,name',
-                'statusHistory.changedBy',
-                'courierLogs.courier',
-                'channelConversation.messages',
-                'exchangeOf:id,order_number',
-                'replacements:id,order_number,exchange_of_order_id',
-                'user:id,name,phone',
-            ]);
-        }
+        // Re-derive paid/due/cod/collected from the ledger on every view.
+        // Catches false paid caches and premature courier COD settlements that
+        // otherwise show Bill ৳bill / Amount to collect ৳0 (COD mismatch).
+        $paymentSync->sync($this->order);
+        $this->order = $this->order->fresh([
+            'items.product:id,slug,name',
+            'items.product.images:id,product_id,path,is_primary,sort_order',
+            'coupon',
+            'adjustments',
+            'adjustmentLogs.actor',
+            'paymentTransactions.receivedBy',
+            'courier',
+            'courierChargeConfirmedBy:id,name',
+            'createdBy:id,name',
+            'statusHistory.changedBy',
+            'courierLogs.courier',
+            'channelConversation.messages',
+            'exchangeOf:id,order_number',
+            'replacements:id,order_number,exchange_of_order_id',
+            'user:id,name,phone',
+        ]);
 
         $this->status = (string) $this->order->status;
         $this->adminNote = (string) ($this->order->admin_note ?? '');

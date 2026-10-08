@@ -8,14 +8,13 @@ use Illuminate\Support\Collection;
 class OrderPrintSlip
 {
     /**
-     * Thermal / OTG slip payload for one order (ESC/POS companion app + APIs).
+     * Full slip fields (admin helpers / address formatting).
      *
      * @return array{
      *     id: int,
      *     order_number: string,
      *     parcel_id: string|null,
      *     brand: string,
-     *     helpline: string,
      *     name: string,
      *     phone: string,
      *     address: string,
@@ -38,11 +37,32 @@ class OrderPrintSlip
             'order_number' => (string) $order->order_number,
             'parcel_id' => $order->printParcelId(),
             'brand' => 'Sundoritoma.com',
-            'helpline' => 'WhatsApp: 01880001255',
             'name' => (string) $order->name,
             'phone' => (string) $order->phone,
             'address' => $shippingAddress,
             'due_tk' => (int) round($order->collectableAmount()),
+        ];
+    }
+
+    /**
+     * Minimal thermal / OTG payload — matches admin print-selected layout.
+     *
+     * @return array{
+     *     id: int,
+     *     order_number: string,
+     *     parcel_id: string|null,
+     *     brand: string,
+     *     name: string
+     * }
+     */
+    public static function thermalFromOrder(Order $order): array
+    {
+        return [
+            'id' => (int) $order->id,
+            'order_number' => (string) $order->order_number,
+            'parcel_id' => $order->printParcelId(),
+            'brand' => 'Sundoritoma.com',
+            'name' => (string) $order->name,
         ];
     }
 
@@ -69,7 +89,7 @@ class OrderPrintSlip
             ->values();
 
         return $orders
-            ->map(fn (Order $order) => self::fromOrder($order))
+            ->map(fn (Order $order) => self::thermalFromOrder($order))
             ->all();
     }
 }

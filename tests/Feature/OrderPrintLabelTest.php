@@ -124,9 +124,16 @@ class OrderPrintLabelTest extends TestCase
         $this->assertSame('0.00', $order->cod_amount);
         $this->assertSame(3120.0, $order->collectableAmount());
 
+        // Collectable still uses total when COD cache is zero; slip HTML no longer prints due.
+        $this->assertSame(3120.0, $order->collectableAmount());
+
         $this->get(route('admin.orders.print', $order))
             ->assertOk()
-            ->assertSee('3,120 Tk', false);
+            ->assertSee('Parcel ID', false)
+            ->assertSee('270697676', false)
+            ->assertSee('Sundoritoma.com', false)
+            ->assertDontSee('TOTAL DUE', false)
+            ->assertDontSee('3,120 Tk', false);
     }
 
     public function test_print_selected_shows_parcel_id_brand_and_customer_name_per_order(): void

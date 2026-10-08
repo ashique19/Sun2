@@ -52,7 +52,7 @@ class SlipRepository(
                         orderNumber = o.optString("order_number"),
                         parcelId = o.optString("parcel_id").ifBlank { null },
                         brand = o.optString("brand", "Sundoritoma.com"),
-                        helpline = o.optString("helpline", "WhatsApp: 01880001255"),
+                        helpline = o.optString("helpline"),
                         name = o.optString("name"),
                         phone = o.optString("phone"),
                         address = o.optString("address"),

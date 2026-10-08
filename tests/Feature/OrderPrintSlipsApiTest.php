@@ -64,9 +64,12 @@ class OrderPrintSlipsApiTest extends TestCase
             ->assertJsonPath('slips.0.name', 'Karim')
             ->assertJsonPath('slips.0.parcel_id', '222')
             ->assertJsonPath('slips.0.brand', 'Sundoritoma.com')
-            ->assertJsonPath('slips.0.due_tk', 1080)
             ->assertJsonPath('slips.1.name', 'Alyssa')
-            ->assertJsonPath('slips.1.parcel_id', '111');
+            ->assertJsonPath('slips.1.parcel_id', '111')
+            ->assertJsonMissingPath('slips.0.due_tk')
+            ->assertJsonMissingPath('slips.0.phone')
+            ->assertJsonMissingPath('slips.0.address')
+            ->assertJsonMissingPath('slips.0.helpline');
     }
 
     public function test_unsigned_print_slips_is_forbidden(): void
@@ -102,6 +105,9 @@ class OrderPrintSlipsApiTest extends TestCase
             ->assertSee('sundoritoma://print?slips_url=', false)
             ->assertSee('Print via OTG app', false)
             ->assertSee('Browser print (not USB OTG)', false)
+            ->assertSee('Sundoritoma.com', false)
+            ->assertDontSee('TOTAL DUE', false)
+            ->assertDontSee('WhatsApp:', false)
             ->assertDontSee('setTimeout(function () { window.print();', false);
     }
 }

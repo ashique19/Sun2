@@ -8,7 +8,8 @@
     <meta name="robots" content="noindex, nofollow">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @if (request()->routeIs('admin.inbox'))
-        @vite(['resources/js/inbox-product-crop.js', 'resources/js/inbox-image-edit.js'])
+        <meta name="inbox-image-match-concurrency" content="{{ (int) config('channels.image_match.client_concurrency', 3) }}">
+        @vite(['resources/js/inbox-product-crop.js', 'resources/js/inbox-image-edit.js', 'resources/js/inbox-image-match.js'])
     @endif
     @livewireStyles
 </head>

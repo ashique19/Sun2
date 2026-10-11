@@ -177,14 +177,50 @@ class ProductImageHashService
             Log::debug('Catalog embedding failed.', ['error' => $e->getMessage()]);
         }
 
+        $signature = null;
+        try {
+            $signatures = app(ProductImageSignatureService::class);
+            $signature = $signatures->pack($signatures->catalogSignatures($binary));
+        } catch (Throwable $e) {
+            Log::debug('Catalog match signature failed.', ['error' => $e->getMessage()]);
+        }
+
         $image->update([
             'perceptual_hash' => $full,
             'perceptual_hashes' => $variants,
             'dct_hash' => $dctHash,
             'embedding_vector' => $embedding,
+            'match_signature' => $signature,
         ]);
 
         return $full;
+    }
+
+    /**
+     * Visual match signature only (no hashes / embedding). Written without model events so
+     * bulk backfills do not invalidate the per-image match caches once per row.
+     */
+    public function storeMatchSignature(ProductImage $image, bool $allowRemoteDownload = true): bool
+    {
+        $binary = $this->productImageBinary($image, $allowRemoteDownload);
+
+        if ($binary === null) {
+            return false;
+        }
+
+        try {
+            $signatures = app(ProductImageSignatureService::class);
+            $packed = $signatures->pack($signatures->catalogSignatures($binary));
+        } catch (Throwable $e) {
+            Log::debug('Catalog match signature failed.', ['product_image_id' => $image->id, 'error' => $e->getMessage()]);
+
+            return false;
+        }
+
+        ProductImage::query()->whereKey($image->id)->update(['match_signature' => $packed]);
+        $image->setAttribute('match_signature', $packed)->syncOriginalAttribute('match_signature');
+
+        return true;
     }
 
     /**

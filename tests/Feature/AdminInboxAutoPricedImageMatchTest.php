@@ -16,10 +16,12 @@ use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
+use Tests\ProductPhotoFixtures;
 use Tests\TestCase;
 
 class AdminInboxAutoPricedImageMatchTest extends TestCase
 {
+    use ProductPhotoFixtures;
     use RefreshDatabase;
 
     private function adminUser(): User
@@ -66,14 +68,11 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
 
         $filename = 'catalog.jpg';
         $absolute = $absoluteDir.DIRECTORY_SEPARATOR.$filename;
-        $image = imagecreatetruecolor(240, 240);
-        $fill = imagecolorallocate($image, 210, 40, 70);
-        imagefill($image, 0, 0, $fill);
-        imagejpeg($image, $absolute, 92);
-        imagedestroy($image);
+        file_put_contents($absolute, $this->productPhotoBytes(21, 240, 240));
 
         $hash = app(ProductImageHashService::class)->hashFile($absolute);
 
+        // No match_signature: the matcher signs legacy catalog rows on first use.
         ProductImage::query()->create([
             'product_id' => $product->id,
             'path' => '/'.$relativeDir.'/'.$filename,
@@ -152,9 +151,12 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
     #[Test]
     public function weak_matches_do_not_show_send_priced_image_button(): void
     {
-        $matcher = \Mockery::mock(ChannelMessageImageMatchService::class);
-        $matcher->shouldReceive('bestAutoMatch')->once()->andReturn(null);
-        $this->app->instance(ChannelMessageImageMatchService::class, $matcher);
+        config(['channels.ai_draft.image_min_bytes' => 100]);
+
+        $this->catalogProduct('Unrelated Catalog Ring', $this->productPhotoBytes(31));
+        Http::fake([
+            'https://cdn.example.test/weak-customer.jpg' => Http::response($this->productPhotoBytes(32), 200, ['Content-Type' => 'image/jpeg']),
+        ]);
 
         $this->actingAs($this->adminUser());
         $conversation = $this->conversation();
@@ -175,6 +177,9 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
             ->assertDontSeeHtml('wire:click="addMatchedProductToOrder('.$inbound->id.')"')
             ->assertSee('No match — search product')
             ->assertSeeHtml('wire:click.stop="openTagProductOnImage('.$inbound->id.')"');
+
+        $this->assertNull($inbound->fresh()->matched_product_id);
+        $this->assertSame(ChannelMessageImageMatchService::STATUS_NONE, $inbound->fresh()->image_match_meta['status'] ?? null);
     }
 
     #[Test]
@@ -504,7 +509,7 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
     }
 
     #[Test]
-    public function screenshot_with_chrome_matches_via_center_crop_fallback(): void
+    public function phone_screenshot_with_ui_chrome_auto_matches_the_photo_region(): void
     {
         config([
             'facebook.messenger.page_access_token' => 'page-token',
@@ -512,55 +517,11 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
         ]);
 
         $hasher = app(ProductImageHashService::class);
+        $catalogBytes = $this->productPhotoBytes(41);
+        $screenshotBytes = $this->phoneScreenshotBytes($catalogBytes);
 
-        $catalog = imagecreatetruecolor(200, 200);
-        $a = imagecolorallocate($catalog, 200, 40, 60);
-        $b = imagecolorallocate($catalog, 40, 90, 200);
-        for ($y = 0; $y < 200; $y++) {
-            for ($x = 0; $x < 200; $x++) {
-                imagesetpixel($catalog, $x, $y, (((int) ($x / 10)) % 2) === 0 ? $a : $b);
-            }
-        }
-
-        $screenshot = imagecreatetruecolor(400, 400);
-        $chrome = imagecolorallocate($screenshot, 18, 18, 22);
-        imagefill($screenshot, 0, 0, $chrome);
-        imagecopy($screenshot, $catalog, 100, 100, 0, 0, 200, 200);
-
-        ob_start();
-        imagepng($catalog);
-        $catalogBytes = (string) ob_get_clean();
-        imagedestroy($catalog);
-
-        ob_start();
-        imagepng($screenshot);
-        $screenshotBytes = (string) ob_get_clean();
-        imagedestroy($screenshot);
-
-        $product = Product::query()->create([
-            'name' => 'Screenshot Match Ring',
-            'slug' => 'screenshot-match-ring-'.uniqid(),
-            'price' => 2100,
-            'purchase_price' => 900,
-            'stock_quantity' => 2,
-            'is_published' => true,
-        ]);
-
-        $relativeDir = 'img/products/'.$product->id;
-        $absoluteDir = public_path($relativeDir);
-        if (! is_dir($absoluteDir)) {
-            mkdir($absoluteDir, 0775, true);
-        }
-        file_put_contents($absoluteDir.'/catalog.png', $catalogBytes);
-
-        ProductImage::query()->create([
-            'product_id' => $product->id,
-            'path' => '/'.$relativeDir.'/catalog.png',
-            'alt' => $product->name,
-            'is_primary' => true,
-            'sort_order' => 0,
-            'perceptual_hash' => $hasher->hashBinary($catalogBytes),
-        ]);
+        $product = $this->catalogProduct('Screenshot Match Ring', $catalogBytes);
+        $this->catalogProduct('Other Necklace', $this->productPhotoBytes(42));
 
         $customerUrl = 'https://cdn.example.test/screenshot-chrome.png';
         Http::fake([
@@ -578,28 +539,23 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
             'sent_at' => now(),
         ]);
 
-        $fullMatches = $hasher->findTopMatches(
+        $this->assertSame([], $hasher->findTopMatches(
             $hasher->hashBinary($screenshotBytes),
             1,
             ProductImageHashService::AUTO_MATCH_PERCENT,
-        );
-        $this->assertSame([], $fullMatches);
+        ), 'A whole-frame perceptual hash cannot see past the screenshot chrome.');
 
         $component = Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->assertSee('P.img')
-            ->assertSee('+Order');
+            ->assertSee('+Order')
+            ->assertSeeHtml('wire:click="rejectMatchedProduct('.$inbound->id.')"');
 
         $state = $component->get('inboundImageMatchState')[(string) $inbound->id] ?? [];
         $this->assertSame($product->id, $state['product_id'] ?? null);
-        $strategy = (string) ($state['strategy'] ?? '');
-        $this->assertTrue(
-            str_contains($strategy, 'trim')
-            || str_contains($strategy, 'center')
-            || str_contains($strategy, 'photo_panel'),
-            'Expected trim, photo-panel, or center-crop strategy, got: '.$strategy,
-        );
+        $this->assertSame('visual', $state['strategy'] ?? null);
         $this->assertSame($product->id, $inbound->fresh()->matched_product_id);
+        $this->assertLessThan(0.7, $inbound->fresh()->image_match_meta['candidates'][0]['region']['height'] ?? 1.0);
     }
 
     #[Test]

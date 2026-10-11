@@ -6,7 +6,6 @@ use App\Models\Category;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Models\Product;
-use App\Services\Admin\ProductImageHashService;
 use App\Services\Admin\ProductPricedImageService;
 use App\Services\Channels\ChannelInboxDiagnostics;
 use App\Services\Channels\ChannelInboxPurgeService;
@@ -16,7 +15,6 @@ use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
 use App\Services\Channels\InboxQuickReplyService;
 use App\Services\Channels\MessengerConversationSyncService;
-use App\Services\Channels\ProductImageMatchMemoryService;
 use App\Services\Facebook\FacebookPageTokenService;
 use App\Support\AdminAccess;
 use App\Support\Fileinfo;
@@ -37,6 +35,14 @@ use Throwable;
 class AdminInbox extends Component
 {
     use WithFileUploads;
+
+    /** Newest inbound photos per thread whose matches are tracked. */
+    private const IMAGE_MATCH_THREAD_LIMIT = 60;
+
+    private const IMAGE_MATCH_SUGGESTIONS = 3;
+
+    /** @var array{left: float, top: float, width: float, height: float} */
+    private const FULL_FRAME_REGION = ['left' => 0.0, 'top' => 0.0, 'width' => 1.0, 'height' => 1.0];
 
     #[Url]
     public string $channel = '';
@@ -143,11 +149,18 @@ class AdminInbox extends Component
     public $mappingCroppedImage = null;
 
     /**
-     * @var list<array{product_id: int, name: string, sku: ?string, price: float, stock_quantity: int, image_url: ?string, match_percent: float, distance: int}>
+     * @var list<array{product_id: int, name: string, sku: ?string, price: float, stock_quantity: int, image_url: ?string, match_percent: float}>
      */
     public array $mappingImageMatches = [];
 
     public ?string $mappingImageMatchError = null;
+
+    /**
+     * Staff crop on the chat image (fractions of the original), learned on tag.
+     *
+     * @var array{left: float, top: float, width: float, height: float}|null
+     */
+    public ?array $mappingCropRegion = null;
 
     /** Inbound image message currently open in the edit-and-send modal. */
     public ?int $imageEditMessageId = null;
@@ -175,9 +188,20 @@ class AdminInbox extends Component
     public array $pricedSendResults = [];
 
     /**
-     * Auto product-image matches for inbound customer photos in the open thread.
+     * Product matches for inbound customer photos in the open thread, read from the
+     * persisted per-photo result. "pending" photos are matched by the browser queue
+     * (parallel POSTs to admin.inbox.image-match), never inside a Livewire request.
      *
-     * @var array<string, array{status: string, product_id?: int, name?: string, match_percent?: float}>
+     * @var array<string, array{
+     *     status: 'pending'|'done',
+     *     match_status?: ?string,
+     *     match_url?: string,
+     *     product_id?: int,
+     *     name?: string,
+     *     match_percent?: float,
+     *     strategy?: string,
+     *     suggestions?: list<array{product_id: int, name: string, image_url: ?string, match_percent: float}>
+     * }>
      */
     public array $inboundImageMatchState = [];
 
@@ -435,7 +459,7 @@ class AdminInbox extends Component
             }
 
             if ($message->isImageAttachment()) {
-                $this->runScreenshotFallbackImageMatch($message);
+                $this->loadStoredImageMatches($message);
             }
 
             return;
@@ -518,34 +542,66 @@ class AdminInbox extends Component
             ->all();
     }
 
-    public function matchProductFromCroppedImage(ProductImageHashService $hasher): void
+    /**
+     * Rotated crops are uploaded as pixels (the crop box no longer maps onto the original).
+     */
+    public function matchProductFromCroppedImage(ChannelMessageImageMatchService $matches): void
     {
         AdminAccess::ensureStaffAdmin();
 
         $this->mappingImageMatchError = null;
         $this->mappingImageMatches = [];
+        $this->mappingCropRegion = null;
 
         $this->validate([
             'mappingCroppedImage' => Fileinfo::storedImageRules(10240),
         ]);
 
         try {
-            $hash = $hasher->hashUploadedFile($this->mappingCroppedImage);
-            $matches = $hasher->findTopMatches(
-                $hash,
-                ProductImageHashService::TOP_MATCHES,
-                ProductImageHashService::MIN_MATCH_PERCENT,
-            );
-
-            // Always list matches so staff can confirm before adding; do not auto-apply/close.
-            $this->mappingImageMatches = $matches;
-            if ($matches === []) {
-                $this->mappingImageMatchError = 'No catalog match at 80%+. Try a tighter crop or search by name.';
-            }
+            $bytes = (string) file_get_contents($this->mappingCroppedImage->getRealPath());
+            $this->showCropMatches($matches->searchBinary($bytes, self::FULL_FRAME_REGION)['rows']);
         } catch (Throwable $e) {
             $this->mappingImageMatchError = $e->getMessage();
         } finally {
             $this->mappingCroppedImage = null;
+        }
+    }
+
+    /**
+     * Match the staff crop box on the original chat image: no upload, and the region
+     * is learned when staff tag the result.
+     *
+     * @param  array<string, mixed>  $region  left/top/width/height fractions of the original image
+     */
+    public function matchProductFromCropRegion(array $region, ChannelMessageImageMatchService $matches): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->mappingImageMatchError = null;
+        $this->mappingImageMatches = [];
+        $this->mappingCropRegion = null;
+
+        $fractions = $this->normalizeCropRegion($region);
+        $message = $this->mappingMessageId ? $this->inboundImageMessage($this->mappingMessageId) : null;
+
+        if ($fractions === null || $message === null) {
+            $this->mappingImageMatchError = 'Select an area of the chat image first.';
+
+            return;
+        }
+
+        try {
+            $downloaded = $matches->downloadInboundImageBytes($message);
+            if ($downloaded === null) {
+                $this->mappingImageMatchError = 'Could not load the chat image.';
+
+                return;
+            }
+
+            $this->mappingCropRegion = $fractions;
+            $this->showCropMatches($matches->searchBinary($downloaded['bytes'], $fractions)['rows']);
+        } catch (Throwable $e) {
+            $this->mappingImageMatchError = $e->getMessage();
         }
     }
 
@@ -595,25 +651,54 @@ class AdminInbox extends Component
             return;
         }
 
-        $message->forceFill(['matched_product_id' => $product->id])->save();
-
-        app(ProductImageMatchMemoryService::class)->rememberFromStaffTag(
-            $message,
-            $product,
-            auth()->user(),
-        );
-
-        $this->inboundImageMatchState[(string) $message->id] = [
-            'status' => 'done',
-            'product_id' => (int) $product->id,
-            'name' => (string) $product->name,
-            'match_percent' => (float) ($this->inboundImageMatchState[(string) $message->id]['match_percent'] ?? 100),
-            'strategy' => 'manual',
-        ];
+        app(ChannelMessageImageMatchService::class)->tag($message, $product, auth()->user(), $this->mappingCropRegion);
+        $this->syncInboundImageMatchState();
 
         $this->statusMessage = 'Tagged “'.$product->name.'” on this photo.';
         $this->error = null;
         $this->closeMessageMapMenu();
+    }
+
+    /**
+     * One-click confirm of a suggested product under an inbound photo.
+     */
+    public function tagSuggestedProduct(int $messageId, int $productId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $message = $this->inboundImageMessage($messageId);
+        $product = Product::query()->published()->whereKey($productId)->first();
+
+        if (! $message || ! $product) {
+            $this->error = 'Message or product not found.';
+
+            return;
+        }
+
+        $this->ensureConversationSelected((int) $message->channel_conversation_id);
+        app(ChannelMessageImageMatchService::class)->tag($message, $product, auth()->user());
+        $this->syncInboundImageMatchState();
+
+        $this->statusMessage = 'Tagged “'.$product->name.'” on this photo.';
+        $this->error = null;
+    }
+
+    /**
+     * "Not this": reject the attached product for this photo, then open the product picker.
+     */
+    public function rejectMatchedProduct(int $messageId, ChannelMessageOrderMapper $mapper): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $message = $this->inboundImageMessage($messageId);
+        if (! $message) {
+            return;
+        }
+
+        app(ChannelMessageImageMatchService::class)->reject($message);
+        $this->syncInboundImageMatchState();
+
+        $this->openTagProductOnImage($messageId, $mapper);
     }
 
     /**
@@ -650,15 +735,8 @@ class AdminInbox extends Component
             return;
         }
 
-        app(ProductImageMatchMemoryService::class)->forgetFromMessage($message);
-
-        $message->forceFill([
-            'matched_product_id' => null,
-            'image_match_checked_at' => now(),
-        ])->save();
-
-        $key = (string) $message->id;
-        $this->inboundImageMatchState[$key] = ['status' => 'done'];
+        app(ChannelMessageImageMatchService::class)->reject($message);
+        $this->syncInboundImageMatchState();
 
         $this->statusMessage = 'Product tag cleared.';
         $this->error = null;
@@ -871,54 +949,14 @@ class AdminInbox extends Component
     }
 
     /**
-     * Hash each pending inbound customer photo against the product catalog.
+     * Re-read persisted photo matches after the browser queue finished one or more
+     * (matching itself runs in parallel HTTP requests, not in this component).
      */
-    public function runInboundImageMatches(ChannelMessageImageMatchService $matcher): void
+    public function refreshInboundImageMatches(): void
     {
         AdminAccess::ensureStaffAdmin();
 
-        // The thread is already on screen. Each request spends a short budget so
-        // matched photos appear progressively instead of blocking the conversation.
-        $startedAt = microtime(true);
-        $processed = 0;
-        $budgetSeconds = 0.4;
-        $maxImagesPerRequest = 4;
-
-        while (true) {
-            $nextId = null;
-
-            foreach ($this->inboundImageMatchState as $messageId => $state) {
-                if (($state['status'] ?? null) === 'pending') {
-                    $nextId = (int) $messageId;
-                    break;
-                }
-            }
-
-            if ($nextId === null) {
-                return;
-            }
-
-            $this->resolveInboundImageMatch($nextId, $matcher);
-            $processed++;
-
-            $hasMorePending = collect($this->inboundImageMatchState)
-                ->contains(fn (array $state): bool => ($state['status'] ?? null) === 'pending');
-
-            if (! $hasMorePending) {
-                return;
-            }
-
-            if (app()->runningUnitTests()) {
-                continue;
-            }
-
-            $overBudget = (microtime(true) - $startedAt) >= $budgetSeconds || $processed >= $maxImagesPerRequest;
-            if ($overBudget) {
-                $this->js('queueMicrotask(() => $wire.runInboundImageMatches())');
-
-                return;
-            }
-        }
+        $this->syncInboundImageMatchState();
     }
 
     /**
@@ -1784,124 +1822,100 @@ class AdminInbox extends Component
     }
 
     /**
-     * Queue perceptual-hash matching for inbound customer images in the open thread.
+     * Show persisted photo matches for the open thread; unmatched photos become "pending"
+     * and are matched by the browser queue (inline in tests).
      */
     private function queueInboundImageMatching(): void
     {
+        $this->syncInboundImageMatchState(resolvePending: app()->runningUnitTests());
+    }
+
+    private function syncInboundImageMatchState(bool $resolvePending = false): void
+    {
         if (! $this->selectedConversationId) {
+            $this->inboundImageMatchState = [];
+
             return;
         }
+
+        $matches = app(ChannelMessageImageMatchService::class);
 
         $messages = ChannelMessage::query()
             ->where('channel_conversation_id', $this->selectedConversationId)
             ->where('direction', ChannelMessage::DIRECTION_INBOUND)
             ->whereNotNull('media_url')
-            ->orderBy('id')
-            ->get(['id', 'matched_product_id', 'media_mime', 'media_url', 'image_match_checked_at']);
+            ->latest('id')
+            ->limit(self::IMAGE_MATCH_THREAD_LIMIT)
+            ->get(['id', 'channel_conversation_id', 'direction', 'matched_product_id', 'media_mime', 'media_url', 'media_path', 'raw_payload', 'image_match_checked_at', 'image_match_meta'])
+            ->reverse()
+            ->filter(fn (ChannelMessage $message): bool => $message->isImageAttachment())
+            ->values();
+
+        $stamp = $messages->contains(fn (ChannelMessage $message): bool => $message->image_match_checked_at !== null && ! $message->matched_product_id)
+            ? $matches->indexStamp()
+            : null;
+
+        $pending = [];
+        foreach ($messages as $index => $message) {
+            if (! $matches->needsMatching($message, $stamp)) {
+                continue;
+            }
+
+            if ($resolvePending) {
+                $messages[$index] = $matches->resolve($message);
+            } else {
+                $pending[(int) $message->id] = true;
+            }
+        }
 
         $productNames = Product::query()
             ->whereIn('id', $messages->pluck('matched_product_id')->filter()->unique())
             ->pluck('name', 'id');
 
-        $queued = false;
+        $suggestions = $matches->suggestionRows(
+            $messages->filter(fn (ChannelMessage $message): bool => ! $message->matched_product_id && ! isset($pending[(int) $message->id])),
+            self::IMAGE_MATCH_SUGGESTIONS,
+        );
 
+        $state = [];
         foreach ($messages as $message) {
-            if (! $message->isImageAttachment()) {
-                continue;
-            }
-
             $key = (string) $message->id;
-            if (isset($this->inboundImageMatchState[$key])) {
-                continue;
-            }
 
-            if ($message->matched_product_id) {
-                $this->inboundImageMatchState[$key] = [
-                    'status' => 'done',
-                    'product_id' => (int) $message->matched_product_id,
-                    'name' => (string) ($productNames[(int) $message->matched_product_id] ?? 'Product'),
-                    'match_percent' => 100.0,
-                    'strategy' => 'stored',
+            if (isset($pending[(int) $message->id])) {
+                $state[$key] = [
+                    'status' => 'pending',
+                    'match_url' => route('admin.inbox.image-match', $message),
                 ];
 
                 continue;
             }
 
-            if ($message->image_match_checked_at !== null) {
-                $this->inboundImageMatchState[$key] = ['status' => 'done'];
-
-                continue;
-            }
-
-            $this->inboundImageMatchState[$key] = ['status' => 'pending'];
-            $queued = true;
-        }
-
-        if (! $queued) {
-            return;
-        }
-
-        if (app()->runningUnitTests()) {
-            $this->runInboundImageMatches(app(ChannelMessageImageMatchService::class));
-
-            return;
-        }
-
-        $this->js('queueMicrotask(() => $wire.runInboundImageMatches())');
-    }
-
-    private function resolveInboundImageMatch(int $messageId, ChannelMessageImageMatchService $matcher): void
-    {
-        $key = (string) $messageId;
-        $message = $this->inboundImageMessage($messageId);
-
-        if (! $message) {
-            $this->inboundImageMatchState[$key] = ['status' => 'done'];
-
-            return;
-        }
-
-        if ($message->matched_product_id) {
-            $product = $message->matchedProduct
-                ?? Product::query()->whereKey($message->matched_product_id)->first();
-
-            $this->inboundImageMatchState[$key] = [
+            $row = [
                 'status' => 'done',
-                'product_id' => (int) $message->matched_product_id,
-                'name' => (string) ($product?->name ?? 'Product'),
-                'match_percent' => 100.0,
-                'strategy' => 'stored',
+                'match_status' => is_array($message->image_match_meta) ? ($message->image_match_meta['status'] ?? null) : null,
             ];
 
-            return;
-        }
-
-        $match = $matcher->bestAutoMatch($message);
-        $message->refresh();
-
-        if ($match === null) {
-            // A failed download should be retried next time the thread is opened.
-            if (filled($message->media_path) || blank($message->media_url)) {
-                $message->forceFill(['image_match_checked_at' => now()])->save();
+            if ($message->matched_product_id) {
+                $row['product_id'] = (int) $message->matched_product_id;
+                $row['name'] = (string) ($productNames[(int) $message->matched_product_id] ?? 'Product');
+                $row['match_percent'] = $matches->matchPercent($message);
+                $row['strategy'] = $matches->strategy($message);
             }
 
-            $this->inboundImageMatchState[$key] = ['status' => 'done'];
+            $rows = $suggestions[(int) $message->id] ?? [];
+            if ($rows !== []) {
+                $row['suggestions'] = array_map(fn (array $suggestion): array => [
+                    'product_id' => $suggestion['product_id'],
+                    'name' => $suggestion['name'],
+                    'image_url' => $suggestion['image_url'],
+                    'match_percent' => $suggestion['match_percent'],
+                ], $rows);
+            }
 
-            return;
+            $state[$key] = $row;
         }
 
-        $message->forceFill([
-            'matched_product_id' => $match['product_id'],
-            'image_match_checked_at' => now(),
-        ])->save();
-
-        $this->inboundImageMatchState[$key] = [
-            'status' => 'done',
-            'product_id' => $match['product_id'],
-            'name' => $match['name'],
-            'match_percent' => $match['match_percent'],
-            'strategy' => $match['strategy'] ?? 'full',
-        ];
+        $this->inboundImageMatchState = $state;
     }
 
     private function clearMappingImageMatchState(): void
@@ -1909,19 +1923,64 @@ class AdminInbox extends Component
         $this->mappingCroppedImage = null;
         $this->mappingImageMatches = [];
         $this->mappingImageMatchError = null;
+        $this->mappingCropRegion = null;
     }
 
-    private function runScreenshotFallbackImageMatch(ChannelMessage $message): void
+    /**
+     * Tag modal: list the photo's stored candidates (matching first only if it never ran).
+     */
+    private function loadStoredImageMatches(ChannelMessage $message): void
     {
-        $matches = app(ChannelMessageImageMatchService::class)
-            ->screenshotFallbackMatches($message);
+        $matches = app(ChannelMessageImageMatchService::class);
 
-        if ($matches === []) {
+        try {
+            $rows = $matches->candidateRows($matches->resolve($message), 5, includeAttached: true);
+        } catch (Throwable) {
             return;
         }
 
-        $this->mappingImageMatches = $matches;
+        if ($rows === []) {
+            return;
+        }
+
+        $this->mappingImageMatches = $rows;
         $this->mappingImageMatchError = null;
+    }
+
+    /**
+     * @param  list<array{product_id: int, name: string, sku: ?string, price: float, stock_quantity: int, image_url: ?string, match_percent: float}>  $rows
+     */
+    private function showCropMatches(array $rows): void
+    {
+        // Always list matches so staff can confirm before adding; do not auto-apply/close.
+        $this->mappingImageMatches = $rows;
+        if ($rows === []) {
+            $this->mappingImageMatchError = 'No close catalog match. Try a tighter crop or search by name.';
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $region
+     * @return array{left: float, top: float, width: float, height: float}|null
+     */
+    private function normalizeCropRegion(array $region): ?array
+    {
+        $values = [];
+        foreach (['left', 'top', 'width', 'height'] as $key) {
+            if (! isset($region[$key]) || ! is_numeric($region[$key])) {
+                return null;
+            }
+            $values[$key] = min(1.0, max(0.0, (float) $region[$key]));
+        }
+
+        $values['width'] = min($values['width'], 1.0 - $values['left']);
+        $values['height'] = min($values['height'], 1.0 - $values['top']);
+
+        if ($values['width'] < 0.02 || $values['height'] < 0.02) {
+            return null;
+        }
+
+        return $values;
     }
 
     private function inboundImageMessage(int $messageId): ?ChannelMessage

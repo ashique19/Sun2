@@ -7,14 +7,17 @@ use App\Models\ChannelMessage;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Services\Admin\ProductImageHashService;
+use App\Services\Admin\ProductImageMatcher;
 use App\Services\Channels\ChannelMessageImageMatchService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\Test;
+use Tests\ProductPhotoFixtures;
 use Tests\TestCase;
 
 class ChannelMessageScreenshotMatchTest extends TestCase
 {
+    use ProductPhotoFixtures;
     use RefreshDatabase;
 
     #[Test]
@@ -22,31 +25,8 @@ class ChannelMessageScreenshotMatchTest extends TestCase
     {
         config(['channels.ai_draft.image_min_bytes' => 100]);
 
-        $hasher = app(ProductImageHashService::class);
-
-        $catalog = imagecreatetruecolor(200, 200);
-        $a = imagecolorallocate($catalog, 200, 40, 60);
-        $b = imagecolorallocate($catalog, 40, 90, 200);
-        for ($y = 0; $y < 200; $y++) {
-            for ($x = 0; $x < 200; $x++) {
-                imagesetpixel($catalog, $x, $y, (((int) ($x / 10)) % 2) === 0 ? $a : $b);
-            }
-        }
-
-        $screenshot = imagecreatetruecolor(400, 400);
-        $chrome = imagecolorallocate($screenshot, 18, 18, 22);
-        imagefill($screenshot, 0, 0, $chrome);
-        imagecopy($screenshot, $catalog, 100, 100, 0, 0, 200, 200);
-
-        ob_start();
-        imagepng($catalog);
-        $catalogBytes = (string) ob_get_clean();
-        imagedestroy($catalog);
-
-        ob_start();
-        imagepng($screenshot);
-        $screenshotBytes = (string) ob_get_clean();
-        imagedestroy($screenshot);
+        $catalogBytes = $this->productPhotoBytes(61);
+        $screenshotBytes = $this->phoneScreenshotBytes($catalogBytes);
 
         $product = Product::query()->create([
             'name' => 'Indexed Screenshot Product',
@@ -62,20 +42,21 @@ class ChannelMessageScreenshotMatchTest extends TestCase
         if (! is_dir($absoluteDir)) {
             mkdir($absoluteDir, 0775, true);
         }
-        file_put_contents($absoluteDir.'/catalog.png', $catalogBytes);
+        file_put_contents($absoluteDir.'/catalog.jpg', $catalogBytes);
 
         $imageRow = ProductImage::query()->create([
             'product_id' => $product->id,
-            'path' => '/'.$relativeDir.'/catalog.png',
+            'path' => '/'.$relativeDir.'/catalog.jpg',
             'alt' => $product->name,
             'is_primary' => true,
             'sort_order' => 0,
         ]);
 
-        $hasher->storeHash($imageRow);
+        app(ProductImageHashService::class)->storeHash($imageRow);
         $imageRow->refresh();
         $this->assertNotNull($imageRow->dct_hash);
         $this->assertNotNull($imageRow->embedding_vector);
+        $this->assertNotNull($imageRow->match_signature);
 
         $customerUrl = 'https://cdn.example.test/screenshot-indexed.png';
         Http::fake([
@@ -101,6 +82,9 @@ class ChannelMessageScreenshotMatchTest extends TestCase
 
         $this->assertNotNull($match);
         $this->assertSame($product->id, $match['product_id']);
-        $this->assertGreaterThanOrEqual(ProductImageHashService::autoMatchPercent(), $match['match_percent']);
+        $this->assertSame('visual', $match['strategy']);
+        $this->assertGreaterThanOrEqual(ProductImageMatcher::autoScore() * 100, $match['match_percent']);
+
+        @unlink($absoluteDir.'/catalog.jpg');
     }
 }

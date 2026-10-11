@@ -10,17 +10,18 @@ use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\User;
 use App\Services\Admin\ProductImageHashService;
-use App\Services\Channels\ChannelMessageImageMatchService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
+use Tests\ProductPhotoFixtures;
 use Tests\TestCase;
 
 class AdminInboxProductImageMatchTest extends TestCase
 {
+    use ProductPhotoFixtures;
     use RefreshDatabase;
 
     private function adminUser(): User
@@ -290,51 +291,36 @@ class AdminInboxProductImageMatchTest extends TestCase
         $this->assertSame($product->id, $order->items()->first()?->product_id);
     }
 
-    #[Test]
-    public function cropped_image_lists_strong_catalog_match_for_manual_confirm(): void
+    private function photoMessage(ChannelConversation $conversation, string $url): ChannelMessage
     {
-        Storage::fake('public');
-        $this->actingAs($this->adminUser());
-
-        $hash = str_repeat('a', 16);
-        $product = $this->productWithHash($hash);
-        $conversation = $this->conversation();
-
-        $message = ChannelMessage::query()->create([
+        return ChannelMessage::query()->create([
             'channel_conversation_id' => $conversation->id,
             'direction' => ChannelMessage::DIRECTION_INBOUND,
             'body' => null,
-            'media_url' => 'https://example.test/chat.jpg',
+            'media_url' => $url,
             'media_mime' => 'image/jpeg',
             'raw_payload' => [
                 'message' => [
                     'attachments' => [
-                        ['type' => 'image', 'payload' => ['url' => 'https://example.test/chat.jpg']],
+                        ['type' => 'image', 'payload' => ['url' => $url]],
                     ],
                 ],
             ],
             'sent_at' => now(),
         ]);
+    }
 
-        $hasher = \Mockery::mock(ProductImageHashService::class);
-        $hasher->shouldReceive('hashUploadedFile')
-            ->once()
-            ->andReturn($hash);
-        $hasher->shouldReceive('findTopMatches')
-            ->once()
-            ->andReturn([[
-                'product_id' => $product->id,
-                'name' => $product->name,
-                'sku' => $product->sku,
-                'price' => (float) $product->price,
-                'stock_quantity' => (int) $product->stock_quantity,
-                'image_url' => null,
-                'match_percent' => 95.0,
-                'distance' => 3,
-            ]]);
-        $this->app->instance(ProductImageHashService::class, $hasher);
+    #[Test]
+    public function cropped_image_lists_strong_catalog_match_for_manual_confirm(): void
+    {
+        Http::fake(['*' => Http::response('', 404)]);
+        $this->actingAs($this->adminUser());
 
-        $upload = UploadedFile::fake()->image('inbox-crop.jpg', 200, 200);
+        $photo = $this->productPhotoBytes(51);
+        $product = $this->catalogProduct('Crop Match Saree', $photo);
+        $this->catalogProduct('Unrelated Kurti', $this->productPhotoBytes(52));
+        $conversation = $this->conversation();
+        $message = $this->photoMessage($conversation, 'https://example.test/chat.jpg');
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
@@ -342,11 +328,13 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->call('beginMapField', 'product')
             ->assertSee('Crop chat image')
             ->assertSet('mappingMode', 'order')
-            ->set('mappingCroppedImage', $upload)
+            ->set('mappingCroppedImage', UploadedFile::fake()->createWithContent('inbox-crop.jpg', $photo))
             ->call('matchProductFromCroppedImage')
             ->assertSet('mappingField', 'product')
             ->assertSee('Image matches')
-            ->assertSee('95.0% match')
+            ->assertSee('Crop Match Saree')
+            ->assertSee('% match')
+            ->assertDontSee('Unrelated Kurti')
             ->call('selectMappingImageMatch', $product->id)
             ->assertSet('mappingField', null);
 
@@ -357,45 +345,27 @@ class AdminInboxProductImageMatchTest extends TestCase
     #[Test]
     public function weaker_cropped_matches_are_listed_for_staff_choice(): void
     {
+        Http::fake(['*' => Http::response('', 404)]);
         $this->actingAs($this->adminUser());
 
-        $hash = str_repeat('b', 16);
-        $product = $this->productWithHash($hash);
+        $photo = $this->productPhotoBytes(53);
+        $product = $this->catalogProduct('Partly Visible Saree', $photo);
         $conversation = $this->conversation();
+        $message = $this->photoMessage($conversation, 'https://example.test/chat2.jpg');
 
-        $message = ChannelMessage::query()->create([
-            'channel_conversation_id' => $conversation->id,
-            'direction' => ChannelMessage::DIRECTION_INBOUND,
-            'body' => null,
-            'media_url' => 'https://example.test/chat2.jpg',
-            'media_mime' => 'image/jpeg',
-            'sent_at' => now(),
-        ]);
-
-        $hasher = \Mockery::mock(ProductImageHashService::class);
-        $hasher->shouldReceive('hashUploadedFile')->once()->andReturn($hash);
-        $hasher->shouldReceive('findTopMatches')->once()->andReturn([[
-            'product_id' => $product->id,
-            'name' => $product->name,
-            'sku' => $product->sku,
-            'price' => (float) $product->price,
-            'stock_quantity' => (int) $product->stock_quantity,
-            'image_url' => null,
-            'match_percent' => 84.0,
-            'distance' => 10,
-        ]]);
-        $this->app->instance(ProductImageHashService::class, $hasher);
-
-        Livewire::test(AdminInbox::class)
+        $component = Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->call('openMessageMapMenu', $message->id)
             ->call('beginMapField', 'product')
-            ->set('mappingCroppedImage', UploadedFile::fake()->image('inbox-crop.jpg'))
+            ->set('mappingCroppedImage', UploadedFile::fake()->createWithContent('inbox-crop.jpg', $this->croppedPhotoBytes($photo, 0.72)))
             ->call('matchProductFromCroppedImage')
             ->assertSet('mappingField', 'product')
             ->assertSee('Image matches')
-            ->assertSee('84.0% match')
-            ->call('selectMappingImageMatch', $product->id)
+            ->assertSee('Partly Visible Saree');
+
+        $this->assertSame($product->id, $component->get('mappingImageMatches')[0]['product_id'] ?? null);
+
+        $component->call('selectMappingImageMatch', $product->id)
             ->assertSet('mappingField', null);
 
         $this->assertSame(
@@ -463,53 +433,20 @@ class AdminInboxProductImageMatchTest extends TestCase
     #[Test]
     public function crop_tag_lists_published_match_and_skips_unpublished_twin(): void
     {
+        Http::fake(['*' => Http::response('', 404)]);
         $this->actingAs($this->adminUser());
 
-        $hash = str_repeat('e', 16);
-        $published = $this->productWithHash($hash);
-        $published->forceFill(['name' => 'Published Tag Crop'])->save();
-
-        $unpublished = Product::query()->create([
-            'name' => 'Unpublished Tag Crop',
-            'slug' => 'unpublished-tag-crop-'.uniqid(),
-            'sku' => 'UTC'.random_int(100, 999),
-            'price' => 1600,
-            'purchase_price' => 800,
-            'stock_quantity' => 3,
-            'is_published' => false,
-            'display_order' => 0,
-        ]);
-        ProductImage::query()->create([
-            'product_id' => $unpublished->id,
-            'path' => 'products/unpublished-tag-crop.jpg',
-            'alt' => $unpublished->name,
-            'sort_order' => 0,
-            'perceptual_hash' => $hash,
-        ]);
-
+        $photo = $this->productPhotoBytes(54);
+        $published = $this->catalogProduct('Published Tag Crop', $photo);
+        $this->catalogProduct('Unpublished Tag Crop', $photo, ['is_published' => false]);
         $conversation = $this->conversation();
-        $message = ChannelMessage::query()->create([
-            'channel_conversation_id' => $conversation->id,
-            'direction' => ChannelMessage::DIRECTION_INBOUND,
-            'body' => null,
-            'media_url' => 'https://example.test/tag-crop.jpg',
-            'media_mime' => 'image/jpeg',
-            'sent_at' => now(),
-        ]);
-
-        $real = app(ProductImageHashService::class);
-        $hasher = \Mockery::mock(ProductImageHashService::class);
-        $hasher->shouldReceive('hashUploadedFile')->once()->andReturn($hash);
-        $hasher->shouldReceive('findTopMatches')
-            ->once()
-            ->andReturnUsing(fn (string $h, int $limit = 5, float $min = 80.0) => $real->findTopMatches($h, $limit, $min));
-        $this->app->instance(ProductImageHashService::class, $hasher);
+        $message = $this->photoMessage($conversation, 'https://example.test/tag-crop.jpg');
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->call('openTagProductOnImage', $message->id)
             ->assertSet('mappingMode', 'tag')
-            ->set('mappingCroppedImage', UploadedFile::fake()->image('tag-crop.jpg', 200, 200))
+            ->set('mappingCroppedImage', UploadedFile::fake()->createWithContent('tag-crop.jpg', $photo))
             ->call('matchProductFromCroppedImage')
             ->assertSee('Published Tag Crop')
             ->assertDontSee('Unpublished Tag Crop')
@@ -525,51 +462,21 @@ class AdminInboxProductImageMatchTest extends TestCase
     #[Test]
     public function crop_tag_shows_no_match_when_only_unpublished_catalog_hits(): void
     {
+        Http::fake(['*' => Http::response('', 404)]);
         $this->actingAs($this->adminUser());
 
-        $hash = str_repeat('f', 16);
-        $unpublished = Product::query()->create([
-            'name' => 'Ghost Unpublished Crop',
-            'slug' => 'ghost-unpublished-crop-'.uniqid(),
-            'sku' => 'GUC'.random_int(100, 999),
-            'price' => 1400,
-            'purchase_price' => 600,
-            'stock_quantity' => 1,
-            'is_published' => false,
-            'display_order' => 0,
-        ]);
-        ProductImage::query()->create([
-            'product_id' => $unpublished->id,
-            'path' => 'products/ghost-unpublished.jpg',
-            'alt' => $unpublished->name,
-            'sort_order' => 0,
-            'perceptual_hash' => $hash,
-        ]);
-
+        $photo = $this->productPhotoBytes(55);
+        $this->catalogProduct('Ghost Unpublished Crop', $photo, ['is_published' => false]);
         $conversation = $this->conversation();
-        $message = ChannelMessage::query()->create([
-            'channel_conversation_id' => $conversation->id,
-            'direction' => ChannelMessage::DIRECTION_INBOUND,
-            'media_url' => 'https://example.test/ghost-crop.jpg',
-            'media_mime' => 'image/jpeg',
-            'sent_at' => now(),
-        ]);
-
-        $real = app(ProductImageHashService::class);
-        $hasher = \Mockery::mock(ProductImageHashService::class);
-        $hasher->shouldReceive('hashUploadedFile')->once()->andReturn($hash);
-        $hasher->shouldReceive('findTopMatches')
-            ->once()
-            ->andReturnUsing(fn (string $h, int $limit = 5, float $min = 80.0) => $real->findTopMatches($h, $limit, $min));
-        $this->app->instance(ProductImageHashService::class, $hasher);
+        $message = $this->photoMessage($conversation, 'https://example.test/ghost-crop.jpg');
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->call('openTagProductOnImage', $message->id)
-            ->set('mappingCroppedImage', UploadedFile::fake()->image('ghost-crop.jpg', 200, 200))
+            ->set('mappingCroppedImage', UploadedFile::fake()->createWithContent('ghost-crop.jpg', $photo))
             ->call('matchProductFromCroppedImage')
             ->assertSet('mappingImageMatches', [])
-            ->assertSee('No catalog match at 80%+')
+            ->assertSee('No close catalog match')
             ->assertDontSee('Ghost Unpublished Crop');
 
         $this->assertNull($message->fresh()->matched_product_id);
@@ -683,71 +590,35 @@ class AdminInboxProductImageMatchTest extends TestCase
     }
 
     #[Test]
-    public function screenshot_fallback_matches_use_panel_trim_for_chrome_screenshots(): void
+    public function product_modal_opens_with_stored_candidates_for_a_chrome_screenshot(): void
     {
         config(['channels.ai_draft.image_min_bytes' => 100]);
+        $this->actingAs($this->adminUser());
 
-        $hasher = app(ProductImageHashService::class);
-        [$catalogBytes, $screenshotBytes] = $this->catalogAndScreenshotBytes();
+        $photo = $this->productPhotoBytes(56);
+        $first = $this->catalogProduct('Twin Pendant A', $photo);
+        $second = $this->catalogProduct('Twin Pendant B', $photo);
+        $url = 'https://example.test/twin-screenshot.png';
+        Http::fake([$url => Http::response($this->phoneScreenshotBytes($photo), 200, ['Content-Type' => 'image/png'])]);
 
-        $relativeDir = 'img/inbox-tests';
-        $absoluteDir = public_path($relativeDir);
-        if (! is_dir($absoluteDir)) {
-            mkdir($absoluteDir, 0775, true);
-        }
-        $relativePath = $relativeDir.'/map-fallback-'.uniqid().'.png';
-        file_put_contents(public_path($relativePath), $screenshotBytes);
+        $conversation = $this->conversation();
+        $message = $this->photoMessage($conversation, $url);
 
-        $product = $this->productWithHash($hasher->hashBinary($catalogBytes));
+        $component = Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSee('Twin Pendant A')
+            ->assertSee('Twin Pendant B')
+            ->assertSeeHtml('wire:click.stop="tagSuggestedProduct('.$message->id.', '.$first->id.')"');
 
-        $message = ChannelMessage::query()->create([
-            'channel_conversation_id' => $this->conversation()->id,
-            'direction' => ChannelMessage::DIRECTION_INBOUND,
-            'body' => null,
-            'media_url' => '/'.$relativePath,
-            'media_mime' => 'image/png',
-            'sent_at' => now(),
-        ]);
+        $this->assertNull($message->fresh()->matched_product_id, 'Equal twins must not be auto-attached.');
+        Http::fake(fn () => throw new \RuntimeException('The modal must reuse stored candidates.'));
 
-        $matches = app(ChannelMessageImageMatchService::class)
-            ->screenshotFallbackMatches($message);
+        $component->call('openMessageMapMenu', $message->id)
+            ->call('beginMapField', 'product')
+            ->assertSee('Image matches');
 
-        $this->assertNotEmpty($matches);
-        $this->assertSame($product->id, $matches[0]['product_id']);
-        $this->assertGreaterThanOrEqual(ProductImageHashService::MIN_MATCH_PERCENT, $matches[0]['match_percent']);
-
-        @unlink(public_path($relativePath));
-    }
-
-    /**
-     * @return array{0: string, 1: string}
-     */
-    private function catalogAndScreenshotBytes(): array
-    {
-        $catalog = imagecreatetruecolor(200, 200);
-        $a = imagecolorallocate($catalog, 200, 40, 60);
-        $b = imagecolorallocate($catalog, 40, 90, 200);
-        for ($y = 0; $y < 200; $y++) {
-            for ($x = 0; $x < 200; $x++) {
-                imagesetpixel($catalog, $x, $y, (((int) ($x / 10)) % 2) === 0 ? $a : $b);
-            }
-        }
-
-        $screenshot = imagecreatetruecolor(400, 400);
-        $chrome = imagecolorallocate($screenshot, 30, 30, 30);
-        imagefill($screenshot, 0, 0, $chrome);
-        imagecopy($screenshot, $catalog, 100, 100, 0, 0, 200, 200);
-
-        ob_start();
-        imagepng($catalog);
-        $catalogBytes = (string) ob_get_clean();
-        imagedestroy($catalog);
-
-        ob_start();
-        imagepng($screenshot);
-        $screenshotBytes = (string) ob_get_clean();
-        imagedestroy($screenshot);
-
-        return [$catalogBytes, $screenshotBytes];
+        $listed = array_column($component->get('mappingImageMatches'), 'product_id');
+        sort($listed);
+        $this->assertSame([$first->id, $second->id], $listed);
     }
 }

@@ -23,10 +23,12 @@ use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 use Mockery;
 use Spatie\Permission\Models\Role;
+use Tests\ProductPhotoFixtures;
 use Tests\TestCase;
 
 class ChannelAiDraftOrdersTest extends TestCase
 {
+    use ProductPhotoFixtures;
     use RefreshDatabase;
 
     private function adminUser(): User
@@ -710,6 +712,7 @@ class ChannelAiDraftOrdersTest extends TestCase
             'is_primary' => true,
             'sort_order' => 0,
             'perceptual_hash' => $hash,
+            'match_signature' => $this->matchSignatureFor($bytes),
         ]);
 
         Http::fake([

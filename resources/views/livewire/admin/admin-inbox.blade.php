@@ -832,7 +832,9 @@
                                         @endphp
                                         @if (($imageMatchState['status'] ?? null) === 'pending')
                                             <div class="mt-1.5 flex items-center gap-1.5 text-[10px] text-[#8C8474]"
-                                                wire:key="inbound-image-match-loading-{{ $messageRow->id }}">
+                                                wire:key="inbound-image-match-loading-{{ $messageRow->id }}"
+                                                x-data="inboxImageMatchPending(@js($imageMatchState['match_url'] ?? null))"
+                                                x-show="! failed">
                                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3 animate-spin" aria-hidden="true">
                                                     <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.39a.75.75 0 0 0-.75.75v3.842a.75.75 0 0 0 1.5 0v-2.14l.311.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm-10.623-2.85a5.5 5.5 0 0 1 9.201-2.466l.312.311H11.77a.75.75 0 0 0 0 1.5h3.843a.75.75 0 0 0 .75-.75V3.328a.75.75 0 1 0-1.5 0V5.47l-.311-.311A7 7 0 0 0 3.04 8.295a.75.75 0 1 0 1.45.39Z" clip-rule="evenodd" />
                                                 </svg>
@@ -896,13 +898,50 @@
                                                     class="text-[10px] font-semibold text-[#C9A227] hover:underline">
                                                     +Order
                                                 </button>
+                                                @if (in_array($imageMatchState['strategy'] ?? null, ['visual', 'staff_memory'], true))
+                                                    <button type="button"
+                                                        wire:click="rejectMatchedProduct({{ $messageRow->id }})"
+                                                        @click.stop
+                                                        class="text-[10px] font-medium text-[#8C8474] hover:text-rose-600"
+                                                        title="Wrong product: never auto-attach it to this photo again, then pick the right one"
+                                                        aria-label="Not this product">
+                                                        Not this
+                                                    </button>
+                                                @else
+                                                    <button type="button"
+                                                        wire:click="clearMatchedProduct({{ $messageRow->id }})"
+                                                        @click.stop
+                                                        class="text-[10px] font-medium text-[#8C8474] hover:text-[#6B6459]"
+                                                        title="Clear product tag"
+                                                        aria-label="Clear product tag">
+                                                        Clear
+                                                    </button>
+                                                @endif
+                                            </div>
+                                        @elseif (($imageMatchState['suggestions'] ?? []) !== [])
+                                            <div class="mt-1.5 flex flex-wrap items-center gap-1.5"
+                                                wire:key="inbound-image-suggestions-{{ $messageRow->id }}">
+                                                <span class="text-[10px] font-semibold text-[#8C8474]">Is it?</span>
+                                                @foreach ($imageMatchState['suggestions'] as $suggestion)
+                                                    <button type="button"
+                                                        wire:click.stop="tagSuggestedProduct({{ $messageRow->id }}, {{ $suggestion['product_id'] }})"
+                                                        wire:loading.attr="disabled"
+                                                        wire:target="tagSuggestedProduct({{ $messageRow->id }}, {{ $suggestion['product_id'] }})"
+                                                        wire:key="inbound-image-suggestion-{{ $messageRow->id }}-{{ $suggestion['product_id'] }}"
+                                                        title="Tag {{ $suggestion['name'] }} ({{ number_format($suggestion['match_percent'], 0) }}% visual match)"
+                                                        aria-label="Tag {{ $suggestion['name'] }} on this photo"
+                                                        class="inline-flex max-w-[11rem] items-center gap-1 rounded-full border border-[#E0D6C2] bg-white py-0.5 pl-0.5 pr-2 text-[10px] font-semibold text-[#1E1E1E] hover:border-[#C9A227] hover:bg-[#FAF6EF] disabled:opacity-60">
+                                                        @if (! empty($suggestion['image_url']))
+                                                            <img src="{{ $suggestion['image_url'] }}" alt="" class="h-5 w-5 shrink-0 rounded-full object-cover bg-[#FAF6EF]" loading="lazy">
+                                                        @endif
+                                                        <span class="truncate">{{ $suggestion['name'] }}</span>
+                                                        <span class="shrink-0 tabular-nums text-[#8C8474]">{{ number_format($suggestion['match_percent'], 0) }}%</span>
+                                                    </button>
+                                                @endforeach
                                                 <button type="button"
-                                                    wire:click="clearMatchedProduct({{ $messageRow->id }})"
-                                                    @click.stop
-                                                    class="text-[10px] font-medium text-[#8C8474] hover:text-[#6B6459]"
-                                                    title="Clear product tag"
-                                                    aria-label="Clear product tag">
-                                                    Clear
+                                                    wire:click.stop="openTagProductOnImage({{ $messageRow->id }})"
+                                                    class="text-[10px] font-semibold text-[#8C8474] hover:text-[#1E1E1E] hover:underline">
+                                                    Other…
                                                 </button>
                                             </div>
                                         @elseif (($imageMatchState['status'] ?? null) === 'done')
@@ -911,6 +950,18 @@
                                                 wire:key="inbound-image-no-match-{{ $messageRow->id }}"
                                                 class="mt-1.5 inline-flex items-center gap-1 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-2 py-0.5 text-[10px] font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]">
                                                 No match — search product
+                                            </button>
+                                        @endif
+                                        @if (($imageMatchState['status'] ?? null) === 'pending')
+                                            <button type="button"
+                                                x-data="{ failed: false }"
+                                                x-show="failed"
+                                                x-cloak
+                                                @inbox-image-match-failed.window="if ($event.detail.url === @js($imageMatchState['match_url'] ?? null)) failed = true"
+                                                wire:click.stop="openTagProductOnImage({{ $messageRow->id }})"
+                                                wire:key="inbound-image-match-failed-{{ $messageRow->id }}"
+                                                class="mt-1.5 inline-flex items-center gap-1 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-2 py-0.5 text-[10px] font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]">
+                                                Couldn’t match — search product
                                             </button>
                                         @endif
                                     @endif

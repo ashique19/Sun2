@@ -23,6 +23,7 @@ class ChannelMessage extends Model
             'raw_payload' => 'array',
             'sent_at' => 'datetime',
             'image_match_checked_at' => 'datetime',
+            'image_match_meta' => 'array',
         ];
     }
 

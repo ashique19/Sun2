@@ -6,6 +6,7 @@ use App\Models\ProductImage;
 use App\Services\Admin\ProductImageCatalogIndex;
 use App\Services\Admin\ProductImageHashRebuildService;
 use App\Services\Admin\ProductImageHashService;
+use App\Services\Admin\ProductImageMatchIndex;
 use Illuminate\Console\Command;
 
 class IndexProductImageHashesCommand extends Command
@@ -37,6 +38,7 @@ class IndexProductImageHashesCommand extends Command
 
         if ($total === 0) {
             app(ProductImageCatalogIndex::class)->warm();
+            app(ProductImageMatchIndex::class)->entries();
             $this->info('Nothing to index. Catalog match index is warm.');
 
             return self::SUCCESS;

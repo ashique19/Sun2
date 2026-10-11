@@ -52,6 +52,35 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Inbound screenshot → product matching
+    |--------------------------------------------------------------------------
+    |
+    | Scores are 0–1 visual similarity from ProductImageMatcher. A product is
+    | attached automatically only when the top score clears auto_score AND leads
+    | the runner-up by auto_margin; otherwise the top candidates are offered to
+    | staff as one-click suggestions (when at least suggest_score).
+    |
+    */
+    'image_match' => [
+        'auto_score' => (float) env('CHANNEL_IMAGE_MATCH_AUTO_SCORE', 0.86),
+        'auto_margin' => (float) env('CHANNEL_IMAGE_MATCH_AUTO_MARGIN', 0.05),
+        'suggest_score' => (float) env('CHANNEL_IMAGE_MATCH_SUGGEST_SCORE', 0.75),
+
+        // Match new inbound photos right after the webhook response is sent, so
+        // results are ready before staff open the thread.
+        'prewarm_on_receive' => filter_var(env('CHANNEL_IMAGE_MATCH_PREWARM', true), FILTER_VALIDATE_BOOL),
+        'prewarm_max_per_request' => (int) env('CHANNEL_IMAGE_MATCH_PREWARM_MAX', 6),
+
+        // Parallel match requests the inbox fires while a thread is open.
+        'client_concurrency' => (int) env('CHANNEL_IMAGE_MATCH_CONCURRENCY', 3),
+
+        // Time a match request may spend signing catalog images that predate visual
+        // matching (until products:index-image-hashes has run). 0 disables it.
+        'lazy_index_budget_ms' => (int) env('CHANNEL_IMAGE_MATCH_LAZY_INDEX_MS', 4000),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Inbox retention
     |--------------------------------------------------------------------------
     |

@@ -12,6 +12,7 @@ class ProductImageHashRebuildService
 {
     public function __construct(
         private readonly ProductImageHashService $hasher,
+        private readonly ProductImageSignatureService $signatures,
     ) {}
 
     public function isFullyIndexed(ProductImage $image): bool
@@ -23,7 +24,8 @@ class ProductImageHashRebuildService
             && is_string($image->dct_hash)
             && $image->dct_hash !== ''
             && is_array($image->embedding_vector)
-            && count($image->embedding_vector) === ProductImageEmbeddingService::DIMENSIONS;
+            && count($image->embedding_vector) === ProductImageEmbeddingService::DIMENSIONS
+            && $this->signatures->isCurrent($image->match_signature);
     }
 
     /**
@@ -49,7 +51,8 @@ class ProductImageHashRebuildService
                 ->orWhere(function ($query) use ($dimensions): void {
                     $query->whereNull('embedding_vector')
                         ->orWhereJsonLength('embedding_vector', '<', $dimensions);
-                });
+                })
+                ->orWhereNull('match_signature');
         });
     }
 
@@ -76,6 +79,7 @@ class ProductImageHashRebuildService
      *     fully_indexed:int,
      *     missing_dct:int,
      *     missing_embedding:int,
+     *     missing_signature:int,
      *     needs_screenshot_backfill:int
      * }
      */
@@ -86,6 +90,7 @@ class ProductImageHashRebuildService
         $multiHashed = ProductImage::query()->whereNotNull('perceptual_hashes')->count();
         $missingDct = ProductImage::query()->whereNull('dct_hash')->count();
         $missingEmbedding = ProductImage::query()->whereNull('embedding_vector')->count();
+        $missingSignature = ProductImage::query()->whereNull('match_signature')->count();
         $needsBackfill = $this->incompleteIndexQuery()->count();
         $fullyIndexed = max(0, $total - $needsBackfill);
 
@@ -98,6 +103,7 @@ class ProductImageHashRebuildService
             'fully_indexed' => $fullyIndexed,
             'missing_dct' => $missingDct,
             'missing_embedding' => $missingEmbedding,
+            'missing_signature' => $missingSignature,
             'needs_screenshot_backfill' => $needsBackfill,
         ];
     }

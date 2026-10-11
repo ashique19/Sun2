@@ -10,6 +10,7 @@ use App\Models\ProductImage;
 use App\Models\ProductImageMatchMemory;
 use App\Observers\SitemapInvalidationObserver;
 use App\Services\Admin\ProductImageCatalogIndex;
+use App\Services\Admin\ProductImageMatchIndex;
 use App\Services\Channels\ProductImageMatchMemoryService;
 use App\Services\Facebook\FacebookPageTokenService;
 use App\Services\Sms\LoggingSmsSender;
@@ -49,8 +50,18 @@ class AppServiceProvider extends ServiceProvider
         Page::observe(SitemapInvalidationObserver::class);
         ProductImage::observe(SitemapInvalidationObserver::class);
 
-        ProductImage::saved(fn () => ProductImageCatalogIndex::bump());
-        ProductImage::deleted(fn () => ProductImageCatalogIndex::bump());
+        ProductImage::saved(function (ProductImage $image): void {
+            ProductImageCatalogIndex::bump();
+            if ($image->wasChanged('match_signature') || ($image->wasRecentlyCreated && $image->match_signature !== null)) {
+                ProductImageMatchIndex::forget();
+            }
+        });
+        ProductImage::deleted(function (ProductImage $image): void {
+            ProductImageCatalogIndex::bump();
+            if ($image->match_signature !== null) {
+                ProductImageMatchIndex::forget();
+            }
+        });
         Product::saved(function (Product $product): void {
             if ($product->wasChanged('is_published')) {
                 ProductImageCatalogIndex::bump();
@@ -58,13 +69,19 @@ class AppServiceProvider extends ServiceProvider
         });
         ProductImageMatchMemory::saved(function (ProductImageMatchMemory $memory): void {
             ProductImageMatchMemoryService::flush();
-            if ($memory->wasRecentlyCreated || $memory->wasChanged(['hash', 'hash_kind', 'product_id'])) {
+            if ($memory->wasRecentlyCreated || $memory->wasChanged(['hash', 'hash_kind', 'product_id', 'signature'])) {
                 ProductImageCatalogIndex::bumpMemory();
             }
+            if ($memory->signature !== null && ($memory->wasRecentlyCreated || $memory->wasChanged(['signature', 'product_id']))) {
+                ProductImageMatchIndex::forget();
+            }
         });
-        ProductImageMatchMemory::deleted(function (): void {
+        ProductImageMatchMemory::deleted(function (ProductImageMatchMemory $memory): void {
             ProductImageMatchMemoryService::flush();
             ProductImageCatalogIndex::bumpMemory();
+            if ($memory->signature !== null) {
+                ProductImageMatchIndex::forget();
+            }
         });
     }
 

@@ -95,6 +95,13 @@ class AdminDashboard extends Component
         $webhookInbox->dismiss($entry);
     }
 
+    public function dismissAllSteadfastWebhooks(SteadfastWebhookInboxService $webhookInbox): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $webhookInbox->dismissShown();
+    }
+
     public function recordExpenseReminder(int $reminderId, ExpenseAssistantService $assistant): void
     {
         AdminAccess::ensureStaffAdmin();

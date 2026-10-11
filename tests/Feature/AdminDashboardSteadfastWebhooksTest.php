@@ -9,9 +9,11 @@ use App\Models\Order;
 use App\Models\User;
 use App\Services\Admin\SteadfastWebhookInboxService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class AdminDashboardSteadfastWebhooksTest extends TestCase
@@ -232,6 +234,174 @@ class AdminDashboardSteadfastWebhooksTest extends TestCase
         $this->actingAs($this->adminUser());
 
         Livewire::test(AdminDashboard::class)
-            ->assertDontSee('Latest Steadfast webhooks');
+            ->assertDontSee('Latest Steadfast webhooks')
+            ->assertDontSee('Dismiss all')
+            ->assertDontSeeHtml('wire:click="dismissAllSteadfastWebhooks"');
+    }
+
+    #[Test]
+    public function dashboard_can_dismiss_all_shown_steadfast_webhooks(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $first = $this->dispatchedOrder('ALL-1');
+        $second = $this->dispatchedOrder('ALL-2');
+        $withOlder = $this->dispatchedOrder('ALL-OLD');
+
+        $firstEntry = $this->webhook($first, ['notification_type' => 'delivery_status', 'status' => 'in_transit'], now()->subMinutes(10));
+        $secondEntry = $this->webhook($second, ['notification_type' => 'tracking_update', 'tracking_message' => 'Out for delivery'], now()->subMinutes(5));
+        $olderSibling = $this->webhook($withOlder, ['notification_type' => 'tracking_update', 'tracking_message' => 'Older hop'], now()->subMinutes(30));
+        $shownLatest = $this->webhook($withOlder, ['notification_type' => 'delivery_status', 'status' => 'pending'], now()->subMinutes(2));
+
+        $stale = $this->dispatchedOrder('ALL-STALE');
+        $staleEntry = $this->webhook($stale, ['notification_type' => 'delivery_status', 'status' => 'delivered'], now()->subDays(3));
+
+        $polled = $this->dispatchedOrder('ALL-POLL');
+        $polledEntry = $this->webhook($polled, [
+            'notification_type' => 'delivery_status',
+            'source' => 'status_poll',
+            'status' => 'delivered',
+        ], now()->subMinutes(4));
+
+        $already = $this->dispatchedOrder('ALL-DONE');
+        $alreadyEntry = $this->webhook($already, ['notification_type' => 'delivery_status', 'status' => 'delivered'], now()->subMinutes(8));
+        $alreadyDismissedAt = now()->subHour()->startOfSecond();
+        $alreadyEntry->forceFill(['inbox_dismissed_at' => $alreadyDismissedAt])->save();
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSee('Dismiss all')
+            ->assertSeeHtml('wire:click="dismissAllSteadfastWebhooks"')
+            ->assertSeeHtml('wire:confirm="Dismiss all shown Steadfast webhooks?"')
+            ->assertSee('Order #'.$first->order_number)
+            ->assertSee('Order #'.$second->order_number)
+            ->assertSee('Order #'.$withOlder->order_number)
+            ->assertDontSee('Older hop')
+            ->call('dismissAllSteadfastWebhooks')
+            ->assertDontSee('Latest Steadfast webhooks')
+            ->assertDontSee('Dismiss all')
+            ->assertDontSee('Order #'.$first->order_number)
+            ->assertDontSee('Order #'.$second->order_number)
+            ->assertDontSee('Order #'.$withOlder->order_number);
+
+        $this->assertNotNull($firstEntry->fresh()->inbox_dismissed_at);
+        $this->assertNotNull($secondEntry->fresh()->inbox_dismissed_at);
+        $this->assertNotNull($shownLatest->fresh()->inbox_dismissed_at);
+        $this->assertNull($olderSibling->fresh()->inbox_dismissed_at);
+        $this->assertNull($staleEntry->fresh()->inbox_dismissed_at);
+        $this->assertNull($polledEntry->fresh()->inbox_dismissed_at);
+        $this->assertSame(
+            $alreadyDismissedAt->format('Y-m-d H:i:s'),
+            $alreadyEntry->fresh()->inbox_dismissed_at->format('Y-m-d H:i:s'),
+        );
+    }
+
+    #[Test]
+    public function dismiss_all_leaves_webhooks_outside_the_dashboard_cap(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->steadfast();
+
+        $orders = [];
+        for ($i = 1; $i <= 22; $i++) {
+            $order = $this->dispatchedOrder('CAP-'.$i);
+            $orders[$i] = $order;
+            $this->webhook($order, [
+                'notification_type' => 'delivery_status',
+                'status' => 'pending',
+                'invoice' => $order->order_number,
+            ], now()->subMinutes(22 - $i));
+        }
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSee('Order #'.$orders[22]->order_number)
+            ->assertDontSee('Order #'.$orders[1]->order_number)
+            ->call('dismissAllSteadfastWebhooks')
+            ->assertSee('Order #'.$orders[1]->order_number)
+            ->assertSee('Order #'.$orders[2]->order_number)
+            ->assertSee('Dismiss all')
+            ->assertDontSee('Order #'.$orders[22]->order_number)
+            ->assertDontSee('Order #'.$orders[3]->order_number);
+
+        $this->assertNull(
+            CourierData::query()->where('order_id', $orders[1]->id)->value('inbox_dismissed_at')
+        );
+        $this->assertNull(
+            CourierData::query()->where('order_id', $orders[2]->id)->value('inbox_dismissed_at')
+        );
+        $this->assertNotNull(
+            CourierData::query()->where('order_id', $orders[22]->id)->value('inbox_dismissed_at')
+        );
+        $this->assertNotNull(
+            CourierData::query()->where('order_id', $orders[3]->id)->value('inbox_dismissed_at')
+        );
+    }
+
+    #[Test]
+    public function dismiss_all_requires_staff_admin(): void
+    {
+        $this->steadfast();
+        $order = $this->dispatchedOrder('AUTH');
+        $entry = $this->webhook($order, [
+            'notification_type' => 'delivery_status',
+            'status' => 'in_transit',
+        ], now()->subMinute());
+
+        $this->get(route('admin.dashboard'))->assertRedirect(route('login'));
+
+        Livewire::test(AdminDashboard::class)
+            ->call('dismissAllSteadfastWebhooks')
+            ->assertForbidden();
+
+        $this->assertNull($entry->fresh()->inbox_dismissed_at);
+
+        $customer = User::factory()->create();
+        $this->actingAs($customer);
+
+        $this->get(route('admin.dashboard'))->assertForbidden();
+
+        Livewire::test(AdminDashboard::class)
+            ->call('dismissAllSteadfastWebhooks')
+            ->assertForbidden();
+
+        $this->assertNull($entry->fresh()->inbox_dismissed_at);
+
+        Role::findOrCreate('moderator');
+        $moderator = User::factory()->create();
+        $moderator->assignRole('moderator');
+        $this->actingAs($moderator);
+
+        try {
+            (new AdminDashboard)->dismissAllSteadfastWebhooks(app(SteadfastWebhookInboxService::class));
+            $this->fail('Moderators must not dismiss Steadfast webhooks.');
+        } catch (HttpException $exception) {
+            $this->assertSame(403, $exception->getStatusCode());
+        }
+
+        $this->assertNull($entry->fresh()->inbox_dismissed_at);
+
+        Role::findOrCreate('dev');
+        $dev = User::factory()->create();
+        $dev->assignRole('dev');
+        $this->actingAs($dev);
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSee('Order #'.$order->order_number)
+            ->call('dismissAllSteadfastWebhooks')
+            ->assertDontSee('Order #'.$order->order_number);
+
+        $this->assertNotNull($entry->fresh()->inbox_dismissed_at);
+    }
+
+    /**
+     * @param  array<string, mixed>  $apiData
+     */
+    private function webhook(Order $order, array $apiData, Carbon $createdAt): CourierData
+    {
+        return CourierData::query()->create([
+            'order_id' => $order->id,
+            'courier_id' => $order->courier_id,
+            'api_data' => $apiData,
+            'created_at' => $createdAt,
+        ]);
     }
 }

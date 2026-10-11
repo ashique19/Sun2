@@ -355,11 +355,22 @@
                         Newest inbound update per order · last 2 days · max 20
                     </p>
                 </div>
-                <a href="{{ route('admin.couriers.webhooks') }}"
-                    wire:navigate
-                    class="shrink-0 text-xs font-medium text-[#C9A227] hover:text-[#B8921F]">
-                    See all &rarr;
-                </a>
+                <div class="flex shrink-0 items-center gap-2">
+                    <button type="button"
+                        wire:click="dismissAllSteadfastWebhooks"
+                        wire:confirm="Dismiss all shown Steadfast webhooks?"
+                        wire:loading.attr="disabled"
+                        wire:target="dismissAllSteadfastWebhooks"
+                        class="inline-flex items-center justify-center rounded border border-[#E7DFCF] px-2.5 py-1 text-xs font-medium text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E] disabled:cursor-not-allowed disabled:opacity-60">
+                        <span wire:loading.remove wire:target="dismissAllSteadfastWebhooks">Dismiss all</span>
+                        <span wire:loading wire:target="dismissAllSteadfastWebhooks">Dismissing…</span>
+                    </button>
+                    <a href="{{ route('admin.couriers.webhooks') }}"
+                        wire:navigate
+                        class="shrink-0 text-xs font-medium text-[#C9A227] hover:text-[#B8921F]">
+                        See all &rarr;
+                    </a>
+                </div>
             </div>
 
             <div class="divide-y divide-[#EFE7D6]">

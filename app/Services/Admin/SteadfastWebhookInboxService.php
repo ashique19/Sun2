@@ -58,6 +58,22 @@ class SteadfastWebhookInboxService
     }
 
     /**
+     * Dismiss every webhook currently listed on the dashboard inbox.
+     *
+     * Same window as {@see latestIncoming()} and the same per-row write as {@see dismiss()}.
+     */
+    public function dismissShown(): int
+    {
+        $entries = $this->latestIncoming();
+
+        foreach ($entries as $entry) {
+            $this->dismiss($entry);
+        }
+
+        return $entries->count();
+    }
+
+    /**
      * Human-readable summary of a stored webhook payload.
      */
     public function summary(CourierData $entry): string

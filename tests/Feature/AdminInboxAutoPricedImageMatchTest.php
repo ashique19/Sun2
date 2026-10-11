@@ -172,7 +172,9 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
             ->assertSeeHtml('wire:click.stop="openTagProductOnImage('.$inbound->id.')"')
             ->assertDontSeeHtml('wire:click="sendMatchedProductPriceReply('.$inbound->id.')"')
             ->assertDontSeeHtml('wire:click="sendPricedImageFromMatch('.$inbound->id.')"')
-            ->assertDontSeeHtml('wire:click="addMatchedProductToOrder('.$inbound->id.')"');
+            ->assertDontSeeHtml('wire:click="addMatchedProductToOrder('.$inbound->id.')"')
+            ->assertSee('No match — search product')
+            ->assertSeeHtml('wire:click.stop="openTagProductOnImage('.$inbound->id.')"');
     }
 
     #[Test]

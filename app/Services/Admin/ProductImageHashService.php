@@ -20,6 +20,12 @@ class ProductImageHashService
 
     public const TOP_MATCHES = 3;
 
+    /**
+     * Stop extra crop/DCT work once a candidate is essentially the catalog photo.
+     * Lower scores still scan the remaining crops so a later, better panel can win.
+     */
+    public const EARLY_ACCEPT_PERCENT = 98.0;
+
     public static function autoMatchPercent(): float
     {
         return (float) config('channels.ai_draft.image_match_auto_percent', self::AUTO_MATCH_PERCENT);
@@ -228,7 +234,7 @@ class ProductImageHashService
         }
         imagedestroy($resized);
 
-        $dct = $this->dct2d($pixels, $size);
+        $dct = $this->dctLowFrequencies($pixels, $size);
         $lowFreq = [];
         for ($y = 0; $y < 8; $y++) {
             for ($x = 0; $x < 8; $x++) {
@@ -255,29 +261,57 @@ class ProductImageHashService
     }
 
     /**
+     * Top-left 8×8 DCT coefficients. pHash discards the rest of the 32×32 spectrum,
+     * and each coefficient uses the same sum order as a full DCT so stored hashes stay valid.
+     *
      * @param  array<int, array<int, float>>  $pixels
      * @return array<int, array<int, float>>
      */
-    private function dct2d(array $pixels, int $size): array
+    private function dctLowFrequencies(array $pixels, int $size): array
     {
+        $low = 8;
+        $cos = self::dctCosTable($size);
         $dct = [];
-        for ($u = 0; $u < $size; $u++) {
-            for ($v = 0; $v < $size; $v++) {
+
+        for ($v = 0; $v < $low; $v++) {
+            $cv = $v === 0 ? 1 / sqrt(2) : 1.0;
+            for ($u = 0; $u < $low; $u++) {
                 $sum = 0.0;
                 for ($x = 0; $x < $size; $x++) {
+                    $cosU = $cos[$u][$x];
                     for ($y = 0; $y < $size; $y++) {
-                        $sum += $pixels[$y][$x]
-                            * cos(((2 * $x + 1) * $u * M_PI) / (2 * $size))
-                            * cos(((2 * $y + 1) * $v * M_PI) / (2 * $size));
+                        $sum += $pixels[$y][$x] * $cosU * $cos[$v][$y];
                     }
                 }
                 $cu = $u === 0 ? 1 / sqrt(2) : 1.0;
-                $cv = $v === 0 ? 1 / sqrt(2) : 1.0;
                 $dct[$v][$u] = 0.25 * $cu * $cv * $sum;
             }
         }
 
         return $dct;
+    }
+
+    /**
+     * @return array<int, array<int, float>>
+     */
+    private static function dctCosTable(int $size): array
+    {
+        static $tables = [];
+
+        if (isset($tables[$size])) {
+            return $tables[$size];
+        }
+
+        $cos = [];
+        for ($k = 0; $k < 8; $k++) {
+            for ($n = 0; $n < $size; $n++) {
+                $cos[$k][$n] = cos(((2 * $n + 1) * $k * M_PI) / (2 * $size));
+            }
+        }
+
+        $tables[$size] = $cos;
+
+        return $cos;
     }
 
     /**
@@ -398,15 +432,39 @@ class ProductImageHashService
             return self::HASH_BITS;
         }
 
+        return $this->hammingPacked($a, $b);
+    }
+
+    public function hammingPacked(string $packedA, string $packedB): int
+    {
+        $popcount = self::popcountTable();
         $distance = 0;
-        $length = min(strlen($a), strlen($b));
+        $length = min(strlen($packedA), strlen($packedB));
 
         for ($i = 0; $i < $length; $i++) {
-            $xor = ord($a[$i]) ^ ord($b[$i]);
-            $distance += substr_count(decbin($xor), '1');
+            $distance += $popcount[ord($packedA[$i]) ^ ord($packedB[$i])];
         }
 
         return $distance;
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private static function popcountTable(): array
+    {
+        static $table = null;
+
+        if ($table !== null) {
+            return $table;
+        }
+
+        $table = [];
+        for ($i = 0; $i < 256; $i++) {
+            $table[$i] = substr_count(decbin($i), '1');
+        }
+
+        return $table;
     }
 
     public function matchPercent(string $hashA, string $hashB): float
@@ -435,10 +493,9 @@ class ProductImageHashService
 
         try {
             $best = null;
-
             $autoPercent = self::autoMatchPercent();
 
-            foreach ($this->queryHashesFromImage($image, $subjectFractions) as $candidate) {
+            $this->onQueryHash = function (array $candidate) use (&$best, $autoPercent): bool {
                 $matches = $this->findTopMatches(
                     $candidate['hash'],
                     1,
@@ -447,13 +504,17 @@ class ProductImageHashService
                 );
                 $top = $matches[0] ?? null;
 
-                if ($top === null) {
-                    continue;
-                }
-
-                if ($best === null || (float) $top['match_percent'] > (float) $best['match_percent']) {
+                if ($top !== null && ($best === null || (float) $top['match_percent'] > (float) $best['match_percent'])) {
                     $best = $top + ['strategy' => $candidate['strategy']];
                 }
+
+                return $best === null || (float) $best['match_percent'] < self::EARLY_ACCEPT_PERCENT;
+            };
+
+            try {
+                $this->queryHashesFromImage($image, $subjectFractions);
+            } finally {
+                $this->onQueryHash = null;
             }
 
             if ($best !== null && (float) $best['match_percent'] >= $autoPercent) {
@@ -464,6 +525,72 @@ class ProductImageHashService
         }
 
         return null;
+    }
+
+    /**
+     * Product regions with screenshot chrome removed, for the embedding fallback.
+     * Caller must imagedestroy every returned image.
+     *
+     * @return list<\GdImage>
+     */
+    public function contentCropsForEmbedding(string $binary): array
+    {
+        $image = @imagecreatefromstring($binary);
+
+        if ($image === false) {
+            return [];
+        }
+
+        $image = $this->downscaleForHash($image);
+        $crops = [];
+        $seen = [];
+
+        try {
+            foreach ([
+                $this->detectBrightPhotoPanelBounds($image),
+                $this->detectTexturePhotoPanelBounds($image),
+                $this->detectUniformChromeBounds($image),
+            ] as $bounds) {
+                if ($bounds === null) {
+                    continue;
+                }
+
+                $key = $this->boundsKey($bounds);
+                if (isset($seen[$key])) {
+                    continue;
+                }
+
+                $seen[$key] = true;
+
+                try {
+                    $crop = $this->cropFromBounds($image, $bounds);
+                } catch (Throwable) {
+                    continue;
+                }
+
+                if ($crop === null) {
+                    continue;
+                }
+
+                $crops[] = $crop;
+
+                if (count($crops) >= 2) {
+                    break;
+                }
+            }
+
+            if ($crops === []) {
+                try {
+                    $crops[] = $this->centerCropCopy($image, 0.5);
+                } catch (Throwable) {
+                    // A full-frame embedding is still attempted by the caller.
+                }
+            }
+        } finally {
+            imagedestroy($image);
+        }
+
+        return $crops;
     }
 
     /**
@@ -538,50 +665,74 @@ class ProductImageHashService
     }
 
     /**
+     * Scores each query hash as it is produced and returns false to skip later crops.
+     *
+     * @var (callable(array{hash:string,kind:string,strategy:string}): bool)|null
+     */
+    private ?\Closure $onQueryHash = null;
+
+    /**
      * @param  array{left: float, top: float, width: float, height: float}|null  $subjectFractions
-     * @return list<array{hash:string,strategy:string}>
+     * @return list<array{hash:string,kind:string,strategy:string}>
      */
     private function queryHashesFromImage(\GdImage $image, ?array $subjectFractions = null): array
     {
-        $candidates = [
-            [
-                'hash' => $this->hashGdImageCopy($image),
-                'kind' => 'dhash',
-                'strategy' => 'query_full_vs_catalog_full',
-            ],
-        ];
+        $candidates = [];
 
-        $this->appendDctHashCandidate($candidates, $image, 'query_full_dct_vs_catalog_dct');
+        if (! $this->pushQueryCandidate($candidates, [
+            'hash' => $this->hashGdImageCopy($image),
+            'kind' => 'dhash',
+            'strategy' => 'query_full_vs_catalog_full',
+        ])) {
+            return $candidates;
+        }
+
+        if (! $this->appendDctHashCandidate($candidates, $image, 'query_full_dct_vs_catalog_dct')) {
+            return $candidates;
+        }
 
         $seenBounds = [];
 
         if ($subjectFractions !== null) {
-            $this->appendBoundsHashCandidate(
+            if (! $this->appendBoundsHashCandidate(
                 $candidates,
                 $seenBounds,
                 $image,
                 $this->boundsFromFractions($image, $subjectFractions, 'subject_vision'),
                 'query_subject_vision_vs_catalog_full',
-            );
+            )) {
+                return $candidates;
+            }
         }
 
-        $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectBrightPhotoPanelBounds($image), 'query_photo_panel_vs_catalog_full');
-        $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectTexturePhotoPanelBounds($image), 'query_texture_panel_vs_catalog_full');
-        $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectEmbeddedCardBounds($image), 'query_embedded_card_vs_catalog_full');
-        $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectLightLetterboxBounds($image), 'query_light_letterbox_vs_catalog_full');
-        $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $this->detectUniformChromeBounds($image), 'query_trim_chrome_vs_catalog_full');
+        foreach ([
+            [$this->detectBrightPhotoPanelBounds($image), 'query_photo_panel_vs_catalog_full'],
+            [$this->detectTexturePhotoPanelBounds($image), 'query_texture_panel_vs_catalog_full'],
+            [$this->detectEmbeddedCardBounds($image), 'query_embedded_card_vs_catalog_full'],
+            [$this->detectLightLetterboxBounds($image), 'query_light_letterbox_vs_catalog_full'],
+            [$this->detectUniformChromeBounds($image), 'query_trim_chrome_vs_catalog_full'],
+        ] as [$bounds, $strategy]) {
+            if (! $this->appendBoundsHashCandidate($candidates, $seenBounds, $image, $bounds, $strategy)) {
+                return $candidates;
+            }
+        }
 
         foreach (self::CENTER_CROP_SCALES as $scale) {
             try {
                 $cropped = $this->centerCropCopy($image, $scale);
                 $label = $this->scaleLabel($scale);
-                $candidates[] = [
+                $keepGoing = $this->pushQueryCandidate($candidates, [
                     'hash' => $this->hashGdImageCopy($cropped),
                     'kind' => 'dhash',
                     'strategy' => 'query_center_'.$label.'_vs_catalog_full',
-                ];
-                $this->appendDctHashCandidate($candidates, $cropped, 'query_center_'.$label.'_dct_vs_catalog_dct');
+                ]);
+                if ($keepGoing) {
+                    $keepGoing = $this->appendDctHashCandidate($candidates, $cropped, 'query_center_'.$label.'_dct_vs_catalog_dct');
+                }
                 imagedestroy($cropped);
+                if (! $keepGoing) {
+                    return $candidates;
+                }
             } catch (Throwable $e) {
                 Log::debug('Center-crop product image match failed.', [
                     'scale' => $scale,
@@ -591,6 +742,21 @@ class ProductImageHashService
         }
 
         return $candidates;
+    }
+
+    /**
+     * @param  list<array{hash:string,kind:string,strategy:string}>  $candidates
+     * @param  array{hash:string,kind:string,strategy:string}  $candidate
+     */
+    private function pushQueryCandidate(array &$candidates, array $candidate): bool
+    {
+        if ($this->onQueryHash !== null) {
+            return ($this->onQueryHash)($candidate) !== false;
+        }
+
+        $candidates[] = $candidate;
+
+        return true;
     }
 
     /**
@@ -619,48 +785,56 @@ class ProductImageHashService
      * @param  list<string>  $seenBounds
      * @param  array{0:int,1:int,2:int,3:int,4:string}|null  $bounds
      */
-    private function appendBoundsHashCandidate(array &$candidates, array &$seenBounds, \GdImage $image, ?array $bounds, string $strategy): void
+    private function appendBoundsHashCandidate(array &$candidates, array &$seenBounds, \GdImage $image, ?array $bounds, string $strategy): bool
     {
         if ($bounds === null) {
-            return;
+            return true;
         }
 
         $boundsKey = $this->boundsKey($bounds);
         if (in_array($boundsKey, $seenBounds, true)) {
-            return;
+            return true;
         }
 
         try {
             $hash = $this->hashFromBounds($image, $bounds);
 
             if ($hash === null) {
-                return;
+                return true;
             }
 
             $seenBounds[] = $boundsKey;
-            $candidates[] = [
+            if (! $this->pushQueryCandidate($candidates, [
                 'hash' => $hash,
                 'kind' => 'dhash',
                 'strategy' => $strategy,
-            ];
+            ])) {
+                return false;
+            }
 
             $cropped = $this->cropFromBounds($image, $bounds);
-            if ($cropped !== null) {
-                $this->appendDctHashCandidate($candidates, $cropped, $strategy.'_dct');
-                imagedestroy($cropped);
+            if ($cropped === null) {
+                return true;
             }
+
+            $keepGoing = $this->appendDctHashCandidate($candidates, $cropped, $strategy.'_dct');
+            imagedestroy($cropped);
+
+            return $keepGoing;
         } catch (Throwable $e) {
             Log::debug('Screenshot bounds hash failed.', [
                 'strategy' => $strategy,
                 'error' => $e->getMessage(),
             ]);
+
+            return true;
         }
     }
 
     /**
      * @param  list<array{hash:string,kind:string,strategy:string}>  $candidates
      */
-    private function appendDctHashCandidate(array &$candidates, \GdImage $image, string $strategy): void
+    private function appendDctHashCandidate(array &$candidates, \GdImage $image, string $strategy): bool
     {
         try {
             $width = imagesx($image);
@@ -668,20 +842,23 @@ class ProductImageHashService
             $copy = imagecreatetruecolor($width, $height);
 
             if ($copy === false) {
-                return;
+                return true;
             }
 
             imagecopy($copy, $image, 0, 0, 0, 0, $width, $height);
-            $candidates[] = [
+
+            return $this->pushQueryCandidate($candidates, [
                 'hash' => $this->dctHashGdImage($copy),
                 'kind' => 'dct',
                 'strategy' => $strategy,
-            ];
+            ]);
         } catch (Throwable $e) {
             Log::debug('DCT query hash failed.', [
                 'strategy' => $strategy,
                 'error' => $e->getMessage(),
             ]);
+
+            return true;
         }
     }
 
@@ -736,90 +913,47 @@ class ProductImageHashService
      */
     public function findTopMatches(string $hash, int $limit = self::TOP_MATCHES, float $minPercent = self::MIN_MATCH_PERCENT, string $hashKind = 'dhash'): array
     {
-        $rows = ProductImage::query()
-            ->where(function ($query) use ($hashKind): void {
-                if ($hashKind === 'dct') {
-                    $query->whereNotNull('dct_hash');
-                } else {
-                    $query->where(function ($builder): void {
-                        $builder->whereNotNull('perceptual_hash')
-                            ->orWhereNotNull('perceptual_hashes');
-                    });
-                }
-            })
-            ->whereHas('product', fn ($query) => $query->where('is_published', true))
-            ->with(['product:id,name,sku,price,stock_quantity,slug'])
-            ->get(['id', 'product_id', 'path', 'perceptual_hash', 'perceptual_hashes', 'dct_hash']);
+        $packed = hex2bin(str_pad($hash, 16, '0', STR_PAD_LEFT));
+        if ($packed === false) {
+            return [];
+        }
 
+        $index = app(ProductImageCatalogIndex::class)->load();
+        $entries = $hashKind === 'dct' ? $index['dct'] : $index['dhash'];
         $bestByProduct = [];
 
-        foreach ($rows as $row) {
-            if (! $row->product) {
+        foreach ($entries as $entry) {
+            $distance = $this->hammingPacked($packed, $entry['bits']);
+            $percent = round(max(0, (1 - ($distance / self::HASH_BITS)) * 100), 1);
+
+            if ($percent < $minPercent) {
                 continue;
             }
 
-            foreach ($this->catalogHashesForRow($row, $hashKind) as $catalogHash) {
-                $distance = $this->hammingDistance($hash, $catalogHash);
-                $percent = round(max(0, (1 - ($distance / self::HASH_BITS)) * 100), 1);
+            $row = $index['rows'][$entry['row']];
+            $productId = (int) $row['product_id'];
+            $existing = $bestByProduct[$productId] ?? null;
 
-                if ($percent < $minPercent) {
-                    continue;
-                }
-
-                $productId = (int) $row->product_id;
-                $existing = $bestByProduct[$productId] ?? null;
-
-                if ($existing && $existing['match_percent'] >= $percent) {
-                    continue;
-                }
-
-                $bestByProduct[$productId] = [
-                    'product_id' => $productId,
-                    'name' => $row->product->name,
-                    'sku' => $row->product->sku,
-                    'price' => (float) $row->product->price,
-                    'stock_quantity' => (int) $row->product->stock_quantity,
-                    'image_url' => StorefrontAssets::url($row->path),
-                    'match_percent' => $percent,
-                    'distance' => $distance,
-                ];
+            if ($existing && $existing['match_percent'] >= $percent) {
+                continue;
             }
+
+            $bestByProduct[$productId] = [
+                'product_id' => $productId,
+                'name' => $row['name'],
+                'sku' => $row['sku'],
+                'price' => $row['price'],
+                'stock_quantity' => $row['stock_quantity'],
+                'image_url' => $row['image_url'],
+                'match_percent' => $percent,
+                'distance' => $distance,
+            ];
         }
 
         $matches = array_values($bestByProduct);
         usort($matches, fn (array $a, array $b) => $b['match_percent'] <=> $a['match_percent']);
 
         return array_slice($matches, 0, $limit);
-    }
-
-    /**
-     * @return list<string>
-     */
-    /**
-     * @return list<string>
-     */
-    private function catalogHashesForRow(ProductImage $row, string $hashKind = 'dhash'): array
-    {
-        if ($hashKind === 'dct') {
-            return is_string($row->dct_hash) && $row->dct_hash !== '' ? [$row->dct_hash] : [];
-        }
-
-        $hashes = [];
-
-        if (is_array($row->perceptual_hashes)) {
-            foreach ($row->perceptual_hashes as $variant) {
-                $hash = is_array($variant) ? ($variant['hash'] ?? null) : null;
-                if (is_string($hash) && $hash !== '') {
-                    $hashes[$hash] = $hash;
-                }
-            }
-        }
-
-        if (is_string($row->perceptual_hash) && $row->perceptual_hash !== '') {
-            $hashes[$row->perceptual_hash] = $row->perceptual_hash;
-        }
-
-        return array_values($hashes);
     }
 
     /**

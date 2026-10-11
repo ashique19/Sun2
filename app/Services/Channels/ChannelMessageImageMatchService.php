@@ -4,8 +4,10 @@ namespace App\Services\Channels;
 
 use App\Models\ChannelMessage;
 use App\Models\Product;
+use App\Services\Admin\ProductImageCatalogIndex;
 use App\Services\Admin\ProductImageEmbeddingService;
 use App\Services\Admin\ProductImageHashService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -16,6 +18,7 @@ class ChannelMessageImageMatchService
         private ChannelInboundMediaService $media,
         private ProductImageMatchMemoryService $matchMemory,
         private ProductImageEmbeddingService $embeddings,
+        private ProductImageCatalogIndex $catalog,
     ) {}
 
     /**
@@ -42,18 +45,14 @@ class ChannelMessageImageMatchService
         );
 
         if ($memory !== null) {
-            $product = Product::query()
-                ->whereKey($memory['product_id'])
-                ->where('is_published', true)
-                ->first();
+            $remembered = $this->publishedMatch(
+                (int) $memory['product_id'],
+                (float) ($memory['match_percent'] ?? 100.0),
+                'staff_memory',
+            );
 
-            if ($product !== null) {
-                return [
-                    'product_id' => (int) $product->id,
-                    'name' => (string) $product->name,
-                    'match_percent' => 100.0,
-                    'strategy' => 'staff_memory',
-                ];
+            if ($remembered !== null) {
+                return $remembered;
             }
         }
 
@@ -62,6 +61,24 @@ class ChannelMessageImageMatchService
             return null;
         }
 
+        $cacheKey = 'inbox-image-auto-match:v1:'.sha1($cached['bytes'].'|'.$this->catalog->matchCacheFingerprint());
+        $stored = Cache::get($cacheKey);
+        if (is_array($stored) && array_key_exists('match', $stored)) {
+            return $this->hydrateCachedMatch($stored['match']);
+        }
+
+        $match = $this->computeAutoMatch($message, $cached);
+        Cache::put($cacheKey, ['match' => $match], now()->addDays(14));
+
+        return $match;
+    }
+
+    /**
+     * @param  array{bytes: string, mime: string, path: ?string, dhash: ?string, dct_hash: ?string}  $cached
+     * @return array{product_id: int, name: string, match_percent: float, strategy: string}|null
+     */
+    private function computeAutoMatch(ChannelMessage $message, array $cached): ?array
+    {
         try {
             $top = $this->hasher->findBestAutoMatchFromBinary($cached['bytes']);
         } catch (Throwable $e) {
@@ -86,21 +103,48 @@ class ChannelMessageImageMatchService
             }
         }
 
-        $productId = (int) $top['product_id'];
-        $published = Product::query()
+        return $this->publishedMatch(
+            (int) $top['product_id'],
+            (float) $top['match_percent'],
+            (string) ($top['strategy'] ?? 'query_full_vs_catalog_full'),
+        );
+    }
+
+    /**
+     * @return array{product_id: int, name: string, match_percent: float, strategy: string}|null
+     */
+    private function hydrateCachedMatch(mixed $match): ?array
+    {
+        if (! is_array($match) || ! isset($match['product_id'])) {
+            return null;
+        }
+
+        return $this->publishedMatch(
+            (int) $match['product_id'],
+            (float) ($match['match_percent'] ?? 0),
+            (string) ($match['strategy'] ?? 'cached'),
+        );
+    }
+
+    /**
+     * @return array{product_id: int, name: string, match_percent: float, strategy: string}|null
+     */
+    private function publishedMatch(int $productId, float $matchPercent, string $strategy): ?array
+    {
+        $product = Product::query()
             ->whereKey($productId)
             ->where('is_published', true)
-            ->exists();
+            ->first();
 
-        if (! $published) {
+        if ($product === null) {
             return null;
         }
 
         return [
-            'product_id' => $productId,
-            'name' => (string) $top['name'],
-            'match_percent' => (float) $top['match_percent'],
-            'strategy' => (string) ($top['strategy'] ?? 'query_full_vs_catalog_full'),
+            'product_id' => (int) $product->id,
+            'name' => (string) $product->name,
+            'match_percent' => $matchPercent,
+            'strategy' => $strategy,
         ];
     }
 
@@ -111,6 +155,21 @@ class ChannelMessageImageMatchService
     {
         try {
             $match = $this->embeddings->findBestAutoMatchFromBinary($bytes);
+            if ($match !== null) {
+                return $match;
+            }
+
+            foreach ($this->hasher->contentCropsForEmbedding($bytes) as $crop) {
+                try {
+                    $match = $this->embeddings->findBestAutoMatchFromGdImage($crop, 'embedding_content');
+                } finally {
+                    imagedestroy($crop);
+                }
+
+                if ($match !== null) {
+                    return $match;
+                }
+            }
         } catch (Throwable $e) {
             Log::debug('Inbox inbound embedding match failed.', [
                 'error' => $e->getMessage(),
@@ -119,7 +178,7 @@ class ChannelMessageImageMatchService
             return null;
         }
 
-        return $match;
+        return null;
     }
 
     /**

@@ -164,6 +164,31 @@ class InboxImageMatchCorrectionsTest extends TestCase
     }
 
     #[Test]
+    public function only_candidates_above_the_suggest_score_are_offered(): void
+    {
+        $close = $this->catalogProduct('Close Candidate', $this->productPhotoBytes(95));
+        $far = $this->catalogProduct('Far Candidate', $this->productPhotoBytes(96));
+        $message = $this->photoMessage($this->conversation(), 'https://cdn.example.test/stored.jpg');
+        $message->forceFill([
+            'image_match_checked_at' => now(),
+            'image_match_meta' => [
+                'v' => ChannelMessageImageMatchService::META_VERSION,
+                'status' => ChannelMessageImageMatchService::STATUS_SUGGESTED,
+                'candidates' => [
+                    ['product_id' => $close->id, 'score' => 0.8, 'source' => 'catalog', 'source_id' => 1, 'region' => null],
+                    ['product_id' => $far->id, 'score' => 0.7, 'source' => 'catalog', 'source_id' => 2, 'region' => null],
+                ],
+                'rejected' => [],
+            ],
+        ])->save();
+
+        $rows = app(ChannelMessageImageMatchService::class)->candidateRows($message->fresh());
+
+        $this->assertSame([$close->id], array_column($rows, 'product_id'));
+        $this->assertSame(80.0, $rows[0]['match_percent']);
+    }
+
+    #[Test]
     public function crop_region_on_the_original_chat_image_matches_and_is_learned_on_tag(): void
     {
         $photo = $this->productPhotoBytes(86);

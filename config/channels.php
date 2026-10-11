@@ -64,7 +64,7 @@ return [
     'image_match' => [
         'auto_score' => (float) env('CHANNEL_IMAGE_MATCH_AUTO_SCORE', 0.86),
         'auto_margin' => (float) env('CHANNEL_IMAGE_MATCH_AUTO_MARGIN', 0.05),
-        'suggest_score' => (float) env('CHANNEL_IMAGE_MATCH_SUGGEST_SCORE', 0.6),
+        'suggest_score' => (float) env('CHANNEL_IMAGE_MATCH_SUGGEST_SCORE', 0.75),
 
         // Match new inbound photos right after the webhook response is sent, so
         // results are ready before staff open the thread.

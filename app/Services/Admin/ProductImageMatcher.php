@@ -61,7 +61,7 @@ class ProductImageMatcher
 
     public static function suggestScore(): float
     {
-        return (float) config('channels.image_match.suggest_score', 0.6);
+        return (float) config('channels.image_match.suggest_score', 0.75);
     }
 
     /**

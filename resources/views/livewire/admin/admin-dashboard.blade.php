@@ -255,6 +255,17 @@
         <div class="mb-4 rounded-lg bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">{{ $courierChargeMessage }}</div>
     @endif
 
+    @if (($courierChargeFailures ?? []) !== [])
+        <div class="mb-4 rounded-lg bg-rose-50 px-4 py-2.5 text-sm text-rose-700">
+            <p class="font-medium">Could not update {{ count($courierChargeFailures) }} {{ count($courierChargeFailures) === 1 ? 'order' : 'orders' }}.</p>
+            <ul class="mt-1 list-disc space-y-0.5 pl-4">
+                @foreach ($courierChargeFailures as $failure)
+                    <li wire:key="courier-charge-failure-{{ $loop->index }}">{{ $failure }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     @if ($returnHubMessage)
         <div class="mb-4 rounded-lg bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">{{ $returnHubMessage }}</div>
     @endif
@@ -453,10 +464,21 @@
                         charge + packaging review — packaging defaults 1→21 · 2→30 · 3+→41
                     </p>
                 </div>
-                <a href="{{ route('admin.orders.dispatched') }}"
-                    class="shrink-0 text-xs font-medium text-[#C9A227] hover:text-[#B8921F]">
-                    Dispatched list &rarr;
-                </a>
+                <div class="flex shrink-0 items-center gap-2">
+                    <button type="button"
+                        wire:click="confirmAllCourierCharges"
+                        wire:confirm="Update courier charge and packaging for all listed orders?"
+                        wire:loading.attr="disabled"
+                        wire:target="confirmAllCourierCharges"
+                        class="rounded-full bg-[#C9A227] px-3 py-1 text-xs font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
+                        <span wire:loading.remove wire:target="confirmAllCourierCharges">Update all</span>
+                        <span wire:loading wire:target="confirmAllCourierCharges">Saving…</span>
+                    </button>
+                    <a href="{{ route('admin.orders.dispatched') }}"
+                        class="shrink-0 text-xs font-medium text-[#C9A227] hover:text-[#B8921F]">
+                        Dispatched list &rarr;
+                    </a>
+                </div>
             </div>
 
             <div class="divide-y divide-[#EFE7D6]">

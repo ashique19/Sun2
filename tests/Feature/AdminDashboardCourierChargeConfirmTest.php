@@ -10,10 +10,14 @@ use App\Models\Courier;
 use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\User;
+use App\Services\Admin\OrderPackagingCourierConfirmService;
+use App\Services\Orders\OrderCourierChargeSync;
+use App\Services\Orders\OrderPackagingCost;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class AdminDashboardCourierChargeConfirmTest extends TestCase
@@ -253,7 +257,139 @@ class AdminDashboardCourierChargeConfirmTest extends TestCase
 
         Livewire::test(AdminDashboard::class)
             ->assertDontSee('Confirm courier charges')
+            ->assertDontSee('Update all')
+            ->assertDontSeeHtml('wire:click="confirmAllCourierCharges"')
             ->assertDontSee('Already Confirmed');
+    }
+
+    #[Test]
+    public function dashboard_updates_all_listed_courier_charges_from_the_input_values(): void
+    {
+        $admin = $this->adminUser();
+        $this->actingAs($admin);
+        $courier = $this->steadfast();
+
+        $older = $this->dispatchedOrder($courier, 'Older Customer', 60, null, 'Dhaka', null, 1);
+        $newer = $this->dispatchedOrder($courier, 'Newer Customer', 72, null, 'Dhaka', null, 2);
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSee('Update all')
+            ->assertSeeHtml('wire:click="confirmAllCourierCharges"')
+            ->assertSeeHtml('wire:confirm="Update courier charge and packaging for all listed orders?"')
+            ->set('pendingCourierCharges.'.$newer->id, '90')
+            ->set('pendingPackagingCosts.'.$newer->id, '40')
+            ->set('pendingCourierCharges.'.$older->id, '55')
+            ->set('pendingPackagingCosts.'.$older->id, '21')
+            ->call('confirmAllCourierCharges')
+            ->assertHasNoErrors()
+            ->assertSet('courierChargeFailures', [])
+            ->assertSet('courierChargeMessage', 'Courier charge and packaging updated for Newer Customer, Older Customer.')
+            ->assertDontSee('Confirm courier charges')
+            ->assertDontSee('Update all');
+
+        $newer->refresh();
+        $older->refresh();
+
+        $this->assertSame(90.0, (float) $newer->courier_charge);
+        $this->assertSame(40.0, (float) $newer->packaging_cost);
+        $this->assertNotNull($newer->courier_charge_confirmed_at);
+        $this->assertSame($admin->id, (int) $newer->courier_charge_confirmed_by);
+
+        $this->assertSame(55.0, (float) $older->courier_charge);
+        $this->assertSame(21.0, (float) $older->packaging_cost);
+        $this->assertNotNull($older->courier_charge_confirmed_at);
+        $this->assertSame($admin->id, (int) $older->courier_charge_confirmed_by);
+    }
+
+    #[Test]
+    public function update_all_reports_invalid_rows_and_saves_the_rest(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+
+        $good = $this->dispatchedOrder($courier, 'Good Customer', 60);
+        $bad = $this->dispatchedOrder($courier, 'Bad Customer', 60);
+
+        Livewire::test(AdminDashboard::class)
+            ->set('pendingCourierCharges.'.$bad->id, '-3')
+            ->call('confirmAllCourierCharges')
+            ->assertHasErrors(['pendingCourierCharges.'.$bad->id])
+            ->assertSet('courierChargeMessage', 'Courier charge and packaging updated for Good Customer.')
+            ->assertSee('Could not update 1 order.')
+            ->assertSee('Bad Customer (#'.$bad->order_number.'): The courier charge field must be at least 0.')
+            ->assertSee('Bad Customer')
+            ->assertSee('Confirm courier charges');
+
+        $good->refresh();
+        $bad->refresh();
+
+        $this->assertNotNull($good->courier_charge_confirmed_at);
+        $this->assertSame(60.0, (float) $good->courier_charge);
+        $this->assertNull($bad->courier_charge_confirmed_at);
+        $this->assertSame(60.0, (float) $bad->courier_charge);
+    }
+
+    #[Test]
+    public function update_all_leaves_orders_past_the_dashboard_cap(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+
+        $orders = [];
+        for ($i = 1; $i <= 26; $i++) {
+            $orders[$i] = $this->dispatchedOrder($courier, 'Cap '.$i.'x', 60);
+        }
+
+        Livewire::test(AdminDashboard::class)
+            ->assertDontSee('Cap 1x')
+            ->assertSee('Cap 26x')
+            ->call('confirmAllCourierCharges')
+            ->assertSee('Cap 1x')
+            ->assertSee('Update all');
+
+        $this->assertNull($orders[1]->fresh()->courier_charge_confirmed_at);
+        $this->assertNotNull($orders[26]->fresh()->courier_charge_confirmed_at);
+        $this->assertNotNull($orders[2]->fresh()->courier_charge_confirmed_at);
+    }
+
+    #[Test]
+    public function update_all_requires_staff_admin(): void
+    {
+        $courier = $this->steadfast();
+        $order = $this->dispatchedOrder($courier, 'Locked Customer', 60);
+
+        Livewire::test(AdminDashboard::class)
+            ->call('confirmAllCourierCharges')
+            ->assertForbidden();
+
+        $this->assertNull($order->fresh()->courier_charge_confirmed_at);
+
+        $customer = User::factory()->create();
+        $this->actingAs($customer);
+
+        Livewire::test(AdminDashboard::class)
+            ->call('confirmAllCourierCharges')
+            ->assertForbidden();
+
+        $this->assertNull($order->fresh()->courier_charge_confirmed_at);
+
+        Role::findOrCreate('moderator');
+        $moderator = User::factory()->create();
+        $moderator->assignRole('moderator');
+        $this->actingAs($moderator);
+
+        try {
+            (new AdminDashboard)->confirmAllCourierCharges(
+                app(OrderCourierChargeSync::class),
+                app(OrderPackagingCost::class),
+                app(OrderPackagingCourierConfirmService::class),
+            );
+            $this->fail('Moderators must not confirm courier charges.');
+        } catch (HttpException $exception) {
+            $this->assertSame(403, $exception->getStatusCode());
+        }
+
+        $this->assertNull($order->fresh()->courier_charge_confirmed_at);
     }
 
     #[Test]

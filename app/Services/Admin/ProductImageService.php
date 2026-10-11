@@ -148,7 +148,7 @@ class ProductImageService
     }
 
     /**
-     * @return array{perceptual_hash:?string, perceptual_hashes:?list<array{strategy:string,hash:string}>, dct_hash:?string, embedding_vector:?list<float>}
+     * @return array{perceptual_hash:?string, perceptual_hashes:?list<array{strategy:string,hash:string}>, dct_hash:?string, embedding_vector:?list<float>, match_signature:?string}
      */
     private function safeHashAttributes(string $absolutePath): array
     {
@@ -160,6 +160,7 @@ class ProductImageService
                     'perceptual_hashes' => null,
                     'dct_hash' => null,
                     'embedding_vector' => null,
+                    'match_signature' => null,
                 ];
             }
 
@@ -179,11 +180,20 @@ class ProductImageService
                 // Embedding is additive fallback.
             }
 
+            $signature = null;
+            try {
+                $signatures = app(ProductImageSignatureService::class);
+                $signature = $signatures->pack($signatures->catalogSignatures($bytes));
+            } catch (\Throwable) {
+                // Visual signature can be backfilled by products:index-image-hashes.
+            }
+
             return [
                 'perceptual_hash' => $variants[0]['hash'] ?? null,
                 'perceptual_hashes' => $variants,
                 'dct_hash' => $dctHash,
                 'embedding_vector' => $embedding,
+                'match_signature' => $signature,
             ];
         } catch (\Throwable) {
             return [
@@ -191,6 +201,7 @@ class ProductImageService
                 'perceptual_hashes' => null,
                 'dct_hash' => null,
                 'embedding_vector' => null,
+                'match_signature' => null,
             ];
         }
     }

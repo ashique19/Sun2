@@ -7,9 +7,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProductImageMatchMemory extends Model
 {
+    /** Staff-confirmed visual region signature (hash = content key, signature = packed vectors). */
+    public const KIND_SIGNATURE = 'sig';
+
     protected $fillable = [
         'hash',
         'hash_kind',
+        'signature',
         'product_id',
         'source_channel_message_id',
         'created_by',

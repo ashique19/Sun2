@@ -7,7 +7,10 @@ use App\Models\Category;
 use App\Models\Page;
 use App\Models\Product;
 use App\Models\ProductImage;
+use App\Models\ProductImageMatchMemory;
 use App\Observers\SitemapInvalidationObserver;
+use App\Services\Admin\ProductImageCatalogIndex;
+use App\Services\Channels\ProductImageMatchMemoryService;
 use App\Services\Facebook\FacebookPageTokenService;
 use App\Services\Sms\LoggingSmsSender;
 use App\Services\Sms\LogSmsSender;
@@ -45,6 +48,24 @@ class AppServiceProvider extends ServiceProvider
         Category::observe(SitemapInvalidationObserver::class);
         Page::observe(SitemapInvalidationObserver::class);
         ProductImage::observe(SitemapInvalidationObserver::class);
+
+        ProductImage::saved(fn () => ProductImageCatalogIndex::bump());
+        ProductImage::deleted(fn () => ProductImageCatalogIndex::bump());
+        Product::saved(function (Product $product): void {
+            if ($product->wasChanged('is_published')) {
+                ProductImageCatalogIndex::bump();
+            }
+        });
+        ProductImageMatchMemory::saved(function (ProductImageMatchMemory $memory): void {
+            ProductImageMatchMemoryService::flush();
+            if ($memory->wasRecentlyCreated || $memory->wasChanged(['hash', 'hash_kind', 'product_id'])) {
+                ProductImageCatalogIndex::bumpMemory();
+            }
+        });
+        ProductImageMatchMemory::deleted(function (): void {
+            ProductImageMatchMemoryService::flush();
+            ProductImageCatalogIndex::bumpMemory();
+        });
     }
 
     private function applyFacebookTokenOverride(): void

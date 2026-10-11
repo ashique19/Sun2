@@ -652,7 +652,10 @@ class AdminInbox extends Component
 
         app(ProductImageMatchMemoryService::class)->forgetFromMessage($message);
 
-        $message->forceFill(['matched_product_id' => null])->save();
+        $message->forceFill([
+            'matched_product_id' => null,
+            'image_match_checked_at' => now(),
+        ])->save();
 
         $key = (string) $message->id;
         $this->inboundImageMatchState[$key] = ['status' => 'done'];
@@ -874,37 +877,48 @@ class AdminInbox extends Component
     {
         AdminAccess::ensureStaffAdmin();
 
-        // One image per request — hashing stays under the PHP time limit when a
-        // thread has many inbound photos.
-        $nextId = null;
+        // The thread is already on screen. Each request spends a short budget so
+        // matched photos appear progressively instead of blocking the conversation.
+        $startedAt = microtime(true);
+        $processed = 0;
+        $budgetSeconds = 0.4;
+        $maxImagesPerRequest = 4;
 
-        foreach ($this->inboundImageMatchState as $messageId => $state) {
-            if (($state['status'] ?? null) === 'pending') {
-                $nextId = (int) $messageId;
-                break;
+        while (true) {
+            $nextId = null;
+
+            foreach ($this->inboundImageMatchState as $messageId => $state) {
+                if (($state['status'] ?? null) === 'pending') {
+                    $nextId = (int) $messageId;
+                    break;
+                }
+            }
+
+            if ($nextId === null) {
+                return;
+            }
+
+            $this->resolveInboundImageMatch($nextId, $matcher);
+            $processed++;
+
+            $hasMorePending = collect($this->inboundImageMatchState)
+                ->contains(fn (array $state): bool => ($state['status'] ?? null) === 'pending');
+
+            if (! $hasMorePending) {
+                return;
+            }
+
+            if (app()->runningUnitTests()) {
+                continue;
+            }
+
+            $overBudget = (microtime(true) - $startedAt) >= $budgetSeconds || $processed >= $maxImagesPerRequest;
+            if ($overBudget) {
+                $this->js('queueMicrotask(() => $wire.runInboundImageMatches())');
+
+                return;
             }
         }
-
-        if ($nextId === null) {
-            return;
-        }
-
-        $this->resolveInboundImageMatch($nextId, $matcher);
-
-        $hasMorePending = collect($this->inboundImageMatchState)
-            ->contains(fn (array $state): bool => ($state['status'] ?? null) === 'pending');
-
-        if (! $hasMorePending) {
-            return;
-        }
-
-        if (app()->runningUnitTests()) {
-            $this->runInboundImageMatches($matcher);
-
-            return;
-        }
-
-        $this->js('queueMicrotask(() => $wire.runInboundImageMatches())');
     }
 
     /**
@@ -1783,7 +1797,7 @@ class AdminInbox extends Component
             ->where('direction', ChannelMessage::DIRECTION_INBOUND)
             ->whereNotNull('media_url')
             ->orderBy('id')
-            ->get(['id', 'matched_product_id', 'media_mime', 'media_url']);
+            ->get(['id', 'matched_product_id', 'media_mime', 'media_url', 'image_match_checked_at']);
 
         $productNames = Product::query()
             ->whereIn('id', $messages->pluck('matched_product_id')->filter()->unique())
@@ -1809,6 +1823,12 @@ class AdminInbox extends Component
                     'match_percent' => 100.0,
                     'strategy' => 'stored',
                 ];
+
+                continue;
+            }
+
+            if ($message->image_match_checked_at !== null) {
+                $this->inboundImageMatchState[$key] = ['status' => 'done'];
 
                 continue;
             }
@@ -1857,14 +1877,23 @@ class AdminInbox extends Component
         }
 
         $match = $matcher->bestAutoMatch($message);
+        $message->refresh();
 
         if ($match === null) {
+            // A failed download should be retried next time the thread is opened.
+            if (filled($message->media_path) || blank($message->media_url)) {
+                $message->forceFill(['image_match_checked_at' => now()])->save();
+            }
+
             $this->inboundImageMatchState[$key] = ['status' => 'done'];
 
             return;
         }
 
-        $message->forceFill(['matched_product_id' => $match['product_id']])->save();
+        $message->forceFill([
+            'matched_product_id' => $match['product_id'],
+            'image_match_checked_at' => now(),
+        ])->save();
 
         $this->inboundImageMatchState[$key] = [
             'status' => 'done',

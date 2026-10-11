@@ -905,6 +905,13 @@
                                                     Clear
                                                 </button>
                                             </div>
+                                        @elseif (($imageMatchState['status'] ?? null) === 'done')
+                                            <button type="button"
+                                                wire:click.stop="openTagProductOnImage({{ $messageRow->id }})"
+                                                wire:key="inbound-image-no-match-{{ $messageRow->id }}"
+                                                class="mt-1.5 inline-flex items-center gap-1 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-2 py-0.5 text-[10px] font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]">
+                                                No match — search product
+                                            </button>
                                         @endif
                                     @endif
                                 @elseif ($messageRow->hasMedia())

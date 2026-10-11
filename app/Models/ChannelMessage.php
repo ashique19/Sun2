@@ -22,6 +22,7 @@ class ChannelMessage extends Model
             'matched_product_id' => 'integer',
             'raw_payload' => 'array',
             'sent_at' => 'datetime',
+            'image_match_checked_at' => 'datetime',
         ];
     }
 

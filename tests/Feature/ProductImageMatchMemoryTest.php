@@ -8,6 +8,7 @@ use App\Models\ChannelMessage;
 use App\Models\Product;
 use App\Models\ProductImageMatchMemory;
 use App\Models\User;
+use App\Services\Admin\ProductImageHashService;
 use App\Services\Channels\ChannelMessageImageMatchService;
 use App\Services\Channels\ProductImageMatchMemoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -145,5 +146,34 @@ class ProductImageMatchMemoryTest extends TestCase
 
         $this->assertSame(0, ProductImageMatchMemory::query()->count());
         $this->assertNull($message->fresh()->matched_product_id);
+        $this->assertNotNull($message->fresh()->image_match_checked_at);
+    }
+
+    #[Test]
+    public function near_duplicate_of_a_staff_tag_auto_matches_without_a_catalog_scan(): void
+    {
+        $original = str_repeat('a', 16);
+        $near = 'b'.substr($original, 1);
+        $far = str_repeat('f', 16);
+        $hasher = app(ProductImageHashService::class);
+
+        $this->assertLessThanOrEqual(ProductImageMatchMemoryService::NEAR_DISTANCE, $hasher->hammingDistance($original, $near));
+        $this->assertGreaterThan(ProductImageMatchMemoryService::NEAR_DISTANCE, $hasher->hammingDistance($original, $far));
+
+        [, $source] = $this->inboundImageWithHashes($original, str_repeat('c', 16));
+        $product = $this->publishedProduct('Remembered Ring');
+        app(ProductImageMatchMemoryService::class)->rememberFromStaffTag($source, $product);
+
+        [, $later] = $this->inboundImageWithHashes($near, str_repeat('d', 16));
+        $match = app(ChannelMessageImageMatchService::class)->bestAutoMatch($later);
+
+        $this->assertNotNull($match);
+        $this->assertSame($product->id, $match['product_id']);
+        $this->assertSame('staff_memory', $match['strategy']);
+        $this->assertGreaterThanOrEqual(90.0, $match['match_percent']);
+        $this->assertLessThan(100.0, $match['match_percent']);
+
+        [, $unrelated] = $this->inboundImageWithHashes($far, str_repeat('e', 16));
+        $this->assertNull(app(ChannelMessageImageMatchService::class)->bestAutoMatch($unrelated));
     }
 }

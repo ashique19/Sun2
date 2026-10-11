@@ -129,39 +129,45 @@ class ProductImageEmbeddingService
      */
     public function findBestAutoMatchFromBinary(string $binary): ?array
     {
-        $query = $this->embedBinary($binary);
+        return $this->findBestAutoMatchForVector($this->embedBinary($binary), 'embedding');
+    }
+
+    public function findBestAutoMatchFromGdImage(\GdImage $image, string $strategy = 'embedding'): ?array
+    {
+        return $this->findBestAutoMatchForVector($this->embedGdImage($image), $strategy);
+    }
+
+    /**
+     * @param  list<float>  $query
+     * @return array{product_id:int,name:string,match_percent:float,strategy:string,distance:int}|null
+     */
+    public function findBestAutoMatchForVector(array $query, string $strategy = 'embedding'): ?array
+    {
+        if (count($query) !== self::DIMENSIONS) {
+            return null;
+        }
+
         $best = null;
         $bestSim = 0.0;
 
-        ProductImage::query()
-            ->whereNotNull('embedding_vector')
-            ->with('product:id,name,is_published')
-            ->orderBy('id')
-            ->chunkById(200, function ($images) use ($query, &$best, &$bestSim): void {
-                foreach ($images as $image) {
-                    $product = $image->product;
-                    if ($product === null || ! $product->is_published) {
-                        continue;
-                    }
+        foreach (app(ProductImageCatalogIndex::class)->load()['rows'] as $row) {
+            $vector = $row['embedding'] ?? null;
+            if (! is_array($vector) || count($vector) !== self::DIMENSIONS) {
+                continue;
+            }
 
-                    $vector = $image->embedding_vector;
-                    if (! is_array($vector) || count($vector) !== self::DIMENSIONS) {
-                        continue;
-                    }
-
-                    $sim = $this->cosineSimilarity($query, $vector);
-                    if ($sim > $bestSim) {
-                        $bestSim = $sim;
-                        $best = [
-                            'product_id' => (int) $product->id,
-                            'name' => (string) $product->name,
-                            'match_percent' => round($sim * 100, 2),
-                            'strategy' => 'embedding',
-                            'distance' => (int) round((1 - $sim) * ProductImageHashService::HASH_BITS),
-                        ];
-                    }
-                }
-            });
+            $sim = $this->cosineSimilarity($query, $vector);
+            if ($sim > $bestSim) {
+                $bestSim = $sim;
+                $best = [
+                    'product_id' => (int) $row['product_id'],
+                    'name' => (string) $row['name'],
+                    'match_percent' => round($sim * 100, 2),
+                    'strategy' => $strategy,
+                    'distance' => (int) round((1 - $sim) * ProductImageHashService::HASH_BITS),
+                ];
+            }
+        }
 
         if ($best === null || $bestSim < (ProductImageHashService::autoMatchPercent() / 100)) {
             return null;

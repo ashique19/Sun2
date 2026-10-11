@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\ProductImage;
+use App\Services\Admin\ProductImageCatalogIndex;
 use App\Services\Admin\ProductImageHashRebuildService;
 use App\Services\Admin\ProductImageHashService;
 use Illuminate\Console\Command;
@@ -35,7 +36,8 @@ class IndexProductImageHashesCommand extends Command
         }
 
         if ($total === 0) {
-            $this->info('Nothing to index.');
+            app(ProductImageCatalogIndex::class)->warm();
+            $this->info('Nothing to index. Catalog match index is warm.');
 
             return self::SUCCESS;
         }
@@ -84,7 +86,8 @@ class IndexProductImageHashesCommand extends Command
 
         $bar->finish();
         $this->newLine(2);
-        $this->info("Done. hashed={$ok} failed={$failed}");
+        app(ProductImageCatalogIndex::class)->warm();
+        $this->info("Done. hashed={$ok} failed={$failed}. Catalog match index is warm.");
 
         return self::SUCCESS;
     }

@@ -20,9 +20,14 @@ use App\Services\Orders\OrderPackagingCost;
 use App\Support\AdminAccess;
 use App\Support\AdminDashboardMetrics;
 use App\Support\AdminOrderSegment;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 #[Title('Admin Dashboard')]
 #[Layout('components.layouts.admin')]
@@ -35,6 +40,9 @@ class AdminDashboard extends Component
     public array $pendingPackagingCosts = [];
 
     public ?string $courierChargeMessage = null;
+
+    /** @var list<string> */
+    public array $courierChargeFailures = [];
 
     public ?string $returnHubMessage = null;
 
@@ -241,6 +249,45 @@ class AdminDashboard extends Component
         $this->returnHubMessage = 'Return marked received for order #'.$order->order_number.'.';
     }
 
+    public function confirmAllCourierCharges(
+        OrderCourierChargeSync $courierChargeSync,
+        OrderPackagingCost $packagingCost,
+        OrderPackagingCourierConfirmService $confirmService,
+    ): void {
+        AdminAccess::ensureStaffAdmin();
+
+        $updatedNames = [];
+        $failures = [];
+        /** @var array<string, list<string>> $fieldErrors */
+        $fieldErrors = [];
+
+        foreach ($this->unconfirmedCourierChargeOrders() as $order) {
+            try {
+                $this->confirmCourierCharge($order->id, $courierChargeSync, $packagingCost, $confirmService);
+                $updatedNames[] = $order->name;
+            } catch (ValidationException $exception) {
+                $errors = $exception->validator->errors();
+                $fieldErrors = array_merge($fieldErrors, $errors->messages());
+                $failures[] = $order->name.' (#'.$order->order_number.'): '.($errors->first() ?: 'Invalid values.');
+            } catch (ModelNotFoundException) {
+                $failures[] = $order->name.' (#'.$order->order_number.'): no longer awaiting confirmation.';
+            } catch (HttpException $exception) {
+                throw $exception;
+            } catch (RuntimeException $exception) {
+                $failures[] = $order->name.' (#'.$order->order_number.'): '.$exception->getMessage();
+            }
+        }
+
+        foreach ($fieldErrors as $key => $messages) {
+            $this->addError($key, $messages[0]);
+        }
+
+        $this->courierChargeFailures = $failures;
+        $this->courierChargeMessage = $updatedNames === []
+            ? null
+            : 'Courier charge and packaging updated for '.implode(', ', $updatedNames).'.';
+    }
+
     public function confirmCourierCharge(
         int $orderId,
         OrderCourierChargeSync $courierChargeSync,
@@ -248,6 +295,8 @@ class AdminDashboard extends Component
         OrderPackagingCourierConfirmService $confirmService,
     ): void {
         AdminAccess::ensureStaffAdmin();
+
+        $this->courierChargeFailures = [];
 
         $order = Order::query()
             ->with('items:id,order_id,quantity')
@@ -358,17 +407,7 @@ class AdminDashboard extends Component
             ->limit(10)
             ->get();
 
-        $unconfirmedCourierCharges = Order::query()
-            ->with([
-                'courier:id,name,slug,charge,osd_charge',
-                'items:id,order_id,name,quantity,product_image',
-            ])
-            ->where('status', 'dispatched')
-            ->whereNull('courier_charge_confirmed_at')
-            ->orderByDesc('dispatch_date')
-            ->orderByDesc('id')
-            ->limit(25)
-            ->get(['id', 'order_number', 'name', 'city', 'area', 'courier_id', 'courier_tracker', 'courier_consignment_id', 'courier_charge', 'packaging_cost', 'dispatch_date', 'status']);
+        $unconfirmedCourierCharges = $this->unconfirmedCourierChargeOrders();
 
         $courierChargeAreaLabels = [];
         $courierChargeQuickAmounts = [];
@@ -421,5 +460,25 @@ class AdminDashboard extends Component
             'expenseCategories' => Expense::CATEGORIES,
             'steadfastExpectedApiBalance' => $steadfastExpectedApiBalance,
         ]);
+    }
+
+    /**
+     * Dispatched orders still waiting for a courier-charge confirmation, newest first.
+     *
+     * @return Collection<int, Order>
+     */
+    private function unconfirmedCourierChargeOrders(): Collection
+    {
+        return Order::query()
+            ->with([
+                'courier:id,name,slug,charge,osd_charge',
+                'items:id,order_id,name,quantity,product_image',
+            ])
+            ->where('status', 'dispatched')
+            ->whereNull('courier_charge_confirmed_at')
+            ->orderByDesc('dispatch_date')
+            ->orderByDesc('id')
+            ->limit(25)
+            ->get(['id', 'order_number', 'name', 'city', 'area', 'courier_id', 'courier_tracker', 'courier_consignment_id', 'courier_charge', 'packaging_cost', 'dispatch_date', 'status']);
     }
 }

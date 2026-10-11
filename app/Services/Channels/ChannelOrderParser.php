@@ -7,8 +7,8 @@ use App\Models\ChannelMessage;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Services\Admin\GeminiClient;
-use App\Services\Admin\ProductImageEmbeddingService;
 use App\Services\Admin\ProductImageHashService;
+use App\Services\Admin\ProductImageMatcher;
 use App\Services\Storefront\AddressLocationGuesser;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Carbon;
@@ -54,10 +54,8 @@ class ChannelOrderParser
     public function __construct(
         private GeminiClient $gemini,
         private AddressLocationGuesser $locationGuesser,
-        private ProductImageHashService $imageHasher,
         private ChannelInboundMediaService $inboundMedia,
-        private ProductImageMatchMemoryService $matchMemory,
-        private ProductImageEmbeddingService $embeddings,
+        private ChannelMessageImageMatchService $imageMatches,
     ) {}
 
     /**
@@ -507,14 +505,6 @@ class ChannelOrderParser
     {
         $weak = [];
         $candidates = [];
-        $autoPercent = (float) config(
-            'channels.ai_draft.image_match_auto_percent',
-            ProductImageHashService::AUTO_MATCH_PERCENT,
-        );
-        $minPercent = (float) config(
-            'channels.ai_draft.image_match_min_percent',
-            ProductImageHashService::MIN_MATCH_PERCENT,
-        );
 
         $imageMessages = $messages->filter(
             fn (ChannelMessage $message) => $message->hasMedia() && $message->isImageAttachment()
@@ -531,14 +521,7 @@ class ChannelOrderParser
             ];
         }
 
-        $hashedCount = ProductImage::query()
-            ->where(function ($query): void {
-                $query->whereNotNull('perceptual_hash')
-                    ->orWhereNotNull('perceptual_hashes')
-                    ->orWhereNotNull('dct_hash');
-            })
-            ->count();
-        if ($hashedCount === 0) {
+        if (! ProductImage::query()->whereNotNull('match_signature')->exists()) {
             $weak[] = self::WEAK_CATALOG_UNHASHED;
         }
 
@@ -569,89 +552,40 @@ class ChannelOrderParser
 
             $hadBytes = true;
 
-            if ($hashedCount === 0) {
-                continue;
-            }
-
             try {
-                $memory = $this->matchMemory->lookup(
-                    $cached['dhash'] ?? null,
-                    $cached['dct_hash'] ?? null,
-                );
+                $resolved = $this->imageMatches->resolve($message);
+                $rows = $this->imageMatches->candidateRows($resolved, ProductImageHashService::TOP_MATCHES, includeAttached: true);
+                $rows = array_values(array_filter(
+                    $rows,
+                    fn (array $row): bool => (float) $row['match_percent'] >= ProductImageMatcher::suggestScore() * 100,
+                ));
 
-                if ($memory !== null) {
-                    $product = Product::query()
-                        ->whereKey($memory['product_id'])
-                        ->where('is_published', true)
-                        ->first();
-
-                    if ($product !== null) {
-                        $newerWeight = 1.0 + (($index + 1) / max(1, $total));
-                        $autoHits[] = [
-                            'message_id' => (int) $message->id,
-                            'product_id' => (int) $product->id,
-                            'name' => (string) $product->name,
-                            'match_percent' => 100.0,
-                            'dhash' => $cached['dhash'] ?? null,
-                            'newer_weight' => $newerWeight,
-                        ];
-                        $candidates[] = [
-                            'product_id' => (int) $product->id,
-                            'name' => (string) $product->name,
-                            'match_percent' => 100.0,
-                        ];
-
-                        continue;
-                    }
-                }
-
-                // Prefer crop-aware binary match; falls back to cached full-frame / DCT hashes.
-                $matches = $this->imageHasher->findTopMatchesFromBinary(
-                    $cached['bytes'],
-                    ProductImageHashService::TOP_MATCHES,
-                    $minPercent,
-                );
-                $matches = $this->filterPublishedMatches($matches);
-
-                if ($matches === [] && filled($cached['dhash'] ?? null)) {
-                    $matches = $this->filterPublishedMatches(
-                        $this->imageHasher->findTopMatches((string) $cached['dhash'], ProductImageHashService::TOP_MATCHES, $minPercent)
-                    );
-                }
-                if ($matches === [] && filled($cached['dct_hash'] ?? null)) {
-                    $matches = $this->filterPublishedMatches(
-                        $this->imageHasher->findTopMatches((string) $cached['dct_hash'], ProductImageHashService::TOP_MATCHES, $minPercent)
-                    );
-                }
-
-                if ($matches === []) {
-                    $embeddingMatch = $this->embeddings->findBestAutoMatchFromBinary($cached['bytes']);
-                    if ($embeddingMatch !== null) {
-                        $matches = [$embeddingMatch];
-                    }
-                }
-
-                foreach ($matches as $match) {
+                foreach ($rows as $row) {
                     $candidates[] = [
-                        'product_id' => (int) $match['product_id'],
-                        'name' => (string) $match['name'],
-                        'match_percent' => (float) $match['match_percent'],
+                        'product_id' => (int) $row['product_id'],
+                        'name' => (string) $row['name'],
+                        'match_percent' => (float) $row['match_percent'],
                     ];
                 }
 
-                $top = $matches[0] ?? null;
-                if ($top && (float) $top['match_percent'] >= $autoPercent) {
+                $attached = $this->imageMatches->bestAutoMatch($resolved);
+                if ($attached !== null) {
                     // Newer photos weigh more (last image in the window ≈ "this one").
                     $newerWeight = 1.0 + (($index + 1) / max(1, $total));
                     $autoHits[] = [
                         'message_id' => (int) $message->id,
-                        'product_id' => (int) $top['product_id'],
-                        'name' => (string) $top['name'],
-                        'match_percent' => (float) $top['match_percent'],
+                        'product_id' => (int) $attached['product_id'],
+                        'name' => (string) $attached['name'],
+                        'match_percent' => (float) $attached['match_percent'],
                         'dhash' => $cached['dhash'] ?? null,
                         'newer_weight' => $newerWeight,
                     ];
-                } elseif ($top) {
+                    $candidates[] = [
+                        'product_id' => (int) $attached['product_id'],
+                        'name' => (string) $attached['name'],
+                        'match_percent' => (float) $attached['match_percent'],
+                    ];
+                } elseif ($rows !== []) {
                     $weak[] = self::WEAK_IMAGE_BELOW_AUTO;
                 } else {
                     $weak[] = self::WEAK_IMAGE_NO_AUTO_MATCH;
@@ -733,30 +667,6 @@ class ChannelOrderParser
         $top = $scores[0] ?? null;
 
         return $top ? ['product_id' => $top['product_id'], 'name' => $top['name']] : null;
-    }
-
-    /**
-     * @param  list<array{product_id:int,name:string,sku:?string,price:float,stock_quantity:int,image_url:?string,match_percent:float,distance:int}>  $matches
-     * @return list<array{product_id:int,name:string,sku:?string,price:float,stock_quantity:int,image_url:?string,match_percent:float,distance:int}>
-     */
-    private function filterPublishedMatches(array $matches): array
-    {
-        if ($matches === []) {
-            return [];
-        }
-
-        $ids = array_map(fn (array $m) => (int) $m['product_id'], $matches);
-        $published = Product::query()
-            ->whereIn('id', $ids)
-            ->where('is_published', true)
-            ->pluck('id')
-            ->all();
-        $publishedSet = array_flip($published);
-
-        return array_values(array_filter(
-            $matches,
-            fn (array $m) => isset($publishedSet[(int) $m['product_id']]),
-        ));
     }
 
     /**

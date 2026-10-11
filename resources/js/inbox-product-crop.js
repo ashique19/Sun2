@@ -136,6 +136,23 @@ const registerInboxProductCrop = () => {
             this.error = null;
 
             try {
+                const data = this.cropper.getData(true);
+                const image = this.$refs.cropImage;
+                const rotated = Math.round(((data.rotate ?? 0) % 360 + 360) % 360) !== 0;
+
+                // Unrotated: match the box on the original server-side (no upload; the
+                // region is also learned when staff tag the result).
+                if (! rotated && image?.naturalWidth && image?.naturalHeight) {
+                    await this.$wire.matchProductFromCropRegion({
+                        left: data.x / image.naturalWidth,
+                        top: data.y / image.naturalHeight,
+                        width: data.width / image.naturalWidth,
+                        height: data.height / image.naturalHeight,
+                    });
+
+                    return;
+                }
+
                 const canvas = this.cropper.getCroppedCanvas({
                     maxWidth: 1600,
                     maxHeight: 1600,

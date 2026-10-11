@@ -16,10 +16,12 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Mockery;
 use PHPUnit\Framework\Attributes\Test;
+use Tests\ProductPhotoFixtures;
 use Tests\TestCase;
 
 class ChannelInboundImageMatchCacheTest extends TestCase
 {
+    use ProductPhotoFixtures;
     use RefreshDatabase;
 
     #[Test]
@@ -79,6 +81,7 @@ class ChannelInboundImageMatchCacheTest extends TestCase
             'sort_order' => 0,
             'perceptual_hash' => $hash,
             'dct_hash' => app(ProductImageHashService::class)->dctHashBinary($bytes),
+            'match_signature' => $this->matchSignatureFor($bytes),
         ]);
 
         $downloadCount = 0;
@@ -216,6 +219,7 @@ class ChannelInboundImageMatchCacheTest extends TestCase
             'is_primary' => true,
             'sort_order' => 0,
             'perceptual_hash' => $hash,
+            'match_signature' => $this->matchSignatureFor($goodBytes),
         ]);
 
         Http::fake([

@@ -16,6 +16,7 @@ use App\Services\Admin\CustomerLookupService;
 use App\Services\Admin\OrderPasteParser;
 use App\Services\Admin\ProductImageHashService;
 use App\Services\Admin\ProductImageService;
+use App\Services\Channels\ChannelMessageImageMatchService;
 use App\Services\Couriers\PathaoMerchantSuccessClient;
 use App\Services\Locations\LocationAliasLearner;
 use App\Services\Orders\CouponStackingService;
@@ -732,17 +733,16 @@ class AdminOrderForm extends Component
         ]);
 
         try {
-            $hasher = app(ProductImageHashService::class);
-            $hash = $hasher->hashUploadedFile($this->pastedImage);
-            $matches = $hasher->findTopMatches(
-                $hash,
+            $result = app(ChannelMessageImageMatchService::class)->searchBinary(
+                (string) file_get_contents($this->pastedImage->getRealPath()),
+                null,
                 ProductImageHashService::TOP_MATCHES,
-                ProductImageHashService::MIN_MATCH_PERCENT,
             );
+            $matches = $result['rows'];
 
             $best = $matches[0] ?? null;
 
-            if ($best && $best['match_percent'] >= ProductImageHashService::AUTO_MATCH_PERCENT) {
+            if ($best && $result['confident']) {
                 $this->addProduct((int) $best['product_id']);
                 $this->pastedImage = null;
                 $this->imageMatches = [];

@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AdminAiCandidateFileController;
 use App\Http\Controllers\Admin\AdminCustomerExportController;
 use App\Http\Controllers\Admin\AdminProductImageFileController;
 use App\Http\Controllers\ChannelMessageCropSuggestionController;
+use App\Http\Controllers\ChannelMessageImageMatchController;
 use App\Http\Controllers\ChannelMessageMediaController;
 use App\Http\Controllers\MessengerConversationSyncController;
 use App\Http\Controllers\ProductImageHashRebuildController;
@@ -262,6 +263,9 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/inbox/media/{message}/crop-suggestion', ChannelMessageCropSuggestionController::class)
             ->whereNumber('message')
             ->name('inbox.crop-suggestion');
+        Route::post('/inbox/media/{message}/match', ChannelMessageImageMatchController::class)
+            ->whereNumber('message')
+            ->name('inbox.image-match');
         Route::get('/issues', AdminIssues::class)->name('issues.index');
         Route::get('/orders/draft-ai', AdminOrders::class)->defaults('segment', 'draft-ai')->name('orders.draft-ai');
         Route::get('/orders/dispatched', AdminOrders::class)->defaults('segment', 'dispatched')->name('orders.dispatched');

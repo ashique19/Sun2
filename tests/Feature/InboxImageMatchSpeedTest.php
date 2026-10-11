@@ -9,12 +9,12 @@ use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\User;
 use App\Services\Admin\ProductImageHashService;
+use App\Services\Admin\ProductImageMatcher;
 use App\Services\Channels\ChannelMessageImageMatchService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Livewire\Livewire;
-use Mockery;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -136,16 +136,18 @@ class InboxImageMatchSpeedTest extends TestCase
             ->call('selectConversation', $conversation->id)
             ->assertSee('No match — search product');
 
-        $this->assertNotNull($message->fresh()->image_match_checked_at);
+        $checked = $message->fresh();
+        $this->assertNotNull($checked->image_match_checked_at);
+        $this->assertSame(ChannelMessageImageMatchService::STATUS_SKIPPED, $checked->image_match_meta['status'] ?? null);
 
-        $matcher = Mockery::mock(ChannelMessageImageMatchService::class);
-        $matcher->shouldNotReceive('bestAutoMatch');
-        $this->app->instance(ChannelMessageImageMatchService::class, $matcher);
+        $this->mock(ProductImageMatcher::class)->shouldNotReceive('match');
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->assertSee('No match — search product')
             ->assertDontSee('Matching product…');
+
+        $this->assertEquals($checked->image_match_checked_at, $message->fresh()->image_match_checked_at);
     }
 
     private function catalogHashLoads(): int

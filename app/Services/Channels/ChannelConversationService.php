@@ -93,6 +93,10 @@ class ChannelConversationService
                 if ($conversation->last_inbound_at === null || $sentAt->greaterThan($conversation->last_inbound_at)) {
                     $conversation->forceFill(['last_inbound_at' => $sentAt])->save();
                 }
+
+                if ($message->hasMedia()) {
+                    ChannelMessageImageMatchService::prewarmAfterResponse($message);
+                }
             } elseif ($conversation->last_outbound_at === null || $sentAt->greaterThan($conversation->last_outbound_at)) {
                 $conversation->forceFill(['last_outbound_at' => $sentAt])->save();
             }

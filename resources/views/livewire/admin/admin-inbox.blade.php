@@ -567,6 +567,20 @@
                             <p class="mt-1.5 text-[10px] text-[#8C8474]">Showing full conversation history</p>
                         @endif
                     @endif
+                    @foreach ($imageMatchNotices as $notice)
+                        <p class="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900"
+                            wire:key="image-match-notice-{{ $loop->index }}"
+                            role="status">
+                            {{ $notice['message'] }}
+                            @if (! empty($notice['action_url']))
+                                <a href="{{ $notice['action_url'] }}" wire:navigate class="ml-1 font-semibold text-[#8A6D12] underline underline-offset-2 hover:text-[#1E1E1E]">{{ $notice['action_label'] }} →</a>
+                            @endif
+                        </p>
+                    @endforeach
+                    @if (collect($inboundImageMatchState)->contains(fn (array $row): bool => ($row['status'] ?? null) === 'pending'))
+                        {{-- Re-read results even if the browser queue never reports back; stalled photos turn into errors server-side. --}}
+                        <div wire:poll.10s="refreshInboundImageMatches" class="hidden" aria-hidden="true"></div>
+                    @endif
                 </div>
 
                 @if ($orderPanelOpen && $selectedConversation->draftOrder)
@@ -831,14 +845,47 @@
                                                 : null;
                                         @endphp
                                         @if (($imageMatchState['status'] ?? null) === 'pending')
-                                            <div class="mt-1.5 flex items-center gap-1.5 text-[10px] text-[#8C8474]"
-                                                wire:key="inbound-image-match-loading-{{ $messageRow->id }}"
-                                                x-data="inboxImageMatchPending(@js($imageMatchState['match_url'] ?? null))"
-                                                x-show="! failed">
-                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3 animate-spin" aria-hidden="true">
-                                                    <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.39a.75.75 0 0 0-.75.75v3.842a.75.75 0 0 0 1.5 0v-2.14l.311.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm-10.623-2.85a5.5 5.5 0 0 1 9.201-2.466l.312.311H11.77a.75.75 0 0 0 0 1.5h3.843a.75.75 0 0 0 .75-.75V3.328a.75.75 0 1 0-1.5 0V5.47l-.311-.311A7 7 0 0 0 3.04 8.295a.75.75 0 1 0 1.45.39Z" clip-rule="evenodd" />
-                                                </svg>
-                                                <span>Matching product…</span>
+                                            <div class="mt-1.5 text-[10px] text-[#8C8474]"
+                                                wire:key="inbound-image-match-pending-{{ $messageRow->id }}-{{ md5($imageMatchState['match_url'] ?? '') }}"
+                                                data-inbox-image-match-url="{{ $imageMatchState['match_url'] ?? '' }}"
+                                                x-data="window.inboxImageMatchPending ? inboxImageMatchPending(@js($imageMatchState['match_url'] ?? null)) : { state: 'loading', error: '' }">
+                                                <div class="flex items-center gap-1.5" x-show="state === 'loading'">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3 animate-spin" aria-hidden="true">
+                                                        <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.39a.75.75 0 0 0-.75.75v3.842a.75.75 0 0 0 1.5 0v-2.14l.311.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm-10.623-2.85a5.5 5.5 0 0 1 9.201-2.466l.312.311H11.77a.75.75 0 0 0 0 1.5h3.843a.75.75 0 0 0 .75-.75V3.328a.75.75 0 1 0-1.5 0V5.47l-.311-.311A7 7 0 0 0 3.04 8.295a.75.75 0 1 0 1.45.39Z" clip-rule="evenodd" />
+                                                    </svg>
+                                                    <span>Matching product…</span>
+                                                </div>
+                                                <div class="flex flex-wrap items-center gap-1.5" x-show="state === 'error'" x-cloak>
+                                                    <span class="text-rose-700" x-text="error"></span>
+                                                    <button type="button"
+                                                        wire:click.stop="openTagProductOnImage({{ $messageRow->id }})"
+                                                        class="inline-flex items-center gap-1 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-2 py-0.5 font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]">
+                                                        No match — search product
+                                                    </button>
+                                                    <button type="button"
+                                                        wire:click.stop="retryInboundImageMatch({{ $messageRow->id }})"
+                                                        class="font-semibold text-[#C9A227] hover:underline">
+                                                        Retry
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        @elseif (($imageMatchState['match_status'] ?? null) === 'failed' && $taggedProductId <= 0)
+                                            <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]"
+                                                wire:key="inbound-image-match-failed-{{ $messageRow->id }}"
+                                                role="status">
+                                                <span class="text-rose-700">{{ $imageMatchState['error'] ?? 'Couldn’t match this photo.' }}</span>
+                                                <button type="button"
+                                                    wire:click.stop="openTagProductOnImage({{ $messageRow->id }})"
+                                                    class="inline-flex items-center gap-1 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-2 py-0.5 font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]">
+                                                    No match — search product
+                                                </button>
+                                                <button type="button"
+                                                    wire:click.stop="retryInboundImageMatch({{ $messageRow->id }})"
+                                                    wire:loading.attr="disabled"
+                                                    wire:target="retryInboundImageMatch({{ $messageRow->id }})"
+                                                    class="font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
+                                                    Retry
+                                                </button>
                                             </div>
                                         @elseif ($taggedProductId > 0 && filled($taggedProductName))
                                             <div class="mt-1.5 flex flex-wrap items-center gap-1.5"
@@ -952,17 +999,10 @@
                                                 No match — search product
                                             </button>
                                         @endif
-                                        @if (($imageMatchState['status'] ?? null) === 'pending')
-                                            <button type="button"
-                                                x-data="{ failed: false }"
-                                                x-show="failed"
-                                                x-cloak
-                                                @inbox-image-match-failed.window="if ($event.detail.url === @js($imageMatchState['match_url'] ?? null)) failed = true"
-                                                wire:click.stop="openTagProductOnImage({{ $messageRow->id }})"
-                                                wire:key="inbound-image-match-failed-{{ $messageRow->id }}"
-                                                class="mt-1.5 inline-flex items-center gap-1 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-2 py-0.5 text-[10px] font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]">
-                                                Couldn’t match — search product
-                                            </button>
+                                        @if (! empty($imageMatchState['refresh_url']))
+                                            <span class="hidden"
+                                                wire:key="inbound-image-match-refresh-{{ $messageRow->id }}-{{ md5($imageMatchState['refresh_url']) }}"
+                                                x-data="window.inboxImageMatchRefresh ? inboxImageMatchRefresh(@js($imageMatchState['refresh_url'])) : {}"></span>
                                         @endif
                                     @endif
                                 @elseif ($messageRow->hasMedia())

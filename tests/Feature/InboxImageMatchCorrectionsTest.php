@@ -290,6 +290,7 @@ class InboxImageMatchCorrectionsTest extends TestCase
                 'message_id' => $message->id,
                 'status' => ChannelMessageImageMatchService::STATUS_MATCHED,
                 'product_id' => $product->id,
+                'error' => null,
             ]);
     }
 

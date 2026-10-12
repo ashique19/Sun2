@@ -11,6 +11,7 @@ use App\Services\Admin\ProductImageMatcher;
 use App\Services\Admin\ProductImageMatchIndex;
 use App\Services\Admin\ProductImageSignatureService;
 use App\Support\StorefrontAssets;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -42,6 +43,34 @@ class ChannelMessageImageMatchService
     public const META_VERSION = 1;
 
     public const STORED_CANDIDATES = 5;
+
+    /** Automatic re-tries of a failed photo (on later thread opens); staff can always retry. */
+    public const MAX_AUTO_ATTEMPTS = 3;
+
+    public const RETRY_AFTER_SECONDS = 600;
+
+    /** Inbox render states (see renderState()). */
+    public const STATE_PENDING = 'pending';
+
+    public const STATE_STALE = 'stale';
+
+    public const STATE_STALLED = 'stalled';
+
+    public const STATE_DONE = 'done';
+
+    /**
+     * Admin-facing text for failure reasons stored in image_match_meta.error.
+     *
+     * @var array<string, string>
+     */
+    public const FAILURE_MESSAGES = [
+        'download_failed' => 'Couldn’t download this photo (the Facebook link may have expired).',
+        'timeout' => 'The server hit its PHP time limit while matching. Build the photo index under Image Hashes, then retry.',
+        'memory' => 'The server ran out of memory while matching.',
+        'stalled' => 'Matching didn’t finish on the server. Retry, or build the photo index under Image Hashes.',
+        'not_started' => 'Matching never started in this browser. Reload the page (Ctrl+Shift+R) and retry.',
+        'server_error' => 'Server error while matching.',
+    ];
 
     private static int $prewarmScheduled = 0;
 
@@ -79,7 +108,7 @@ class ChannelMessageImageMatchService
             return false;
         }
 
-        if ((int) ($meta['v'] ?? 0) !== self::META_VERSION) {
+        if ($this->awaitsMatch($message)) {
             return true;
         }
 
@@ -88,15 +117,187 @@ class ChannelMessageImageMatchService
             && ($meta['stamp'] ?? null) !== $stamp;
     }
 
+    /**
+     * Whether the photo has no usable result yet (never matched, matcher upgraded, or a
+     * failed attempt is due for an automatic retry). Unlike a stale "none"/"suggested"
+     * result, these show a spinner until the match request finishes.
+     */
+    public function awaitsMatch(ChannelMessage $message): bool
+    {
+        if (! $this->isEligible($message) || $message->matched_product_id) {
+            return false;
+        }
+
+        if ($message->image_match_checked_at === null) {
+            return true;
+        }
+
+        $meta = $this->meta($message);
+        if ($meta === []) {
+            return false;
+        }
+
+        if ((int) ($meta['v'] ?? 0) !== self::META_VERSION) {
+            return true;
+        }
+
+        return ($meta['status'] ?? null) === self::STATUS_FAILED
+            && (int) ($meta['attempts'] ?? 0) < self::MAX_AUTO_ATTEMPTS
+            && now()->getTimestamp() >= (int) ($meta['retry_after'] ?? 0);
+    }
+
+    /**
+     * What the inbox should show for the photo: pending (spinner + match request),
+     * stale (show the stored result, re-match silently), stalled (a match attempt or the
+     * browser never finished — show the error), or done.
+     */
+    public function renderState(ChannelMessage $message, ?string $stamp, int $stallSeconds): string
+    {
+        if ($this->awaitsMatch($message)) {
+            $startedAt = (int) ($this->meta($message)['attempt_started_at'] ?? 0);
+            if ($startedAt > 0 && now()->getTimestamp() - $startedAt >= $stallSeconds) {
+                return self::STATE_STALLED;
+            }
+
+            return self::STATE_PENDING;
+        }
+
+        return $this->needsMatching($message, $stamp) ? self::STATE_STALE : self::STATE_DONE;
+    }
+
+    /**
+     * Stored failure for the photo, with admin-facing text.
+     *
+     * @return array{reason: string, message: string}|null
+     */
+    public function failure(ChannelMessage $message): ?array
+    {
+        $meta = $this->meta($message);
+        if (($meta['status'] ?? null) !== self::STATUS_FAILED) {
+            return null;
+        }
+
+        $reason = (string) ($meta['error'] ?? 'server_error');
+
+        return [
+            'reason' => $reason,
+            'message' => self::failureMessage($reason, $meta['error_detail'] ?? null),
+        ];
+    }
+
+    public static function failureMessage(string $reason, ?string $detail = null): string
+    {
+        $message = self::FAILURE_MESSAGES[$reason] ?? self::FAILURE_MESSAGES['server_error'];
+
+        if ($reason === 'server_error' && filled($detail)) {
+            $message .= ' '.mb_strimwidth((string) $detail, 0, 160, '…');
+        }
+
+        return $message;
+    }
+
+    /**
+     * Map a PHP fatal error message (seen in a shutdown handler) to a failure reason.
+     */
+    public static function failureReasonForFatal(string $error): string
+    {
+        return match (true) {
+            str_contains($error, 'Maximum execution time') => 'timeout',
+            str_contains($error, 'Allowed memory size') => 'memory',
+            default => 'server_error',
+        };
+    }
+
+    /**
+     * Persist a failed attempt so the photo shows an error (and is retried automatically
+     * later, a bounded number of times) instead of spinning.
+     */
+    public function markFailed(ChannelMessage $message, string $reason, ?string $detail = null): void
+    {
+        $meta = $this->meta($message);
+        unset($meta['attempt_started_at']);
+
+        $message->forceFill([
+            'matched_product_id' => null,
+            'image_match_checked_at' => now(),
+            'image_match_meta' => [
+                ...$meta,
+                'v' => self::META_VERSION,
+                'status' => self::STATUS_FAILED,
+                'error' => $reason,
+                'error_detail' => $detail !== null ? mb_strimwidth($detail, 0, 300, '…') : null,
+                'attempts' => max(1, (int) ($meta['attempts'] ?? 0)),
+                'retry_after' => now()->addSeconds(self::RETRY_AFTER_SECONDS)->getTimestamp(),
+                'rejected' => array_map('intval', $meta['rejected'] ?? []),
+            ],
+        ])->save();
+    }
+
+    /**
+     * Staff "Retry": queue the photo for a fresh match on the next render.
+     */
+    public function resetForRetry(ChannelMessage $message): void
+    {
+        if (! $this->isEligible($message) || $message->matched_product_id) {
+            return;
+        }
+
+        $meta = $this->meta($message);
+        unset($meta['attempt_started_at'], $meta['error'], $meta['error_detail'], $meta['retry_after']);
+        $meta['v'] = self::META_VERSION;
+        $meta['status'] = self::STATUS_FAILED;
+        $meta['retry_after'] = 0;
+        $meta['attempts'] = 0;
+        $meta['retries'] = (int) ($meta['retries'] ?? 0) + 1;
+
+        $message->forceFill([
+            'image_match_checked_at' => null,
+            'image_match_meta' => $meta,
+        ])->save();
+    }
+
+    /**
+     * Changes whenever a new attempt is queued, so the browser never reuses a finished
+     * request for a photo that was retried.
+     */
+    public function attemptKey(ChannelMessage $message): string
+    {
+        $meta = $this->meta($message);
+
+        return ((int) ($meta['retries'] ?? 0)).'.'.((int) ($meta['attempts'] ?? 0));
+    }
+
     public function indexStamp(): string
     {
         return $this->index->stamp();
     }
 
     /**
-     * Match the photo if needed and persist the result. Safe to call concurrently.
+     * Catalog index health for the inbox notice (cached briefly; re-read on every poll otherwise).
+     *
+     * @return array{total: int, signed: int, unreadable: int, missing: int, cache_writable: bool, index_write_failed: bool}|null
      */
-    public function resolve(ChannelMessage $message, bool $force = false): ChannelMessage
+    public function indexHealth(): ?array
+    {
+        try {
+            return Cache::remember('image-match-index-health', now()->addSeconds(30), fn (): array => $this->index->health());
+        } catch (Throwable) {
+            try {
+                return $this->index->health();
+            } catch (Throwable $e) {
+                Log::warning('Image match index health check failed.', ['error' => $e->getMessage()]);
+
+                return null;
+            }
+        }
+    }
+
+    /**
+     * Match the photo if needed and persist the result. Safe to call concurrently: when
+     * another request (or the webhook prewarm) is already matching this photo, waits up
+     * to $waitSeconds for it, then returns without matching.
+     */
+    public function resolve(ChannelMessage $message, bool $force = false, int $waitSeconds = 0): ChannelMessage
     {
         if (! $this->isEligible($message)) {
             return $message;
@@ -106,8 +307,20 @@ class ChannelMessageImageMatchService
             return $message;
         }
 
-        $lock = Cache::lock('channel-image-match:'.$message->id, 60);
-        if (! $lock->get()) {
+        $lock = null;
+        try {
+            $lock = Cache::lock('channel-image-match:'.$message->id, 120);
+            $acquired = $waitSeconds > 0 ? $lock->block($waitSeconds) : $lock->get();
+        } catch (LockTimeoutException) {
+            $acquired = false;
+        } catch (Throwable $e) {
+            // A broken cache store must not stop matching; concurrent runs are harmless.
+            Log::warning('Inbox image match lock unavailable.', ['message_id' => $message->id, 'error' => $e->getMessage()]);
+            $lock = null;
+            $acquired = true;
+        }
+
+        if (! $acquired) {
             return $message->refresh();
         }
 
@@ -117,7 +330,10 @@ class ChannelMessageImageMatchService
                 $this->runMatch($message);
             }
         } finally {
-            $lock->release();
+            try {
+                $lock?->release();
+            } catch (Throwable) {
+            }
         }
 
         return $message;
@@ -367,13 +583,18 @@ class ChannelMessageImageMatchService
                 return;
             }
 
+            $matches = app(self::class);
             try {
-                app(self::class)->resolve($message);
+                $matches->resolve($message);
             } catch (Throwable $e) {
                 Log::warning('Inbound image prewarm match failed.', [
                     'message_id' => $messageId,
                     'error' => $e->getMessage(),
                 ]);
+                try {
+                    $matches->markFailed($message->refresh(), 'server_error', $e->getMessage());
+                } catch (Throwable) {
+                }
             }
         })->afterResponse();
     }
@@ -397,15 +618,32 @@ class ChannelMessageImageMatchService
     private function runMatch(ChannelMessage $message): void
     {
         $started = microtime(true);
-        $this->index->backfillMissingSignatures();
-        $stamp = $this->index->stamp();
-        $rejected = array_map('intval', $this->meta($message)['rejected'] ?? []);
+        $previous = $this->meta($message);
+        $rejected = array_map('intval', $previous['rejected'] ?? []);
+        $attempts = (int) ($previous['attempts'] ?? 0) + 1;
+        $retries = (int) ($previous['retries'] ?? 0);
 
-        $persist = function (string $status, array $candidates = [], string $source = 'visual', ?int $attach = null) use ($message, $started, $stamp, $rejected): void {
+        // Recorded before the heavy work so a request killed by a PHP time/memory limit
+        // still leaves a trace the inbox can turn into an error (see renderState()).
+        $message->forceFill([
+            'image_match_meta' => [
+                ...$previous,
+                'attempts' => $attempts,
+                'attempt_started_at' => now()->getTimestamp(),
+            ],
+        ])->save();
+
+        try {
+            $this->index->backfillMissingSignatures();
+        } catch (Throwable $e) {
+            Log::warning('Lazy match signature backfill failed.', ['error' => $e->getMessage()]);
+        }
+        $stamp = $this->index->stamp();
+
+        $persist = function (string $status, array $candidates = [], string $source = 'visual', ?int $attach = null) use ($message, $started, $stamp, $rejected, $attempts, $retries): void {
             $message->forceFill([
                 'matched_product_id' => $attach,
-                // A failed download is retried the next time the thread opens.
-                'image_match_checked_at' => $status === self::STATUS_FAILED ? null : now(),
+                'image_match_checked_at' => now(),
                 'image_match_meta' => [
                     'v' => self::META_VERSION,
                     'status' => $status,
@@ -413,6 +651,8 @@ class ChannelMessageImageMatchService
                     'source' => $source,
                     'candidates' => $candidates,
                     'rejected' => $rejected,
+                    'attempts' => $attempts,
+                    'retries' => $retries,
                     'ms' => (int) round((microtime(true) - $started) * 1000),
                 ],
             ])->save();
@@ -426,7 +666,7 @@ class ChannelMessageImageMatchService
         }
 
         if ($cached === null) {
-            $persist(self::STATUS_FAILED);
+            $this->markFailed($message, 'download_failed');
 
             return;
         }
@@ -456,8 +696,8 @@ class ChannelMessageImageMatchService
         try {
             $ranked = $this->rankedCandidates($cached['bytes'], $stamp);
         } catch (Throwable $e) {
-            Log::debug('Inbox inbound image match failed.', ['message_id' => $message->id, 'error' => $e->getMessage()]);
-            $persist(self::STATUS_NONE);
+            Log::warning('Inbox inbound image match failed.', ['message_id' => $message->id, 'error' => $e->getMessage()]);
+            $this->markFailed($message, 'server_error', $e->getMessage());
 
             return;
         }

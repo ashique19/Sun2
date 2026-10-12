@@ -71,12 +71,23 @@ return [
         'prewarm_on_receive' => filter_var(env('CHANNEL_IMAGE_MATCH_PREWARM', true), FILTER_VALIDATE_BOOL),
         'prewarm_max_per_request' => (int) env('CHANNEL_IMAGE_MATCH_PREWARM_MAX', 6),
 
-        // Parallel match requests the inbox fires while a thread is open.
+        // Parallel match requests the inbox fires while a thread is open, the browser's
+        // hard timeout per request, and how many times it retries a failed request.
         'client_concurrency' => (int) env('CHANNEL_IMAGE_MATCH_CONCURRENCY', 3),
+        'client_timeout_ms' => (int) env('CHANNEL_IMAGE_MATCH_CLIENT_TIMEOUT_MS', 30000),
+        'client_retries' => (int) env('CHANNEL_IMAGE_MATCH_CLIENT_RETRIES', 2),
 
-        // Time a match request may spend signing catalog images that predate visual
-        // matching (until products:index-image-hashes has run). 0 disables it.
-        'lazy_index_budget_ms' => (int) env('CHANNEL_IMAGE_MATCH_LAZY_INDEX_MS', 4000),
+        // A photo still "Matching product…" this long after its attempt started (or after
+        // it was first shown, if the browser never sent the request) shows an error instead.
+        'stall_seconds' => (int) env('CHANNEL_IMAGE_MATCH_STALL_SECONDS', 120),
+
+        // How long a match request waits for another request (or the webhook prewarm) that is
+        // already matching the same photo before answering "busy" (the browser then retries).
+        'lock_wait_seconds' => (int) env('CHANNEL_IMAGE_MATCH_LOCK_WAIT_SECONDS', 10),
+
+        // Time a match request may spend signing catalog images that have no visual
+        // signature yet. Admin → Image Hashes builds them all in batches; 0 disables it.
+        'lazy_index_budget_ms' => (int) env('CHANNEL_IMAGE_MATCH_LAZY_INDEX_MS', 1500),
     ],
 
     /*

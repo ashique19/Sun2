@@ -1,7 +1,7 @@
 <div>
     @if ($activeRunId || $active)
         <div
-            wire:poll.1s="tickRebuild"
+            wire:poll.{{ max(3, $tickBudgetSeconds + 2) }}s="tickRebuild"
             wire:poll.keep-alive
             class="pointer-events-none fixed bottom-0 left-0 z-0 h-px w-px opacity-0"
             aria-hidden="true"
@@ -55,6 +55,50 @@
             PHP GD extension is required to hash images. Enable <code class="font-mono text-xs">extension=gd</code> on the server.
         </div>
     @endunless
+
+    @php
+        $matchPercent = $matchHealth['total'] > 0 ? (int) floor(($matchHealth['signed'] / $matchHealth['total']) * 100) : 100;
+    @endphp
+    <div class="mb-6 rounded-xl border {{ $matchHealth['missing'] > 0 ? 'border-amber-200 bg-amber-50' : 'border-[#EFE7D6] bg-white' }} p-5" wire:key="inbox-photo-index">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-xs uppercase tracking-wide text-[#8C8474]">Inbox photo matching index</p>
+                <p class="mt-2 text-2xl font-semibold tabular-nums">
+                    {{ number_format($matchHealth['signed']) }}
+                    <span class="text-base font-normal text-[#8C8474]">/ {{ number_format($matchHealth['total']) }} catalog photos ({{ $matchPercent }}%)</span>
+                </p>
+                @if ($matchHealth['missing'] > 0)
+                    <p class="mt-2 text-sm text-amber-900">
+                        {{ number_format($matchHealth['missing']) }} photo(s) not indexed yet: customer screenshots in the inbox match slower and can miss these products.
+                        Build the index here — it runs in small batches from this browser tab (about {{ $tickBudgetSeconds }}s each, within the server’s PHP time limit), needs no server access, queue worker or cron, and resumes where it stopped if you close the tab.
+                    </p>
+                @else
+                    <p class="mt-2 text-sm text-emerald-700">All readable catalog photos are indexed for inbox matching.</p>
+                @endif
+                @if ($matchHealth['unreadable'] > 0)
+                    <p class="mt-1 text-xs text-[#8C8474]">{{ number_format($matchHealth['unreadable']) }} photo(s) couldn’t be read and are skipped (missing file or unreachable URL).</p>
+                @endif
+            </div>
+            @if ($matchHealth['missing'] > 0)
+                <button
+                    type="button"
+                    wire:click="buildMatchIndex"
+                    wire:loading.attr="disabled"
+                    @disabled($active || ! $gdAvailable)
+                    class="shrink-0 rounded-full bg-[#1E1E1E] px-5 py-2 text-sm font-semibold text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    {{ $active ? 'Building… keep this tab open' : 'Build photo index' }}
+                </button>
+            @endif
+        </div>
+    </div>
+
+    @if (! $matchHealth['cache_writable'] || $matchHealth['index_write_failed'])
+        <div class="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            The server can’t write to <code class="font-mono text-xs">storage/framework/cache</code>, so the photo index is rebuilt on every inbox match (slow).
+            Make that folder writable (755 or 775) in your hosting file manager.
+        </div>
+    @endif
 
     @if ($coverage['needs_screenshot_backfill'] > 0)
         <div class="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">

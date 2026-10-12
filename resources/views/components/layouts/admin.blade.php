@@ -6,10 +6,13 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ?? 'Admin - Sundoritoma' }}</title>
     <meta name="robots" content="noindex, nofollow">
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    {{-- Loaded on every admin page: after wire:navigate into the inbox, head scripts added for the new page run too late for the first render. --}}
+    <meta name="inbox-image-match-concurrency" content="{{ (int) config('channels.image_match.client_concurrency', 3) }}">
+    <meta name="inbox-image-match-timeout-ms" content="{{ (int) config('channels.image_match.client_timeout_ms', 30000) }}">
+    <meta name="inbox-image-match-retries" content="{{ (int) config('channels.image_match.client_retries', 2) }}">
+    @vite(['resources/css/app.css', 'resources/js/app.js', 'resources/js/inbox-image-match.js'])
     @if (request()->routeIs('admin.inbox'))
-        <meta name="inbox-image-match-concurrency" content="{{ (int) config('channels.image_match.client_concurrency', 3) }}">
-        @vite(['resources/js/inbox-product-crop.js', 'resources/js/inbox-image-edit.js', 'resources/js/inbox-image-match.js'])
+        @vite(['resources/js/inbox-product-crop.js', 'resources/js/inbox-image-edit.js'])
     @endif
     @livewireStyles
 </head>

@@ -3,13 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Services\Admin\ProductImageHashRebuildService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class ProductImageHashRebuildController extends Controller
 {
-    public function __invoke(Request $request, ProductImageHashRebuildService $hashes): Response
+    public function __invoke(Request $request, ProductImageHashRebuildService $hashes): JsonResponse
     {
         $token = (string) config('products.image_hash_rebuild_token');
 
@@ -19,16 +19,15 @@ class ProductImageHashRebuildController extends Controller
 
         $force = $request->boolean('force');
 
-        if ($active = $hashes->activeRun()) {
-            $run = $hashes->runToCompletion($active);
-        } else {
-            $run = $hashes->runToCompletion(
-                $hashes->start('http', force: $force),
-            );
-        }
+        // Work in batches within this request's PHP time limit; the next call resumes the run.
+        $limit = (int) ini_get('max_execution_time');
+        $seconds = $limit > 0 ? max(2.0, $limit * 0.6 - ProductImageHashRebuildService::tickBudgetSeconds()) : 50.0;
+
+        $run = $hashes->runFor($hashes->activeRun() ?? $hashes->start('http', force: $force), $seconds);
 
         return response()->json([
             'ok' => $run->status === 'completed',
+            'done' => ! $run->isActive(),
             'status' => $run->status,
             'message' => $run->message,
             'force' => (bool) $run->force,
@@ -37,6 +36,6 @@ class ProductImageHashRebuildController extends Controller
             'progress_percent' => $run->progressPercent(),
             'error' => $run->error,
             'coverage' => $hashes->coverage(),
-        ], $run->status === 'completed' ? 200 : 500);
+        ], $run->status === 'failed' ? 500 : 200);
     }
 }

@@ -20,6 +20,7 @@ use App\Support\AdminAccess;
 use App\Support\Fileinfo;
 use App\Support\StorefrontAssets;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -204,6 +205,21 @@ class AdminInbox extends Component
      * }>
      */
     public array $inboundImageMatchState = [];
+
+    /**
+     * Admin-facing problems that make photo matching slow or fail (index incomplete,
+     * cache folder not writable), shown above the thread.
+     *
+     * @var list<array{message: string, action_url?: string, action_label?: string}>
+     */
+    public array $imageMatchNotices = [];
+
+    /**
+     * When this page first showed each photo attempt ("{messageId}:{attemptKey}") as pending.
+     *
+     * @var array<string, int>
+     */
+    public array $imageMatchPendingSince = [];
 
     /** When false, the open thread only shows recent messages (see thread_lookback_hours). */
     public bool $threadHistoryExpanded = false;
@@ -699,6 +715,22 @@ class AdminInbox extends Component
         $this->syncInboundImageMatchState();
 
         $this->openTagProductOnImage($messageId, $mapper);
+    }
+
+    /**
+     * Staff "Retry" on a photo whose match failed or never finished.
+     */
+    public function retryInboundImageMatch(int $messageId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $message = $this->inboundImageMessage($messageId);
+        if (! $message) {
+            return;
+        }
+
+        app(ChannelMessageImageMatchService::class)->resetForRetry($message);
+        $this->syncInboundImageMatchState();
     }
 
     /**
@@ -1827,7 +1859,12 @@ class AdminInbox extends Component
      */
     private function queueInboundImageMatching(): void
     {
-        $this->syncInboundImageMatchState(resolvePending: app()->runningUnitTests());
+        // Tests resolve inline so they can assert chips without a browser. A test that
+        // needs the pending spinner (one request URL per photo) turns this off.
+        $resolveInline = app()->runningUnitTests()
+            && config('channels.image_match.resolve_inline_in_tests', true);
+
+        $this->syncInboundImageMatchState(resolvePending: $resolveInline);
     }
 
     private function syncInboundImageMatchState(bool $resolvePending = false): void
@@ -1851,29 +1888,62 @@ class AdminInbox extends Component
             ->filter(fn (ChannelMessage $message): bool => $message->isImageAttachment())
             ->values();
 
-        $stamp = $messages->contains(fn (ChannelMessage $message): bool => $message->image_match_checked_at !== null && ! $message->matched_product_id)
-            ? $matches->indexStamp()
-            : null;
+        $health = $messages->isNotEmpty() ? $matches->indexHealth() : null;
+        $this->imageMatchNotices = $this->imageMatchNoticesFor($health);
+
+        $stamp = null;
+        if ($messages->contains(fn (ChannelMessage $message): bool => $message->image_match_checked_at !== null && ! $message->matched_product_id)) {
+            try {
+                $stamp = $matches->indexStamp();
+            } catch (Throwable $e) {
+                Log::warning('Inbox image match index stamp failed.', ['error' => $e->getMessage()]);
+            }
+        }
+
+        // While catalog photos are still being signed the stamp changes constantly; re-checking
+        // stored results then would only churn. They are re-checked once the index is complete.
+        $refreshStale = $health !== null && $health['missing'] === 0;
+        $stallSeconds = max(15, (int) config('channels.image_match.stall_seconds', 120));
 
         $pending = [];
+        $stale = [];
+        $stalled = [];
+        $trackedPending = [];
         foreach ($messages as $index => $message) {
-            if (! $matches->needsMatching($message, $stamp)) {
+            $renderState = $matches->renderState($message, $stamp, $stallSeconds);
+
+            if ($renderState === ChannelMessageImageMatchService::STATE_DONE
+                || ($renderState === ChannelMessageImageMatchService::STATE_STALE && ! $refreshStale)) {
                 continue;
             }
 
-            if ($resolvePending) {
+            if ($resolvePending && $renderState !== ChannelMessageImageMatchService::STATE_STALLED) {
                 $messages[$index] = $matches->resolve($message);
+
+                continue;
+            }
+
+            if ($renderState === ChannelMessageImageMatchService::STATE_STALLED) {
+                $stalled[(int) $message->id] = 'stalled';
+            } elseif ($renderState === ChannelMessageImageMatchService::STATE_STALE) {
+                $stale[(int) $message->id] = true;
             } else {
-                $pending[(int) $message->id] = true;
+                $trackedPending[$message->id.':'.$matches->attemptKey($message)] = true;
+                if ($this->imageMatchNeverStarted($message, $matches->attemptKey($message), $stallSeconds)) {
+                    $stalled[(int) $message->id] = 'not_started';
+                } else {
+                    $pending[(int) $message->id] = true;
+                }
             }
         }
+        $this->imageMatchPendingSince = array_intersect_key($this->imageMatchPendingSince, $trackedPending);
 
         $productNames = Product::query()
             ->whereIn('id', $messages->pluck('matched_product_id')->filter()->unique())
             ->pluck('name', 'id');
 
         $suggestions = $matches->suggestionRows(
-            $messages->filter(fn (ChannelMessage $message): bool => ! $message->matched_product_id && ! isset($pending[(int) $message->id])),
+            $messages->filter(fn (ChannelMessage $message): bool => ! $message->matched_product_id && ! isset($pending[(int) $message->id]) && ! isset($stalled[(int) $message->id])),
             self::IMAGE_MATCH_SUGGESTIONS,
         );
 
@@ -1884,7 +1954,17 @@ class AdminInbox extends Component
             if (isset($pending[(int) $message->id])) {
                 $state[$key] = [
                     'status' => 'pending',
-                    'match_url' => route('admin.inbox.image-match', $message),
+                    'match_url' => route('admin.inbox.image-match', ['message' => $message, 'attempt' => $matches->attemptKey($message)]),
+                ];
+
+                continue;
+            }
+
+            if (isset($stalled[(int) $message->id])) {
+                $state[$key] = [
+                    'status' => 'done',
+                    'match_status' => ChannelMessageImageMatchService::STATUS_FAILED,
+                    'error' => ChannelMessageImageMatchService::failureMessage($stalled[(int) $message->id]),
                 ];
 
                 continue;
@@ -1894,6 +1974,14 @@ class AdminInbox extends Component
                 'status' => 'done',
                 'match_status' => is_array($message->image_match_meta) ? ($message->image_match_meta['status'] ?? null) : null,
             ];
+
+            if (isset($stale[(int) $message->id])) {
+                $row['refresh_url'] = route('admin.inbox.image-match', ['message' => $message, 'stamp' => substr(sha1((string) $stamp), 0, 10)]);
+            }
+
+            if (! $message->matched_product_id && ($failure = $matches->failure($message)) !== null) {
+                $row['error'] = $failure['message'];
+            }
 
             if ($message->matched_product_id) {
                 $row['product_id'] = (int) $message->matched_product_id;
@@ -1916,6 +2004,56 @@ class AdminInbox extends Component
         }
 
         $this->inboundImageMatchState = $state;
+    }
+
+    /**
+     * True when this inbox page has shown the photo as "pending" for longer than the stall
+     * window without its match request ever starting (e.g. the inbox script failed to load).
+     * Tracked per page, so another tab or a reload gets its own chance to match.
+     */
+    private function imageMatchNeverStarted(ChannelMessage $message, string $attemptKey, int $stallSeconds): bool
+    {
+        if (isset($message->image_match_meta['attempt_started_at'])) {
+            return false;
+        }
+
+        $key = $message->id.':'.$attemptKey;
+        $this->imageMatchPendingSince[$key] ??= now()->getTimestamp();
+
+        return now()->getTimestamp() - $this->imageMatchPendingSince[$key] >= $stallSeconds;
+    }
+
+    /**
+     * @param  array{total: int, signed: int, unreadable: int, missing: int, cache_writable: bool, index_write_failed: bool}|null  $health
+     * @return list<array{message: string, action_url?: string, action_label?: string}>
+     */
+    private function imageMatchNoticesFor(?array $health): array
+    {
+        if ($health === null) {
+            return [];
+        }
+
+        $notices = [];
+
+        if ($health['missing'] > 0) {
+            $notices[] = [
+                'message' => sprintf(
+                    'Photo matching index is incomplete: %s of %s catalog photos indexed, so matching is slower and can miss products.',
+                    number_format($health['signed']),
+                    number_format($health['total']),
+                ),
+                'action_url' => route('admin.image-hashes'),
+                'action_label' => 'Build photo index',
+            ];
+        }
+
+        if (! $health['cache_writable'] || $health['index_write_failed']) {
+            $notices[] = [
+                'message' => 'The server can’t write to storage/framework/cache, so the photo index is rebuilt on every match (slow). Make that folder writable (755 or 775) in your hosting file manager.',
+            ];
+        }
+
+        return $notices;
     }
 
     private function clearMappingImageMatchState(): void

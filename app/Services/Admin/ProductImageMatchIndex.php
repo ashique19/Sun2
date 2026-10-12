@@ -7,6 +7,7 @@ use App\Models\ProductImageMatchMemory;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -27,6 +28,8 @@ class ProductImageMatchIndex
     private const FORMAT = 2;
 
     private const UNREADABLE_CACHE_KEY = 'image-match-signature-unreadable';
+
+    private const WRITE_FAILED_CACHE_KEY = 'image-match-index-write-failed';
 
     public function __construct(
         private ProductImageSignatureService $signatures,
@@ -84,13 +87,12 @@ class ProductImageMatchIndex
      */
     public function backfillMissingSignatures(?int $budgetMs = null): int
     {
-        $budgetMs ??= (int) config('channels.image_match.lazy_index_budget_ms', 4000);
+        $budgetMs ??= (int) config('channels.image_match.lazy_index_budget_ms', 1500);
         if ($budgetMs <= 0) {
             return 0;
         }
 
-        /** @var list<int> $unreadable */
-        $unreadable = Cache::get(self::UNREADABLE_CACHE_KEY, []);
+        $unreadable = $this->unreadableIds();
         $pending = ProductImage::query()
             ->whereNull('match_signature')
             ->when($unreadable !== [], fn ($query) => $query->whereNotIn('id', $unreadable));
@@ -99,8 +101,14 @@ class ProductImageMatchIndex
             return 0;
         }
 
-        $lock = Cache::lock('image-match-signature-backfill', 120);
-        if (! $lock->get()) {
+        try {
+            $lock = Cache::lock('image-match-signature-backfill', 120);
+            if (! $lock->get()) {
+                return 0;
+            }
+        } catch (Throwable $e) {
+            Log::warning('Lazy match signature backfill skipped: cache lock unavailable.', ['error' => $e->getMessage()]);
+
             return 0;
         }
 
@@ -128,11 +136,73 @@ class ProductImageMatchIndex
                 }
             }
         } finally {
-            Cache::put(self::UNREADABLE_CACHE_KEY, array_values(array_unique($unreadable)), now()->addDay());
-            $lock->release();
+            try {
+                Cache::put(self::UNREADABLE_CACHE_KEY, array_values(array_unique($unreadable)), now()->addDay());
+                $lock->release();
+            } catch (Throwable) {
+            }
         }
 
         return $signed;
+    }
+
+    /**
+     * Skip a catalog image that could not be read or signed (for a day) in lazy backfill and
+     * the coverage counts, so one broken file does not keep the index "incomplete".
+     */
+    public function markUnreadable(int $productImageId): void
+    {
+        try {
+            Cache::put(
+                self::UNREADABLE_CACHE_KEY,
+                array_values(array_unique([...$this->unreadableIds(), $productImageId])),
+                now()->addDay(),
+            );
+        } catch (Throwable) {
+        }
+    }
+
+    /**
+     * What admins need to know when inbox matching is slow or failing.
+     *
+     * @return array{total: int, signed: int, unreadable: int, missing: int, cache_writable: bool, index_write_failed: bool}
+     */
+    public function health(): array
+    {
+        $total = ProductImage::query()->count();
+        $signed = ProductImage::query()->whereNotNull('match_signature')->count();
+        $unreadable = count($this->unreadableIds());
+
+        try {
+            $writeFailed = (bool) Cache::get(self::WRITE_FAILED_CACHE_KEY, false);
+        } catch (Throwable) {
+            $writeFailed = false;
+        }
+
+        $directory = dirname(self::path());
+
+        return [
+            'total' => $total,
+            'signed' => $signed,
+            'unreadable' => $unreadable,
+            'missing' => max(0, $total - $signed - $unreadable),
+            'cache_writable' => is_dir($directory) ? is_writable($directory) : is_writable(dirname($directory)),
+            'index_write_failed' => $writeFailed,
+        ];
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function unreadableIds(): array
+    {
+        try {
+            $ids = Cache::get(self::UNREADABLE_CACHE_KEY, []);
+        } catch (Throwable) {
+            return [];
+        }
+
+        return is_array($ids) ? array_values(array_map('intval', $ids)) : [];
     }
 
     /**
@@ -221,10 +291,16 @@ class ProductImageMatchIndex
         try {
             File::ensureDirectoryExists(dirname($path));
             $temporary = $path.'.'.getmypid().'.tmp';
-            File::put($temporary, serialize($compiled));
-            rename($temporary, $path);
+            if (File::put($temporary, serialize($compiled)) === false || ! rename($temporary, $path)) {
+                throw new RuntimeException('Could not write '.$path);
+            }
+            Cache::forget(self::WRITE_FAILED_CACHE_KEY);
         } catch (Throwable $e) {
             Log::warning('Image match index cache write failed.', ['error' => $e->getMessage()]);
+            try {
+                Cache::put(self::WRITE_FAILED_CACHE_KEY, true, now()->addHour());
+            } catch (Throwable) {
+            }
         }
     }
 

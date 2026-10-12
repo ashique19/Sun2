@@ -848,7 +848,7 @@
                                             <div class="mt-1.5 text-[10px] text-[#8C8474]"
                                                 wire:key="inbound-image-match-pending-{{ $messageRow->id }}-{{ md5($imageMatchState['match_url'] ?? '') }}"
                                                 data-inbox-image-match-url="{{ $imageMatchState['match_url'] ?? '' }}"
-                                                x-data="window.inboxImageMatchPending ? inboxImageMatchPending(@js($imageMatchState['match_url'] ?? null)) : { state: 'loading', error: '' }">
+                                                x-data="window.inboxImageMatchPending ? window.inboxImageMatchPending(@js($imageMatchState['match_url'] ?? null)) : { url: @js($imageMatchState['match_url'] ?? ''), state: 'loading', error: '' }">
                                                 <div class="flex items-center gap-1.5" x-show="state === 'loading'">
                                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3 animate-spin" aria-hidden="true">
                                                         <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.39a.75.75 0 0 0-.75.75v3.842a.75.75 0 0 0 1.5 0v-2.14l.311.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm-10.623-2.85a5.5 5.5 0 0 1 9.201-2.466l.312.311H11.77a.75.75 0 0 0 0 1.5h3.843a.75.75 0 0 0 .75-.75V3.328a.75.75 0 1 0-1.5 0V5.47l-.311-.311A7 7 0 0 0 3.04 8.295a.75.75 0 1 0 1.45.39Z" clip-rule="evenodd" />
@@ -1002,7 +1002,7 @@
                                         @if (! empty($imageMatchState['refresh_url']))
                                             <span class="hidden"
                                                 wire:key="inbound-image-match-refresh-{{ $messageRow->id }}-{{ md5($imageMatchState['refresh_url']) }}"
-                                                x-data="window.inboxImageMatchRefresh ? inboxImageMatchRefresh(@js($imageMatchState['refresh_url'])) : {}"></span>
+                                                x-data="window.inboxImageMatchRefresh ? window.inboxImageMatchRefresh(@js($imageMatchState['refresh_url'])) : {}"></span>
                                         @endif
                                     @endif
                                 @elseif ($messageRow->hasMedia())

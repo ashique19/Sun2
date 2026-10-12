@@ -1,7 +1,7 @@
 <div>
     @if ($activeRunId || $active)
         <div
-            wire:poll.1s="tickRebuild"
+            wire:poll.{{ max(3, $tickBudgetSeconds + 2) }}s="tickRebuild"
             wire:poll.keep-alive
             class="pointer-events-none fixed bottom-0 left-0 z-0 h-px w-px opacity-0"
             aria-hidden="true"

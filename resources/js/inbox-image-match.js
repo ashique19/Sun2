@@ -7,10 +7,18 @@
 
 const queue = [];
 const jobs = new Map();
+// Per element, not on the Alpine object. Nested x-data writes unknown properties
+// through Alpine's scope proxy onto the outermost component, so a flag stored on
+// `data` made every photo after the first look already started and never match.
+const started = new WeakSet();
 let active = 0;
 let refreshTimer = null;
 
 const meta = (name, fallback) => {
+    if (typeof document === 'undefined') {
+        return fallback;
+    }
+
     const value = Number(document.querySelector(`meta[name="${name}"]`)?.content);
 
     return Number.isFinite(value) && value > 0 ? value : fallback;
@@ -20,7 +28,9 @@ const concurrency = () => Math.max(1, meta('inbox-image-match-concurrency', 3));
 const timeoutMs = () => meta('inbox-image-match-timeout-ms', 30000);
 const retries = () => Math.max(0, Math.round(meta('inbox-image-match-retries', 2)));
 
-const csrfToken = () => document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+const csrfToken = () => (typeof document === 'undefined'
+    ? ''
+    : document.querySelector('meta[name="csrf-token"]')?.content ?? '');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -137,10 +147,11 @@ const match = (url) => {
 const watchdogMs = () => (timeoutMs() + 2000) * (retries() + 1) + 15000;
 
 const start = (data, el) => {
-    if (! data || data.__inboxMatchStarted || ! data.url) {
+    const url = el?.dataset?.inboxImageMatchUrl || data?.url || '';
+    if (! data || ! el || started.has(el) || url === '') {
         return;
     }
-    data.__inboxMatchStarted = true;
+    started.add(el);
 
     const fail = (message) => {
         data.state = 'error';
@@ -149,8 +160,9 @@ const start = (data, el) => {
 
     // The server replaces this element once the result is saved; if it never does, say so.
     const watchdog = setTimeout(() => fail('Matching is taking too long. Retry, or search the product.'), watchdogMs());
+    watchdog.unref?.();
 
-    match(data.url).then((result) => {
+    match(url).then((result) => {
         if (! el.isConnected) {
             clearTimeout(watchdog);
 
@@ -166,7 +178,7 @@ const start = (data, el) => {
     });
 };
 
-window.inboxImageMatchPending = (url) => ({
+globalThis.inboxImageMatchPending = (url) => ({
     url,
     state: 'loading',
     error: '',
@@ -176,7 +188,7 @@ window.inboxImageMatchPending = (url) => ({
     },
 });
 
-window.inboxImageMatchRefresh = (url) => ({
+globalThis.inboxImageMatchRefresh = (url) => ({
     init() {
         const el = this.$el;
         match(url).then(() => {
@@ -196,16 +208,19 @@ const adoptRendered = () => {
 
     document.querySelectorAll('[data-inbox-image-match-url]').forEach((el) => {
         const data = el._x_dataStack ? window.Alpine.$data(el) : null;
-        if (data && ! data.__inboxMatchStarted) {
-            data.url = el.dataset.inboxImageMatchUrl;
+        if (data) {
             start(data, el);
         }
     });
 };
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(adoptRendered, 0));
-} else {
-    setTimeout(adoptRendered, 0);
+if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => setTimeout(adoptRendered, 0));
+    } else {
+        setTimeout(adoptRendered, 0);
+    }
+    document.addEventListener('livewire:navigated', () => setTimeout(adoptRendered, 0));
 }
-document.addEventListener('livewire:navigated', () => setTimeout(adoptRendered, 0));
+
+export { start };

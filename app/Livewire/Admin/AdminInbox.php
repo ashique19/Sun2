@@ -1859,7 +1859,12 @@ class AdminInbox extends Component
      */
     private function queueInboundImageMatching(): void
     {
-        $this->syncInboundImageMatchState(resolvePending: app()->runningUnitTests());
+        // Tests resolve inline so they can assert chips without a browser. A test that
+        // needs the pending spinner (one request URL per photo) turns this off.
+        $resolveInline = app()->runningUnitTests()
+            && config('channels.image_match.resolve_inline_in_tests', true);
+
+        $this->syncInboundImageMatchState(resolvePending: $resolveInline);
     }
 
     private function syncInboundImageMatchState(bool $resolvePending = false): void

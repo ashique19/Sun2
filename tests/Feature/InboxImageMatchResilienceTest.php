@@ -312,6 +312,26 @@ class InboxImageMatchResilienceTest extends TestCase
     }
 
     #[Test]
+    public function every_pending_photo_in_the_thread_gets_its_own_match_request(): void
+    {
+        config(['channels.image_match.resolve_inline_in_tests' => false]);
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+        $first = $this->photoMessage($conversation, 'https://cdn.example.test/one.jpg');
+        $second = $this->photoMessage($conversation, 'https://cdn.example.test/two.jpg');
+
+        $html = Livewire::test(AdminInbox::class)
+            ->set('selectedConversationId', $conversation->id)
+            ->assertSee('Matching product…')
+            ->html();
+
+        $this->assertStringContainsString('window.inboxImageMatchPending(', $html);
+        $this->assertStringContainsString('data-inbox-image-match-url="'.e(route('admin.inbox.image-match', ['message' => $first, 'attempt' => '0.0'])).'"', $html);
+        $this->assertStringContainsString('data-inbox-image-match-url="'.e(route('admin.inbox.image-match', ['message' => $second, 'attempt' => '0.0'])).'"', $html);
+        $this->assertSame(2, substr_count($html, 'data-inbox-image-match-url='));
+    }
+
+    #[Test]
     public function the_match_script_is_loaded_on_every_admin_page_for_wire_navigate(): void
     {
         $this->actingAs($this->adminUser());

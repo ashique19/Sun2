@@ -20,7 +20,6 @@ use App\Support\AdminAccess;
 use App\Support\Fileinfo;
 use App\Support\StorefrontAssets;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Livewire\Attributes\Layout;
@@ -214,6 +213,13 @@ class AdminInbox extends Component
      * @var list<array{message: string, action_url?: string, action_label?: string}>
      */
     public array $imageMatchNotices = [];
+
+    /**
+     * When this page first showed each photo attempt ("{messageId}:{attemptKey}") as pending.
+     *
+     * @var array<string, int>
+     */
+    public array $imageMatchPendingSince = [];
 
     /** When false, the open thread only shows recent messages (see thread_lookback_hours). */
     public bool $threadHistoryExpanded = false;
@@ -723,9 +729,7 @@ class AdminInbox extends Component
             return;
         }
 
-        $matches = app(ChannelMessageImageMatchService::class);
-        $matches->resetForRetry($message);
-        $this->forgetImageMatchFirstSeen($message, $matches->attemptKey($message->refresh()));
+        app(ChannelMessageImageMatchService::class)->resetForRetry($message);
         $this->syncInboundImageMatchState();
     }
 
@@ -1899,6 +1903,7 @@ class AdminInbox extends Component
         $pending = [];
         $stale = [];
         $stalled = [];
+        $trackedPending = [];
         foreach ($messages as $index => $message) {
             $renderState = $matches->renderState($message, $stamp, $stallSeconds);
 
@@ -1917,12 +1922,16 @@ class AdminInbox extends Component
                 $stalled[(int) $message->id] = 'stalled';
             } elseif ($renderState === ChannelMessageImageMatchService::STATE_STALE) {
                 $stale[(int) $message->id] = true;
-            } elseif ($this->imageMatchNeverStarted($message, $matches->attemptKey($message), $stallSeconds)) {
-                $stalled[(int) $message->id] = 'not_started';
             } else {
-                $pending[(int) $message->id] = true;
+                $trackedPending[$message->id.':'.$matches->attemptKey($message)] = true;
+                if ($this->imageMatchNeverStarted($message, $matches->attemptKey($message), $stallSeconds)) {
+                    $stalled[(int) $message->id] = 'not_started';
+                } else {
+                    $pending[(int) $message->id] = true;
+                }
             }
         }
+        $this->imageMatchPendingSince = array_intersect_key($this->imageMatchPendingSince, $trackedPending);
 
         $productNames = Product::query()
             ->whereIn('id', $messages->pluck('matched_product_id')->filter()->unique())
@@ -1993,8 +2002,9 @@ class AdminInbox extends Component
     }
 
     /**
-     * True when a photo has been shown as "pending" for longer than the stall window without
-     * the browser ever starting its match request (e.g. the inbox script failed to load).
+     * True when this inbox page has shown the photo as "pending" for longer than the stall
+     * window without its match request ever starting (e.g. the inbox script failed to load).
+     * Tracked per page, so another tab or a reload gets its own chance to match.
      */
     private function imageMatchNeverStarted(ChannelMessage $message, string $attemptKey, int $stallSeconds): bool
     {
@@ -2002,27 +2012,10 @@ class AdminInbox extends Component
             return false;
         }
 
-        try {
-            $key = $this->imageMatchFirstSeenKey($message, $attemptKey);
-            Cache::add($key, now()->getTimestamp(), now()->addHour());
+        $key = $message->id.':'.$attemptKey;
+        $this->imageMatchPendingSince[$key] ??= now()->getTimestamp();
 
-            return now()->getTimestamp() - (int) Cache::get($key, now()->getTimestamp()) >= $stallSeconds;
-        } catch (Throwable) {
-            return false;
-        }
-    }
-
-    private function forgetImageMatchFirstSeen(ChannelMessage $message, string $attemptKey): void
-    {
-        try {
-            Cache::forget($this->imageMatchFirstSeenKey($message, $attemptKey));
-        } catch (Throwable) {
-        }
-    }
-
-    private function imageMatchFirstSeenKey(ChannelMessage $message, string $attemptKey): string
-    {
-        return 'inbox-image-match-first-seen:'.$message->id.':'.$attemptKey;
+        return now()->getTimestamp() - $this->imageMatchPendingSince[$key] >= $stallSeconds;
     }
 
     /**

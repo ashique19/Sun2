@@ -230,13 +230,18 @@ class InboxImageMatchResilienceTest extends TestCase
         Http::fake();
 
         $component = Livewire::test(AdminInbox::class)->set('selectedConversationId', $conversation->id);
-        $message->forceFill(['image_match_checked_at' => null, 'image_match_meta' => null])->save();
+        ChannelMessage::query()->whereKey($message->id)->update(['image_match_checked_at' => null, 'image_match_meta' => null]);
 
         $component->call('refreshInboundImageMatches');
         $this->assertSame('pending', $this->stateFor($component, $message)['status']);
 
         $this->travel(61)->seconds();
         $component->call('refreshInboundImageMatches')->assertSee('Matching never started in this browser');
+
+        $otherTab = Livewire::test(AdminInbox::class)->set('selectedConversationId', $conversation->id);
+        ChannelMessage::query()->whereKey($message->id)->update(['image_match_checked_at' => null, 'image_match_meta' => null]);
+        $otherTab->call('refreshInboundImageMatches');
+        $this->assertSame('pending', $this->stateFor($otherTab, $message)['status'], 'A new page gets its own chance to match.');
     }
 
     #[Test]

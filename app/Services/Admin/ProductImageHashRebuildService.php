@@ -6,6 +6,8 @@ use App\Models\ImageHashRun;
 use App\Models\ProductImage;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class ProductImageHashRebuildService
@@ -152,10 +154,51 @@ class ProductImageHashRebuildService
     }
 
     /**
-     * Process one chunk. Returns true when finished.
+     * Process one chunk (one HTTP tick from the admin page or cron URL). Returns true when finished.
+     *
+     * Safe under shared-hosting PHP limits: the tick stops before its time budget (derived
+     * from max_execution_time), and the image being hashed is recorded first, so if a tick
+     * is killed mid-image the next tick skips that image instead of dying on it again.
      */
     public function processChunk(ImageHashRun $run): bool
     {
+        if (in_array($run->status, ['completed', 'failed'], true)) {
+            return true;
+        }
+
+        $lock = null;
+        try {
+            $lock = Cache::lock('image-hash-rebuild-tick', self::tickBudgetSeconds() + 60);
+            if (! $lock->get()) {
+                return false;
+            }
+        } catch (Throwable) {
+            $lock = null;
+        }
+
+        try {
+            return $this->processChunkLocked($run);
+        } finally {
+            try {
+                $lock?->release();
+            } catch (Throwable) {
+            }
+        }
+    }
+
+    /**
+     * Seconds one tick may spend hashing: well inside max_execution_time (min 2s, max 8s).
+     */
+    public static function tickBudgetSeconds(): int
+    {
+        $limit = (int) ini_get('max_execution_time');
+
+        return $limit > 0 ? max(2, min(8, (int) floor($limit * 0.3))) : 8;
+    }
+
+    private function processChunkLocked(ImageHashRun $run): bool
+    {
+        $run->refresh();
         if (in_array($run->status, ['completed', 'failed'], true)) {
             return true;
         }
@@ -171,6 +214,7 @@ class ProductImageHashRebuildService
                         'finished_at' => now(),
                         'progress_current' => 0,
                     ]);
+                    $this->afterRebuild();
 
                     return true;
                 }
@@ -185,7 +229,22 @@ class ProductImageHashRebuildService
 
             $chunkSize = (int) ($run->meta['chunk_size'] ?? config('products.image_hash_chunk_size', 5));
             $cursor = (int) $run->image_cursor;
-            $chunkDeadline = microtime(true) + 8;
+            $chunkDeadline = microtime(true) + self::tickBudgetSeconds();
+
+            $ok = (int) $run->hashed_ok;
+            $failed = (int) $run->failed;
+            $processed = (int) $run->progress_current;
+            $meta = is_array($run->meta) ? $run->meta : [];
+
+            // The previous tick was killed while hashing this image: count it as failed and move on.
+            $crashedId = (int) ($meta['in_flight_id'] ?? 0);
+            if ($crashedId > $cursor) {
+                $cursor = $crashedId;
+                $processed++;
+                $failed++;
+                $this->matchIndex()->markUnreadable($crashedId);
+            }
+            unset($meta['in_flight_id']);
 
             if (! $run->force) {
                 $query = $this->incompleteIndexQuery()->where('id', '>', $cursor);
@@ -199,34 +258,36 @@ class ProductImageHashRebuildService
                 $stillIncomplete = ! $run->force && $this->incompleteIndexQuery()->exists();
 
                 $run->update([
-                    'status' => $stillIncomplete ? 'failed' : 'completed',
-                    'phase' => $stillIncomplete ? 'failed' : 'done',
-                    'message' => $stillIncomplete
-                        ? 'Rebuild stopped before all images were processed'
-                        : sprintf(
-                            'Done — hashed %s, failed %s',
-                            number_format($run->hashed_ok),
-                            number_format($run->failed),
-                        ),
-                    'error' => $stillIncomplete
-                        ? 'Some images were not reached during this run. Try again, use “Re-hash all images”, or run php artisan products:index-image-hashes on the server.'
+                    'status' => 'completed',
+                    'phase' => 'done',
+                    'message' => sprintf(
+                        'Done — hashed %s, failed %s',
+                        number_format($ok),
+                        number_format($failed),
+                    ),
+                    'error' => $stillIncomplete && $failed > 0
+                        ? sprintf('%s image(s) could not be read (missing file or unreachable URL) and were skipped.', number_format($failed))
                         : null,
+                    'image_cursor' => $cursor,
+                    'hashed_ok' => $ok,
+                    'failed' => $failed,
+                    'meta' => $meta,
                     'progress_current' => (int) $run->progress_total,
                     'finished_at' => now(),
                 ]);
+                $this->afterRebuild();
 
                 return true;
             }
 
-            $ok = (int) $run->hashed_ok;
-            $failed = (int) $run->failed;
-            $processed = (int) $run->progress_current;
             $lastId = $cursor;
 
             foreach ($images as $image) {
                 if (microtime(true) >= $chunkDeadline) {
                     break;
                 }
+
+                $run->forceFill(['meta' => [...$meta, 'in_flight_id' => (int) $image->id]])->save();
 
                 $lastId = (int) $image->id;
                 $processed++;
@@ -236,15 +297,19 @@ class ProductImageHashRebuildService
                         continue;
                     }
 
-                    $hash = $this->hasher->storeHash($image, allowRemoteDownload: true);
+                    $stored = ! $run->force && $this->onlyMissingSignature($image)
+                        ? $this->hasher->storeMatchSignature($image, allowRemoteDownload: true)
+                        : $this->hasher->storeHash($image, allowRemoteDownload: true) !== null;
 
-                    if ($hash) {
+                    if ($stored) {
                         $ok++;
                     } else {
                         $failed++;
+                        $this->matchIndex()->markUnreadable((int) $image->id);
                     }
                 } catch (Throwable) {
                     $failed++;
+                    $this->matchIndex()->markUnreadable((int) $image->id);
                 }
             }
 
@@ -253,6 +318,7 @@ class ProductImageHashRebuildService
                 'progress_current' => min($processed, (int) $run->progress_total),
                 'hashed_ok' => $ok,
                 'failed' => $failed,
+                'meta' => $meta,
                 'message' => sprintf(
                     'Hashing… %s / %s (ok %s, failed %s)',
                     number_format(min($processed, (int) $run->progress_total)),
@@ -262,31 +328,26 @@ class ProductImageHashRebuildService
                 ),
             ]);
 
-            $attemptedAll = min($processed, (int) $run->progress_total) >= (int) $run->progress_total;
-
             $hasMoreByCursor = $run->force
                 ? ProductImage::query()->where('id', '>', $lastId)->exists()
                 : $this->incompleteIndexQuery()->where('id', '>', $lastId)->exists();
 
-            if ($attemptedAll || ! $hasMoreByCursor) {
-                $stillIncomplete = ! $run->force && $this->incompleteIndexQuery()->exists();
-
+            if (! $hasMoreByCursor) {
                 $run->update([
-                    'status' => ($stillIncomplete && ! $attemptedAll) ? 'failed' : 'completed',
-                    'phase' => ($stillIncomplete && ! $attemptedAll) ? 'failed' : 'done',
-                    'message' => ($stillIncomplete && ! $attemptedAll)
-                        ? 'Rebuild stopped before all images were processed'
-                        : sprintf(
-                            'Done — hashed %s, failed %s',
-                            number_format($ok),
-                            number_format($failed),
-                        ),
-                    'error' => ($stillIncomplete && ! $attemptedAll)
-                        ? 'Some images were not reached during this run. Try again, use “Re-hash all images”, or run php artisan products:index-image-hashes on the server.'
+                    'status' => 'completed',
+                    'phase' => 'done',
+                    'message' => sprintf(
+                        'Done — hashed %s, failed %s',
+                        number_format($ok),
+                        number_format($failed),
+                    ),
+                    'error' => $failed > 0
+                        ? sprintf('%s image(s) could not be read (missing file or unreachable URL) and were skipped.', number_format($failed))
                         : null,
                     'progress_current' => (int) $run->progress_total,
                     'finished_at' => now(),
                 ]);
+                $this->afterRebuild();
 
                 return true;
             }
@@ -305,6 +366,22 @@ class ProductImageHashRebuildService
         }
     }
 
+    /**
+     * Run ticks for up to $seconds (cron URL), leaving the rest for the next call.
+     */
+    public function runFor(ImageHashRun $run, float $seconds): ImageHashRun
+    {
+        $deadline = microtime(true) + $seconds;
+
+        do {
+            if ($this->processChunk($run->fresh())) {
+                break;
+            }
+        } while (microtime(true) + self::tickBudgetSeconds() < $deadline);
+
+        return $run->fresh();
+    }
+
     public function runToCompletion(ImageHashRun $run, int $maxChunks = 100_000): ImageHashRun
     {
         $chunks = 0;
@@ -318,5 +395,35 @@ class ProductImageHashRebuildService
         }
 
         return $run->fresh();
+    }
+
+    private function onlyMissingSignature(ProductImage $image): bool
+    {
+        return is_string($image->perceptual_hash)
+            && $image->perceptual_hash !== ''
+            && is_array($image->perceptual_hashes)
+            && $image->perceptual_hashes !== []
+            && is_string($image->dct_hash)
+            && $image->dct_hash !== ''
+            && is_array($image->embedding_vector)
+            && count($image->embedding_vector) === ProductImageEmbeddingService::DIMENSIONS;
+    }
+
+    /**
+     * Compile the inbox match index now so the first inbox match after a rebuild is fast.
+     */
+    private function afterRebuild(): void
+    {
+        try {
+            Cache::forget('image-match-index-health');
+            $this->matchIndex()->entries();
+        } catch (Throwable $e) {
+            Log::warning('Image match index warm-up after rebuild failed.', ['error' => $e->getMessage()]);
+        }
+    }
+
+    private function matchIndex(): ProductImageMatchIndex
+    {
+        return app(ProductImageMatchIndex::class);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Livewire\Admin;
 
 use App\Models\ImageHashRun;
 use App\Services\Admin\ProductImageHashRebuildService;
+use App\Services\Admin\ProductImageMatchIndex;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -86,6 +87,15 @@ class AdminProductImageHashes extends Component
         $this->tickRebuild($hashes);
     }
 
+    /**
+     * One-click backfill of whatever is missing (no re-hash), driven by this page's poll.
+     */
+    public function buildMatchIndex(ProductImageHashRebuildService $hashes): void
+    {
+        $this->forceRehash = false;
+        $this->confirmRebuild($hashes);
+    }
+
     public function startRebuild(ProductImageHashRebuildService $hashes): void
     {
         $this->openRebuildModal($hashes);
@@ -134,7 +144,7 @@ class AdminProductImageHashes extends Component
 
             if ($remaining > 0 && ! $run->force) {
                 $this->errorMessage = sprintf(
-                    '%s image(s) still need backfill after this run. Try “Re-hash all images” or use the cron rebuild URL.',
+                    '%s image(s) could not be read (missing file or unreachable URL) and were skipped. Inbox matching works without them; re-upload those product photos to include them.',
                     number_format($remaining),
                 );
                 $this->statusMessage = null;
@@ -165,6 +175,8 @@ class AdminProductImageHashes extends Component
 
         return view('livewire.admin.admin-product-image-hashes', [
             'coverage' => $hashes->coverage(),
+            'matchHealth' => app(ProductImageMatchIndex::class)->health(),
+            'tickBudgetSeconds' => ProductImageHashRebuildService::tickBudgetSeconds(),
             'latest' => $latest,
             'active' => $active,
             'recentRuns' => ImageHashRun::query()

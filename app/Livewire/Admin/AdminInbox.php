@@ -321,8 +321,9 @@ class AdminInbox extends Component
     public function closeMobileThread(): void
     {
         // Always return to the conversation list. Do not use history.back() —
-        // the stack may hold a previous page outside Inbox. Conversation switches
-        // use replaceState, so Android/browser Back from a thread hits the list snapshot.
+        // the stack may hold a previous page outside Inbox. Mobile swipe-back is
+        // handled in inbox-thread-history.js so it closes the thread instead of
+        // restoring a previous ?conversation= URL.
         $this->clearConversationFromUrl();
     }
 

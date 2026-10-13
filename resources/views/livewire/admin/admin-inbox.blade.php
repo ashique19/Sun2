@@ -32,37 +32,12 @@
             });
         }
 
-        // Conversation URL uses replaceState (not push) so switching threads does not
-        // stack prior conversations. List → thread pushes one list snapshot first.
-        // Sync Livewire when Android/browser Back/Forward changes the URL.
-        window.__inboxPrepareThreadHistory = (mobileThreadOpen) => {
-            if (mobileThreadOpen) {
-                return;
-            }
-
-            const url = new URL(window.location.href);
-            if (url.searchParams.has('conversation')) {
-                return;
-            }
-
-            history.pushState(Object.assign({}, history.state || {}, { inboxPane: 'list' }), '', url);
-        };
-
-        const syncConversationFromUrl = () => {
-            const raw = new URL(window.location.href).searchParams.get('conversation');
-            const fromUrl = raw !== null && raw !== '' ? Number(raw) : null;
-            const normalizedUrl = Number.isFinite(fromUrl) ? fromUrl : null;
-            const current = $wire.selectedConversationId;
-            const normalizedCurrent = current === null || current === undefined || current === ''
-                ? null
-                : Number(current);
-
-            if (normalizedCurrent !== normalizedUrl) {
-                $wire.set('selectedConversationId', normalizedUrl);
-            }
-        };
-
-        window.addEventListener('popstate', syncConversationFromUrl);
+        // Mobile swipe/browser Back from a thread must return to the conversation
+        // list. Do not $wire.set the popped ?conversation= (that reopened the
+        // previous thread) and park a history overlay so Back does not leave Inbox.
+        if (window.installInboxThreadHistory) {
+            window.installInboxThreadHistory($wire);
+        }
     </script>
     @endscript
 

@@ -164,6 +164,48 @@ class InboxImageMatchCorrectionsTest extends TestCase
     }
 
     #[Test]
+    public function suggestion_picker_renders_large_square_product_tiles(): void
+    {
+        config(['channels.image_match.resolve_inline_in_tests' => false]);
+
+        $gold = $this->catalogProduct('Twin Bangle Gold', $this->productPhotoBytes(85));
+        $rose = $this->catalogProduct('Twin Bangle Rose', $this->productPhotoBytes(86));
+        $conversation = $this->conversation('psid-tiles');
+        $message = $this->photoMessage($conversation, 'https://cdn.example.test/stored-tiles.jpg');
+        $message->forceFill([
+            'image_match_checked_at' => now(),
+            'image_match_meta' => [
+                'v' => ChannelMessageImageMatchService::META_VERSION,
+                'status' => ChannelMessageImageMatchService::STATUS_SUGGESTED,
+                'stamp' => app(ChannelMessageImageMatchService::class)->indexStamp(),
+                'candidates' => [
+                    ['product_id' => $gold->id, 'score' => 0.86, 'source' => 'catalog', 'source_id' => 1, 'region' => null],
+                    ['product_id' => $rose->id, 'score' => 0.81, 'source' => 'catalog', 'source_id' => 2, 'region' => null],
+                ],
+                'rejected' => [],
+            ],
+        ])->save();
+
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSee('Is it?')
+            ->assertSee('Twin Bangle Gold')
+            ->assertSee('Twin Bangle Rose')
+            ->assertSee('86%')
+            ->assertSee('81%')
+            ->assertSee('Other…')
+            ->assertSeeHtml('data-inbox-suggestion-picker')
+            ->assertSeeHtml('data-inbox-suggestion-tile')
+            ->assertSeeHtml('grid grid-cols-2')
+            ->assertSeeHtml('aspect-square')
+            ->assertSeeHtml('h-full w-full object-cover')
+            ->assertSeeHtml('line-clamp-2')
+            ->assertDontSeeHtml('h-5 w-5 shrink-0 rounded-full');
+    }
+
+    #[Test]
     public function only_candidates_above_the_suggest_score_are_offered(): void
     {
         $close = $this->catalogProduct('Close Candidate', $this->productPhotoBytes(95));

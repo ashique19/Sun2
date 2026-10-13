@@ -966,30 +966,41 @@
                                                 @endif
                                             </div>
                                         @elseif (($imageMatchState['suggestions'] ?? []) !== [])
-                                            <div class="mt-1.5 flex flex-wrap items-center gap-1.5"
+                                            <div class="mt-2"
+                                                data-inbox-suggestion-picker
                                                 wire:key="inbound-image-suggestions-{{ $messageRow->id }}">
-                                                <span class="text-[10px] font-semibold text-[#8C8474]">Is it?</span>
-                                                @foreach ($imageMatchState['suggestions'] as $suggestion)
+                                                <p class="text-[11px] font-semibold text-[#8C8474]">Is it?</p>
+                                                <div class="mt-1.5 grid grid-cols-2 gap-2">
+                                                    @foreach ($imageMatchState['suggestions'] as $suggestion)
+                                                        <button type="button"
+                                                            data-inbox-suggestion-tile
+                                                            wire:click.stop="tagSuggestedProduct({{ $messageRow->id }}, {{ $suggestion['product_id'] }})"
+                                                            wire:loading.attr="disabled"
+                                                            wire:target="tagSuggestedProduct({{ $messageRow->id }}, {{ $suggestion['product_id'] }})"
+                                                            wire:key="inbound-image-suggestion-{{ $messageRow->id }}-{{ $suggestion['product_id'] }}"
+                                                            title="Tag {{ $suggestion['name'] }} ({{ number_format($suggestion['match_percent'], 0) }}% visual match)"
+                                                            aria-label="Tag {{ $suggestion['name'] }} on this photo"
+                                                            class="flex min-w-0 flex-col overflow-hidden rounded-xl border border-[#E0D6C2] bg-white text-left shadow-sm hover:border-[#C9A227] hover:bg-[#FAF6EF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A227] disabled:opacity-60">
+                                                            <span class="relative aspect-square w-full overflow-hidden bg-[#FAF6EF]">
+                                                                @if (! empty($suggestion['image_url']))
+                                                                    <img src="{{ $suggestion['image_url'] }}" alt="" class="h-full w-full object-cover" loading="lazy">
+                                                                @else
+                                                                    <span class="flex h-full w-full items-center justify-center text-[10px] font-medium text-[#8C8474]">No img</span>
+                                                                @endif
+                                                                <span class="absolute right-1 top-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white">{{ number_format($suggestion['match_percent'], 0) }}%</span>
+                                                            </span>
+                                                            <span class="line-clamp-2 px-1.5 py-1.5 text-[11px] font-semibold leading-snug text-[#1E1E1E]">{{ $suggestion['name'] }}</span>
+                                                        </button>
+                                                    @endforeach
                                                     <button type="button"
-                                                        wire:click.stop="tagSuggestedProduct({{ $messageRow->id }}, {{ $suggestion['product_id'] }})"
-                                                        wire:loading.attr="disabled"
-                                                        wire:target="tagSuggestedProduct({{ $messageRow->id }}, {{ $suggestion['product_id'] }})"
-                                                        wire:key="inbound-image-suggestion-{{ $messageRow->id }}-{{ $suggestion['product_id'] }}"
-                                                        title="Tag {{ $suggestion['name'] }} ({{ number_format($suggestion['match_percent'], 0) }}% visual match)"
-                                                        aria-label="Tag {{ $suggestion['name'] }} on this photo"
-                                                        class="inline-flex max-w-[11rem] items-center gap-1 rounded-full border border-[#E0D6C2] bg-white py-0.5 pl-0.5 pr-2 text-[10px] font-semibold text-[#1E1E1E] hover:border-[#C9A227] hover:bg-[#FAF6EF] disabled:opacity-60">
-                                                        @if (! empty($suggestion['image_url']))
-                                                            <img src="{{ $suggestion['image_url'] }}" alt="" class="h-5 w-5 shrink-0 rounded-full object-cover bg-[#FAF6EF]" loading="lazy">
-                                                        @endif
-                                                        <span class="truncate">{{ $suggestion['name'] }}</span>
-                                                        <span class="shrink-0 tabular-nums text-[#8C8474]">{{ number_format($suggestion['match_percent'], 0) }}%</span>
+                                                        wire:click.stop="openTagProductOnImage({{ $messageRow->id }})"
+                                                        class="flex aspect-square min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-[#E0D6C2] bg-[#FAF6EF] px-2 text-[11px] font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E]">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-6 w-6" aria-hidden="true">
+                                                            <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/>
+                                                        </svg>
+                                                        Other…
                                                     </button>
-                                                @endforeach
-                                                <button type="button"
-                                                    wire:click.stop="openTagProductOnImage({{ $messageRow->id }})"
-                                                    class="text-[10px] font-semibold text-[#8C8474] hover:text-[#1E1E1E] hover:underline">
-                                                    Other…
-                                                </button>
+                                                </div>
                                             </div>
                                         @elseif (($imageMatchState['status'] ?? null) === 'done')
                                             <button type="button"

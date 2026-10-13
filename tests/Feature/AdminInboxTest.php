@@ -93,7 +93,9 @@ class AdminInboxTest extends TestCase
             ->call('selectConversation', $conversation->id)
             ->assertSet('mobileThreadOpen', true)
             ->assertSeeHtml('aria-label="Back to conversations"')
-            ->assertSeeHtml('fixed inset-0 z-30')
+            ->assertSeeHtml('data-inbox-mobile-thread-sheet')
+            ->assertSeeHtml('fixed z-30')
+            ->assertSeeHtml('inset-0 flex')
             ->assertSeeHtml('aria-label="Send"')
             ->call('closeMobileThread')
             ->assertSet('mobileThreadOpen', false)
@@ -149,8 +151,8 @@ class AdminInboxTest extends TestCase
     #[Test]
     public function conversation_url_uses_replace_history_so_thread_switches_do_not_stack(): void
     {
-        // replaceState on conversation changes; list→thread pushes one list snapshot in the UI.
-        // That way Android/browser Back from a thread returns to the list, not a prior thread.
+        // replaceState on conversation changes; mobile swipe-back is handled in
+        // inbox-thread-history.js so it returns to the list, not a prior thread.
         $attribute = (new \ReflectionProperty(AdminInbox::class, 'selectedConversationId'))
             ->getAttributes(Url::class)[0] ?? null;
 
@@ -167,9 +169,8 @@ class AdminInboxTest extends TestCase
         $conversation = $this->conversation();
 
         Livewire::test(AdminInbox::class)
+            ->assertSeeHtml('installInboxThreadHistory')
             ->assertSeeHtml('__inboxPrepareThreadHistory')
-            ->assertSeeHtml('inboxPane')
-            ->assertSeeHtml('history.pushState')
             ->assertSeeHtml('$wire.selectConversation('.$conversation->id.')');
     }
 

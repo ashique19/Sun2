@@ -2,6 +2,10 @@ import { installInboxThreadHistory } from './inbox-thread-history.js';
 
 globalThis.installInboxThreadHistory = installInboxThreadHistory;
 
+if (typeof document !== 'undefined') {
+    document.dispatchEvent(new Event('inbox-thread-history-ready'));
+}
+
 // Inbox photo → product matching runs here, outside Livewire: each pending photo is
 // a POST to admin.inbox.image-match, a few in parallel, and the inbox re-reads the
 // persisted results (debounced) so chips appear progressively while staff keep working.

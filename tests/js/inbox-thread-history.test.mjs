@@ -160,3 +160,28 @@ test('desktop Back still restores the conversation from the URL', () => {
     assert.equal(wire.selectedConversationId, 3);
     assert.equal(wire.mobileThreadOpen, true);
 });
+
+test('conversation click still selects when the prepare helper is missing', () => {
+    const previous = globalThis.__inboxPrepareThreadHistory;
+    delete globalThis.__inboxPrepareThreadHistory;
+
+    let selected = null;
+    const $wire = {
+        mobileThreadOpen: false,
+        selectConversation(id) {
+            selected = id;
+        },
+    };
+
+    // Same expression as admin-inbox.blade.php @click. Must not throw.
+    typeof globalThis.__inboxPrepareThreadHistory === 'function' && globalThis.__inboxPrepareThreadHistory($wire.mobileThreadOpen);
+    $wire.selectConversation(4576);
+
+    assert.equal(selected, 4576);
+
+    if (previous !== undefined) {
+        globalThis.__inboxPrepareThreadHistory = previous;
+    } else {
+        delete globalThis.__inboxPrepareThreadHistory;
+    }
+});

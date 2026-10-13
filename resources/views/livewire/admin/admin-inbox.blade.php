@@ -32,11 +32,32 @@
             });
         }
 
-        // Mobile swipe/browser Back from a thread must return to the conversation
-        // list. Do not $wire.set the popped ?conversation= (that reopened the
-        // previous thread) and park a history overlay so Back does not leave Inbox.
-        if (window.installInboxThreadHistory) {
+        // Stub first: Vite ES modules are deferred, so this Livewire script can run
+        // before inbox-image-match.js assigns installInboxThreadHistory. A missing
+        // prepare function would throw and block selectConversation.
+        if (typeof window.__inboxPrepareThreadHistory !== 'function') {
+            window.__inboxPrepareThreadHistory = function () {};
+        }
+
+        const attachInboxThreadHistory = function () {
+            if (typeof window.installInboxThreadHistory !== 'function') {
+                return false;
+            }
+
             window.installInboxThreadHistory($wire);
+
+            return true;
+        };
+
+        if (! attachInboxThreadHistory()) {
+            document.addEventListener('inbox-thread-history-ready', attachInboxThreadHistory);
+            let tries = 0;
+            const timer = setInterval(function () {
+                tries += 1;
+                if (attachInboxThreadHistory() || tries >= 40) {
+                    clearInterval(timer);
+                }
+            }, 50);
         }
     </script>
     @endscript
@@ -379,7 +400,7 @@
                         wire:key="inbox-conversation-{{ $conversation->id }}"
                         wire:loading.class="opacity-60"
                         wire:target="selectConversation({{ $conversation->id }})"
-                        @click="window.__inboxPrepareThreadHistory($wire.mobileThreadOpen); $wire.selectConversation({{ $conversation->id }})"
+                        @click="typeof window.__inboxPrepareThreadHistory === 'function' && window.__inboxPrepareThreadHistory($wire.mobileThreadOpen); $wire.selectConversation({{ $conversation->id }})"
                         @class([
                             'block w-full px-4 py-3 text-left transition',
                             $selected ? 'bg-[#FAF6EF]' : 'active:bg-[#FAF6EF] hover:bg-[#FAF6EF]/60',

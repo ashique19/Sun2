@@ -69,6 +69,7 @@
             font-size: clamp(28px, 9vw, 72px);
             font-weight: 900;
             letter-spacing: 0.01em;
+            text-transform: uppercase;
             line-height: 1.15;
             margin-bottom: 2.5vw;
             word-break: break-word;
@@ -113,11 +114,11 @@
 
     <div class="slip">
         @if (filled($parcelId))
-            <div class="parcel-label">Parcel ID</div>
+            <div class="parcel-label">PARCEL ID</div>
             <div class="parcel-id">{{ $parcelId }}</div>
         @endif
 
-        <div class="brand">Sundoritoma.com</div>
+        <div class="brand">SUNDORITOMA.COM</div>
         <div class="customer">{{ $order->name }}</div>
     </div>
 </body>

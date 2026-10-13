@@ -12,7 +12,7 @@ import com.sundoritoma.posotg.data.PrintSlip
 
 /**
  * Minimal shipping slip (matches admin print-selected):
- * PARCEL ID / id / Sundoritoma.com / customer name.
+ * PARCEL ID / id / SUNDORITOMA.COM / customer name.
  * 80mm ≈ 576 dots; 58mm ≈ 384 dots at 203dpi.
  */
 object SlipBitmapRenderer {
@@ -49,7 +49,7 @@ object SlipBitmapRenderer {
             addBlock("PARCEL ID", width * 0.055f, 4f)
             addBlock(slip.parcelId, width * 0.14f, 22f)
         }
-        addBlock(slip.brand.ifBlank { "Sundoritoma.com" }, width * 0.09f, 18f)
+        addBlock(slip.brand.ifBlank { "SUNDORITOMA.COM" }, width * 0.09f, 18f)
         addBlock(slip.name, width * 0.09f, 8f)
 
         totalHeight += padding + 8

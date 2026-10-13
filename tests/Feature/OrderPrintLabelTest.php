@@ -98,7 +98,7 @@ class OrderPrintLabelTest extends TestCase
         $response = $this->get(route('admin.orders.print', $order));
 
         $response->assertOk();
-        $response->assertSee('Parcel ID', false);
+        $response->assertSee('PARCEL ID', false);
         $response->assertSee('270697676', false);
         $response->assertDontSee('SFR260713STA4C54B9BD', false);
         $response->assertDontSee('CN#', false);
@@ -129,11 +129,13 @@ class OrderPrintLabelTest extends TestCase
 
         $this->get(route('admin.orders.print', $order))
             ->assertOk()
-            ->assertSee('Parcel ID', false)
+            ->assertSee('PARCEL ID', false)
             ->assertSee('270697676', false)
-            ->assertSee('Sundoritoma.com', false)
+            ->assertSee('SUNDORITOMA.COM', false)
             ->assertDontSee('TOTAL DUE', false)
-            ->assertDontSee('3,120 Tk', false);
+            ->assertDontSee('WhatsApp', false)
+            ->assertDontSee('3,120 Tk', false)
+            ->assertDontSee('0 Tk', false);
     }
 
     public function test_print_selected_shows_parcel_id_brand_and_customer_name_per_order(): void
@@ -156,10 +158,10 @@ class OrderPrintLabelTest extends TestCase
         ]));
 
         $response->assertOk();
-        $response->assertSee('Parcel ID', false);
+        $response->assertSee('PARCEL ID', false);
         $response->assertSee('270697676', false);
         $response->assertSee('270697677', false);
-        $response->assertSee('Sundoritoma.com', false);
+        $response->assertSee('SUNDORITOMA.COM', false);
         $response->assertSee('Alyssa Russo', false);
         $response->assertSee('Karim Hossain', false);
         $response->assertSee('page-break-after: always', false);
@@ -172,6 +174,9 @@ class OrderPrintLabelTest extends TestCase
         $response->assertDontSee('window.setTimeout(window.printCutEach', false);
         $response->assertDontSee('border-top: 0.4vw dashed', false);
         $response->assertDontSee('TOTAL DUE', false);
+        $response->assertDontSee('WhatsApp', false);
+        $response->assertDontSee('01880001255', false);
+        $response->assertDontSee('0 Tk', false);
         $response->assertDontSee('CALL:', false);
     }
 

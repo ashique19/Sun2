@@ -234,7 +234,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
     Route::get('/orders/{order}/print', function (Order $order) {
         AdminAccess::ensureCanViewOrder($order);
 
-        $slip = OrderPrintSlip::fromOrder($order);
+        $slip = OrderPrintSlip::thermalFromOrder($order);
 
         $slipsUrl = URL::temporarySignedRoute(
             'print-slips',
@@ -246,7 +246,6 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         return response()
             ->view('admin.order-print-label', [
                 'order' => $order,
-                'shippingAddress' => $slip['address'],
                 'parcelId' => $slip['parcel_id'],
                 'otgDeepLink' => $otgDeepLink,
             ])

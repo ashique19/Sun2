@@ -43,7 +43,7 @@ Same minimal layout as admin **Print selected**:
 PARCEL ID
 <parcel id>
 
-Sundoritoma.com
+SUNDORITOMA.COM
 <customer name>
 ```
 

@@ -51,12 +51,8 @@ class SlipRepository(
                         id = o.getInt("id"),
                         orderNumber = o.optString("order_number"),
                         parcelId = o.optString("parcel_id").ifBlank { null },
-                        brand = o.optString("brand", "Sundoritoma.com"),
-                        helpline = o.optString("helpline"),
+                        brand = o.optString("brand", "SUNDORITOMA.COM"),
                         name = o.optString("name"),
-                        phone = o.optString("phone"),
-                        address = o.optString("address"),
-                        dueTk = o.optInt("due_tk", 0),
                     ),
                 )
             }

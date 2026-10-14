@@ -7,7 +7,16 @@
 <div
     x-data
     x-init="document.body.dataset.inboxMobileThread = $wire.mobileThreadOpen ? '1' : '0'"
-    x-effect="document.body.dataset.inboxMobileThread = $wire.mobileThreadOpen ? '1' : '0'"
+    x-effect="
+        if (document.body.dataset.inboxClosingThread === '1') {
+            document.body.dataset.inboxMobileThread = '0';
+            if (! $wire.mobileThreadOpen) {
+                delete document.body.dataset.inboxClosingThread;
+            }
+        } else {
+            document.body.dataset.inboxMobileThread = $wire.mobileThreadOpen ? '1' : '0';
+        }
+    "
     @class(['flex min-h-0 flex-1 flex-col xl:gap-4'])
 >
     {{--
@@ -48,13 +57,16 @@
             const listUrl = function (href) {
                 const url = new URL(href);
                 url.searchParams.delete('conversation');
+                url.pathname = url.pathname.replace(/\/+$/, '').replace(/\/c\/\d+$/, '');
 
                 return url.toString();
             };
             const threadUrl = function (href, conversationId) {
                 const url = new URL(href);
+                const base = url.pathname.replace(/\/+$/, '').replace(/\/c\/\d+$/, '');
+                url.searchParams.delete('conversation');
                 if (conversationId !== null && conversationId !== undefined && conversationId !== '') {
-                    url.searchParams.set('conversation', String(conversationId));
+                    url.pathname = base + '/c/' + conversationId;
                 }
 
                 return url.toString();
@@ -78,6 +90,9 @@
                 if (! isMobile()) {
                     return;
                 }
+
+                delete document.body.dataset.inboxClosingThread;
+                document.body.dataset.inboxMobileThread = '1';
 
                 const state = cloneState();
                 if (state.inboxPane === 'thread' && mobileThreadOpen) {
@@ -103,6 +118,8 @@
                     }
 
                     if ($wire.mobileThreadOpen || $wire.selectedConversationId) {
+                        document.body.dataset.inboxClosingThread = '1';
+                        document.body.dataset.inboxMobileThread = '0';
                         window.history.replaceState(listState(), '', listUrl(window.location.href));
                         $wire.clearConversationFromUrl();
                     }
@@ -114,9 +131,17 @@
                     }
 
                     try {
-                        const destPath = (dest.pathname ? dest.pathname : new URL(String(dest), window.location.href).pathname).replace(/\/+$/, '');
-                        const here = window.location.pathname.replace(/\/+$/, '');
-                        if (here.endsWith('/admin/inbox') && destPath.endsWith('/admin/inbox')) {
+                        const inboxPath = function (path) {
+                            const trimmed = path.replace(/\/+$/, '');
+
+                            return trimmed.endsWith('/admin/inbox') || /\/admin\/inbox\/c\/\d+$/.test(trimmed);
+                        };
+                        const destPath = (dest.pathname ? dest.pathname : new URL(String(dest), window.location.href).pathname);
+                        const here = window.location.pathname;
+                        if (inboxPath(here) && inboxPath(destPath)) {
+                            event.preventDefault();
+                        }
+                        if (document.body.dataset.inboxClosingThread === '1' && ! inboxPath(destPath)) {
                             event.preventDefault();
                         }
                     } catch (error) {
@@ -462,7 +487,9 @@
         $mobileThreadOpen ? 'mt-0' : 'mt-2 xl:mt-0',
     ])>
         {{-- Conversation list --}}
-        <div @class([
+        <div
+            data-inbox-conversation-list
+            @class([
             'flex min-h-0 flex-col overflow-hidden bg-white',
             'border-y border-[#EFE7D6] xl:rounded-2xl xl:border',
             'h-full max-h-full',

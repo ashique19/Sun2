@@ -135,7 +135,7 @@ class AdminInboxStickyPreviewTest extends TestCase
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->assertSet('mobileThreadOpen', true)
-            ->assertSeeHtml('x-effect="document.body.dataset.inboxMobileThread = $wire.mobileThreadOpen');
+            ->assertSeeHtml('document.body.dataset.inboxMobileThread = $wire.mobileThreadOpen');
     }
 
     #[Test]

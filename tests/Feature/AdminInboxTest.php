@@ -176,7 +176,20 @@ class AdminInboxTest extends TestCase
             ->assertSeeHtml('inboxPane')
             ->assertSeeHtml('installInboxThreadHistory($wire)')
             ->assertSeeHtml('inbox-thread-history-ready')
-            ->assertSeeHtml('alpine:navigate');
+            ->assertSeeHtml('alpine:navigate')
+            ->assertSeeHtml('inboxClosingThread')
+            ->assertSeeHtml('data-inbox-conversation-list');
+    }
+
+    #[Test]
+    public function thread_path_deep_link_opens_the_conversation(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $this->get(route('admin.inbox.thread', ['thread' => $conversation->id]))
+            ->assertOk()
+            ->assertSee($conversation->customer_name);
     }
 
     #[Test]

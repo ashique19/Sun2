@@ -75,9 +75,14 @@ test('list url drops the conversation query', () => {
     );
     assert.equal(
         inboxThreadUrl('https://example.test/admin/inbox?unread=1', 9),
-        'https://example.test/admin/inbox?unread=1&conversation=9',
+        'https://example.test/admin/inbox/c/9?unread=1',
+    );
+    assert.equal(
+        inboxListUrl('https://example.test/admin/inbox/c/9?unread=1'),
+        'https://example.test/admin/inbox?unread=1',
     );
     assert.equal(conversationIdFromHref('https://example.test/admin/inbox?conversation=9'), 9);
+    assert.equal(conversationIdFromHref('https://example.test/admin/inbox/c/9'), 9);
     assert.equal(conversationIdFromHref('https://example.test/admin/inbox'), null);
 });
 
@@ -94,6 +99,7 @@ test('opening a thread from the list parks a distinct list URL under the thread'
     assert.equal(conversationIdFromHref(history.urls()[0]), null);
     assert.equal(conversationIdFromHref(history.urls()[1]), 11);
     assert.equal(history.urls()[0], 'https://example.test/admin/inbox');
+    assert.equal(history.urls()[1], 'https://example.test/admin/inbox/c/11');
     assert.equal(history.state.alpine.snapshotIdx, 1);
 
     history.back();
@@ -229,7 +235,51 @@ test('list then A then Back then B then Back returns to the list, not A', () => 
     assert.match(history.urls()[0], /\/admin\/dashboard$/);
 });
 
+test('popstate shows the list immediately without waiting for Livewire', () => {
+    let shown = 0;
+    const history = fakeHistory('https://example.test/admin/inbox');
+    const wire = fakeWire(null);
+    const api = createInboxThreadHistory(wire, {
+        history,
+        getHref: () => history.href,
+        isMobile: () => true,
+        showList: () => {
+            shown += 1;
+        },
+    });
+
+    api.prepare(false, 5);
+    wire.set('selectedConversationId', 5);
+    history.back();
+    api.onPopState();
+
+    assert.equal(shown, 1);
+    assert.equal(wire.mobileThreadOpen, false);
+});
+
+test('when Safari skips the list, close pushes Inbox back on top of the referrer', () => {
+    const history = fakeHistory('https://example.test/admin/dashboard');
+    history.pushState({}, '', 'https://example.test/admin/inbox');
+    const wire = fakeWire(null);
+    const api = mobileApi(wire, history);
+
+    api.prepare(false, 7);
+    wire.set('selectedConversationId', 7);
+
+    history.back();
+    history.back();
+    api.onPopState();
+
+    assert.match(history.href, /\/admin\/inbox$/);
+    assert.equal(conversationIdFromHref(history.href), null);
+    assert.equal(wire.mobileThreadOpen, false);
+});
+
 test('same-document inbox Back is not a wire:navigate restore', () => {
+    assert.equal(
+        isSameInboxDocument('https://example.test/admin/inbox/c/2', 'https://example.test/admin/inbox'),
+        true,
+    );
     assert.equal(
         isSameInboxDocument('https://example.test/admin/inbox?conversation=2', 'https://example.test/admin/inbox'),
         true,
@@ -248,7 +298,7 @@ test('same-document inbox Back is not a wire:navigate restore', () => {
     };
 
     assert.equal(
-        preventSameDocumentInboxNavigate(event, 'https://example.test/admin/inbox?conversation=2'),
+        preventSameDocumentInboxNavigate(event, 'https://example.test/admin/inbox/c/2'),
         true,
     );
     assert.equal(prevented, true);

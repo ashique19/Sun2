@@ -230,11 +230,16 @@ class AdminInbox extends Component
     /** Skip updatedSelectedConversationId when selectConversation already activated the thread. */
     private bool $suppressConversationUpdatedHook = false;
 
-    public function mount(ChannelInboxPurgeService $purge, ChannelReplyService $replies): void
+    public function mount(ChannelInboxPurgeService $purge, ChannelReplyService $replies, mixed $thread = null): void
     {
         AdminAccess::ensureStaffAdmin();
 
         $purge->purgeOnInboxLoad();
+
+        $threadId = is_numeric($thread) ? (int) $thread : null;
+        if ($threadId && ! $this->selectedConversationId) {
+            $this->selectedConversationId = $threadId;
+        }
 
         if ($this->selectedConversationId
             && ! ChannelConversation::query()->whereKey($this->selectedConversationId)->exists()) {

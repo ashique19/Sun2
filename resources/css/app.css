@@ -294,6 +294,23 @@ body:has(.mobile-nav-toggle:checked) {
     body[data-inbox-mobile-thread="1"] [data-inbox-mobile-thread-sheet] [data-inbox-thread-header] {
         margin-top: 0;
     }
+
+    /* Swipe-back sets data-inbox-mobile-thread before Livewire morphs. */
+    body:not([data-inbox-mobile-thread="1"]) [data-inbox-conversation-list] {
+        display: flex !important;
+    }
+
+    body:not([data-inbox-mobile-thread="1"]) [data-inbox-mobile-thread-sheet] {
+        display: none !important;
+    }
+
+    body[data-inbox-mobile-thread="1"] [data-inbox-conversation-list] {
+        display: none !important;
+    }
+
+    body[data-inbox-mobile-thread="1"] [data-inbox-mobile-thread-sheet] {
+        display: flex !important;
+    }
 }
 
 /* Mobile bottom nav — explicit CSS so it stays a fixed row

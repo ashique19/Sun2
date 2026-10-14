@@ -255,6 +255,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
 
     Route::middleware('role:admin|dev')->group(function () {
         Route::get('/inbox', AdminInbox::class)->name('inbox');
+        Route::get('/inbox/c/{thread}', AdminInbox::class)->whereNumber('thread')->name('inbox.thread');
         Route::get('/inbox/quick-replies', AdminInboxQuickReplies::class)->name('inbox.quick-replies');
         Route::get('/inbox/media/{message}', ChannelMessageMediaController::class)
             ->whereNumber('message')

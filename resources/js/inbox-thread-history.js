@@ -3,8 +3,9 @@
  * list — not a previously viewed thread, and not a page before Inbox.
  *
  * Livewire replaceState-s ?conversation=, which overwrites the list history
- * entry unless we first push a thread overlay. popstate used to $wire.set the
- * conversation id from the popped URL, which reopened the previous thread.
+ * entry unless we first park a list URL and push a distinct thread URL.
+ * popstate used to $wire.set the popped ?conversation= (that reopened the
+ * previous thread).
  */
 
 export const MOBILE_INBOX_MQ = '(max-width: 1279px)';
@@ -13,6 +14,14 @@ export function inboxListUrl(href) {
     const url = new URL(href, 'http://localhost');
 
     url.searchParams.delete('conversation');
+
+    return url.toString();
+}
+
+export function inboxThreadUrl(href, conversationId) {
+    const url = new URL(href, 'http://localhost');
+
+    url.searchParams.set('conversation', String(conversationId));
 
     return url.toString();
 }
@@ -32,25 +41,47 @@ function cloneState(history) {
     return history.state && typeof history.state === 'object' ? { ...history.state } : {};
 }
 
+function alpineWithoutConversation(state) {
+    if (! state.alpine || typeof state.alpine !== 'object') {
+        return state;
+    }
+
+    return {
+        ...state,
+        alpine: {
+            ...state.alpine,
+            conversation: { value: null },
+        },
+    };
+}
+
 export function createInboxThreadHistory(wire, env) {
     const { history, getHref, isMobile } = env;
-    let booted = false;
-    let handlingPop = false;
 
-    const prepare = (mobileThreadOpen) => {
+    const prepare = (mobileThreadOpen, conversationId) => {
         if (! isMobile()) {
             return;
         }
 
-        if (cloneState(history).inboxPane === 'thread' && mobileThreadOpen) {
+        const href = getHref();
+        const id = conversationId ?? conversationIdFromHref(href);
+        const state = cloneState(history);
+
+        if (state.inboxPane === 'thread' && (mobileThreadOpen || conversationIdFromHref(href) !== null)) {
             return;
         }
 
-        history.pushState({ ...cloneState(history), inboxPane: 'thread' }, '', getHref());
+        const listState = alpineWithoutConversation({ ...state, inboxPane: 'list' });
+        const listUrl = inboxListUrl(href);
+        const threadHref = id != null ? inboxThreadUrl(href, id) : href;
+
+        history.replaceState(listState, '', listUrl);
+        history.pushState({ ...cloneState(history), inboxPane: 'thread' }, '', threadHref);
     };
 
     const closeToList = () => {
-        history.replaceState({ ...cloneState(history), inboxPane: 'list' }, '', inboxListUrl(getHref()));
+        const listState = alpineWithoutConversation({ ...cloneState(history), inboxPane: 'list' });
+        history.replaceState(listState, '', inboxListUrl(getHref()));
 
         if (wire.selectedConversationId || wire.mobileThreadOpen) {
             wire.clearConversationFromUrl();
@@ -73,41 +104,27 @@ export function createInboxThreadHistory(wire, env) {
             return;
         }
 
-        if (handlingPop) {
+        const threadOpen = Boolean(wire.mobileThreadOpen) || Boolean(wire.selectedConversationId);
+        const fromUrl = conversationIdFromHref(getHref());
+
+        if (threadOpen) {
+            if (fromUrl !== null || cloneState(history).inboxPane !== 'list') {
+                const listState = alpineWithoutConversation({ ...cloneState(history), inboxPane: 'list' });
+                history.replaceState(listState, '', inboxListUrl(getHref()));
+            }
+
+            wire.clearConversationFromUrl();
+
             return;
         }
 
-        handlingPop = true;
-
-        try {
-            const threadOpen = Boolean(wire.mobileThreadOpen) || Boolean(wire.selectedConversationId);
-            const fromUrl = conversationIdFromHref(getHref());
-
-            if (threadOpen) {
-                if (fromUrl !== null || cloneState(history).inboxPane !== 'list') {
-                    history.replaceState({ ...cloneState(history), inboxPane: 'list' }, '', inboxListUrl(getHref()));
-                }
-
-                wire.clearConversationFromUrl();
-
-                return;
-            }
-
-            if (fromUrl !== null) {
-                history.replaceState({ ...cloneState(history), inboxPane: 'list' }, '', inboxListUrl(getHref()));
-            }
-        } finally {
-            handlingPop = false;
+        if (fromUrl !== null) {
+            const listState = alpineWithoutConversation({ ...cloneState(history), inboxPane: 'list' });
+            history.replaceState(listState, '', inboxListUrl(getHref()));
         }
     };
 
     const boot = () => {
-        if (booted) {
-            return;
-        }
-
-        booted = true;
-
         if (! isMobile()) {
             return;
         }
@@ -120,9 +137,7 @@ export function createInboxThreadHistory(wire, env) {
             return;
         }
 
-        const threadHref = getHref();
-        history.replaceState({ ...cloneState(history), inboxPane: 'list' }, '', inboxListUrl(threadHref));
-        history.pushState({ ...cloneState(history), inboxPane: 'thread' }, '', threadHref);
+        prepare(false, wire.selectedConversationId ?? conversationIdFromHref(getHref()));
     };
 
     return { prepare, onPopState, boot, closeToList };
@@ -134,14 +149,6 @@ export function installInboxThreadHistory(wire) {
     }
 
     window.__inboxThreadHistoryWire = wire;
-
-    if (window.__inboxThreadHistoryBound) {
-        window.__inboxPrepareThreadHistory = (mobileThreadOpen) => {
-            window.__inboxThreadHistoryApi?.prepare(mobileThreadOpen);
-        };
-
-        return window.__inboxThreadHistoryApi;
-    }
 
     const liveWire = {
         get mobileThreadOpen() {
@@ -164,10 +171,18 @@ export function installInboxThreadHistory(wire) {
         isMobile: () => window.matchMedia(MOBILE_INBOX_MQ).matches,
     });
 
-    window.__inboxThreadHistoryBound = true;
     window.__inboxThreadHistoryApi = api;
-    window.__inboxPrepareThreadHistory = (mobileThreadOpen) => api.prepare(mobileThreadOpen);
-    window.addEventListener('popstate', () => api.onPopState());
+    window.__inboxPrepareThreadHistory = (mobileThreadOpen, conversationId) => {
+        api.prepare(mobileThreadOpen, conversationId);
+    };
+
+    if (! window.__inboxThreadHistoryListener) {
+        window.__inboxThreadHistoryListener = true;
+        window.addEventListener('popstate', () => {
+            window.__inboxThreadHistoryApi?.onPopState();
+        });
+    }
+
     api.boot();
 
     return api;

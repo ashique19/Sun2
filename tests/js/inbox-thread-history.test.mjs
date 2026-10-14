@@ -4,6 +4,7 @@ import {
     conversationIdFromHref,
     createInboxThreadHistory,
     inboxListUrl,
+    inboxThreadUrl,
 } from '../../resources/js/inbox-thread-history.js';
 
 function fakeHistory(initialHref, initialState = {}) {
@@ -70,21 +71,28 @@ test('list url drops the conversation query', () => {
         inboxListUrl('https://example.test/admin/inbox?conversation=9&unread=1'),
         'https://example.test/admin/inbox?unread=1',
     );
+    assert.equal(
+        inboxThreadUrl('https://example.test/admin/inbox?unread=1', 9),
+        'https://example.test/admin/inbox?unread=1&conversation=9',
+    );
     assert.equal(conversationIdFromHref('https://example.test/admin/inbox?conversation=9'), 9);
     assert.equal(conversationIdFromHref('https://example.test/admin/inbox'), null);
 });
 
-test('opening a thread from the list parks a history overlay so Back returns to the list', () => {
+test('opening a thread from the list parks a distinct list URL under the thread', () => {
     const history = fakeHistory('https://example.test/admin/inbox', { alpine: { snapshotIdx: 1 } });
     const wire = fakeWire(null);
     const api = mobileApi(wire, history);
 
-    api.prepare(false);
-    history.replaceState({ ...history.state, alpine: history.state.alpine }, '', 'https://example.test/admin/inbox?conversation=11');
+    api.prepare(false, 11);
     wire.set('selectedConversationId', 11);
 
     assert.equal(history.state.inboxPane, 'thread');
     assert.equal(history.urls().length, 2);
+    assert.equal(conversationIdFromHref(history.urls()[0]), null);
+    assert.equal(conversationIdFromHref(history.urls()[1]), 11);
+    assert.equal(history.urls()[0], 'https://example.test/admin/inbox');
+    assert.equal(history.state.alpine.snapshotIdx, 1);
 
     history.back();
     api.onPopState();
@@ -93,6 +101,31 @@ test('opening a thread from the list parks a history overlay so Back returns to 
     assert.equal(wire.mobileThreadOpen, false);
     assert.equal(conversationIdFromHref(history.href), null);
     assert.match(history.href, /\/admin\/inbox$/);
+});
+
+test('swipe Back from a thread does not leave Inbox for the referrer', () => {
+    const history = fakeHistory('https://example.test/admin/dashboard', { alpine: { snapshotIdx: 'dash' } });
+    history.pushState({ alpine: { snapshotIdx: 'inbox' } }, '', 'https://example.test/admin/inbox');
+
+    const wire = fakeWire(null);
+    const api = mobileApi(wire, history);
+
+    api.prepare(false, 4292);
+    wire.set('selectedConversationId', 4292);
+
+    assert.equal(history.urls().length, 3);
+    assert.match(history.urls()[0], /\/admin\/dashboard$/);
+    assert.equal(conversationIdFromHref(history.urls()[1]), null);
+    assert.equal(conversationIdFromHref(history.urls()[2]), 4292);
+
+    history.back();
+    api.onPopState();
+
+    assert.equal(wire.selectedConversationId, null);
+    assert.equal(wire.mobileThreadOpen, false);
+    assert.equal(conversationIdFromHref(history.href), null);
+    assert.match(history.href, /\/admin\/inbox$/);
+    assert.match(history.urls()[0], /\/admin\/dashboard$/);
 });
 
 test('swipe Back from a thread never reopens the previous conversation', () => {
@@ -146,6 +179,28 @@ test('deep-linked thread inserts a list entry underneath so the first Back stays
     assert.equal(conversationIdFromHref(history.href), null);
 });
 
+test('late boot while a thread is already open still parks the list underneath', () => {
+    const history = fakeHistory('https://example.test/admin/dashboard');
+    history.pushState({}, '', 'https://example.test/admin/inbox?conversation=4292');
+
+    const wire = fakeWire(4292);
+    const api = mobileApi(wire, history);
+
+    api.boot();
+
+    assert.equal(history.urls().length, 3);
+    assert.match(history.urls()[0], /\/admin\/dashboard$/);
+    assert.equal(conversationIdFromHref(history.urls()[1]), null);
+    assert.equal(conversationIdFromHref(history.urls()[2]), 4292);
+
+    history.back();
+    api.onPopState();
+
+    assert.equal(wire.mobileThreadOpen, false);
+    assert.match(history.href, /\/admin\/inbox$/);
+    assert.equal(conversationIdFromHref(history.href), null);
+});
+
 test('desktop Back still restores the conversation from the URL', () => {
     const history = fakeHistory('https://example.test/admin/inbox?conversation=3');
     const wire = fakeWire(null);
@@ -173,8 +228,7 @@ test('conversation click still selects when the prepare helper is missing', () =
         },
     };
 
-    // Same expression as admin-inbox.blade.php @click. Must not throw.
-    typeof globalThis.__inboxPrepareThreadHistory === 'function' && globalThis.__inboxPrepareThreadHistory($wire.mobileThreadOpen);
+    typeof globalThis.__inboxPrepareThreadHistory === 'function' && globalThis.__inboxPrepareThreadHistory($wire.mobileThreadOpen, 4576);
     $wire.selectConversation(4576);
 
     assert.equal(selected, 4576);

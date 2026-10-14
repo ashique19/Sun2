@@ -170,8 +170,10 @@ class AdminInboxTest extends TestCase
 
         Livewire::test(AdminInbox::class)
             ->assertSeeHtml("typeof window.__inboxPrepareThreadHistory === 'function' && window.__inboxPrepareThreadHistory")
+            ->assertSeeHtml('$wire.mobileThreadOpen, '.$conversation->id.')')
             ->assertSeeHtml('$wire.selectConversation('.$conversation->id.')')
-            ->assertSeeHtml('window.__inboxPrepareThreadHistory = function () {}')
+            ->assertSeeHtml('history.pushState')
+            ->assertSeeHtml('inboxPane')
             ->assertSeeHtml('installInboxThreadHistory($wire)')
             ->assertSeeHtml('inbox-thread-history-ready');
     }

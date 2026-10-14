@@ -32,12 +32,87 @@
             });
         }
 
-        // Stub first: Vite ES modules are deferred, so this Livewire script can run
-        // before inbox-image-match.js assigns installInboxThreadHistory. A missing
-        // prepare function would throw and block selectConversation.
-        if (typeof window.__inboxPrepareThreadHistory !== 'function') {
-            window.__inboxPrepareThreadHistory = function () {};
-        }
+        // Vite ES modules are deferred, so this Livewire script often runs first.
+        // Park a real list history entry immediately — a no-op stub left swipe-Back
+        // on the Inbox referrer. The image-match module upgrades this when it loads.
+        (function () {
+            const mq = '(max-width: 1279px)';
+            const isMobile = function () {
+                return window.matchMedia(mq).matches;
+            };
+            const cloneState = function () {
+                return window.history.state && typeof window.history.state === 'object'
+                    ? Object.assign({}, window.history.state)
+                    : {};
+            };
+            const listUrl = function (href) {
+                const url = new URL(href);
+                url.searchParams.delete('conversation');
+
+                return url.toString();
+            };
+            const threadUrl = function (href, conversationId) {
+                const url = new URL(href);
+                if (conversationId !== null && conversationId !== undefined && conversationId !== '') {
+                    url.searchParams.set('conversation', String(conversationId));
+                }
+
+                return url.toString();
+            };
+            const listState = function () {
+                const state = Object.assign({}, cloneState(), { inboxPane: 'list' });
+                if (state.alpine && typeof state.alpine === 'object') {
+                    state.alpine = Object.assign({}, state.alpine, { conversation: { value: null } });
+                }
+
+                return state;
+            };
+
+            window.__inboxPrepareThreadHistory = function (mobileThreadOpen, conversationId) {
+                if (typeof window.__inboxThreadHistoryApi?.prepare === 'function' && ! window.__inboxThreadHistoryApi.__fallback) {
+                    window.__inboxThreadHistoryApi.prepare(mobileThreadOpen, conversationId);
+
+                    return;
+                }
+
+                if (! isMobile()) {
+                    return;
+                }
+
+                const state = cloneState();
+                if (state.inboxPane === 'thread' && mobileThreadOpen) {
+                    return;
+                }
+
+                const href = window.location.href;
+                window.history.replaceState(listState(), '', listUrl(href));
+                window.history.pushState(Object.assign({}, cloneState(), { inboxPane: 'thread' }), '', threadUrl(href, conversationId));
+            };
+
+            if (! window.__inboxThreadHistoryListener) {
+                window.__inboxThreadHistoryListener = true;
+                window.addEventListener('popstate', function () {
+                    if (typeof window.__inboxThreadHistoryApi?.onPopState === 'function') {
+                        window.__inboxThreadHistoryApi.onPopState();
+
+                        return;
+                    }
+
+                    if (! isMobile()) {
+                        return;
+                    }
+
+                    if ($wire.mobileThreadOpen || $wire.selectedConversationId) {
+                        window.history.replaceState(listState(), '', listUrl(window.location.href));
+                        $wire.clearConversationFromUrl();
+                    }
+                });
+            }
+
+            if (isMobile() && ($wire.mobileThreadOpen || $wire.selectedConversationId) && cloneState().inboxPane !== 'thread') {
+                window.__inboxPrepareThreadHistory(false, $wire.selectedConversationId);
+            }
+        })();
 
         const attachInboxThreadHistory = function () {
             if (typeof window.installInboxThreadHistory !== 'function') {
@@ -400,7 +475,7 @@
                         wire:key="inbox-conversation-{{ $conversation->id }}"
                         wire:loading.class="opacity-60"
                         wire:target="selectConversation({{ $conversation->id }})"
-                        @click="typeof window.__inboxPrepareThreadHistory === 'function' && window.__inboxPrepareThreadHistory($wire.mobileThreadOpen); $wire.selectConversation({{ $conversation->id }})"
+                        @click="typeof window.__inboxPrepareThreadHistory === 'function' && window.__inboxPrepareThreadHistory($wire.mobileThreadOpen, {{ $conversation->id }}); $wire.selectConversation({{ $conversation->id }})"
                         @class([
                             'block w-full px-4 py-3 text-left transition',
                             $selected ? 'bg-[#FAF6EF]' : 'active:bg-[#FAF6EF] hover:bg-[#FAF6EF]/60',

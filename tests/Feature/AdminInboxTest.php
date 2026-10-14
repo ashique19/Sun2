@@ -175,7 +175,8 @@ class AdminInboxTest extends TestCase
             ->assertSeeHtml('history.pushState')
             ->assertSeeHtml('inboxPane')
             ->assertSeeHtml('installInboxThreadHistory($wire)')
-            ->assertSeeHtml('inbox-thread-history-ready');
+            ->assertSeeHtml('inbox-thread-history-ready')
+            ->assertSeeHtml('alpine:navigate');
     }
 
     #[Test]

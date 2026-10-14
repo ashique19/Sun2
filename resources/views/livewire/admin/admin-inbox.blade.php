@@ -107,6 +107,22 @@
                         $wire.clearConversationFromUrl();
                     }
                 });
+                document.addEventListener('alpine:navigate', function (event) {
+                    const dest = event.detail && event.detail.url;
+                    if (! dest) {
+                        return;
+                    }
+
+                    try {
+                        const destPath = (dest.pathname ? dest.pathname : new URL(String(dest), window.location.href).pathname).replace(/\/+$/, '');
+                        const here = window.location.pathname.replace(/\/+$/, '');
+                        if (here.endsWith('/admin/inbox') && destPath.endsWith('/admin/inbox')) {
+                            event.preventDefault();
+                        }
+                    } catch (error) {
+                        return;
+                    }
+                });
             }
 
             if (isMobile() && ($wire.mobileThreadOpen || $wire.selectedConversationId) && cloneState().inboxPane !== 'thread') {

@@ -5,6 +5,8 @@ import {
     createInboxThreadHistory,
     inboxListUrl,
     inboxThreadUrl,
+    isSameInboxDocument,
+    preventSameDocumentInboxNavigate,
 } from '../../resources/js/inbox-thread-history.js';
 
 function fakeHistory(initialHref, initialState = {}) {
@@ -199,6 +201,67 @@ test('late boot while a thread is already open still parks the list underneath',
     assert.equal(wire.mobileThreadOpen, false);
     assert.match(history.href, /\/admin\/inbox$/);
     assert.equal(conversationIdFromHref(history.href), null);
+});
+
+test('list then A then Back then B then Back returns to the list, not A', () => {
+    const history = fakeHistory('https://example.test/admin/dashboard');
+    history.pushState({ alpine: { snapshotIdx: 'inbox' } }, '', 'https://example.test/admin/inbox');
+
+    const wire = fakeWire(null);
+    const api = mobileApi(wire, history);
+
+    api.prepare(false, 1);
+    wire.set('selectedConversationId', 1);
+
+    history.back();
+    api.onPopState();
+
+    api.prepare(false, 2);
+    wire.set('selectedConversationId', 2);
+
+    history.back();
+    api.onPopState();
+
+    assert.equal(wire.selectedConversationId, null);
+    assert.equal(wire.mobileThreadOpen, false);
+    assert.equal(conversationIdFromHref(history.href), null);
+    assert.match(history.href, /\/admin\/inbox$/);
+    assert.match(history.urls()[0], /\/admin\/dashboard$/);
+});
+
+test('same-document inbox Back is not a wire:navigate restore', () => {
+    assert.equal(
+        isSameInboxDocument('https://example.test/admin/inbox?conversation=2', 'https://example.test/admin/inbox'),
+        true,
+    );
+    assert.equal(
+        isSameInboxDocument('https://example.test/admin/inbox', 'https://example.test/admin/dashboard'),
+        false,
+    );
+
+    let prevented = false;
+    const event = {
+        detail: { url: 'https://example.test/admin/inbox' },
+        preventDefault() {
+            prevented = true;
+        },
+    };
+
+    assert.equal(
+        preventSameDocumentInboxNavigate(event, 'https://example.test/admin/inbox?conversation=2'),
+        true,
+    );
+    assert.equal(prevented, true);
+
+    prevented = false;
+    assert.equal(
+        preventSameDocumentInboxNavigate(
+            { detail: { url: 'https://example.test/admin/dashboard' }, preventDefault() { prevented = true; } },
+            'https://example.test/admin/inbox',
+        ),
+        false,
+    );
+    assert.equal(prevented, false);
 });
 
 test('desktop Back still restores the conversation from the URL', () => {

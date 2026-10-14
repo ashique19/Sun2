@@ -37,6 +37,45 @@ export function conversationIdFromHref(href) {
     return Number.isFinite(n) ? n : null;
 }
 
+export function inboxPathname(href) {
+    return new URL(href, 'http://localhost').pathname.replace(/\/+$/, '') || '/';
+}
+
+export function isSameInboxDocument(currentHref, destination) {
+    if (destination == null || destination === '') {
+        return false;
+    }
+
+    const destHref = typeof destination === 'string' || destination instanceof URL
+        ? destination
+        : destination.href ?? destination.pathname ?? String(destination);
+
+    try {
+        return inboxPathname(currentHref) === inboxPathname(destHref)
+            && inboxPathname(currentHref).endsWith('/admin/inbox');
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Livewire wire:navigate restores cached HTML on popstate whenever
+ * history.state.alpine.snapshotIdx is set. List and thread share that key, so
+ * the first Back saves the open thread over the list snapshot and the next
+ * Back restores the previous conversation. Cancel same-document inbox
+ * restores; clearConversationFromUrl morphs the list instead.
+ */
+export function preventSameDocumentInboxNavigate(event, currentHref) {
+    const dest = event?.detail?.url;
+    if (! isSameInboxDocument(currentHref, dest)) {
+        return false;
+    }
+
+    event.preventDefault();
+
+    return true;
+}
+
 function cloneState(history) {
     return history.state && typeof history.state === 'object' ? { ...history.state } : {};
 }
@@ -180,6 +219,9 @@ export function installInboxThreadHistory(wire) {
         window.__inboxThreadHistoryListener = true;
         window.addEventListener('popstate', () => {
             window.__inboxThreadHistoryApi?.onPopState();
+        });
+        document.addEventListener('alpine:navigate', (event) => {
+            preventSameDocumentInboxNavigate(event, window.location.href);
         });
     }
 

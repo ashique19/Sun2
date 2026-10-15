@@ -520,6 +520,11 @@ class Order extends Model
             ? (string) $this->courier_consignment_id
             : $this->consignmentIdFromCourierLogs();
 
+        if ($parcelId === null || $parcelId === '') {
+            $tracker = (string) ($this->courier_tracker ?? '');
+            $parcelId = ctype_digit($tracker) ? $tracker : null;
+        }
+
         if ($parcelId === null || $parcelId === '' || ! ctype_digit($parcelId)) {
             return null;
         }
@@ -726,19 +731,26 @@ class Order extends Model
         return in_array($this->status, self::CUSTOMER_ACTIVE_STATUSES, true);
     }
 
+    public function hasCourierTracking(): bool
+    {
+        if (filled($this->courier_tracker) || filled($this->courier_consignment_id)) {
+            return true;
+        }
+
+        if ($this->relationLoaded('courierLogs')) {
+            return $this->courierLogs->isNotEmpty();
+        }
+
+        return $this->courierLogs()->exists();
+    }
+
     public function showsCustomerCourierTracking(): bool
     {
         if (! in_array($this->status, self::CUSTOMER_TRACKING_STATUSES, true)) {
             return false;
         }
 
-        if (filled($this->courier_tracker)) {
-            return true;
-        }
-
-        $this->loadMissing('courierLogs');
-
-        return $this->courierLogs->isNotEmpty();
+        return $this->hasCourierTracking();
     }
 
     public function customerStatusLabel(): string

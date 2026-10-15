@@ -12,6 +12,7 @@ use App\Services\Admin\OrderStatusService;
 use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
 use App\Services\Couriers\CourierApiRegistry;
+use App\Services\Couriers\CourierTrackingService;
 use App\Services\Orders\OrderCourierChargeSync;
 use App\Services\Orders\OrderPaymentRecorder;
 use App\Services\Orders\OrderPaymentSync;
@@ -37,6 +38,8 @@ class AdminOrderShow extends Component
     public string $apiCourierSlug = '';
 
     public string $manualTracker = '';
+
+    public ?string $courierLiveStatus = null;
 
     public string $paymentAmount = '';
 
@@ -150,11 +153,45 @@ class AdminOrderShow extends Component
             ?? $apiCouriers->first()?->slug
             ?? ''
         );
+
+        $this->queueCourierStatusRefresh();
     }
 
     public function title(): string
     {
         return 'Order #'.$this->order->order_number;
+    }
+
+    public function refreshCourierStatus(CourierTrackingService $tracking): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->orderShowsCourierTracking()) {
+            return;
+        }
+
+        $this->courierLiveStatus = $tracking->fetchAndRecordLiveStatus($this->order);
+        $this->order->unsetRelation('courierLogs');
+        $this->order->load(['courier', 'courierLogs.courier']);
+    }
+
+    private function orderShowsCourierTracking(): bool
+    {
+        return in_array($this->order->status, ['dispatched', 'delivered', 'cancelled', 'returned'], true)
+            && $this->order->hasCourierTracking();
+    }
+
+    private function queueCourierStatusRefresh(): void
+    {
+        if (AdminAccess::isModeratorOnly() || ! $this->orderShowsCourierTracking()) {
+            return;
+        }
+
+        if (app(CourierApiRegistry::class)->configuredSlugs() === []) {
+            return;
+        }
+
+        $this->js('setTimeout(() => $wire.refreshCourierStatus(), 0)');
     }
 
     public function saveStatus(OrderStatusService $statusService): void
@@ -671,7 +708,7 @@ class AdminOrderShow extends Component
         $this->message = $message;
     }
 
-    public function render(CourierApiRegistry $courierRegistry)
+    public function render(CourierApiRegistry $courierRegistry, CourierTrackingService $tracking)
     {
         $apiCouriers = Courier::query()
             ->where('is_active', true)
@@ -679,11 +716,23 @@ class AdminOrderShow extends Component
             ->orderBy('name')
             ->get();
 
+        $showCourierTracking = $this->orderShowsCourierTracking();
+        $trackingEvents = $showCourierTracking
+            ? $tracking->eventsFromLoadedLogs($this->order)
+            : [];
+        $courierStatus = $showCourierTracking
+            ? $tracking->displayStatus($this->order, $this->courierLiveStatus)
+            : null;
+
         return view('livewire.admin.admin-order-show', [
             'couriers' => Courier::query()->where('is_active', true)->orderBy('name')->get(),
             'apiCouriers' => $apiCouriers,
             'paymentMethods' => PaymentMethod::query()->active()->get(['id', 'name', 'code']),
             'readOnly' => AdminAccess::isModeratorOnly(),
+            'showCourierTracking' => $showCourierTracking,
+            'trackingEvents' => $trackingEvents,
+            'courierStatus' => $courierStatus,
+            'courierApiAvailable' => $courierRegistry->configuredSlugs() !== [],
         ])->title($this->title());
     }
 }

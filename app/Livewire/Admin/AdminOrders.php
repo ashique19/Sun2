@@ -1064,7 +1064,7 @@ class AdminOrders extends Component
     {
         AdminAccess::ensureStaffAdmin();
 
-        if ($this->segment !== 'dispatched') {
+        if (! AdminOrderSegment::refreshesLiveCourierTracking($this->segment)) {
             return;
         }
 
@@ -1091,7 +1091,7 @@ class AdminOrders extends Component
      */
     private function queueCourierStatusRefresh(): void
     {
-        if ($this->segment !== 'dispatched' || AdminAccess::isModeratorOnly()) {
+        if (! AdminOrderSegment::refreshesLiveCourierTracking($this->segment) || AdminAccess::isModeratorOnly()) {
             return;
         }
 
@@ -1121,8 +1121,10 @@ class AdminOrders extends Component
         ];
 
         $showCourierTracking = AdminOrderSegment::showsCourierTracking($this->segment);
+        $liveCourierRefresh = AdminOrderSegment::refreshesLiveCourierTracking($this->segment);
+        $loadCourierLogs = $showCourierTracking || $this->segment === 'all';
 
-        if ($showCourierTracking) {
+        if ($loadCourierLogs) {
             $with[] = 'courierLogs';
         }
 
@@ -1154,9 +1156,13 @@ class AdminOrders extends Component
 
         $trackingByOrder = [];
 
-        if ($showCourierTracking) {
+        if ($loadCourierLogs) {
             foreach ($orders as $order) {
-                $live = $this->segment === 'dispatched'
+                if (! $showCourierTracking && ! $order->hasCourierTracking()) {
+                    continue;
+                }
+
+                $live = $liveCourierRefresh
                     ? ($this->courierLiveStatuses[$order->id] ?? null)
                     : null;
                 $trackingByOrder[$order->id] = [
@@ -1172,6 +1178,7 @@ class AdminOrders extends Component
             'segmentLabel' => AdminOrderSegment::label($this->segment),
             'segments' => AdminOrderSegment::SEGMENTS,
             'showCourierTracking' => $showCourierTracking,
+            'liveCourierRefresh' => $liveCourierRefresh,
             'isPageFullySelected' => $isPageFullySelected,
             'selectedIds' => $selectedIds,
             'selectedCount' => $selectedCount,

@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Models\AdminAttentionItem;
 use App\Models\CourierData;
 use App\Models\Order;
 use App\Models\OrderProduct;
@@ -68,6 +69,7 @@ class ReturnHubArrivalServiceTest extends TestCase
             'has_return' => false,
             'status' => 'delivered',
         ]);
+        $plain->items()->update(['returned_quantity' => 0, 'to_be_returned' => false]);
 
         $this->assertTrue($this->service()->observeMessage(
             $pending,
@@ -152,6 +154,37 @@ class ReturnHubArrivalServiceTest extends TestCase
 
         $awaiting = $this->service()->ordersAwaitingReceive();
         $this->assertTrue($awaiting->contains('id', $order->id));
+    }
+
+    #[Test]
+    public function should_auto_flag_partial_attention_and_cancelled_but_not_plain_delivered(): void
+    {
+        $partial = $this->returnPendingOrder([
+            'order_number' => 'RH-PARTIAL-FLAG',
+            'has_return' => false,
+            'status' => 'dispatched',
+        ]);
+        $partial->items()->update(['returned_quantity' => 0, 'to_be_returned' => false]);
+
+        $this->assertFalse($this->service()->shouldAutoFlagReturnPending($partial->fresh(['items'])));
+
+        AdminAttentionItem::query()->create([
+            'order_id' => $partial->id,
+            'issue_type' => AdminAttentionItem::ISSUE_TYPE_COD_MISMATCH,
+            'title' => 'Partial delivery',
+            'description' => 'Partial',
+            'data' => ['is_partial_delivery' => true],
+        ]);
+
+        $this->assertTrue($this->service()->shouldAutoFlagReturnPending($partial->fresh(['items'])));
+
+        $plain = $this->returnPendingOrder([
+            'order_number' => 'RH-PLAIN-FLAG',
+            'has_return' => false,
+            'status' => 'delivered',
+        ]);
+        $plain->items()->update(['returned_quantity' => 0, 'to_be_returned' => false]);
+        $this->assertFalse($this->service()->shouldAutoFlagReturnPending($plain->fresh(['items'])));
     }
 
     #[Test]

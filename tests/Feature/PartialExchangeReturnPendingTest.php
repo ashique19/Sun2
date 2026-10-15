@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Livewire\Admin\AdminOrders;
 use App\Models\AdminAttentionItem;
 use App\Models\Courier;
 use App\Models\Order;
@@ -11,6 +12,7 @@ use App\Services\Admin\OrderDeliveryReturnService;
 use App\Services\Admin\ReturnHubArrivalService;
 use App\Support\AdminOrderSegment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -508,8 +510,17 @@ class PartialExchangeReturnPendingTest extends TestCase
             'updated_at' => now()->toDateTimeString(),
             'tracking_message' => 'Partial delivered',
         ]);
-        $this->assertFalse((bool) $order->fresh()->has_return);
-        $this->assertNull($order->fresh()->return_hub_arrived_at);
+
+        $order->refresh();
+        $this->assertTrue((bool) $order->has_return);
+        $this->assertNotNull($order->return_hub_arrived_at);
+        $this->assertTrue(
+            AdminOrderSegment::apply(Order::query(), 'return-pending')
+                ->whereKey($order->id)
+                ->exists()
+        );
+        $awaiting = app(ReturnHubArrivalService::class)->ordersAwaitingReceive();
+        $this->assertTrue($awaiting->contains('id', $order->id));
 
         app(OrderDeliveryReturnService::class)->partialReturn(
             $order->fresh(),
@@ -520,7 +531,65 @@ class PartialExchangeReturnPendingTest extends TestCase
         $order->refresh();
         $this->assertTrue((bool) $order->has_return);
         $this->assertNotNull($order->return_hub_arrived_at);
-        $awaiting = app(ReturnHubArrivalService::class)->ordersAwaitingReceive();
-        $this->assertTrue($awaiting->contains('id', $order->id));
+        $this->assertSame(1, (int) $order->items()->first()->returned_quantity);
+    }
+
+    #[Test]
+    public function partial_then_rampura_flags_return_pending_without_qty(): void
+    {
+        $order = $this->dispatchedOrder([
+            'order_number' => 'PRP-HUB-PARTIAL-IN',
+            'courier_tracker' => 'SFR_HUB_PARTIAL_IN',
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Partial inbound',
+            'quantity' => 2,
+            'price' => 1000,
+            'purchase_price' => 400,
+            'line_total' => 2000,
+        ]);
+
+        $this->postWebhook([
+            'notification_type' => 'delivery_status',
+            'invoice' => $order->order_number,
+            'tracking_id' => $order->courier_tracker,
+            'status' => 'partial_delivered',
+            'collected_amount' => 1000,
+            'updated_at' => now()->toDateTimeString(),
+            'tracking_message' => 'Partial delivered',
+        ]);
+        $this->assertFalse((bool) $order->fresh()->has_return);
+
+        $this->postWebhook([
+            'notification_type' => 'tracking_update',
+            'invoice' => $order->order_number,
+            'tracking_id' => $order->courier_tracker,
+            'tracking_message' => 'Consignment has been received at RAMPURA.',
+            'updated_at' => now()->toDateTimeString(),
+        ]);
+
+        $order->refresh();
+        $this->assertTrue((bool) $order->has_return);
+        $this->assertNotNull($order->return_hub_arrived_at);
+        $this->assertTrue(
+            AdminOrderSegment::apply(Order::query(), 'return-pending')
+                ->whereKey($order->id)
+                ->exists()
+        );
+        $this->assertSame(0, (int) $order->items()->first()->returned_quantity);
+
+        $this->actingAs($this->adminUser());
+        Livewire::test(AdminOrders::class, ['segment' => 'return-pending'])
+            ->assertSee($order->name)
+            ->call('markReturnReceived', $order->id)
+            ->assertDontSee($order->name);
+
+        $this->assertFalse((bool) $order->fresh()->has_return);
+        $this->assertFalse(
+            AdminOrderSegment::apply(Order::query(), 'return-pending')
+                ->whereKey($order->id)
+                ->exists()
+        );
     }
 }

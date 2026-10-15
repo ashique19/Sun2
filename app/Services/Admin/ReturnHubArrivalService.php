@@ -2,6 +2,7 @@
 
 namespace App\Services\Admin;
 
+use App\Models\AdminAttentionItem;
 use App\Models\Order;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -39,10 +40,9 @@ class ReturnHubArrivalService
 
     /**
      * Stamp hub arrival when a Steadfast webhook/tracking message matches.
-     * Applies to every Has Return order (`has_return`), including exchange / H/R-only.
-     * If H/R was not set yet but this is an exchange original/replacement, auto-flag
-     * H/R first so the dashboard return-arrival list is not missed.
-     * Partial delivery waits for admin to enter returned quantities (partialReturn).
+     * Applies to every inbound (`has_return`): product returns, partials, exchanges, H/R-only.
+     * Auto-flags known inbound types first so Rampura arrivals are not dropped
+     * while admin still needs to enter returned quantities.
      */
     public function observeMessage(Order $order, string $message, mixed $timestamp = null): bool
     {
@@ -66,9 +66,52 @@ class ReturnHubArrivalService
     }
 
     /**
-     * Exchange parcels expect a return without a qty modal; partial delivery does not.
+     * Known warehouse inbounds: exchanges, C/R, returned qty, and partial delivery.
+     * Partial webhooks still wait for hub arrival before Return Pending is flagged.
      */
     public function shouldAutoFlagReturnPending(Order $order): bool
+    {
+        if ($this->isExchangeInbound($order)) {
+            return true;
+        }
+
+        if (in_array($order->status, ['cancelled', 'returned'], true)) {
+            return true;
+        }
+
+        $order->loadMissing('items');
+
+        if ($order->items->contains(fn ($item) => (int) $item->returned_quantity > 0)) {
+            return true;
+        }
+
+        return $this->hasPartialDeliverySignal($order);
+    }
+
+    /**
+     * When a partial-delivery attention item is created after the hub stamp
+     * already landed in courier logs, promote the order onto Return Pending.
+     */
+    public function promoteInboundIfExpected(Order $order): void
+    {
+        if ($order->has_return) {
+            $this->syncFromCourierLogs($order);
+
+            return;
+        }
+
+        if (! $this->shouldAutoFlagReturnPending($order)) {
+            return;
+        }
+
+        if (! $this->isExchangeInbound($order) && ! $this->hasStoredHubArrivalMessage($order)) {
+            return;
+        }
+
+        app(OrderDeliveryReturnService::class)->setHasReturn($order, true);
+    }
+
+    public function isExchangeInbound(Order $order): bool
     {
         if ((bool) $order->is_replacement) {
             return true;
@@ -165,6 +208,58 @@ class ReturnHubArrivalService
                 'courier_tracker',
                 'courier_consignment_id',
             ]);
+    }
+
+    private function hasPartialDeliverySignal(Order $order): bool
+    {
+        $hasPartialAttention = AdminAttentionItem::query()
+            ->unresolved()
+            ->where('order_id', $order->id)
+            ->where('issue_type', AdminAttentionItem::ISSUE_TYPE_COD_MISMATCH)
+            ->get()
+            ->contains(fn (AdminAttentionItem $item) => (bool) ($item->data['is_partial_delivery'] ?? false));
+
+        if ($hasPartialAttention) {
+            return true;
+        }
+
+        $order->loadMissing('courierLogs');
+
+        foreach ($order->courierLogs as $log) {
+            $data = is_array($log->api_data) ? $log->api_data : [];
+            $haystack = strtolower(implode(' ', array_filter([
+                (string) ($data['status'] ?? ''),
+                (string) ($data['event'] ?? ''),
+                (string) ($data['notification_type'] ?? ''),
+                (string) ($data['tracking_message'] ?? ''),
+            ])));
+
+            if (str_contains($haystack, 'partial')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function hasStoredHubArrivalMessage(Order $order): bool
+    {
+        if ($order->return_hub_arrived_at) {
+            return true;
+        }
+
+        $order->loadMissing('courierLogs');
+
+        foreach ($order->courierLogs as $log) {
+            $data = is_array($log->api_data) ? $log->api_data : [];
+            $message = trim((string) ($data['tracking_message'] ?? ''));
+
+            if ($this->isHubArrivalMessage($message)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function parseTimestamp(mixed $value): ?Carbon

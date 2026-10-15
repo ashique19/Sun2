@@ -249,7 +249,8 @@ class OrderDeliveryReturnService
                 ]);
             }
 
-            // Receiving the return completes the H/R workflow — leave Return Pending.
+            // Receiving the inbound completes the H/R workflow — leave Return Pending
+            // even when there was no returned_quantity (exchanges, H/R-only, partials).
             $this->setHasReturn($order->fresh(), false);
 
             return $order->fresh();
@@ -278,13 +279,7 @@ class OrderDeliveryReturnService
                 ]);
             }
 
-            $hasUnreceivedReturns = $order->items->contains(
-                fn ($item) => (int) $item->returned_quantity > 0,
-            );
-
-            if ($hasUnreceivedReturns) {
-                $this->setHasReturn($order->fresh(), true);
-            }
+            $this->setHasReturn($order->fresh(), true);
 
             return $order->refresh();
         });

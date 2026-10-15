@@ -86,7 +86,7 @@
                     </button>
                 @endif
                 @if ($order->has_return)
-                    @php($hasPendingReturn = $order->items->contains(fn ($item) => (int) $item->returned_quantity > 0 && ! $item->return_received))
+                    @php($hasPendingReturn = (bool) $order->has_return)
                     @php($hasReceivedReturn = $order->items->contains(fn ($item) => (bool) $item->return_received))
                     <button type="button"
                         wire:click="markReturnReceived"

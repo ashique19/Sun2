@@ -100,4 +100,93 @@ class AdminOrdersReturnReceivedClearsHasReturnTest extends TestCase
                 ->exists()
         );
     }
+
+    #[Test]
+    public function return_pending_includes_exchange_without_qty_and_received_skips_the_list(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $original = Order::query()->create([
+            'order_number' => 'EX-ORIG-'.uniqid(),
+            'name' => 'Exchange Return Customer',
+            'phone' => '01710000046',
+            'address' => 'Dhaka',
+            'status' => 'delivered',
+            'subtotal' => 1000,
+            'total' => 1000,
+            'has_return' => true,
+            'actual_delivery_date' => now()->subDay(),
+            'placed_at' => now()->subDays(2),
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $original->id,
+            'name' => 'Exchange Dress',
+            'quantity' => 1,
+            'returned_quantity' => 0,
+            'to_be_returned' => false,
+            'return_received' => false,
+            'price' => 1000,
+            'purchase_price' => 400,
+            'line_total' => 1000,
+        ]);
+
+        $this->assertTrue(
+            AdminOrderSegment::apply(Order::query(), 'return-pending')
+                ->whereKey($original->id)
+                ->exists()
+        );
+
+        Livewire::test(AdminOrders::class, ['segment' => 'return-pending'])
+            ->assertSee($original->name)
+            ->assertSeeHtml('wire:click="markReturnReceived('.$original->id.')"')
+            ->call('markReturnReceived', $original->id)
+            ->assertDontSee($original->name);
+
+        $this->assertFalse((bool) $original->fresh()->has_return);
+        $this->assertFalse(
+            AdminOrderSegment::apply(Order::query(), 'return-pending')
+                ->whereKey($original->id)
+                ->exists()
+        );
+    }
+
+    #[Test]
+    public function return_pending_includes_hr_only_inbound_and_received_skips_the_list(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $order = Order::query()->create([
+            'order_number' => 'HR-'.uniqid(),
+            'name' => 'H/R Only Customer',
+            'phone' => '01710000047',
+            'address' => 'Dhaka',
+            'status' => 'delivered',
+            'subtotal' => 800,
+            'total' => 800,
+            'has_return' => true,
+            'actual_delivery_date' => now()->subDay(),
+            'placed_at' => now()->subDays(2),
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'H/R Kurti',
+            'quantity' => 1,
+            'returned_quantity' => 0,
+            'price' => 800,
+            'purchase_price' => 250,
+            'line_total' => 800,
+        ]);
+
+        Livewire::test(AdminOrders::class, ['segment' => 'return-pending'])
+            ->assertSee($order->name)
+            ->call('markReturnReceived', $order->id)
+            ->assertDontSee($order->name);
+
+        $this->assertFalse((bool) $order->fresh()->has_return);
+        $this->assertFalse(
+            AdminOrderSegment::apply(Order::query(), 'return-pending')
+                ->whereKey($order->id)
+                ->exists()
+        );
+    }
 }

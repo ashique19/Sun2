@@ -62,17 +62,22 @@ class AdminAttentionService
                 'description' => $description,
                 'data' => $data,
             ]);
-
-            return $existing->refresh();
+            $item = $existing->refresh();
+        } else {
+            $item = AdminAttentionItem::query()->create([
+                'order_id' => $order->id,
+                'issue_type' => AdminAttentionItem::ISSUE_TYPE_COD_MISMATCH,
+                'title' => $title,
+                'description' => $description,
+                'data' => $data,
+            ]);
         }
 
-        return AdminAttentionItem::query()->create([
-            'order_id' => $order->id,
-            'issue_type' => AdminAttentionItem::ISSUE_TYPE_COD_MISMATCH,
-            'title' => $title,
-            'description' => $description,
-            'data' => $data,
-        ]);
+        if ($isPartial) {
+            app(ReturnHubArrivalService::class)->promoteInboundIfExpected($order->fresh());
+        }
+
+        return $item;
     }
 
     /**

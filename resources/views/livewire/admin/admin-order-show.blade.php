@@ -723,27 +723,25 @@
                     </div>
                 </form>
 
-                @if ($order->courier_tracker || $order->steadfastConsignmentUrl())
-                    <div class="text-sm space-y-1">
-                        <p>
-                            <span class="text-[#8C8474]">Courier:</span>
-                            @if ($steadfastUrl = $order->steadfastConsignmentUrl())
-                                <a href="{{ $steadfastUrl }}"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="font-medium text-[#C9A227] hover:underline"
-                                    title="Open Steadfast consignment">
-                                    {{ $order->courier?->name ?? 'Steadfast' }} ↗
-                                </a>
-                            @else
-                                {{ $order->courier?->name }}
-                            @endif
-                        </p>
-                        @if ($order->courier_tracker)
-                            <p><span class="text-[#8C8474]">Tracking:</span> <strong>{{ $order->courier_tracker }}</strong></p>
+                @if ($showCourierTracking)
+                    <div class="space-y-3">
+                        @if ($courierApiAvailable && ! $readOnly)
+                            <button type="button"
+                                wire:click="refreshCourierStatus"
+                                wire:loading.attr="disabled"
+                                class="rounded-lg border border-[#E0D6C2] bg-white px-3 py-1.5 text-xs font-medium text-[#6B6459] hover:bg-[#FAF6EF] disabled:opacity-60">
+                                <span wire:loading.remove wire:target="refreshCourierStatus">Refresh tracking</span>
+                                <span wire:loading wire:target="refreshCourierStatus">Refreshing…</span>
+                            </button>
                         @endif
+                        <x-admin.order-courier-tracking
+                            :order="$order"
+                            :events="$trackingEvents"
+                            :courier-status="$courierStatus"
+                            refresh-target="refreshCourierStatus"
+                        />
                         @if ($order->dispatch_date)
-                            <p class="text-[#8C8474]">Dispatched {{ $order->dispatch_date->format('d M Y, h:i A') }}</p>
+                            <p class="text-xs text-[#8C8474]">Dispatched {{ $order->dispatch_date->format('d M Y, h:i A') }}</p>
                         @endif
                     </div>
                 @elseif ($order->isDispatchable())

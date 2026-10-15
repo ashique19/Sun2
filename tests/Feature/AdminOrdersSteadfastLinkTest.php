@@ -145,6 +145,39 @@ class AdminOrdersSteadfastLinkTest extends TestCase
     }
 
     #[Test]
+    public function numeric_tracker_is_used_as_steadfast_consignment_link(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->order($this->steadfast(), [
+            'status' => 'delivered',
+            'actual_delivery_date' => now(),
+            'collected_amount' => 1080,
+            'courier_consignment_id' => null,
+            'courier_tracker' => '277193413',
+        ]);
+
+        Livewire::test(AdminOrders::class, ['segment' => 'delivered'])
+            ->assertSee('Steadfast ↗')
+            ->assertSeeHtml('href="https://steadfast.com.bd/user/consignment/277193413"');
+    }
+
+    #[Test]
+    public function cancelled_orders_list_links_to_steadfast_consignment(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->order($this->steadfast(), [
+            'status' => 'cancelled',
+            'collected_amount' => 0,
+            'due_amount' => 0,
+        ]);
+
+        Livewire::test(AdminOrders::class, ['segment' => 'cancel-return'])
+            ->assertSee('Steadfast ↗')
+            ->assertSeeHtml('href="https://steadfast.com.bd/user/consignment/277193413"')
+            ->assertSee('SF123456');
+    }
+
+    #[Test]
     public function order_show_links_to_steadfast_consignment_after_dispatch(): void
     {
         $this->actingAs($this->adminUser());

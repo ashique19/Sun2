@@ -45,12 +45,17 @@ class AdminOrderSegment
     }
 
     /**
-     * Segments that show stored courier tracking (timeline + tracker).
-     * Live API refresh stays Dispatched-only.
+     * Segments that show courier tracking (Steadfast link, tracker, timeline).
+     * Live API refresh uses the same set so Delivered / Cancel & Return match Dispatched.
      */
     public static function showsCourierTracking(string $segment): bool
     {
         return in_array($segment, ['dispatched', 'delivered', 'cancel-return', 'return-pending'], true);
+    }
+
+    public static function refreshesLiveCourierTracking(string $segment): bool
+    {
+        return self::showsCourierTracking($segment);
     }
 
     public static function label(string $segment): string

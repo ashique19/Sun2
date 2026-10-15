@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Livewire\Admin\AdminOrders;
+use App\Livewire\Admin\AdminOrderShow;
 use App\Models\Courier;
 use App\Models\CourierData;
 use App\Models\Order;
@@ -109,7 +110,12 @@ class AdminOrdersTrackingPanelTest extends TestCase
                 'actual_delivery_date' => now()->subDay(),
                 'collected_amount' => 1080,
             ]],
-            'cancel-return' => ['cancel-return', [
+            'cancelled' => ['cancel-return', [
+                'status' => 'cancelled',
+                'collected_amount' => 0,
+                'due_amount' => 0,
+            ]],
+            'returned' => ['cancel-return', [
                 'status' => 'returned',
                 'collected_amount' => 0,
                 'due_amount' => 0,
@@ -136,8 +142,27 @@ class AdminOrdersTrackingPanelTest extends TestCase
             ->assertSee('SF998877')
             ->assertSee('Parcel delivered to customer')
             ->assertSee('DELIVERED')
-            ->assertSeeHtml('href="https://steadfast.com.bd/user/consignment/288776655"')
-            ->assertDontSeeHtml('wire:click="refreshCourierStatuses"');
+            ->assertSeeHtml('href="https://steadfast.com.bd/user/consignment/288776655"');
+    }
+
+    #[Test]
+    public function all_segment_shows_tracking_for_delivered_cancelled_and_returned(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+        $this->orderWithTracking($courier, [
+            'status' => 'cancelled',
+            'name' => 'Cancelled Tracked Customer',
+            'collected_amount' => 0,
+            'due_amount' => 0,
+        ]);
+
+        Livewire::test(AdminOrders::class, ['segment' => 'all'])
+            ->assertSee('Cancelled Tracked Customer')
+            ->assertSee('Steadfast ↗')
+            ->assertSee('SF998877')
+            ->assertSee('Parcel delivered to customer')
+            ->assertSeeHtml('href="https://steadfast.com.bd/user/consignment/288776655"');
     }
 
     #[Test]
@@ -178,7 +203,25 @@ class AdminOrdersTrackingPanelTest extends TestCase
         $this->assertTrue(AdminOrderSegment::showsCourierTracking('delivered'));
         $this->assertTrue(AdminOrderSegment::showsCourierTracking('cancel-return'));
         $this->assertTrue(AdminOrderSegment::showsCourierTracking('return-pending'));
+        $this->assertTrue(AdminOrderSegment::refreshesLiveCourierTracking('delivered'));
+        $this->assertTrue(AdminOrderSegment::refreshesLiveCourierTracking('cancel-return'));
         $this->assertFalse(AdminOrderSegment::showsCourierTracking('new'));
         $this->assertFalse(AdminOrderSegment::showsCourierTracking('all'));
+        $this->assertFalse(AdminOrderSegment::refreshesLiveCourierTracking('all'));
+    }
+
+    #[Test]
+    #[DataProvider('trackingSegmentsProvider')]
+    public function order_show_lists_tracking_link_and_timeline_for_terminal_orders(string $segment, array $overrides): void
+    {
+        $this->actingAs($this->adminUser());
+        $order = $this->orderWithTracking($this->steadfast(), $overrides);
+
+        Livewire::test(AdminOrderShow::class, ['order' => $order])
+            ->assertSee('Steadfast ↗')
+            ->assertSee('SF998877')
+            ->assertSee('Parcel delivered to customer')
+            ->assertSee('DELIVERED')
+            ->assertSeeHtml('href="https://steadfast.com.bd/user/consignment/288776655"');
     }
 }

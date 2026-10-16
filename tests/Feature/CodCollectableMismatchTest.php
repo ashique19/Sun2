@@ -225,4 +225,110 @@ class CodCollectableMismatchTest extends TestCase
         $this->assertSame(0.0, $order->codCharge());
         $this->assertSame(0.0, $order->moneyTotals()->remittanceBase);
     }
+
+    /**
+     * Production screenshot: Alchora ৳980 + delivery ৳120 = bill ৳1,100, Amount to collect ৳0.
+     * False paid cache + premature COD ledger on a New order must not zero collectable,
+     * even before OrderPaymentSync rewrites the caches (order list / first paint).
+     */
+    #[Test]
+    public function new_cod_order_collectable_matches_bill_despite_false_paid_and_premature_ledger(): void
+    {
+        $this->seedCodMethod();
+        $courier = $this->steadfast();
+        $order = $this->order($courier, [
+            'status' => 'new',
+            'dispatch_date' => null,
+            'subtotal' => 980,
+            'delivery_charge' => 120,
+            'courier_charge' => 80,
+            'packaging_cost' => 20,
+            'total' => 1100,
+            'cod_amount' => 0,
+            'due_amount' => 0,
+            'paid_amount' => 1100,
+            'collected_amount' => 1100,
+            'payment_status' => 'paid',
+        ]);
+        $order->items()->delete();
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Alchora',
+            'quantity' => 1,
+            'price' => 980,
+            'purchase_price' => 600,
+            'line_total' => 980,
+        ]);
+
+        PaymentTransaction::query()->create([
+            'order_id' => $order->id,
+            'method' => 'cod',
+            'amount' => 1100,
+            'status' => 'completed',
+            'kind' => 'settlement',
+            'received_by' => $this->adminUser()->id,
+            'external_id' => OrderDeliverySettlement::settlementExternalId((int) $order->id),
+            'paid_at' => now(),
+            'meta' => ['source' => 'steadfast_webhook'],
+        ]);
+
+        $order = $order->fresh(['items', 'courier', 'paymentTransactions', 'adjustments']);
+
+        $this->assertSame(1100.0, $order->moneyTotals()->billToCustomer);
+        $this->assertSame(0.0, $order->trustedPaidAmount());
+        $this->assertSame(1100.0, $order->collectableAmount());
+        $this->assertSame(1100.0, $order->successfulPaymentLedgerTotal());
+        $this->assertSame(0.0, $order->recognizedPaidAmount());
+    }
+
+    #[Test]
+    public function admin_order_show_displays_matching_bill_and_collectable_for_false_paid_new_order(): void
+    {
+        $this->seedCodMethod();
+        $courier = $this->steadfast();
+        $order = $this->order($courier, [
+            'status' => 'new',
+            'dispatch_date' => null,
+            'subtotal' => 980,
+            'delivery_charge' => 120,
+            'total' => 0,
+            'cod_amount' => 0,
+            'due_amount' => 0,
+            'paid_amount' => 1100,
+            'payment_status' => 'paid',
+        ]);
+        $order->items()->delete();
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Alchora',
+            'quantity' => 1,
+            'price' => 980,
+            'purchase_price' => 600,
+            'line_total' => 980,
+        ]);
+
+        PaymentTransaction::query()->create([
+            'order_id' => $order->id,
+            'method' => 'cod',
+            'amount' => 1100,
+            'status' => 'completed',
+            'kind' => 'settlement',
+            'paid_at' => now(),
+            'meta' => ['source' => 'steadfast_webhook'],
+        ]);
+
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminOrderShow::class, ['order' => $order->fresh()])
+            ->assertSee('Bill to customer')
+            ->assertSee('Amount to collect')
+            ->assertSeeHtml('&#2547; 1,100')
+            ->assertDontSee('After &#2547;1,100 paid');
+
+        $order->refresh();
+        $this->assertSame(1100.0, $order->moneyTotals()->billToCustomer);
+        $this->assertSame(1100.0, $order->collectableAmount());
+        $this->assertSame(0.0, (float) $order->paid_amount);
+        $this->assertSame('unpaid', $order->payment_status);
+    }
 }

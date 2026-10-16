@@ -288,10 +288,11 @@
                             <span>Amount to collect</span>
                             <span class="tabular-nums">&#2547; {{ number_format($order->collectableAmount(), 0) }}</span>
                         </div>
-                        @if ($order->trustedPaidAmount() > 0)
+                        @php($recognizedPaid = $order->trustedPaidAmount())
+                        @if ($recognizedPaid > 0)
                             <p class="text-xs text-[#8C8474]">
-                                After &#2547;{{ number_format($order->trustedPaidAmount(), 0) }} paid
-                                (due &#2547;{{ number_format($order->due_amount, 0) }}).
+                                After &#2547;{{ number_format($recognizedPaid, 0) }} paid
+                                (due &#2547;{{ number_format(max(0, $money->billToCustomer - $recognizedPaid), 0) }}).
                             </p>
                         @endif
                     </div>

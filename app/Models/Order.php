@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Orders\OrderPaymentSync;
 use App\Services\Orders\OrderTotalCalculator;
 use App\Services\Orders\OrderTotals;
 use App\Support\PhoneNumber;
@@ -535,45 +536,33 @@ class Order extends Model
     /**
      * Amount the courier should collect (cash on delivery).
      *
-     * When any successful payment is on the order (advance / partial / settlement
-     * caches on paid_amount), residual is total − paid when total is healthy.
-     * If total is stale at 0 while the reconstructed invoice bill is positive,
-     * residual is invoiceBill − paid so advances still leave the correct COD.
+     * This is the same invoice bill as “Bill to customer”, minus money that
+     * actually reduces COD (bkash/cash/advances, or courier COD once delivery
+     * is recognized). It does not trust orders.paid_amount / total / due / cod
+     * when those caches claim the order is fully paid — that is the classic
+     * Bill ৳1100 / Amount to collect ৳0 mismatch.
      *
-     * Unpaid rows prefer cod → due → total; when all are ≤0, fall back to the
-     * reconstructed invoice bill (same inputs as billToCustomer). Intentional
-     * free/replacement orders (bill also 0) stay at collectable 0.
-     *
-     * Stale paid_amount caches (common after bad syncs / repairs) are ignored when
-     * payment_status is still unpaid or the payment ledger has no successful rows —
-     * otherwise storefront COD shows “After ৳bill paid” with Amount to collect ৳0.
+     * Unpaid rows with no recognized payments still prefer a positive cod → due
+     * → total cache (manual COD residual / advances not yet in the ledger),
+     * then the reconstructed invoice bill.
      *
      * Compare as floats — Laravel's decimal cast yields "0.00", which is truthy
      * for ?: and would incorrectly fall through.
      */
     public function collectableAmount(): float
     {
-        $total = round((float) $this->total, 2);
-        $paid = round((float) ($this->paid_amount ?? 0), 2);
+        $bill = $this->reconstructedInvoiceBill();
+        $paid = $this->trustedPaidAmount();
+
+        if ($paid > 0) {
+            $base = $bill > 0 ? $bill : round((float) $this->total, 2);
+
+            return round(max(0.0, $base - $paid), 2);
+        }
+
         $cod = round((float) ($this->cod_amount ?? 0), 2);
         $due = round((float) ($this->due_amount ?? 0), 2);
-
-        if ($paid > 0) {
-            $paid = $this->trustedPaidAmount($paid);
-        }
-
-        if ($paid > 0) {
-            if ($total > 0) {
-                return round(max(0.0, $total - $paid), 2);
-            }
-
-            $invoiceBill = $this->reconstructedInvoiceBill();
-            if ($invoiceBill > 0) {
-                return round(max(0.0, $invoiceBill - $paid), 2);
-            }
-
-            return 0.0;
-        }
+        $total = round((float) $this->total, 2);
 
         foreach ([$cod, $due, $total] as $value) {
             if ($value > 0) {
@@ -581,41 +570,58 @@ class Order extends Model
             }
         }
 
-        return $this->reconstructedInvoiceBill();
+        return $bill;
     }
 
     /**
-     * Paid cache used for COD residual — 0 when status/ledger say nothing was paid.
+     * Paid amount that may reduce COD. False “fully paid” caches and premature
+     * courier COD ledger rows (parcel still new / not delivered) count as 0.
      *
-     * Partial advances keep trusting paid_amount (ledger and cache stay in sync via
-     * OrderPaymentSync). Only when the cache claims the order is fully paid do we
-     * re-check the ledger — that is the storefront false-paid failure mode.
+     * Partial advances keep trusting paid_amount when the cache is below the
+     * invoice bill (ledger and cache stay in sync via OrderPaymentSync).
      */
     public function trustedPaidAmount(?float $cachedPaid = null): float
     {
         $cachedPaid = round($cachedPaid ?? (float) ($this->paid_amount ?? 0), 2);
 
-        if ($cachedPaid <= 0) {
+        if (strtolower((string) ($this->payment_status ?? '')) === 'unpaid') {
             return 0.0;
         }
 
-        if (strtolower((string) ($this->payment_status ?? '')) === 'unpaid') {
+        if ($cachedPaid <= 0) {
             return 0.0;
         }
 
         $total = round((float) $this->total, 2);
         $bill = max($this->reconstructedInvoiceBill(), $total);
 
-        // Cache says fully paid (collectable would be 0) — confirm against ledger.
+        // Cache says fully paid (collectable would be 0) — confirm against the
+        // filtered ledger so premature courier COD cannot zero Amount to collect.
         if ($bill >= 0.01 && $cachedPaid + 0.009 >= $bill) {
-            return $this->successfulPaymentLedgerTotal();
+            return $this->recognizedPaidAmount();
         }
 
         return $cachedPaid;
     }
 
     /**
-     * Sum of successful payment_transactions (ledger source of truth for paid_amount).
+     * Successful ledger rows that actually reduce COD (same rules as OrderPaymentSync).
+     */
+    public function recognizedPaidAmount(): float
+    {
+        $sync = app(OrderPaymentSync::class);
+        $this->loadMissing('paymentTransactions');
+
+        return round(
+            (float) $this->paymentTransactions
+                ->filter(fn (PaymentTransaction $tx) => $tx->isSuccessful() && $sync->countsTowardPaid($this, $tx))
+                ->sum(fn (PaymentTransaction $tx) => (float) $tx->amount),
+            2,
+        );
+    }
+
+    /**
+     * Sum of successful payment_transactions (unfiltered — includes premature COD).
      */
     public function successfulPaymentLedgerTotal(): float
     {

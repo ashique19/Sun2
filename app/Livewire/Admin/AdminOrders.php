@@ -1116,6 +1116,7 @@ class AdminOrders extends Component
             'channelConversation:id,channel,customer_name,last_inbound_at',
             'items:'.$itemColumns,
             'adjustments:id,order_id,type,label,amount,sort_order',
+            'paymentTransactions:id,order_id,method,amount,status,kind,received_by',
             'exchangeOf:id,order_number',
             'replacements:id,order_number,exchange_of_order_id',
         ];

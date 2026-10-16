@@ -22,8 +22,8 @@
 <div {{ $attributes->merge(['class' => 'shrink-0 text-right']) }}>
     <p class="text-[11px] uppercase tracking-wide text-[#8C8474]">Collect</p>
     <p class="text-sm font-semibold tabular-nums text-[#1E1E1E]">&#2547; {{ number_format($order->collectableAmount(), 0) }}</p>
-    @if ((float) $order->paid_amount > 0 && round((float) $order->collectableAmount(), 2) !== round((float) $order->total, 2))
-        <p class="text-[11px] text-[#8C8474]">Bill &#2547;{{ number_format($order->total, 0) }}</p>
+    @if ($order->trustedPaidAmount() > 0 && round((float) $order->collectableAmount(), 2) !== round((float) $money->billToCustomer, 2))
+        <p class="text-[11px] text-[#8C8474]">Bill &#2547;{{ number_format($money->billToCustomer, 0) }}</p>
     @endif
     <p class="mt-1 text-[11px] text-[#8C8474]">
         Net

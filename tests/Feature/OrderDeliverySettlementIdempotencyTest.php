@@ -37,7 +37,7 @@ class OrderDeliverySettlementIdempotencyTest extends TestCase
     #[Test]
     public function record_collection_reuses_settlement_external_id(): void
     {
-        $order = $this->order();
+        $order = $this->order(['actual_delivery_date' => now()]);
         $settlement = app(OrderDeliverySettlement::class);
 
         $settlement->recordCollection(

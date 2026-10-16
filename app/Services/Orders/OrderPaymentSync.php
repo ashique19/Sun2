@@ -126,7 +126,15 @@ class OrderPaymentSync
 
     private function codSettlementIsRecognized(Order $order, PaymentTransaction $transaction): bool
     {
-        // Staff-recorded COD (shop / manual) counts immediately.
+        $status = strtolower((string) $order->status);
+
+        // Still in-house: courier has not collected. Ignore leaked settlement rows,
+        // received_by, and actual_delivery_date so New orders cannot show COD ৳0.
+        if (in_array($status, ['draft', 'new', 'confirmed'], true)) {
+            return false;
+        }
+
+        // Staff-recorded COD (shop / manual) counts once the parcel is out or delivered.
         if ($transaction->received_by !== null) {
             return true;
         }
@@ -135,7 +143,7 @@ class OrderPaymentSync
             return true;
         }
 
-        return in_array($order->status, ['delivered', 'returned', 'cancelled'], true);
+        return in_array($status, ['delivered', 'returned', 'cancelled'], true);
     }
 
     /**

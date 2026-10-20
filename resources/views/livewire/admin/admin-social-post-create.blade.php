@@ -264,7 +264,13 @@
                         const status = $wire.channelProgress[channel]?.status;
                         if (status !== 'waiting' && status !== 'posting') continue;
                         await $wire.markChannelPosting(channel);
-                        await $wire.publishSelectedChannel(channel);
+                        let guard = 0;
+                        while (guard < 80) {
+                            guard++;
+                            const status = $wire.channelProgress[channel]?.status;
+                            if (status === 'success' || status === 'failed') break;
+                            await $wire.advanceSelectedChannel(channel);
+                        }
                     }
                 }
             }"
@@ -315,6 +321,9 @@
                                 {{ $label }}
                             </div>
                         </div>
+                        @if (($row['detail'] ?? null) && $status === 'posting')
+                            <p class="mt-2 text-xs text-[#8C8474]">{{ $row['detail'] }}</p>
+                        @endif
 
                         @if (($row['url'] ?? null) && $status === 'success')
                             <a href="{{ $row['url'] }}" target="_blank" rel="noreferrer"

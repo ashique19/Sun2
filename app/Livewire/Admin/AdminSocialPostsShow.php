@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Admin;
 
+use App\Livewire\Admin\Concerns\AdvancesFacebookSocialPublish;
 use App\Models\SocialPost;
 use App\Models\SocialPostPublication;
 use App\Services\Social\MetaGraphSocialPublisher;
@@ -11,6 +12,10 @@ use Livewire\Component;
 #[Layout('components.layouts.admin')]
 class AdminSocialPostsShow extends Component
 {
+    use AdvancesFacebookSocialPublish {
+        advanceSelectedChannel as advanceSelectedChannelUnchecked;
+    }
+
     public SocialPost $socialPost;
 
     public ?string $message = null;
@@ -19,7 +24,7 @@ class AdminSocialPostsShow extends Component
     public string $republishPhase = 'idle';
 
     /**
-     * @var array<string, array{label: string, status: string, error: ?string, url: ?string}>
+     * @var array<string, array{label: string, status: string, error: ?string, url: ?string, detail?: ?string}>
      */
     public array $channelProgress = [];
 
@@ -54,9 +59,11 @@ class AdminSocialPostsShow extends Component
                 'status' => 'waiting',
                 'error' => null,
                 'url' => null,
+                'detail' => null,
             ];
         }
 
+        $this->resetAlbumProgress();
         $this->republishPhase = 'publishing';
     }
 
@@ -76,41 +83,26 @@ class AdminSocialPostsShow extends Component
 
     public function publishSelectedChannel(string $channel, MetaGraphSocialPublisher $publisher): void
     {
-        if ($this->republishPhase !== 'publishing' || ! isset($this->channelProgress[$channel])) {
-            return;
-        }
-
-        if (! in_array($this->channelProgress[$channel]['status'], ['waiting', 'posting'], true)) {
-            return;
-        }
-
         $this->ensureCanRepublish();
-        $this->channelProgress[$channel]['status'] = 'posting';
-
-        $post = $this->socialPost->fresh(['products']);
-        if (! $post) {
-            $this->channelProgress[$channel] = [
-                'label' => $this->channelLabel($channel),
-                'status' => 'failed',
-                'error' => 'Social post was not found.',
-                'url' => null,
-            ];
-            $this->finishIfComplete();
-
-            return;
-        }
-
-        $publication = $publisher->publishChannel($post, $channel);
-
-        $this->channelProgress[$channel] = [
-            'label' => $this->channelLabel($channel),
-            'status' => $publication->status === SocialPostPublication::STATUS_SUCCESS ? 'success' : 'failed',
-            'error' => $publication->error,
-            'url' => $publication->external_url,
-        ];
-
+        $this->publishSelectedChannelUntilDone($channel, $publisher);
         $this->socialPost->refresh();
-        $this->finishIfComplete();
+    }
+
+    public function advanceSelectedChannel(string $channel, MetaGraphSocialPublisher $publisher): void
+    {
+        $this->ensureCanRepublish();
+        $this->advanceSelectedChannelUnchecked($channel, $publisher);
+        $this->socialPost->refresh();
+    }
+
+    protected function publishingPost(): ?SocialPost
+    {
+        return $this->socialPost->fresh(['products']);
+    }
+
+    protected function isChannelPublishActive(): bool
+    {
+        return $this->republishPhase === 'publishing';
     }
 
     /**

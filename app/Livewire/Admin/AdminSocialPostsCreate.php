@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Admin;
 
+use App\Livewire\Admin\Concerns\AdvancesFacebookSocialPublish;
 use App\Models\Product;
 use App\Models\SocialPost;
 use App\Models\SocialPostPublication;
@@ -18,6 +19,8 @@ use Livewire\Component;
 #[Layout('components.layouts.admin')]
 class AdminSocialPostsCreate extends Component
 {
+    use AdvancesFacebookSocialPublish;
+
     #[Url(as: 'products')]
     public string $products = '';
 
@@ -281,9 +284,11 @@ class AdminSocialPostsCreate extends Component
                 'status' => 'waiting',
                 'error' => null,
                 'url' => null,
+                'detail' => null,
             ];
         }
 
+        $this->resetAlbumProgress();
         $this->phase = 'publishing';
     }
 
@@ -303,42 +308,21 @@ class AdminSocialPostsCreate extends Component
 
     public function publishSelectedChannel(string $channel, MetaGraphSocialPublisher $publisher): void
     {
-        if ($this->phase !== 'publishing' || ! $this->createdPostId || ! isset($this->channelProgress[$channel])) {
-            return;
+        $this->publishSelectedChannelUntilDone($channel, $publisher);
+    }
+
+    protected function publishingPost(): ?SocialPost
+    {
+        if (! $this->createdPostId) {
+            return null;
         }
 
-        if (! in_array($this->channelProgress[$channel]['status'], ['waiting', 'posting'], true)) {
-            return;
-        }
+        return SocialPost::query()->with(['products'])->find($this->createdPostId);
+    }
 
-        $this->channelProgress[$channel]['status'] = 'posting';
-
-        $post = SocialPost::query()
-            ->with(['products'])
-            ->find($this->createdPostId);
-
-        if (! $post) {
-            $this->channelProgress[$channel] = [
-                'label' => $this->channelLabel($channel),
-                'status' => 'failed',
-                'error' => 'Social post was not found.',
-                'url' => null,
-            ];
-            $this->finishIfComplete();
-
-            return;
-        }
-
-        $publication = $publisher->publishChannel($post, $channel);
-
-        $this->channelProgress[$channel] = [
-            'label' => $this->channelLabel($channel),
-            'status' => $publication->status === SocialPostPublication::STATUS_SUCCESS ? 'success' : 'failed',
-            'error' => $publication->error,
-            'url' => $publication->external_url,
-        ];
-
-        $this->finishIfComplete();
+    protected function isChannelPublishActive(): bool
+    {
+        return $this->phase === 'publishing' && $this->createdPostId !== null;
     }
 
     /**

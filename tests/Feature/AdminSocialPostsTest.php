@@ -531,4 +531,80 @@ class AdminSocialPostsTest extends TestCase
         $this->assertSame(2, SocialPostPublication::query()->count());
         $this->assertSame(0, SocialPostPublication::query()->where('channel', SocialPostPublication::CHANNEL_INSTAGRAM)->count());
     }
+
+    #[Test]
+    public function republish_uploads_each_album_photo_in_its_own_step(): void
+    {
+        $admin = $this->adminUser();
+        $category = $this->makeCategory();
+        $first = $this->makeProduct($category, 'p-step-a', 'img/products/step-a.jpg', 'Step A');
+        $second = $this->makeProduct($category, 'p-step-b', 'img/products/step-b.jpg', 'Step B');
+        $third = $this->makeProduct($category, 'p-step-c', 'img/products/step-c.jpg', 'Step C');
+
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'fb-page-steps',
+            'facebook.graph_version' => 'v25.0',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/fb-page-steps/photos*' => Http::sequence()
+                ->push(['id' => 'photo-a'], 200)
+                ->push(['id' => 'photo-b'], 200)
+                ->push(['id' => 'photo-c'], 200),
+            'https://graph.facebook.com/v25.0/fb-page-steps/feed*' => Http::response([
+                'id' => 'fbpub-steps',
+                'permalink_url' => 'https://www.facebook.com/fbpub-steps',
+            ], 200),
+            'https://graph.facebook.com/v25.0/fbpub-steps*' => Http::response([
+                'permalink_url' => 'https://www.facebook.com/fbpub-steps',
+            ], 200),
+        ]);
+
+        $post = SocialPost::query()->create([
+            'body' => 'Twelve-product albums used to timeout in one request',
+            'image_source' => 'thumb',
+            'layout' => 'album',
+            'status' => SocialPost::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+            'thumbnail_path' => 'img/products/step-a.jpg',
+        ]);
+        foreach ([$first, $second, $third] as $index => $product) {
+            $post->products()->attach($product->id, [
+                'sort_order' => $index,
+                'thumb_snapshot_path' => $product->images->first()->path,
+                'priced_snapshot_path' => null,
+                'selected_image_path' => $product->images->first()->path,
+            ]);
+        }
+
+        $component = Livewire::actingAs($admin)
+            ->test(AdminSocialPostsShow::class, ['socialPost' => $post->fresh(['products'])])
+            ->call('startRepublish')
+            ->assertSet('republishPhase', 'publishing')
+            ->call('advanceSelectedChannel', 'facebook')
+            ->assertSet('albumCursor', 1)
+            ->assertSet('channelProgress.facebook.status', 'posting')
+            ->assertSet('channelProgress.facebook.detail', 'Uploading photo 1 of 3…')
+            ->call('advanceSelectedChannel', 'facebook')
+            ->assertSet('albumCursor', 2)
+            ->call('advanceSelectedChannel', 'facebook')
+            ->assertSet('albumCursor', 3)
+            ->call('advanceSelectedChannel', 'facebook')
+            ->assertSet('republishPhase', 'done')
+            ->assertSet('channelProgress.facebook.status', 'success');
+
+        $this->assertSame(1, SocialPostPublication::query()->where('status', 'success')->count());
+
+        $photoRequests = collect(Http::recorded())
+            ->filter(fn (array $pair): bool => str_contains($pair[0]->url(), '/photos'))
+            ->count();
+        $feedRequests = collect(Http::recorded())
+            ->filter(fn (array $pair): bool => str_contains($pair[0]->url(), '/feed'))
+            ->count();
+
+        $this->assertSame(3, $photoRequests);
+        $this->assertSame(1, $feedRequests);
+        $this->assertSame('done', $component->get('republishPhase'));
+    }
 }

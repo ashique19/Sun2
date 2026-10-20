@@ -68,7 +68,13 @@
                     const channels = Object.keys($wire.channelProgress || {});
                     for (const channel of channels) {
                         await $wire.markChannelPosting(channel);
-                        await $wire.publishSelectedChannel(channel);
+                        let guard = 0;
+                        while (guard < 80) {
+                            guard++;
+                            const status = $wire.channelProgress[channel]?.status;
+                            if (status === 'success' || status === 'failed') break;
+                            await $wire.advanceSelectedChannel(channel);
+                        }
                     }
                 } finally {
                     this.busy = false;
@@ -117,6 +123,9 @@
                                 {{ $label }}
                             </div>
                         </div>
+                        @if (($row['detail'] ?? null) && $status === 'posting')
+                            <p class="mt-2 text-xs text-[#8C8474]">{{ $row['detail'] }}</p>
+                        @endif
                         @if (($row['url'] ?? null) && $status === 'success')
                             <a href="{{ $row['url'] }}" target="_blank" rel="noreferrer"
                                 class="mt-2 inline-flex text-xs font-medium text-[#C9A227] hover:underline">

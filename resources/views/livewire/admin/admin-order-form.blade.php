@@ -434,44 +434,46 @@
                     @elseif ($searchResults->isEmpty())
                         <p class="text-sm text-[#8C8474]">No products match your search.</p>
                     @else
-                        <div class="divide-y divide-[#E7DFCF] border border-[#E7DFCF] rounded-lg overflow-hidden">
-                            @foreach ($searchResults as $product)
-                                <div wire:key="search-product-{{ $product->id }}" class="flex items-center gap-3 p-3 hover:bg-[#FAF6EF]/60">
-                                    @php $thumb = $product->images->first()?->path @endphp
-                                    <a href="{{ route('admin.products.edit', $product) }}"
-                                        wire:navigate
-                                        title="Open {{ $product->name }} in admin"
-                                        class="shrink-0 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A227]">
-                                        @if ($thumb)
-                                            <img src="{{ \App\Support\StorefrontAssets::url($thumb) }}" alt="" class="w-10 h-10 rounded object-cover bg-[#FAF6EF] hover:opacity-90">
-                                        @else
-                                            <div class="w-10 h-10 rounded border border-[#E7DFCF] bg-[#FAF6EF] flex items-center justify-center text-[10px] text-[#8C8474]">No img</div>
-                                        @endif
-                                    </a>
-                                    <div class="flex-1 min-w-0">
+                        <div id="admin-order-product-search-results">
+                            <div class="divide-y divide-[#E7DFCF] border border-[#E7DFCF] rounded-lg overflow-hidden">
+                                @foreach ($searchResults as $product)
+                                    <div wire:key="search-product-{{ $product->id }}" class="flex items-center gap-3 p-3 hover:bg-[#FAF6EF]/60">
+                                        @php $thumb = $product->images->first()?->path @endphp
                                         <a href="{{ route('admin.products.edit', $product) }}"
                                             wire:navigate
-                                            class="font-medium text-sm text-[#C9A227] hover:underline truncate block"
-                                            title="{{ $product->name }}">
-                                            {{ $product->name }}
+                                            title="Open {{ $product->name }} in admin"
+                                            class="shrink-0 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A227]">
+                                            @if ($thumb)
+                                                <img src="{{ \App\Support\StorefrontAssets::url($thumb) }}" alt="" class="w-10 h-10 rounded object-cover bg-[#FAF6EF] hover:opacity-90">
+                                            @else
+                                                <div class="w-10 h-10 rounded border border-[#E7DFCF] bg-[#FAF6EF] flex items-center justify-center text-[10px] text-[#8C8474]">No img</div>
+                                            @endif
                                         </a>
-                                        <p class="text-xs text-[#8C8474]">
-                                            {{ $product->sku ?: $product->slug }}
-                                            &middot; &#2547; {{ number_format($product->price, 0) }}
-                                            &middot; Stock: {{ $product->stock_quantity }}
-                                        </p>
+                                        <div class="flex-1 min-w-0">
+                                            <a href="{{ route('admin.products.edit', $product) }}"
+                                                wire:navigate
+                                                class="font-medium text-sm text-[#C9A227] hover:underline truncate block"
+                                                title="{{ $product->name }}">
+                                                {{ $product->name }}
+                                            </a>
+                                            <p class="text-xs text-[#8C8474]">
+                                                {{ $product->sku ?: $product->slug }}
+                                                &middot; &#2547; {{ number_format($product->price, 0) }}
+                                                &middot; Stock: {{ $product->stock_quantity }}
+                                            </p>
+                                        </div>
+                                        <button type="button" wire:click="addProduct({{ $product->id }})"
+                                            @disabled($product->stock_quantity <= 0 && ! isset($lines[$product->id]))
+                                            class="shrink-0 rounded-lg bg-[#C9A227] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#b89220] disabled:opacity-40">
+                                            Add
+                                        </button>
                                     </div>
-                                    <button type="button" wire:click="addProduct({{ $product->id }})"
-                                        @disabled($product->stock_quantity <= 0 && ! isset($lines[$product->id]))
-                                        class="shrink-0 rounded-lg bg-[#C9A227] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#b89220] disabled:opacity-40">
-                                        Add
-                                    </button>
-                                </div>
-                            @endforeach
+                                @endforeach
+                            </div>
+                            @if ($searchResults->hasPages())
+                                <div class="mt-3">{{ $searchResults->links(data: ['scrollTo' => '#admin-order-product-search-results']) }}</div>
+                            @endif
                         </div>
-                        @if ($searchResults->hasPages())
-                            <div class="mt-3">{{ $searchResults->links() }}</div>
-                        @endif
                     @endif
                 </div>
             </div>

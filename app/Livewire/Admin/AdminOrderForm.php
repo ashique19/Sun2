@@ -44,6 +44,10 @@ class AdminOrderForm extends Component
     use WithFileUploads;
     use WithPagination;
 
+    public const PRODUCT_SEARCH_PER_PAGE = 20;
+
+    public const PRODUCT_SEARCH_SCROLL_TO = '#admin-order-product-search-results';
+
     public ?Order $order = null;
 
     /** Prefill create form from this order id (query ?repeat=). */
@@ -1422,7 +1426,7 @@ class AdminOrderForm extends Component
                 ->when($this->productStock === 'out', fn ($q) => $q->where('stock_quantity', '<=', 0))
                 ->orderBy('display_order')
                 ->orderByDesc('id')
-                ->paginate(12, ['*'], 'productPage');
+                ->paginate(self::PRODUCT_SEARCH_PER_PAGE, ['*'], 'productPage');
         }
 
         return view('livewire.admin.admin-order-form', [

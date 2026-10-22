@@ -162,6 +162,74 @@ class SteadfastFraudCheckTest extends TestCase
     }
 
     #[Test]
+    public function fraud_check_reads_score_payload_from_panel_when_score_api_500s(): void
+    {
+        config([
+            'steadfast.fraud.email' => 'merchant@example.com',
+            'steadfast.fraud.password' => 'secret',
+        ]);
+
+        Http::fake(function ($request) {
+            $url = $request->url();
+
+            if (str_contains($url, '/fraud_check/score/')) {
+                return Http::response(['message' => 'Server Error'], 500);
+            }
+
+            if ($url === 'https://steadfast.com.bd/login' && $request->method() === 'GET') {
+                return Http::response(
+                    '<html><input type="hidden" name="_token" value="csrf-login"></html>',
+                    200
+                );
+            }
+
+            if ($url === 'https://steadfast.com.bd/login' && $request->method() === 'POST') {
+                return Http::response('', 302, [
+                    'Location' => 'https://steadfast.com.bd/user/orders',
+                    'Set-Cookie' => 'steadfast_session=abc; Path=/; HttpOnly',
+                ]);
+            }
+
+            if ($url === 'https://steadfast.com.bd/user/frauds/check/01581597404') {
+                return Http::response([
+                    'status' => 200,
+                    'phone' => '01581597404',
+                    'delivery_ratio' => 92,
+                    'cancellation_ratio' => 7,
+                    'volume_band' => 'high',
+                    'volume_range' => '50+',
+                    'delivered_count' => 58,
+                    'cancelled_count' => 5,
+                    'total_reports' => 0,
+                    'fraud_categories' => [],
+                    'scoring_disabled' => true,
+                ], 200, ['Content-Type' => 'application/json']);
+            }
+
+            if ($url === 'https://steadfast.com.bd/user/frauds/check') {
+                return Http::response(
+                    '<html><meta name="csrf-token" content="csrf-logout"></html>',
+                    200
+                );
+            }
+
+            if ($url === 'https://steadfast.com.bd/logout') {
+                return Http::response('', 302);
+            }
+
+            return Http::response('unexpected '.$url, 500);
+        });
+
+        $stats = app(SteadfastApiClient::class)->fraudCheck('01581597404');
+
+        $this->assertSame('score', $stats['data_type']);
+        $this->assertSame(92, $stats['delivery_ratio']);
+        $this->assertSame(58, $stats['total_delivered']);
+        $this->assertSame(5, $stats['total_cancelled']);
+        $this->assertSame('high (50+)', $stats['volume_band_label']);
+    }
+
+    #[Test]
     public function fraud_check_surfaces_rate_limit_errors(): void
     {
         Http::fake([

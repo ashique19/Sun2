@@ -103,67 +103,8 @@ class SteadfastApiClient
     private function fraudCheckViaScoreApi(string $phoneDigits): array
     {
         $response = $this->request('get', '/fraud_check/score/'.rawurlencode($phoneDigits));
-        $payload = $this->flattenFraudPayload($response);
 
-        $this->assertScorePayloadIsUsable($payload);
-
-        $delivered = $this->nullableInt(
-            $payload['delivered_count'] ?? $payload['total_delivered'] ?? null,
-        );
-        $cancelled = $this->nullableInt(
-            $payload['cancelled_count'] ?? $payload['total_cancelled'] ?? null,
-        );
-        $total = $this->nullableInt($payload['total_parcels'] ?? $payload['total'] ?? null);
-
-        if ($total === null && $delivered !== null && $cancelled !== null) {
-            $total = $delivered + $cancelled;
-        }
-
-        $deliveryRatio = $this->nullableRatio($payload['delivery_ratio'] ?? $payload['success_ratio'] ?? null);
-        $cancellationRatio = $this->nullableRatio($payload['cancellation_ratio'] ?? null);
-
-        if ($deliveryRatio === null && $total !== null && $total > 0 && $delivered !== null) {
-            $deliveryRatio = (int) floor(($delivered / $total) * 100);
-        }
-
-        if ($cancellationRatio === null && $total !== null && $total > 0 && $cancelled !== null) {
-            $cancellationRatio = (int) floor(($cancelled / $total) * 100);
-        }
-
-        $volumeBand = $this->nullableString($payload['volume_band'] ?? null);
-        $volumeRange = $this->nullableString($payload['volume_range'] ?? null);
-
-        $fraudCategories = $payload['fraud_categories'] ?? [];
-        if (! is_array($fraudCategories)) {
-            $fraudCategories = [];
-        }
-
-        $reasons = $payload['reasons'] ?? [];
-        if (! is_array($reasons)) {
-            $reasons = [];
-        }
-
-        return [
-            'data_type' => 'score',
-            'phone' => is_string($payload['phone'] ?? null) ? $payload['phone'] : $phoneDigits,
-            'delivery_ratio' => $deliveryRatio,
-            'cancellation_ratio' => $cancellationRatio,
-            'success_ratio' => $deliveryRatio,
-            'volume_band' => $volumeBand,
-            'volume_range' => $volumeRange,
-            'volume_band_label' => $this->volumeBandLabel($volumeBand, $volumeRange),
-            'total_reports' => (int) ($payload['total_reports'] ?? 0),
-            'fraud_categories' => $fraudCategories,
-            'reasons' => $reasons,
-            'score' => $payload['score'] ?? null,
-            'level' => $this->nullableString($payload['level'] ?? null),
-            'scoring_disabled' => (bool) ($payload['scoring_disabled'] ?? true),
-            'doubtful_reports' => (bool) ($payload['doubtful_reports'] ?? false),
-            'total_delivered' => $delivered,
-            'total_parcels' => $total,
-            'total_cancelled' => $cancelled,
-            'total_fraud_reports' => $fraudCategories,
-        ];
+        return $this->normalizeScorePayload($response, $phoneDigits);
     }
 
     /**
@@ -227,6 +168,7 @@ class SteadfastApiClient
     {
         $paths = [
             '/user/frauds/check/'.$phoneDigits,
+            '/user/frauds/score/'.$phoneDigits,
             '/user/consignment/getbyphone/'.$phoneDigits,
         ];
 
@@ -256,13 +198,15 @@ class SteadfastApiClient
             /** @var array<string, mixed> $json */
             $json = $response->json();
 
-            if (! $this->hasLegacyCountKeys($json)) {
-                $errors[] = $path.' missing delivery count keys';
-
-                continue;
+            if ($this->hasScoreKeys($json)) {
+                return $this->normalizeScorePayload($json, $phoneDigits);
             }
 
-            return $this->normalizeLegacyCountResponse($json);
+            if ($this->hasLegacyCountKeys($json)) {
+                return $this->normalizeLegacyCountResponse($json);
+            }
+
+            $errors[] = $path.' missing delivery history fields';
         }
 
         throw new RuntimeException(
@@ -392,6 +336,75 @@ class SteadfastApiClient
     }
 
     /**
+     * @param  array<string, mixed>  $response
+     * @return array<string, mixed>
+     */
+    private function normalizeScorePayload(array $response, string $phoneDigits): array
+    {
+        $payload = $this->flattenFraudPayload($response);
+
+        $this->assertScorePayloadIsUsable($payload);
+
+        $delivered = $this->nullableInt(
+            $payload['delivered_count'] ?? $payload['total_delivered'] ?? null,
+        );
+        $cancelled = $this->nullableInt(
+            $payload['cancelled_count'] ?? $payload['total_cancelled'] ?? null,
+        );
+        $total = $this->nullableInt($payload['total_parcels'] ?? $payload['total'] ?? null);
+
+        if ($total === null && $delivered !== null && $cancelled !== null) {
+            $total = $delivered + $cancelled;
+        }
+
+        $deliveryRatio = $this->nullableRatio($payload['delivery_ratio'] ?? $payload['success_ratio'] ?? null);
+        $cancellationRatio = $this->nullableRatio($payload['cancellation_ratio'] ?? null);
+
+        if ($deliveryRatio === null && $total !== null && $total > 0 && $delivered !== null) {
+            $deliveryRatio = (int) floor(($delivered / $total) * 100);
+        }
+
+        if ($cancellationRatio === null && $total !== null && $total > 0 && $cancelled !== null) {
+            $cancellationRatio = (int) floor(($cancelled / $total) * 100);
+        }
+
+        $volumeBand = $this->nullableString($payload['volume_band'] ?? null);
+        $volumeRange = $this->nullableString($payload['volume_range'] ?? null);
+
+        $fraudCategories = $payload['fraud_categories'] ?? [];
+        if (! is_array($fraudCategories)) {
+            $fraudCategories = [];
+        }
+
+        $reasons = $payload['reasons'] ?? [];
+        if (! is_array($reasons)) {
+            $reasons = [];
+        }
+
+        return [
+            'data_type' => 'score',
+            'phone' => is_string($payload['phone'] ?? null) ? $payload['phone'] : $phoneDigits,
+            'delivery_ratio' => $deliveryRatio,
+            'cancellation_ratio' => $cancellationRatio,
+            'success_ratio' => $deliveryRatio,
+            'volume_band' => $volumeBand,
+            'volume_range' => $volumeRange,
+            'volume_band_label' => $this->volumeBandLabel($volumeBand, $volumeRange),
+            'total_reports' => (int) ($payload['total_reports'] ?? 0),
+            'fraud_categories' => $fraudCategories,
+            'reasons' => $reasons,
+            'score' => $payload['score'] ?? null,
+            'level' => $this->nullableString($payload['level'] ?? null),
+            'scoring_disabled' => (bool) ($payload['scoring_disabled'] ?? true),
+            'doubtful_reports' => (bool) ($payload['doubtful_reports'] ?? false),
+            'total_delivered' => $delivered,
+            'total_parcels' => $total,
+            'total_cancelled' => $cancelled,
+            'total_fraud_reports' => $fraudCategories,
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      */
     private function assertScorePayloadIsUsable(array $payload): void
@@ -405,17 +418,39 @@ class SteadfastApiClient
             throw new RuntimeException($message);
         }
 
+        if (! $this->looksLikeScorePayload($payload)) {
+            throw new RuntimeException('Steadfast fraud score response was missing delivery history fields.');
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $response
+     */
+    private function hasScoreKeys(array $response): bool
+    {
+        $payload = $this->flattenFraudPayload($response);
+        $status = $payload['status'] ?? null;
+
+        if (is_numeric($status) && (int) $status >= 400) {
+            return false;
+        }
+
+        return $this->looksLikeScorePayload($payload);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function looksLikeScorePayload(array $payload): bool
+    {
         $hasRatio = array_key_exists('delivery_ratio', $payload)
             || array_key_exists('cancellation_ratio', $payload);
         $hasVolume = array_key_exists('volume_band', $payload)
             || array_key_exists('volume_range', $payload);
         $hasCounts = array_key_exists('delivered_count', $payload)
-            || array_key_exists('cancelled_count', $payload)
-            || array_key_exists('total_delivered', $payload);
+            || array_key_exists('cancelled_count', $payload);
 
-        if (! $hasRatio && ! $hasVolume && ! $hasCounts) {
-            throw new RuntimeException('Steadfast fraud score response was missing delivery history fields.');
-        }
+        return $hasRatio || $hasVolume || $hasCounts;
     }
 
     /**

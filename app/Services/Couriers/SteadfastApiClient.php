@@ -613,10 +613,7 @@ class SteadfastApiClient
             ->withHeaders([
                 'Api-Key' => $apiKey,
                 'Secret-Key' => $secretKey,
-                'api-key' => $apiKey,
-                'secret-key' => $secretKey,
                 'Accept' => 'application/json',
-                'Content-Type' => 'application/json',
             ]);
 
         $response = match (strtolower($method)) {

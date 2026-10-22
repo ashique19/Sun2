@@ -42,6 +42,9 @@ class SteadfastFraudCheckTest extends TestCase
                 'delivery_ratio' => 92,
                 'cancellation_ratio' => 7,
                 'volume_band' => 'high',
+                'volume_range' => '50+',
+                'delivered_count' => 58,
+                'cancelled_count' => 5,
                 'total_reports' => 0,
                 'fraud_categories' => [],
                 'score' => null,
@@ -59,15 +62,20 @@ class SteadfastFraudCheckTest extends TestCase
         $this->assertSame(92, $stats['success_ratio']);
         $this->assertSame(7, $stats['cancellation_ratio']);
         $this->assertSame('high', $stats['volume_band']);
-        $this->assertSame('high (21–200)', $stats['volume_band_label']);
-        $this->assertNull($stats['total_delivered']);
-        $this->assertNull($stats['total_parcels']);
+        $this->assertSame('50+', $stats['volume_range']);
+        $this->assertSame('high (50+)', $stats['volume_band_label']);
+        $this->assertSame(58, $stats['total_delivered']);
+        $this->assertSame(5, $stats['total_cancelled']);
+        $this->assertSame(63, $stats['total_parcels']);
 
         Http::assertSent(function ($request) {
-            return $request->url() === 'https://portal.packzy.com/api/v1/fraud_check/score/01712345678';
+            return $request->url() === 'https://portal.packzy.com/api/v1/fraud_check/score/01712345678'
+                && $request->hasHeader('Api-Key', 'test-key')
+                && $request->hasHeader('Secret-Key', 'test-secret');
         });
         Http::assertNotSent(function ($request) {
-            return str_contains($request->url(), '/fraud_check/017');
+            return str_contains($request->url(), '/fraud_check/017')
+                && ! str_contains($request->url(), '/fraud_check/score/');
         });
     }
 
@@ -167,6 +175,39 @@ class SteadfastFraudCheckTest extends TestCase
     }
 
     #[Test]
+    public function fraud_check_uses_short_message_for_html_api_errors(): void
+    {
+        Http::fake([
+            'portal.packzy.com/api/v1/fraud_check/score/*' => Http::response('<html>Internal Server Error</html>', 500),
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Steadfast API error (HTTP 500).');
+
+        app(SteadfastApiClient::class)->fraudCheck('01712345678');
+    }
+
+    #[Test]
+    public function fraud_check_derives_ratios_from_counts_when_needed(): void
+    {
+        Http::fake([
+            'portal.packzy.com/api/v1/fraud_check/score/*' => Http::response([
+                'status' => 200,
+                'phone' => '01712345678',
+                'volume_range' => '50+',
+                'delivered_count' => 58,
+                'cancelled_count' => 5,
+            ], 200),
+        ]);
+
+        $stats = app(SteadfastApiClient::class)->fraudCheck('01712345678');
+
+        $this->assertSame(92, $stats['delivery_ratio']);
+        $this->assertSame(7, $stats['cancellation_ratio']);
+        $this->assertSame('50+', $stats['volume_band_label']);
+    }
+
+    #[Test]
     public function customer_lookup_surfaces_score_stats(): void
     {
         Http::fake([
@@ -258,7 +299,11 @@ class SteadfastFraudCheckTest extends TestCase
                 'cancellation_ratio' => 7,
                 'success_ratio' => 92,
                 'volume_band' => 'high',
-                'volume_band_label' => 'high (21–200)',
+                'volume_range' => '50+',
+                'volume_band_label' => 'high (50+)',
+                'total_delivered' => 58,
+                'total_cancelled' => 5,
+                'total_parcels' => 63,
                 'total_reports' => 2,
                 'fraud_categories' => ['no_response' => 2],
             ],
@@ -280,8 +325,9 @@ class SteadfastFraudCheckTest extends TestCase
             ->set('phone', '01712345678')
             ->call('lookupPhone')
             ->assertSee('Steadfast delivery: 92%')
-            ->assertSee('Cancelled 7%')
-            ->assertSee('Volume high (21–200)')
+            ->assertSee('Delivered 58')
+            ->assertSee('Cancelled 5')
+            ->assertSee('Volume high (50+)')
             ->assertSee('Reports 2');
     }
 

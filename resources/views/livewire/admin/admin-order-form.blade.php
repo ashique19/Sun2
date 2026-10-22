@@ -95,7 +95,12 @@
                                                 Steadfast delivery: {{ $steadfastStats['delivery_ratio'] }}%
                                             </p>
                                             <p class="text-[#6B6459] mt-1">
-                                                Cancelled {{ $steadfastStats['cancellation_ratio'] ?? 0 }}%
+                                                @if ($steadfastStats['total_delivered'] !== null || $steadfastStats['total_cancelled'] !== null)
+                                                    Delivered {{ $steadfastStats['total_delivered'] ?? 0 }}
+                                                    · Cancelled {{ $steadfastStats['total_cancelled'] ?? 0 }}
+                                                @else
+                                                    Cancelled {{ $steadfastStats['cancellation_ratio'] ?? 0 }}%
+                                                @endif
                                                 @if (! empty($steadfastStats['volume_band_label']))
                                                     &middot; Volume {{ $steadfastStats['volume_band_label'] }}
                                                 @endif

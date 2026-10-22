@@ -102,22 +102,45 @@ class SteadfastApiClient
      */
     private function fraudCheckViaScoreApi(string $phoneDigits): array
     {
-        $response = $this->request('get', '/fraud_check/score/'.$phoneDigits);
+        $response = $this->request('get', '/fraud_check/score/'.rawurlencode($phoneDigits));
         $payload = $this->flattenFraudPayload($response);
 
-        if (! array_key_exists('delivery_ratio', $payload) && ! array_key_exists('volume_band', $payload)) {
-            throw new RuntimeException('Steadfast fraud score response was missing delivery_ratio / volume_band.');
+        $this->assertScorePayloadIsUsable($payload);
+
+        $delivered = $this->nullableInt(
+            $payload['delivered_count'] ?? $payload['total_delivered'] ?? null,
+        );
+        $cancelled = $this->nullableInt(
+            $payload['cancelled_count'] ?? $payload['total_cancelled'] ?? null,
+        );
+        $total = $this->nullableInt($payload['total_parcels'] ?? $payload['total'] ?? null);
+
+        if ($total === null && $delivered !== null && $cancelled !== null) {
+            $total = $delivered + $cancelled;
         }
 
-        $deliveryRatio = $this->nullableInt($payload['delivery_ratio'] ?? null);
-        $cancellationRatio = $this->nullableInt($payload['cancellation_ratio'] ?? null);
-        $volumeBand = isset($payload['volume_band']) && is_string($payload['volume_band'])
-            ? $payload['volume_band']
-            : null;
+        $deliveryRatio = $this->nullableRatio($payload['delivery_ratio'] ?? $payload['success_ratio'] ?? null);
+        $cancellationRatio = $this->nullableRatio($payload['cancellation_ratio'] ?? null);
+
+        if ($deliveryRatio === null && $total !== null && $total > 0 && $delivered !== null) {
+            $deliveryRatio = (int) floor(($delivered / $total) * 100);
+        }
+
+        if ($cancellationRatio === null && $total !== null && $total > 0 && $cancelled !== null) {
+            $cancellationRatio = (int) floor(($cancelled / $total) * 100);
+        }
+
+        $volumeBand = $this->nullableString($payload['volume_band'] ?? null);
+        $volumeRange = $this->nullableString($payload['volume_range'] ?? null);
 
         $fraudCategories = $payload['fraud_categories'] ?? [];
         if (! is_array($fraudCategories)) {
             $fraudCategories = [];
+        }
+
+        $reasons = $payload['reasons'] ?? [];
+        if (! is_array($reasons)) {
+            $reasons = [];
         }
 
         return [
@@ -125,17 +148,20 @@ class SteadfastApiClient
             'phone' => is_string($payload['phone'] ?? null) ? $payload['phone'] : $phoneDigits,
             'delivery_ratio' => $deliveryRatio,
             'cancellation_ratio' => $cancellationRatio,
-            // Alias for older UI / tests that read success_ratio.
             'success_ratio' => $deliveryRatio,
             'volume_band' => $volumeBand,
-            'volume_band_label' => $this->volumeBandLabel($volumeBand),
+            'volume_range' => $volumeRange,
+            'volume_band_label' => $this->volumeBandLabel($volumeBand, $volumeRange),
             'total_reports' => (int) ($payload['total_reports'] ?? 0),
             'fraud_categories' => $fraudCategories,
+            'reasons' => $reasons,
+            'score' => $payload['score'] ?? null,
+            'level' => $this->nullableString($payload['level'] ?? null),
             'scoring_disabled' => (bool) ($payload['scoring_disabled'] ?? true),
             'doubtful_reports' => (bool) ($payload['doubtful_reports'] ?? false),
-            'total_delivered' => null,
-            'total_parcels' => null,
-            'total_cancelled' => null,
+            'total_delivered' => $delivered,
+            'total_parcels' => $total,
+            'total_cancelled' => $cancelled,
             'total_fraud_reports' => $fraudCategories,
         ];
     }
@@ -356,11 +382,40 @@ class SteadfastApiClient
     {
         $payload = $response;
 
-        if (isset($response['data']) && is_array($response['data'])) {
-            $payload = array_merge($response, $response['data']);
+        foreach (['data', 'result'] as $key) {
+            if (isset($response[$key]) && is_array($response[$key])) {
+                $payload = array_merge($payload, $response[$key]);
+            }
         }
 
         return $payload;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function assertScorePayloadIsUsable(array $payload): void
+    {
+        $status = $payload['status'] ?? null;
+
+        if (is_numeric($status) && (int) $status >= 400) {
+            $message = $this->nullableString($payload['message'] ?? $payload['error'] ?? null)
+                ?? 'Steadfast fraud score failed.';
+
+            throw new RuntimeException($message);
+        }
+
+        $hasRatio = array_key_exists('delivery_ratio', $payload)
+            || array_key_exists('cancellation_ratio', $payload);
+        $hasVolume = array_key_exists('volume_band', $payload)
+            || array_key_exists('volume_range', $payload);
+        $hasCounts = array_key_exists('delivered_count', $payload)
+            || array_key_exists('cancelled_count', $payload)
+            || array_key_exists('total_delivered', $payload);
+
+        if (! $hasRatio && ! $hasVolume && ! $hasCounts) {
+            throw new RuntimeException('Steadfast fraud score response was missing delivery history fields.');
+        }
     }
 
     /**
@@ -434,6 +489,10 @@ class SteadfastApiClient
             return null;
         }
 
+        if (is_string($value)) {
+            $value = rtrim(trim($value), '%');
+        }
+
         if (! is_numeric($value)) {
             return null;
         }
@@ -441,8 +500,34 @@ class SteadfastApiClient
         return (int) $value;
     }
 
-    private function volumeBandLabel(?string $band): ?string
+    private function nullableRatio(mixed $value): ?int
     {
+        $ratio = $this->nullableInt($value);
+
+        if ($ratio === null) {
+            return null;
+        }
+
+        return max(0, min(100, $ratio));
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $value = trim($value);
+
+        return $value !== '' ? $value : null;
+    }
+
+    private function volumeBandLabel(?string $band, ?string $range = null): ?string
+    {
+        if ($range !== null) {
+            return $band !== null ? $band.' ('.$range.')' : $range;
+        }
+
         return match ($band) {
             'none' => 'none (0 finished)',
             'low' => 'low (1–5)',
@@ -493,7 +578,10 @@ class SteadfastApiClient
             ->withHeaders([
                 'Api-Key' => $apiKey,
                 'Secret-Key' => $secretKey,
+                'api-key' => $apiKey,
+                'secret-key' => $secretKey,
                 'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
             ]);
 
         $response = match (strtolower($method)) {
@@ -506,7 +594,7 @@ class SteadfastApiClient
         }
 
         if (! $response->successful()) {
-            throw new RuntimeException('Steadfast API error ('.$response->status().'): '.$response->body());
+            throw new RuntimeException($this->apiErrorMessage($response));
         }
 
         $json = $response->json();
@@ -516,5 +604,26 @@ class SteadfastApiClient
         }
 
         return $json;
+    }
+
+    private function apiErrorMessage(Response $response): string
+    {
+        $json = $response->json();
+
+        if (is_array($json)) {
+            $message = $this->nullableString($json['message'] ?? $json['error'] ?? null);
+
+            if ($message !== null) {
+                return 'Steadfast API error ('.$response->status().'): '.$message;
+            }
+        }
+
+        $body = trim($response->body());
+
+        if ($body === '' || str_starts_with(ltrim($body), '<')) {
+            return 'Steadfast API error (HTTP '.$response->status().').';
+        }
+
+        return 'Steadfast API error ('.$response->status().'): '.mb_substr($body, 0, 180);
     }
 }

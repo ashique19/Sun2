@@ -437,12 +437,14 @@ class Order extends Model
                 ['type' => 'discount', 'amount' => (float) $this->discount],
             ])->filter(fn (array $line) => $line['amount'] > 0)->values();
 
-        // Cancelled/returned with no COD collection: remittance base is actual collected (usually 0),
-        // not the unpaid bill — so courier receivable correctly becomes −courier_charge.
+        // Cancelled/returned: remittance is actual courier cash (usually 0), not the bill.
+        // No courier: leftover due is in-house, not remittance. COD % only with a courier.
         if (in_array($this->status, ['cancelled', 'returned'], true)) {
             $expectedCod = max(0.0, (float) ($this->collected_amount ?? 0));
-        } else {
+        } elseif ($this->courier_id) {
             $expectedCod = $this->collectableAmount();
+        } else {
+            $expectedCod = 0.0;
         }
 
         $totals = app(OrderTotalCalculator::class)->calculate(
@@ -453,7 +455,9 @@ class Order extends Model
             items: $this->itemsForMerchandiseCogs(),
             collectedAmount: (float) ($this->collected_amount ?? 0),
             courierSlug: $this->courier?->slug,
-            codPercentage: (float) ($this->courier?->cod_percentage ?? 1),
+            codPercentage: $this->courier
+                ? (float) ($this->courier->cod_percentage ?? 1)
+                : 0.0,
             packagingCost: (float) ($this->packaging_cost ?? 0),
             expectedCodRemittance: $expectedCod,
             inHouseReceived: $this->inHouseReceivedAmount(),

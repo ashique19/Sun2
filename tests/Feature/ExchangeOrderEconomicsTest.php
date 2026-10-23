@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Courier;
 use App\Models\Order;
 use App\Models\OrderAdjustment;
 use App\Models\OrderProduct;
@@ -21,8 +22,18 @@ class ExchangeOrderEconomicsTest extends TestCase
      *
      * @return array{0: Order, 1: Order}
      */
+    private function pathao(): Courier
+    {
+        return Courier::query()->firstOrCreate(
+            ['slug' => 'pathao'],
+            ['name' => 'Pathao', 'cod_percentage' => 1, 'is_active' => true],
+        );
+    }
+
     private function userScenarioPair(string $replacementStatus = 'new'): array
     {
+        $courier = $this->pathao();
+
         $original = Order::query()->create([
             'order_number' => 'SEP1-ORIG',
             'name' => 'COD Customer',
@@ -37,6 +48,7 @@ class ExchangeOrderEconomicsTest extends TestCase
             'collected_amount' => 1000,
             'paid_amount' => 1000,
             'due_amount' => 0,
+            'courier_id' => $courier->id,
             'has_return' => false,
             'placed_at' => now()->subDays(3),
             'actual_delivery_date' => now()->subDays(3),
@@ -69,6 +81,7 @@ class ExchangeOrderEconomicsTest extends TestCase
             'due_amount' => 0,
             'is_replacement' => true,
             'exchange_of_order_id' => $original->id,
+            'courier_id' => $courier->id,
             'has_return' => false,
             'placed_at' => now(),
             'actual_delivery_date' => $replacementStatus === 'delivered' ? now() : null,
@@ -158,6 +171,8 @@ class ExchangeOrderEconomicsTest extends TestCase
     #[Test]
     public function exchange_with_addon_products_charges_and_discounts_is_independent(): void
     {
+        $courier = $this->pathao();
+
         $original = Order::query()->create([
             'order_number' => 'MIX-ORIG',
             'name' => 'Mix Customer',
@@ -172,6 +187,7 @@ class ExchangeOrderEconomicsTest extends TestCase
             'collected_amount' => 1000,
             'paid_amount' => 1000,
             'due_amount' => 0,
+            'courier_id' => $courier->id,
             'has_return' => false,
             'placed_at' => now()->subDay(),
         ]);
@@ -204,6 +220,7 @@ class ExchangeOrderEconomicsTest extends TestCase
             'due_amount' => 0,
             'is_replacement' => true,
             'exchange_of_order_id' => $original->id,
+            'courier_id' => $courier->id,
             'placed_at' => now(),
         ]);
         OrderAdjustment::query()->create([

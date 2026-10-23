@@ -174,7 +174,7 @@ class AnalyticsService
             ->whereBetween('orders.created_at', [$start, $end])
             ->where('orders.created_at', 'not like', '0000-00-00%')
             ->selectRaw("{$monthExpr} as month")
-            ->selectRaw('COALESCE(SUM(orders.collected_amount), 0) as revenue')
+            ->selectRaw('COALESCE(SUM('.OrderEconomicsSql::cashInExpression('orders').'), 0) as revenue')
             ->selectRaw('COALESCE(SUM(COALESCE(order_cogs.cogs, 0)), 0) as cogs')
             ->selectRaw('COALESCE(SUM(orders.packaging_cost), 0) as packaging')
             ->selectRaw('COALESCE(SUM(orders.courier_charge), 0) as courier')
@@ -586,6 +586,7 @@ class AnalyticsService
                 'order_number',
                 'name',
                 'collected_amount',
+                'paid_amount',
                 'packaging_cost',
                 'courier_charge',
                 'created_at',
@@ -594,7 +595,10 @@ class AnalyticsService
             ->selectRaw("({$codExpr}) as economics_cod")
             ->chunkById(200, function ($chunk) use (&$rows): void {
                 foreach ($chunk as $order) {
-                    $revenue = round((float) ($order->collected_amount ?? 0), 2);
+                    $revenue = round(max(
+                        (float) ($order->paid_amount ?? 0),
+                        (float) ($order->collected_amount ?? 0),
+                    ), 2);
                     $cogs = round((float) ($order->economics_cogs ?? 0), 2);
                     $packaging = round((float) ($order->packaging_cost ?? 0), 2);
                     $courier = round((float) ($order->courier_charge ?? 0), 2);
@@ -670,7 +674,7 @@ class AnalyticsService
             ->whereBetween('created_at', [$start, $end])
             ->where('created_at', 'not like', '0000-00-00%')
             ->selectRaw('COUNT(*) as order_count')
-            ->selectRaw('COALESCE(SUM(collected_amount), 0) as revenue')
+            ->selectRaw('COALESCE(SUM('.OrderEconomicsSql::cashInExpression().'), 0) as revenue')
             ->selectRaw("COALESCE(SUM({$cogsExpr}), 0) as cogs")
             ->selectRaw('COALESCE(SUM(packaging_cost), 0) as packaging')
             ->selectRaw('COALESCE(SUM(courier_charge), 0) as courier')
@@ -789,7 +793,10 @@ class AnalyticsService
      */
     private function orderEconomics(Order $order): array
     {
-        $revenue = (float) ($order->collected_amount ?? 0);
+        $revenue = max(
+            (float) ($order->paid_amount ?? 0),
+            (float) ($order->collected_amount ?? 0),
+        );
         $cogs = $order->cogs();
         $packaging = (float) ($order->packaging_cost ?? 0);
         $courier = (float) ($order->courier_charge ?? 0);

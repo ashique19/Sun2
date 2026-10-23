@@ -6,6 +6,7 @@ use App\Livewire\PublicSharedCart;
 use App\Models\Product;
 use App\Models\SharedCart;
 use App\Services\Storefront\CartService;
+use App\Support\Bangla;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
@@ -50,7 +51,7 @@ class SharedCartImportTest extends TestCase
             ->assertSee('Cart Product A')
             ->assertSee('Cart Product B')
             ->assertSee(__('storefront.proceed_checkout'))
-            ->assertSee('1,750', false);
+            ->assertSee(Bangla::money(1750), false);
 
         app(CartService::class)->clear();
 

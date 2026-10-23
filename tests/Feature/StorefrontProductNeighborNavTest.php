@@ -130,7 +130,7 @@ class StorefrontProductNeighborNavTest extends TestCase
 
         $this->get(route('product.show', $middle))
             ->assertOk()
-            ->assertSeeHtml('class="mb-4 flex items-center gap-2 md:block"')
+            ->assertSeeHtml('class="mb-2 flex items-center gap-2 md:mb-4 md:block"')
             ->assertSeeHtml('class="flex items-center gap-1 md:hidden"')
             ->assertSeeHtml('aria-label="'.__('storefront.previous_product').': First Earring"')
             ->assertSeeHtml('aria-label="'.__('storefront.next_product').': Last Earring"')

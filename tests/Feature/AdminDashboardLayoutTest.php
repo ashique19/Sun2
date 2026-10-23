@@ -89,7 +89,9 @@ class AdminDashboardLayoutTest extends TestCase
 
         $html = $this->get(route('admin.dashboard'))
             ->assertOk()
-            ->assertSeeHtml('md:hidden sticky top-0')
+            ->assertSeeHtml('id="admin-mobile-top-bar"')
+            ->assertSeeHtml('md:hidden')
+            ->assertSeeHtml('sticky top-0')
             ->assertSeeHtml('data-admin-shortcut="products"')
             ->assertSeeHtml('data-admin-shortcut="orders"')
             ->assertSeeHtml('data-admin-shortcut="inbox"')

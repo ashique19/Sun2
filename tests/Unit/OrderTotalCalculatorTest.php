@@ -50,6 +50,7 @@ class OrderTotalCalculatorTest extends TestCase
             courierCharge: 120,
             adjustments: [['type' => 'discount', 'amount' => 100]],
             items: [['purchase_price' => 400, 'quantity' => 1]],
+            codPercentage: 0,
         );
 
         // 500 - 400 + 0 - 100 + 80 - 120 - packaging 0 = -40
@@ -67,6 +68,7 @@ class OrderTotalCalculatorTest extends TestCase
             adjustments: [],
             items: [['purchase_price' => 400, 'quantity' => 1]],
             packagingCost: 21,
+            codPercentage: 0,
         );
 
         // 1000 - 400 + 80 - 60 - 21 = 599
@@ -123,6 +125,7 @@ class OrderTotalCalculatorTest extends TestCase
                 ['type' => 'coupon', 'amount' => 200],
             ],
             items: [['purchase_price' => 800, 'quantity' => 2]],
+            codPercentage: 0,
         );
 
         // revenue 2000 - cogs 1600 + charges 40 - discounts 200 + delivery 100 - courier 60 - pack 0 = 280
@@ -195,6 +198,7 @@ class OrderTotalCalculatorTest extends TestCase
             adjustments: [],
             items: [['purchase_price' => 700, 'quantity' => 2]],
             packagingCost: 0,
+            codPercentage: 0,
         );
 
         // Bill = 2200 + 120 = 2320

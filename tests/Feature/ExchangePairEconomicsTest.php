@@ -133,7 +133,7 @@ class ExchangePairEconomicsTest extends TestCase
 
         $expectedGross = $original->moneyTotals()->grossProfit
             + $replacement->moneyTotals()->grossProfit;
-        $this->assertEquals($expectedGross, $pair['gross_profit']);
+        $this->assertEquals(round($expectedGross, 2), $pair['gross_profit']);
 
         $fromReplacement = $replacement->exchangePairEconomics();
         $this->assertNotNull($fromReplacement);

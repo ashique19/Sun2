@@ -461,6 +461,9 @@
 
                     <div class="space-y-2 border-t border-[#E7DFCF] pt-3">
                         <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Gross profit</p>
+                        @if ($money->inHouseReceived > 0)
+                            <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Paid in-house</span><span class="tabular-nums">&#2547; {{ number_format($money->inHouseReceived, 0) }}</span></div>
+                        @endif
                         <div class="flex justify-between gap-3"><span class="text-[#6B6459]">Receivable from courier</span><span class="tabular-nums">&#2547; {{ number_format($money->courierReceivable, 0) }}</span></div>
                         <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− COGS</span><span class="tabular-nums">&#2547; {{ number_format($money->cogs, 0) }}</span></div>
                         <div class="flex justify-between gap-3"><span class="text-[#6B6459]">− Packaging</span><span class="tabular-nums">&#2547; {{ number_format($money->packagingCost, 0) }}</span></div>

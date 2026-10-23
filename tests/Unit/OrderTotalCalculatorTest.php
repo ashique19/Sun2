@@ -222,6 +222,32 @@ class OrderTotalCalculatorTest extends TestCase
 
         $this->assertSame(0.0, $totals->remittanceBase);
         $this->assertSame(-60.0, $totals->courierReceivable);
+        $this->assertSame(0.0, $totals->inHouseReceived);
         $this->assertSame(-481.0, $totals->grossProfit); // -60 - 400 - 21
+    }
+
+    public function test_prepaid_in_house_received_counts_toward_gross_profit(): void
+    {
+        $totals = $this->calc->calculate(
+            subtotal: 3130,
+            deliveryCharge: 0,
+            courierCharge: 0,
+            adjustments: [],
+            items: [
+                ['purchase_price' => 750, 'quantity' => 1],
+                ['purchase_price' => 700, 'quantity' => 1],
+            ],
+            expectedCodRemittance: 0,
+            inHouseReceived: 3130,
+        );
+
+        // Prepaid bKash is in-house cash, not courier remittance.
+        // GP = 3130 + 0 − 1450 − 0 = 1680 (same as net revenue).
+        $this->assertSame(0.0, $totals->remittanceBase);
+        $this->assertSame(0.0, $totals->courierReceivable);
+        $this->assertSame(3130.0, $totals->inHouseReceived);
+        $this->assertSame(1450.0, $totals->cogs);
+        $this->assertSame(1680.0, $totals->grossProfit);
+        $this->assertSame(1680.0, $totals->netRevenue);
     }
 }

@@ -401,10 +401,29 @@ class Order extends Model
         return $this->moneyTotals()->courierReceivable;
     }
 
-    /** Gross profit = courier receivable − COGS − packaging. */
+    /** Gross profit = in-house received + courier receivable − COGS − packaging. */
     public function grossProfit(): float
     {
         return $this->moneyTotals()->grossProfit;
+    }
+
+    /**
+     * Successful ledger rows that reduce COD but are not courier-collected cash
+     * (bKash, Nagad, shop cash, advances). Used so prepaid orders still show profit.
+     */
+    public function inHouseReceivedAmount(): float
+    {
+        $sync = app(OrderPaymentSync::class);
+        $this->loadMissing('paymentTransactions');
+
+        return round(
+            (float) $this->paymentTransactions
+                ->filter(fn (PaymentTransaction $tx) => $tx->isSuccessful()
+                    && $sync->countsTowardPaid($this, $tx)
+                    && ! $sync->countsTowardCourierCollected($this, $tx))
+                ->sum(fn (PaymentTransaction $tx) => (float) $tx->amount),
+            2,
+        );
     }
 
     public function moneyTotals(): OrderTotals
@@ -437,6 +456,7 @@ class Order extends Model
             codPercentage: (float) ($this->courier?->cod_percentage ?? 1),
             packagingCost: (float) ($this->packaging_cost ?? 0),
             expectedCodRemittance: $expectedCod,
+            inHouseReceived: $this->inHouseReceivedAmount(),
         );
 
         // Cancelled/returned net is logistics-only: cash collected − courier − packaging − COD %.
@@ -465,6 +485,7 @@ class Order extends Model
                 billToCustomer: $totals->billToCustomer,
                 remittanceBase: $totals->remittanceBase,
                 courierReceivable: $totals->courierReceivable,
+                inHouseReceived: $totals->inHouseReceived,
                 grossProfit: $totals->grossProfit,
             );
         }

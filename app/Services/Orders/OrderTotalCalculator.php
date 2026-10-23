@@ -38,6 +38,7 @@ class OrderTotalCalculator
         float $codPercentage = 1.0,
         float $packagingCost = 0.0,
         ?float $expectedCodRemittance = null,
+        float $inHouseReceived = 0.0,
     ): OrderTotals {
         [$charges, $discounts] = $this->sumAdjustments($adjustments);
         $total = max(0.0, $subtotal + $deliveryCharge + $charges - $discounts);
@@ -62,7 +63,8 @@ class OrderTotalCalculator
         );
         $netRevenue = $subtotal - $cogs + $charges - $discounts + $deliveryCharge - $courierCharge - $packaging - $codCharge;
         $courierReceivable = $remittanceBase - $courierCharge - $codCharge;
-        $grossProfit = $courierReceivable - $cogs - $packaging;
+        $inHouse = max(0.0, $inHouseReceived);
+        $grossProfit = $inHouse + $courierReceivable - $cogs - $packaging;
 
         return new OrderTotals(
             subtotal: round($subtotal, 2),
@@ -79,6 +81,7 @@ class OrderTotalCalculator
             billToCustomer: round($total, 2),
             remittanceBase: round($remittanceBase, 2),
             courierReceivable: round($courierReceivable, 2),
+            inHouseReceived: round($inHouse, 2),
             grossProfit: round($grossProfit, 2),
         );
     }

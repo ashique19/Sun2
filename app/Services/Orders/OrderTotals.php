@@ -71,8 +71,14 @@ readonly class OrderTotals
         public float $courierReceivable,
 
         /**
-         * Gross profit after courier remittance and direct costs.
-         * grossProfit = courierReceivable - cogs - packagingCost
+         * In-house cash already received (bKash / Nagad / cash / advances).
+         * Not courier COD — that lives in remittanceBase / courierReceivable.
+         */
+        public float $inHouseReceived,
+
+        /**
+         * Gross profit after cash in (in-house + courier remittance) and direct costs.
+         * grossProfit = inHouseReceived + courierReceivable - cogs - packagingCost
          */
         public float $grossProfit,
     ) {}

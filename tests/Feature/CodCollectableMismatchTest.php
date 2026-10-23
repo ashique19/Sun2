@@ -202,6 +202,9 @@ class CodCollectableMismatchTest extends TestCase
         $this->assertSame(3170.0, (float) $order->collected_amount);
         $this->assertSame(30.5, $order->codCharge());
         $this->assertSame('paid', $order->payment_status);
+        $this->assertSame(0.0, $order->moneyTotals()->inHouseReceived);
+        // Courier remittance 3170 − 115 − 30.5 − COGS 1910 − pack 54 = 1060.5
+        $this->assertSame(1060.5, $order->moneyTotals()->grossProfit);
     }
 
     #[Test]
@@ -224,6 +227,73 @@ class CodCollectableMismatchTest extends TestCase
         $this->assertSame(0.0, (float) $order->collected_amount);
         $this->assertSame(0.0, $order->codCharge());
         $this->assertSame(0.0, $order->moneyTotals()->remittanceBase);
+        $this->assertSame(3170.0, $order->moneyTotals()->inHouseReceived);
+        // 3170 in-house + (0 − 115 courier − 0 COD) − 1910 COGS − 54 pack = 1091
+        $this->assertSame(1091.0, $order->moneyTotals()->grossProfit);
+        $this->assertSame(1091.0, $order->moneyTotals()->netRevenue);
+    }
+
+    /**
+     * Production screenshot: full bKash of ৳3,130, collectable ৳0, COGS ৳1,450.
+     * Gross profit must count the in-house payment, not treat prepaid as a ৳1,450 loss.
+     */
+    #[Test]
+    public function prepaid_bkash_order_show_counts_in_house_cash_in_gross_profit(): void
+    {
+        $this->seedCodMethod();
+        $courier = $this->steadfast();
+        $order = $this->order($courier, [
+            'status' => 'new',
+            'dispatch_date' => null,
+            'subtotal' => 3130,
+            'delivery_charge' => 0,
+            'courier_charge' => 0,
+            'packaging_cost' => 0,
+            'total' => 3130,
+            'cod_amount' => 3130,
+            'due_amount' => 3130,
+        ]);
+        $order->items()->delete();
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Necklace',
+            'quantity' => 1,
+            'price' => 1350,
+            'purchase_price' => 750,
+            'line_total' => 1350,
+        ]);
+        OrderProduct::query()->create([
+            'order_id' => $order->id,
+            'name' => 'Bracelet',
+            'quantity' => 2,
+            'price' => 600,
+            'purchase_price' => 350,
+            'line_total' => 1200,
+        ]);
+
+        app(OrderPaymentRecorder::class)->record(
+            order: $order,
+            method: 'bkash',
+            amount: 3130,
+            kind: 'settlement',
+        );
+
+        $order = $order->fresh(['items', 'courier', 'paymentTransactions', 'adjustments']);
+        $money = $order->moneyTotals();
+
+        $this->assertSame(0.0, $order->collectableAmount());
+        $this->assertSame(3130.0, $money->inHouseReceived);
+        $this->assertSame(0.0, $money->courierReceivable);
+        $this->assertSame(1450.0, $money->cogs);
+        $this->assertSame(1680.0, $money->grossProfit);
+        $this->assertSame(1680.0, $money->netRevenue);
+
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminOrderShow::class, ['order' => $order])
+            ->assertSee('Paid in-house')
+            ->assertSee('Gross profit')
+            ->assertSeeHtml('&#2547; 1,680');
     }
 
     /**

@@ -104,6 +104,16 @@ class OrderPaidStatusRepairService
         $wasLegacyPaid = strtolower($previousStatus) === 'paid';
         $created = 0;
 
+        // Recognize collection before sync: legacy "paid" is delivered-equivalent.
+        // Otherwise COD settlements stay ignored (status is still "paid", no delivery date).
+        if ($wasLegacyPaid && $order->actual_delivery_date === null) {
+            $order->forceFill([
+                'actual_delivery_date' => $order->payment_date
+                    ?? $order->placed_at
+                    ?? now(),
+            ])->save();
+        }
+
         $targetReceived = $this->targetReceivedAmount($order);
         $alreadyPaid = $this->successfulLedgerTotal($order);
 
@@ -164,6 +174,7 @@ class OrderPaidStatusRepairService
                 auth()->id(),
                 $extras,
             );
+            $this->paymentSync->sync($order->fresh(['paymentTransactions']));
         } elseif ($created > 0) {
             $this->statuses->record(
                 $order->fresh(),

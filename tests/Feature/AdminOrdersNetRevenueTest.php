@@ -3,10 +3,10 @@
 namespace Tests\Feature;
 
 use App\Livewire\Admin\AdminOrders;
+use App\Models\Courier;
 use App\Models\Order;
 use App\Models\OrderAdjustment;
 use App\Models\OrderProduct;
-use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -43,6 +43,15 @@ class AdminOrdersNetRevenueTest extends TestCase
      */
     private function orderWithEconomics(array $overrides = []): Order
     {
+        $courier = Courier::query()->firstOrCreate(
+            ['slug' => 'test-zero-cod'],
+            [
+                'name' => 'Test Zero COD',
+                'cod_percentage' => 0,
+                'is_active' => true,
+            ],
+        );
+
         $order = Order::query()->create(array_merge([
             'order_number' => 'ORD-'.uniqid(),
             'name' => 'Net Revenue Customer',
@@ -60,6 +69,7 @@ class AdminOrdersNetRevenueTest extends TestCase
             'due_amount' => 600,
             'payment_status' => 'unpaid',
             'payment_method' => 'cod',
+            'courier_id' => $courier->id,
             'placed_at' => now(),
             'placed_via' => Order::PLACED_VIA_ADMIN,
         ], $overrides));

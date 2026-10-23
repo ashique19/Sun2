@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Collection;
  * 5. payment_method (compat summary) = primary method or 'mixed'
  *
  * COD settlements from courier webhooks only count once delivery is recognized
- * (status delivered/returned/cancelled, or actual_delivery_date set). Otherwise a
+ * (status delivered/returned/cancelled/paid, or actual_delivery_date set). Otherwise a
  * premature COD ledger row zeros Amount to collect while the parcel is still out
  * and Steadfast still holds the full COD — classic COD mismatch.
  *
@@ -143,7 +143,7 @@ class OrderPaymentSync
             return true;
         }
 
-        return in_array($status, ['delivered', 'returned', 'cancelled'], true);
+        return in_array($status, ['delivered', 'returned', 'cancelled', 'paid'], true);
     }
 
     /**

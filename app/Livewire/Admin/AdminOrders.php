@@ -1069,7 +1069,7 @@ class AdminOrders extends Component
         }
 
         $orders = $this->filteredOrdersQuery()
-            ->with(['courier:id,name,slug', 'courierLogs'])
+            ->with(['courier:id,name,slug,cod_percentage', 'courierLogs'])
             ->forPage($this->getPage(), 20)
             ->get();
 
@@ -1111,7 +1111,7 @@ class AdminOrders extends Component
         }
 
         $with = [
-            'courier:id,name,slug',
+            'courier:id,name,slug,cod_percentage',
             'createdBy:id,name',
             'channelConversation:id,channel,customer_name,last_inbound_at',
             'items:'.$itemColumns,

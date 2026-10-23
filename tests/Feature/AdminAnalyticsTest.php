@@ -294,8 +294,8 @@ class AdminAnalyticsTest extends TestCase
             'is_active' => true,
         ]);
 
-        // collected 1080, delivery 80 → COD = (1080-80)*1% = 10
-        // cogs 400, pack 21, courier 65 → direct = 496, profit = 1080-496 = 584
+        // collected 1080, their fee 65 → COD = (1080 − 65) × 1% = 10.15
+        // cogs 400, pack 21, courier 65 → direct = 496.15, profit = 583.85
         $this->seedDeliveredOrder($courier, 'Ayesha', 1080, 65, 21, 1, 400, '2026-07-15 10:00:00');
 
         $breakdown = app(AnalyticsService::class)->monthBreakdown(2026, 7);
@@ -304,13 +304,13 @@ class AdminAnalyticsTest extends TestCase
         $this->assertSame(400.0, $breakdown['direct_breakdown']['cogs']);
         $this->assertSame(21.0, $breakdown['direct_breakdown']['packaging']);
         $this->assertSame(65.0, $breakdown['direct_breakdown']['courier']);
-        $this->assertSame(10.0, $breakdown['direct_breakdown']['cod']);
-        $this->assertSame(496.0, $breakdown['direct']);
+        $this->assertSame(10.15, $breakdown['direct_breakdown']['cod']);
+        $this->assertSame(496.15, $breakdown['direct']);
         $this->assertSame(0.0, $breakdown['indirect']);
-        $this->assertSame(584.0, $breakdown['profit']);
+        $this->assertSame(583.85, $breakdown['profit']);
 
         $overview = app(AnalyticsService::class)->yearOverview(2026);
-        $this->assertSame(584.0, $overview['months'][6]['profit']);
+        $this->assertSame(583.85, $overview['months'][6]['profit']);
         $this->assertSame(1080.0, $overview['months'][6]['revenue']);
 
         $money = $breakdown['money'];
@@ -318,8 +318,8 @@ class AdminAnalyticsTest extends TestCase
         $this->assertSame(1000.0, $money['product_price']);
         $this->assertSame(80.0, $money['customer_delivery']);
         $this->assertSame(1080.0, $money['remittance_base']);
-        $this->assertSame(1005.0, $money['courier_receivable']); // 1080 - 65 - 10
-        $this->assertSame(584.0, $money['gross_profit']); // 1005 - 400 - 21
+        $this->assertSame(1004.85, $money['courier_receivable']); // 1080 − 65 − 10.15
+        $this->assertSame(583.85, $money['gross_profit']); // 1004.85 − 400 − 21
     }
 
     #[Test]

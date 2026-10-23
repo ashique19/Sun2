@@ -132,8 +132,8 @@ class AdminOrderCancelReturnMoneyFlowTest extends TestCase
         $this->assertSame('cancelled', $order->status);
         $this->assertSame(120.0, (float) $order->collected_amount);
         $this->assertSame(120.0, (float) $order->total);
-        // Steadfast COD % of (collected − delivery) = 0 when only delivery was collected.
-        $this->assertSame(-6.0, $money->netRevenue);
+        // Steadfast COD % of (collected − their 105 fee) = 0.15; logistics = 120 − 105 − 21 − 0.15.
+        $this->assertSame(-6.15, $money->netRevenue);
         $this->assertSame(120.0, $money->remittanceBase);
     }
 

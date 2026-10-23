@@ -382,7 +382,7 @@ class Order extends Model
 
     /**
      * Courier COD collection fee (1% by default).
-     * Steadfast: (collected_amount - delivery_charge) × %; others: collected_amount × %.
+     * Steadfast: (collected − courier_charge) × %; others: collected × %.
      */
     public function codCharge(): float
     {

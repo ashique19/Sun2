@@ -96,15 +96,15 @@ class AdminCouriersBalanceBreakdownTest extends TestCase
         // Pending: collectable on dispatched = 1080
         $this->assertSame(1080.0, $summary['pending']);
 
-        // Delivered remittance: 1080 - 60 courier - (1080-80)*1% COD = 1080 - 60 - 10 = 1010
-        // Receivable after 200 withdraw = 810
-        $this->assertSame(1010.0, round(1080 - 60 - 10, 2));
-        $this->assertSame(810.0, $summary['receivable']);
+        // Delivered remittance: 1080 − 60 courier − (1080 − 60)×1% COD = 1009.8
+        // Receivable after 200 withdraw = 809.8
+        $this->assertSame(1009.8, round(1080 - 60 - 10.2, 2));
+        $this->assertSame(809.8, $summary['receivable']);
         $this->assertSame(200.0, $summary['withdrawn']);
 
         // Expected API = receivable (810), not book (1880) and not pending
         $this->assertSame(1880.0, $summary['book']);
-        $this->assertSame(810.0, $summary['expected_api']);
+        $this->assertSame(809.8, $summary['expected_api']);
     }
 
     #[Test]

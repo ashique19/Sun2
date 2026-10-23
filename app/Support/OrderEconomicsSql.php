@@ -34,12 +34,12 @@ class OrderEconomicsSql
     }
 
     /**
-     * Per-order COD fee (Steadfast excludes delivery from the base).
+     * Per-order COD fee (Steadfast excludes their delivery fee / courier_charge).
      */
     public static function codExpression(string $ordersAlias = 'orders'): string
     {
         $steadfastBase = self::greatest(
-            "(COALESCE({$ordersAlias}.collected_amount, 0) - COALESCE({$ordersAlias}.delivery_charge, 0))",
+            "(COALESCE({$ordersAlias}.collected_amount, 0) - COALESCE({$ordersAlias}.courier_charge, 0))",
             '0',
         );
 

@@ -98,9 +98,9 @@ class AdminAnalyticsPaidStatusRepairTest extends TestCase
 
         $this->assertSame(1, PaymentTransaction::query()->where('order_id', $order->id)->count());
 
-        // COD fee on analytics uses collected (Steadfast: (1080-80)*1% = 10).
+        // COD fee on analytics uses collected (Steadfast: (1080 − 60 courier fee) × 1% = 10.2).
         $econ = app(AnalyticsService::class)->orderContribution($order->fresh(['items', 'courier']));
-        $this->assertSame(10.0, $econ['cod']);
+        $this->assertSame(10.2, $econ['cod']);
         $this->assertSame(1080.0, $econ['revenue']);
     }
 
@@ -196,7 +196,7 @@ class AdminAnalyticsPaidStatusRepairTest extends TestCase
         $this->assertSame('paid', $order->payment_status);
 
         $econ = app(AnalyticsService::class)->orderContribution($order->fresh(['items', 'courier']));
-        $this->assertSame(9.0, $econ['cod']); // (980-80)*1%
+        $this->assertSame(9.2, $econ['cod']); // (980 − 60 courier fee) × 1%
     }
 
     #[Test]

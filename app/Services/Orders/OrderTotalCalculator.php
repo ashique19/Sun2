@@ -17,7 +17,7 @@ use App\Models\OrderProduct;
  * - Charges cannot be negative (enforced at service layer; not here)
  * - Delivery and courier cost are independent fields, not adjustments
  * - Packaging cost is a direct attributable cost subtracted from net revenue
- * - COD charge is derived from collected amount × courier COD % (Steadfast excludes delivery)
+ * - COD charge is collected × courier COD % (Steadfast excludes their delivery fee)
  */
 class OrderTotalCalculator
 {
@@ -57,7 +57,7 @@ class OrderTotalCalculator
         // Amount to collect is already 0).
         $codCharge = $this->codCharge(
             collectedAmount: $remittanceBase,
-            deliveryCharge: $deliveryCharge,
+            courierDeliveryFee: $courierCharge,
             courierSlug: $courierSlug,
             codPercentage: $codPercentage,
         );
@@ -89,12 +89,13 @@ class OrderTotalCalculator
     /**
      * Courier COD collection fee.
      *
-     * Steadfast: max(0, collected_amount - delivery_charge) × cod%
-     * Other couriers: collected_amount × cod%
+     * Steadfast total take = their delivery fee + this COD %:
+     *   (collected − courier delivery fee) × cod%
+     * Other couriers: collected × cod%
      */
     public function codCharge(
         float $collectedAmount,
-        float $deliveryCharge,
+        float $courierDeliveryFee = 0.0,
         ?string $courierSlug = null,
         float $codPercentage = 1.0,
     ): float {
@@ -106,7 +107,7 @@ class OrderTotalCalculator
         }
 
         $base = strtolower(trim((string) $courierSlug)) === 'steadfast'
-            ? max(0.0, $collected - max(0.0, $deliveryCharge))
+            ? max(0.0, $collected - max(0.0, $courierDeliveryFee))
             : $collected;
 
         return round($base * $rate, 2);

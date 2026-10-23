@@ -67,10 +67,10 @@ class AdminCouriersNeutralizeReceivableTest extends TestCase
     public function neutralize_lowers_receivable_without_changing_book(): void
     {
         $courier = $this->steadfast(16242);
-        $this->deliveredOrder($courier); // net receivable 1010
+        $this->deliveredOrder($courier); // net receivable 1009.8
 
         $summaryBefore = app(CourierBalanceService::class)->summarize($courier->fresh());
-        $this->assertSame(1010.0, $summaryBefore['receivable']);
+        $this->assertSame(1009.8, $summaryBefore['receivable']);
         $this->assertSame(16242.0, $summaryBefore['book']);
 
         app(CourierBalanceService::class)->neutralizeReceivable($courier->fresh(), targetReceivable: 200);
@@ -88,8 +88,8 @@ class AdminCouriersNeutralizeReceivableTest extends TestCase
         $this->assertSame(16242.0, (float) $entry->balance_after);
 
         $summary = app(CourierBalanceService::class)->summarize($courier->fresh());
-        $this->assertSame(200.0, $summary['receivable']);
-        $this->assertSame(200.0, $summary['expected_api']);
+        $this->assertSame(199.8, $summary['receivable']);
+        $this->assertSame(199.8, $summary['expected_api']);
         $this->assertSame(16242.0, $summary['book']);
         $this->assertSame(810.0, $summary['withdrawn']);
     }
@@ -220,6 +220,6 @@ class AdminCouriersNeutralizeReceivableTest extends TestCase
             ->assertSee('Prior remittances recorded');
 
         $this->assertSame(5000.0, (float) $courier->fresh()->balance);
-        $this->assertSame(100.0, app(CourierBalanceService::class)->summarize($courier->fresh())['receivable']);
+        $this->assertSame(99.8, app(CourierBalanceService::class)->summarize($courier->fresh())['receivable']);
     }
 }

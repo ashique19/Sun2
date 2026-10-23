@@ -136,11 +136,11 @@ class OrderTotalCalculatorTest extends TestCase
         $this->assertSame(1940.0, $totals->total); // 2000+100+40-200
     }
 
-    public function test_steadfast_cod_charge_excludes_delivery(): void
+    public function test_steadfast_cod_charge_excludes_their_delivery_fee(): void
     {
         $charge = $this->calc->codCharge(
             collectedAmount: 1180,
-            deliveryCharge: 80,
+            courierDeliveryFee: 80,
             courierSlug: 'steadfast',
             codPercentage: 1,
         );
@@ -149,11 +149,30 @@ class OrderTotalCalculatorTest extends TestCase
         $this->assertSame(11.0, $charge);
     }
 
+    public function test_steadfast_total_charge_is_their_fee_plus_one_percent_of_remainder(): void
+    {
+        $totals = $this->calc->calculate(
+            subtotal: 1065,
+            deliveryCharge: 135,
+            courierCharge: 135,
+            adjustments: [],
+            items: [['purchase_price' => 400, 'quantity' => 1]],
+            collectedAmount: 1200,
+            courierSlug: 'steadfast',
+            codPercentage: 1,
+        );
+
+        // Their fee 135 + (1200 − 135) × 1% = 135 + 10.65 = 145.65
+        $this->assertSame(10.65, $totals->codCharge);
+        $this->assertSame(1054.35, $totals->courierReceivable);
+        $this->assertSame(145.65, round($totals->courierCharge + $totals->codCharge, 2));
+    }
+
     public function test_other_courier_cod_charge_uses_full_collected(): void
     {
         $charge = $this->calc->codCharge(
             collectedAmount: 1180,
-            deliveryCharge: 80,
+            courierDeliveryFee: 80,
             courierSlug: 'pathao',
             codPercentage: 1,
         );
@@ -181,12 +200,13 @@ class OrderTotalCalculatorTest extends TestCase
             codPercentage: 1,
         );
 
-        // base 2000 - 1600 + 100 - 60 = 440; COD = (2100 - 100) * 1% = 20; net = 420
-        $this->assertSame(20.0, $totals->codCharge);
-        $this->assertSame(420.0, $totals->netRevenue);
+        // COD = (2100 − 60 courier fee) × 1% = 20.4
+        // net = 2000 − 1600 + 100 − 60 − 20.4 = 419.6
+        $this->assertSame(20.4, $totals->codCharge);
+        $this->assertSame(419.6, $totals->netRevenue);
         $this->assertSame(2100.0, $totals->remittanceBase);
-        $this->assertSame(2020.0, $totals->courierReceivable); // 2100 - 60 - 20
-        $this->assertSame(420.0, $totals->grossProfit); // 2020 - 1600 - 0
+        $this->assertSame(2019.6, $totals->courierReceivable); // 2100 - 60 - 20.4
+        $this->assertSame(419.6, $totals->grossProfit); // 2019.6 - 1600 - 0
     }
 
     public function test_bill_receivable_gross_profit_cascade_for_unpaid_cod(): void

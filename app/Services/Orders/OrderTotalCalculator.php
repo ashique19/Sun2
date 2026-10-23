@@ -46,15 +46,14 @@ class OrderTotalCalculator
         $packaging = max(0.0, $packagingCost);
         $deliveryMargin = $deliveryCharge - $courierCharge;
 
-        // Prefer actual COD collection; otherwise expected amount the courier will handle
-        // (collectable residual — 0 when prepaid / fully paid).
+        // Courier-channel cash only. Customer bill and in-house payments are not remittance.
+        // Pass expectedCodRemittance when the courier will collect a residual (unpaid COD).
         $collected = max(0.0, $collectedAmount);
         $remittanceBase = $collected > 0
             ? $collected
-            : max(0.0, $expectedCodRemittance ?? $total);
+            : max(0.0, $expectedCodRemittance ?? 0.0);
 
-        // COD % applies to the same remittance base (not a stale collected_amount when
-        // Amount to collect is already 0).
+        // COD % is a courier money-channel fee on remittance, not a delivery-channel fee.
         $codCharge = $this->codCharge(
             collectedAmount: $remittanceBase,
             courierDeliveryFee: $courierCharge,

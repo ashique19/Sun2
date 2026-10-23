@@ -34,6 +34,18 @@ class OrderEconomicsSql
     }
 
     /**
+     * Cash in from any money channel (in-house paid or courier collected).
+     * Delivery partner is not the source of revenue — prepaid bKash still counts.
+     */
+    public static function cashInExpression(string $ordersAlias = 'orders'): string
+    {
+        return "CASE
+            WHEN COALESCE({$ordersAlias}.paid_amount, 0) > 0 THEN {$ordersAlias}.paid_amount
+            ELSE COALESCE({$ordersAlias}.collected_amount, 0)
+        END";
+    }
+
+    /**
      * Per-order COD fee (Steadfast excludes their delivery fee / courier_charge).
      */
     public static function codExpression(string $ordersAlias = 'orders'): string

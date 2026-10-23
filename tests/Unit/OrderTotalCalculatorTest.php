@@ -218,10 +218,11 @@ class OrderTotalCalculatorTest extends TestCase
             adjustments: [],
             items: [['purchase_price' => 700, 'quantity' => 2]],
             packagingCost: 0,
+            expectedCodRemittance: 2320,
             codPercentage: 0,
         );
 
-        // Bill = 2200 + 120 = 2320
+        // Unpaid COD remittance is passed explicitly — bill is not assumed to be courier cash.
         // Receivable = 2320 - 0 - 0 = 2320
         // Gross profit = 2320 - 1400 - 0 = 920
         $this->assertSame(2320.0, $totals->billToCustomer);
@@ -273,5 +274,44 @@ class OrderTotalCalculatorTest extends TestCase
         $this->assertSame(1450.0, $totals->cogs);
         $this->assertSame(1680.0, $totals->grossProfit);
         $this->assertSame(1680.0, $totals->netRevenue);
+    }
+
+    public function test_unpaid_bill_is_not_courier_remittance_by_default(): void
+    {
+        $totals = $this->calc->calculate(
+            subtotal: 2200,
+            deliveryCharge: 120,
+            courierCharge: 60,
+            adjustments: [],
+            items: [['purchase_price' => 700, 'quantity' => 2]],
+            courierSlug: 'steadfast',
+            codPercentage: 1,
+        );
+
+        $this->assertSame(2320.0, $totals->billToCustomer);
+        $this->assertSame(0.0, $totals->remittanceBase);
+        $this->assertSame(0.0, $totals->codCharge);
+        $this->assertSame(-60.0, $totals->courierReceivable);
+    }
+
+    public function test_delivery_fee_applies_even_when_money_is_in_house(): void
+    {
+        $totals = $this->calc->calculate(
+            subtotal: 3130,
+            deliveryCharge: 0,
+            courierCharge: 80,
+            adjustments: [],
+            items: [['purchase_price' => 1450, 'quantity' => 1]],
+            expectedCodRemittance: 0,
+            inHouseReceived: 3130,
+            courierSlug: 'steadfast',
+            codPercentage: 1,
+        );
+
+        $this->assertSame(0.0, $totals->remittanceBase);
+        $this->assertSame(0.0, $totals->codCharge);
+        $this->assertSame(-80.0, $totals->courierReceivable);
+        $this->assertSame(3130.0, $totals->inHouseReceived);
+        $this->assertSame(1600.0, $totals->grossProfit); // 3130 − 80 − 1450
     }
 }

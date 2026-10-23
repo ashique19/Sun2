@@ -136,7 +136,7 @@ class CodCollectableMismatchTest extends TestCase
         $this->assertSame(3170.0, $order->collectableAmount());
 
         // COD % follows remittance (expected collectable), not a stale collected_amount.
-        $this->assertSame(30.5, $order->codCharge());
+        $this->assertSame(30.55, $order->codCharge());
     }
 
     #[Test]
@@ -200,11 +200,11 @@ class CodCollectableMismatchTest extends TestCase
 
         $this->assertSame(0.0, $order->collectableAmount());
         $this->assertSame(3170.0, (float) $order->collected_amount);
-        $this->assertSame(30.5, $order->codCharge());
+        $this->assertSame(30.55, $order->codCharge());
         $this->assertSame('paid', $order->payment_status);
         $this->assertSame(0.0, $order->moneyTotals()->inHouseReceived);
-        // Courier remittance 3170 − 115 − 30.5 − COGS 1910 − pack 54 = 1060.5
-        $this->assertSame(1060.5, $order->moneyTotals()->grossProfit);
+        // Courier remittance 3170 − 115 − 30.55 − COGS 1910 − pack 54 = 1060.45
+        $this->assertSame(1060.45, $order->moneyTotals()->grossProfit);
     }
 
     #[Test]

@@ -78,7 +78,7 @@ class OrderCodChargeTest extends TestCase
     }
 
     #[Test]
-    public function steadfast_cod_charge_uses_collected_minus_delivery(): void
+    public function steadfast_cod_charge_uses_collected_minus_their_delivery_fee(): void
     {
         $courier = Courier::query()->create([
             'name' => 'Steadfast',
@@ -89,9 +89,11 @@ class OrderCodChargeTest extends TestCase
 
         $order = $this->makeOrder($courier, collected: 1180, delivery: 80);
 
-        $this->assertSame(11.0, $order->codCharge());
-        // 1000 - 400 + 80 - 60 - 11 = 609
-        $this->assertSame(609.0, $order->netRevenue());
+        // Their fee is courier_charge 60, not customer delivery 80: (1180 − 60) × 1% = 11.2
+        $this->assertSame(11.2, $order->codCharge());
+        // 1000 - 400 + 80 - 60 - 11.2 = 608.8
+        $this->assertSame(608.8, $order->netRevenue());
+        $this->assertSame(71.2, round((float) $order->courier_charge + $order->codCharge(), 2));
     }
 
     #[Test]
@@ -133,8 +135,8 @@ class OrderCodChargeTest extends TestCase
             ->assertSee('Receivable from courier')
             ->assertSee('Gross profit')
             ->assertSee('COD charge')
-            ->assertSee('1% of collected − delivery')
-            ->assertSee('11.00')
+            ->assertSee('1% of collected − courier delivery fee')
+            ->assertSee('11.20')
             ->assertSee('Collected by courier');
     }
 
@@ -145,7 +147,7 @@ class OrderCodChargeTest extends TestCase
 
         $this->get(route('admin.couriers.create'))
             ->assertOk()
-            ->assertSee('Steadfast: (collected − delivery) × %')
+            ->assertSee('Steadfast: their delivery fee + (collected − that fee) × %')
             ->assertSee('Other couriers: collected × %');
     }
 }

@@ -277,6 +277,44 @@ class SteadfastWebhookAttentionTest extends TestCase
     }
 
     #[Test]
+    public function delivered_webhook_delivery_charge_is_their_fee_for_cod_percent(): void
+    {
+        $order = $this->order([
+            'order_number' => 'ORD-FEE',
+            'courier_tracker' => 'SFR_FEE',
+            'delivery_charge' => 80,
+            'courier_charge' => 60,
+            'subtotal' => 1120,
+            'total' => 1200,
+            'due_amount' => 1200,
+            'cod_amount' => 1200,
+        ]);
+        $order->forceFill([
+            'courier_id' => Courier::query()->where('slug', 'steadfast')->value('id'),
+        ])->save();
+
+        $this->postWebhook([
+            'notification_type' => 'delivery_status',
+            'invoice' => $order->order_number,
+            'tracking_id' => $order->courier_tracker,
+            'status' => 'delivered',
+            'cod_amount' => 1200,
+            'delivery_charge' => 135,
+            'updated_at' => now()->toDateTimeString(),
+            'tracking_message' => 'Delivered successfully',
+        ]);
+
+        $order = $order->fresh(['items', 'courier', 'paymentTransactions']);
+
+        $this->assertSame('delivered', $order->status);
+        $this->assertSame('steadfast', $order->courier?->slug);
+        $this->assertSame(135.0, (float) $order->courier_charge);
+        $this->assertSame(1200.0, (float) $order->collected_amount);
+        // Their fee 135 + (1200 − 135) × 1% = 145.65
+        $this->assertSame(10.65, $order->codCharge());
+        $this->assertSame(1054.35, $order->moneyTotals()->courierReceivable);
+    }
+
     public function webhook_finds_order_by_consignment_id_when_invoice_missing(): void
     {
         $order = $this->order([

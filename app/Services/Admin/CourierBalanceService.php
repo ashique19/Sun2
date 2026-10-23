@@ -347,7 +347,7 @@ class CourierBalanceService
                     $courierCharge = max(0.0, (float) ($order->courier_charge ?? 0));
                     $codCharge = $this->totals->codCharge(
                         collectedAmount: $collected,
-                        deliveryCharge: (float) $order->delivery_charge,
+                        courierDeliveryFee: $courierCharge,
                         courierSlug: $courier->slug,
                         codPercentage: (float) ($courier->cod_percentage ?? 1),
                     );

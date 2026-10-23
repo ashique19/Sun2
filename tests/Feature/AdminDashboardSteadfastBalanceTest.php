@@ -65,7 +65,7 @@ class AdminDashboardSteadfastBalanceTest extends TestCase
             'placed_at' => now(),
         ]);
 
-        // cash received 1080 − courier charge 60 − COD% 10 = 1010 receivable / should be
+        // cash received 1080 − courier 60 − (1080 − 60)×1% = 1009.8 → shown as ৳ 1,010
         Livewire::test(AdminDashboard::class)
             ->assertSeeHtml('data-steadfast-expected-api')
             ->assertSee('Steadfast')

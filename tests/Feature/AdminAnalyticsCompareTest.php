@@ -109,8 +109,8 @@ class AdminAnalyticsCompareTest extends TestCase
 
         $series2026 = collect($chart['series'])->firstWhere('label', '2026');
         $this->assertNotNull($series2026);
-        // Mar index 2 — collected 2000 - cogs 100 - pack 21 - courier 60 - COD (2000-80)*1% - expense 50
-        $expected = 2000 - 100 - 21 - 60 - 19.2 - 50;
+        // Mar index 2 — collected 2000 − cogs 100 − pack 21 − courier 60 − COD (2000 − 60)×1% − expense 50
+        $expected = 2000 - 100 - 21 - 60 - 19.4 - 50;
         $this->assertEqualsWithDelta($expected, $series2026['values'][2], 0.01);
 
         $ordered = app(AnalyticsYearCompareService::class)->compare('ordered_count', 2026);

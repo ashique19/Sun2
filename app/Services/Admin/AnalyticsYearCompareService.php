@@ -169,7 +169,7 @@ class AnalyticsYearCompareService
             ->groupBy('order_products.order_id');
 
         $steadfastBase = OrderEconomicsSql::greatest(
-            '(COALESCE(orders.collected_amount, 0) - COALESCE(orders.delivery_charge, 0))',
+            '(COALESCE(orders.collected_amount, 0) - COALESCE(orders.courier_charge, 0))',
             '0',
         );
         $codExpr = "CASE

@@ -96,7 +96,7 @@ class DeliveredSettlementRepairTest extends TestCase
 
         $econ = app(AnalyticsService::class)->orderContribution($order->fresh(['items', 'courier']));
         $this->assertSame(1080.0, $econ['revenue']);
-        $this->assertSame(10.0, $econ['cod']);
+        $this->assertSame(10.2, $econ['cod']);
     }
 
     #[Test]

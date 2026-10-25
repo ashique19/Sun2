@@ -62,6 +62,8 @@ return [
     'clear_filters' => 'ফিল্টার মুছুন',
     'no_products_category' => 'এই ক্যাটাগরিতে এখনো পণ্য নেই।',
     'no_products_filtered' => 'এই ফিল্টারে কোনো পণ্য নেই।',
+    'load_more' => 'আরও দেখুন',
+    'loading_more' => 'লোড হচ্ছে…',
 
     'add_to_cart' => 'অর্ডার করুন',
     'buy_now' => 'কিনুন',

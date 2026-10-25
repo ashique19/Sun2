@@ -52,10 +52,26 @@
         @else
             <div class="grid grid-cols-2 gap-5 md:grid-cols-4">
                 @foreach ($products as $product)
-                    <x-storefront.product-card :product="$product" />
+                    <div wire:key="category-product-{{ $product->id }}">
+                        <x-storefront.product-card :product="$product" />
+                    </div>
                 @endforeach
             </div>
-            <div class="mt-8">{{ $products->links() }}</div>
+
+            @if ($hasMore)
+                <div class="mt-8 mb-8 flex flex-col items-center gap-3"
+                    wire:intersect="loadMore"
+                    data-category-load-more>
+                    <button type="button"
+                        wire:click="loadMore"
+                        wire:loading.attr="disabled"
+                        wire:target="loadMore"
+                        class="rounded-full border border-[#E0D6C2] bg-white px-4 py-2 text-sm text-[#5C564C] hover:border-[#C9A227] hover:text-[#7A6114] disabled:opacity-60">
+                        <span wire:loading.remove wire:target="loadMore">{{ __('storefront.load_more') }}</span>
+                        <span wire:loading wire:target="loadMore">{{ __('storefront.loading_more') }}</span>
+                    </button>
+                </div>
+            @endif
         @endif
     </div>
 </x-storefront.shell>

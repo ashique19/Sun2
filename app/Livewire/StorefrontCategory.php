@@ -6,17 +6,20 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Support\Seo;
 use App\Support\StorefrontAssets;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Component;
-use Livewire\WithPagination;
 
 #[Layout('components.layouts.app')]
 class StorefrontCategory extends Component
 {
-    use WithPagination;
+    public const PAGE_SIZE = 24;
 
     public Category $category;
+
+    public int $perPage = self::PAGE_SIZE;
 
     #[Url(as: 'sort')]
     public string $sort = 'featured';
@@ -31,12 +34,21 @@ class StorefrontCategory extends Component
 
     public function updatedSort(): void
     {
-        $this->resetPage();
+        $this->perPage = self::PAGE_SIZE;
     }
 
     public function updatedInStockOnly(): void
     {
-        $this->resetPage();
+        $this->perPage = self::PAGE_SIZE;
+    }
+
+    public function loadMore(): void
+    {
+        if (! $this->hasMoreProducts()) {
+            return;
+        }
+
+        $this->perPage += self::PAGE_SIZE;
     }
 
     public function title(): string
@@ -46,22 +58,11 @@ class StorefrontCategory extends Component
 
     public function render()
     {
-        $products = Product::query()
-            ->with([
-                'category:id,name,slug',
-                'listingImage',
-            ])
-            ->published()
-            ->where('category_id', $this->category->id)
-            ->when($this->inStockOnly, fn ($q) => $q->where('stock_quantity', '>', 0))
-            ->when($this->sort === 'price_asc', fn ($q) => $q->orderBy('price'))
-            ->when($this->sort === 'price_desc', fn ($q) => $q->orderByDesc('price'))
-            ->when($this->sort === 'newest', fn ($q) => $q->orderByDesc('id'))
-            ->when($this->sort === 'featured', fn ($q) => $q->orderBy('display_order')->orderByDesc('id'))
-            ->paginate(24);
+        [$products, $hasMore] = $this->visibleProducts();
 
         return view('livewire.storefront-category', [
             'products' => $products,
+            'hasMore' => $hasMore,
         ])
             ->title($this->title())
             ->layoutData([
@@ -77,5 +78,46 @@ class StorefrontCategory extends Component
                     ? 'noindex, follow'
                     : null,
             ]);
+    }
+
+    /**
+     * @return array{0: Collection<int, Product>, 1: bool}
+     */
+    private function visibleProducts(): array
+    {
+        $products = $this->categoryProductQuery()
+            ->limit($this->perPage + 1)
+            ->get();
+
+        $hasMore = $products->count() > $this->perPage;
+
+        return [$products->take($this->perPage)->values(), $hasMore];
+    }
+
+    private function hasMoreProducts(): bool
+    {
+        return $this->categoryProductQuery()
+            ->skip($this->perPage)
+            ->take(1)
+            ->exists();
+    }
+
+    /**
+     * @return Builder<Product>
+     */
+    private function categoryProductQuery(): Builder
+    {
+        return Product::query()
+            ->with([
+                'category:id,name,slug',
+                'listingImage',
+            ])
+            ->published()
+            ->where('category_id', $this->category->id)
+            ->when($this->inStockOnly, fn (Builder $q) => $q->where('stock_quantity', '>', 0))
+            ->when($this->sort === 'price_asc', fn (Builder $q) => $q->orderBy('price'))
+            ->when($this->sort === 'price_desc', fn (Builder $q) => $q->orderByDesc('price'))
+            ->when($this->sort === 'newest', fn (Builder $q) => $q->orderByDesc('id'))
+            ->when($this->sort === 'featured', fn (Builder $q) => $q->orderBy('display_order')->orderByDesc('id'));
     }
 }

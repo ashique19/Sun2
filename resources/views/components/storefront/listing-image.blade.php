@@ -18,7 +18,7 @@
 @endphp
 
 @if ($src)
-    <div class="relative" data-image-retry-wrap>
+    <div class="relative" data-image-retry-wrap data-image-loading>
         <img
             src="{{ $src }}"
             data-image-retry
@@ -31,10 +31,15 @@
             height="400"
             {{ $attributes->class('bg-[#F1EADB]') }}
         >
+        <div data-image-loading-spinner
+            class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[#F1EADB]"
+            aria-hidden="true">
+            <span class="size-6 animate-spin rounded-full border-2 border-[#D8CDB6] border-t-[#C9A227]"></span>
+        </div>
         <button type="button"
             hidden
             data-image-retry-btn
-            class="absolute inset-0 z-10 flex items-center justify-center bg-[#F1EADB]/90 px-2 text-center text-xs font-medium text-[#7A6114]">
+            class="absolute inset-0 z-20 flex items-center justify-center bg-[#F1EADB]/90 px-2 text-center text-xs font-medium text-[#7A6114]">
             {{ __('storefront.image_retry') }}
         </button>
     </div>

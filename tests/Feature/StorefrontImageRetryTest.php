@@ -47,6 +47,8 @@ class StorefrontImageRetryTest extends TestCase
             ->assertSee('data-image-retry', false)
             ->assertSee('data-image-src', false)
             ->assertSee('data-image-retry-btn', false)
+            ->assertSee('data-image-loading-spinner', false)
+            ->assertSee('data-image-loading', false)
             ->assertSee(__('storefront.image_retry'), false);
     }
 

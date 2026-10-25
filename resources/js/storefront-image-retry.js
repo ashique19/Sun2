@@ -62,9 +62,19 @@ function retryButton(img) {
     return wrapOf(img)?.querySelector('[data-image-retry-btn]') ?? null;
 }
 
+function showLoading(img) {
+    wrapOf(img)?.setAttribute('data-image-loading', '');
+}
+
+function hideLoading(img) {
+    wrapOf(img)?.removeAttribute('data-image-loading');
+}
+
 function showRetryUi(img) {
     const wrap = wrapOf(img);
     const button = retryButton(img);
+
+    hideLoading(img);
 
     if (wrap) {
         wrap.setAttribute('data-image-failed', '');
@@ -94,6 +104,7 @@ function applyRetry(img, token) {
     }
 
     hideRetryUi(img);
+    showLoading(img);
     img.removeAttribute('srcset');
     img.removeAttribute('sizes');
     img.src = withRetryQuery(src, token);
@@ -188,6 +199,7 @@ export function startImageRetry(options = {}) {
         clearPending(img);
         img.dataset.retryAttempt = '0';
         hideRetryUi(img);
+        hideLoading(img);
     }, true);
 
     doc.addEventListener('click', (event) => {
@@ -248,6 +260,19 @@ export function startImageRetry(options = {}) {
 
         mutations.observe(doc.documentElement ?? doc, { childList: true, subtree: true });
     }
+
+    doc.querySelectorAll('[data-image-retry]').forEach((img) => {
+        if (! isRetryImage(img) || ! img.complete) {
+            return;
+        }
+
+        if ((img.naturalWidth || 0) > 0) {
+            hideRetryUi(img);
+            hideLoading(img);
+        } else {
+            queueRetry(img);
+        }
+    });
 
     return { retryNow, queueRetry, retryVisibleFailed };
 }

@@ -56,18 +56,27 @@ function fakeDocument() {
 function fakeImage(src) {
     const wrap = {
         failed: false,
+        loading: false,
         setAttribute(name) {
             if (name === 'data-image-failed') {
                 this.failed = true;
+            }
+
+            if (name === 'data-image-loading') {
+                this.loading = true;
             }
         },
         removeAttribute(name) {
             if (name === 'data-image-failed') {
                 this.failed = false;
             }
+
+            if (name === 'data-image-loading') {
+                this.loading = false;
+            }
         },
         hasAttribute(name) {
-            return name === 'data-image-failed' ? this.failed : false;
+            return name === 'data-image-failed' ? this.failed : name === 'data-image-loading' ? this.loading : false;
         },
         querySelector(selector) {
             return selector === '[data-image-retry-btn]' ? this.button : selector === '[data-image-retry]' ? img : null;
@@ -124,6 +133,7 @@ test('error queues an auto retry that drops srcset and cache-busts src', () => {
     assert.equal(img.srcset, '');
     assert.equal(img.src, '/img/nupur.jpg?retry=99');
     assert.equal(img.wrap.button.hidden, true);
+    assert.equal(img.wrap.loading, true);
 });
 
 test('after max auto retries the tap-to-reload control is shown', () => {

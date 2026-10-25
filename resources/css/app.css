@@ -313,6 +313,14 @@ body:has(.mobile-nav-toggle:checked) {
     }
 }
 
+[data-image-retry-wrap]:not([data-image-loading]) [data-image-loading-spinner] {
+    display: none;
+}
+
+[data-image-retry-wrap][data-image-loading] [data-image-retry] {
+    opacity: 0;
+}
+
 /* Mobile bottom nav — explicit CSS so it stays a fixed row
    even if utility classes are missing from a stale Vite build. */
 .storefront-bottom-nav {

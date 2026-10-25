@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
     MAX_AUTO_RETRIES,
+    imageNeedsRecover,
     nextRetryDelay,
     startImageRetry,
     stripRetryQuery,
@@ -29,6 +30,7 @@ function fakeDocument() {
 
     const doc = {
         listeners,
+        visibilityState: 'visible',
         addEventListener(type, fn, opts) {
             listeners[type] = listeners[type] ?? [];
             listeners[type].push({ fn, opts });
@@ -53,10 +55,27 @@ function fakeDocument() {
     return { doc, images };
 }
 
+function fakeWindow() {
+    const listeners = {};
+
+    return {
+        listeners,
+        addEventListener(type, fn) {
+            listeners[type] = listeners[type] ?? [];
+            listeners[type].push(fn);
+        },
+        dispatch(type) {
+            (listeners[type] ?? []).forEach((fn) => fn({}));
+        },
+        navigator: { onLine: true },
+        IntersectionObserver: undefined,
+    };
+}
+
 function fakeImage(src) {
     const wrap = {
         failed: false,
-        loading: false,
+        loading: true,
         setAttribute(name) {
             if (name === 'data-image-failed') {
                 this.failed = true;
@@ -88,6 +107,9 @@ function fakeImage(src) {
         tagName: 'IMG',
         src,
         srcset: 'a.jpg 200w',
+        currentSrc: src,
+        complete: false,
+        naturalWidth: 0,
         dataset: { retryAttempt: '0' },
         wrap,
         hasAttribute: (name) => name === 'data-image-retry',
@@ -103,27 +125,31 @@ function fakeImage(src) {
     return img;
 }
 
-test('error queues an auto retry that drops srcset and cache-busts src', () => {
-    const { doc, images } = fakeDocument();
-    const scheduled = [];
-    const img = fakeImage('/img/nupur.jpg');
-    images.push(img);
+function start(doc, extra = {}) {
+    const win = extra.window ?? fakeWindow();
+    const scheduled = extra.scheduled ?? [];
 
-    startImageRetry({
+    const api = startImageRetry({
         document: doc,
-        window: {
-            addEventListener() {},
-            navigator: { onLine: true },
-            IntersectionObserver: undefined,
-        },
-        now: () => 99,
-        schedule: (fn) => {
+        window: win,
+        now: extra.now ?? (() => 99),
+        schedule: extra.schedule ?? ((fn) => {
             scheduled.push(fn);
 
             return scheduled.length;
-        },
-        online: () => true,
+        }),
+        online: extra.online ?? (() => true),
+        ...extra.startOptions,
     });
+
+    return { api, win, scheduled };
+}
+
+test('error queues an auto retry that drops srcset and cache-busts src', () => {
+    const { doc, images } = fakeDocument();
+    const img = fakeImage('/img/nupur.jpg');
+    images.push(img);
+    const { scheduled } = start(doc);
 
     doc.dispatch('error', img);
     assert.equal(scheduled.length, 1);
@@ -142,37 +168,21 @@ test('after max auto retries the tap-to-reload control is shown', () => {
     img.dataset.retryAttempt = String(MAX_AUTO_RETRIES);
     images.push(img);
 
-    startImageRetry({
-        document: doc,
-        window: {
-            addEventListener() {},
-            navigator: { onLine: true },
-            IntersectionObserver: undefined,
-        },
-        now: () => 1,
-        schedule: (fn) => fn(),
-        online: () => true,
-    });
+    start(doc, { schedule: (fn) => fn() });
 
     doc.dispatch('error', img);
     assert.equal(img.wrap.failed, true);
     assert.equal(img.wrap.button.hidden, false);
+    assert.equal(img.wrap.loading, false);
 });
 
-test('offline failures show the retry control instead of hammering', () => {
+test('offline failures keep the spinner instead of swapping to the tap control', () => {
     const { doc, images } = fakeDocument();
     const img = fakeImage('/img/nupur.jpg');
     images.push(img);
     let scheduled = 0;
 
-    startImageRetry({
-        document: doc,
-        window: {
-            addEventListener() {},
-            navigator: { onLine: false },
-            IntersectionObserver: undefined,
-        },
-        now: () => 1,
+    start(doc, {
         schedule: (fn) => {
             scheduled += 1;
 
@@ -183,5 +193,88 @@ test('offline failures show the retry control instead of hammering', () => {
 
     doc.dispatch('error', img);
     assert.equal(scheduled, 0);
-    assert.equal(img.wrap.button.hidden, false);
+    assert.equal(img.wrap.button.hidden, true);
+    assert.equal(img.wrap.loading, true);
+    assert.equal(img.wrap.failed, true);
+});
+
+test('network restore restarts failed images and brings the spinner back', () => {
+    const { doc, images } = fakeDocument();
+    const img = fakeImage('/img/nupur.jpg');
+    img.complete = true;
+    img.naturalWidth = 0;
+    img.dataset.retryAttempt = String(MAX_AUTO_RETRIES);
+    img.wrap.failed = true;
+    img.wrap.loading = false;
+    img.wrap.button.hidden = false;
+    images.push(img);
+
+    const { win } = start(doc, { now: () => 55 });
+
+    win.dispatch('online');
+
+    assert.equal(img.dataset.retryAttempt, '0');
+    assert.equal(img.src, '/img/nupur.jpg?retry=55');
+    assert.equal(img.wrap.loading, true);
+    assert.equal(img.wrap.failed, false);
+    assert.equal(img.wrap.button.hidden, true);
+});
+
+test('network restore restarts hung in-flight images that never fired error', () => {
+    const { doc, images } = fakeDocument();
+    const img = fakeImage('/img/nupur.jpg');
+    img.complete = false;
+    img.naturalWidth = 0;
+    img.wrap.failed = false;
+    img.wrap.loading = true;
+    images.push(img);
+
+    const { win } = start(doc, { now: () => 77 });
+
+    win.dispatch('online');
+
+    assert.equal(img.src, '/img/nupur.jpg?retry=77');
+    assert.equal(img.wrap.loading, true);
+    assert.equal(img.wrap.button.hidden, true);
+});
+
+test('a successful image load recovers other failed images on the page', () => {
+    const { doc, images } = fakeDocument();
+    const loaded = fakeImage('/img/ok.jpg');
+    const failed = fakeImage('/img/bad.jpg');
+    failed.complete = true;
+    failed.naturalWidth = 0;
+    failed.wrap.failed = true;
+    failed.wrap.loading = false;
+    failed.wrap.button.hidden = false;
+    images.push(loaded, failed);
+
+    start(doc, { now: () => 12 });
+
+    loaded.naturalWidth = 400;
+    loaded.complete = true;
+    doc.dispatch('load', loaded);
+
+    assert.equal(failed.src, '/img/bad.jpg?retry=12');
+    assert.equal(failed.wrap.loading, true);
+    assert.equal(failed.wrap.button.hidden, true);
+});
+
+test('imageNeedsRecover treats failed and broken images as waiting', () => {
+    const failed = fakeImage('/img/nupur.jpg');
+    failed.wrap.failed = true;
+    failed.complete = true;
+    failed.naturalWidth = 0;
+    assert.equal(imageNeedsRecover(failed), true);
+
+    const hung = fakeImage('/img/nupur.jpg');
+    hung.complete = false;
+    hung.naturalWidth = 0;
+    assert.equal(imageNeedsRecover(hung), false);
+    assert.equal(imageNeedsRecover(hung, { includeHung: true }), true);
+
+    const ok = fakeImage('/img/nupur.jpg');
+    ok.complete = true;
+    ok.naturalWidth = 400;
+    assert.equal(imageNeedsRecover(ok, { includeHung: true }), false);
 });

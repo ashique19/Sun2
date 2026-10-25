@@ -1,5 +1,6 @@
 export const MAX_AUTO_RETRIES = 3;
 export const RETRY_DELAYS_MS = [800, 2000, 4500];
+export const RESTORE_FOLLOWUP_MS = 800;
 
 /**
  * Drop a previous retry query so we can stamp a fresh one.
@@ -38,6 +39,31 @@ export function withRetryQuery(url, token) {
 
 export function nextRetryDelay(attempt) {
     return RETRY_DELAYS_MS[Math.min(Math.max(0, attempt), RETRY_DELAYS_MS.length - 1)];
+}
+
+export function imageHasPixels(img) {
+    return Boolean(img && (img.naturalWidth || 0) > 0);
+}
+
+/**
+ * Failed, broken, or (optionally) hung in-flight images that should be restarted.
+ */
+export function imageNeedsRecover(img, { includeHung = false } = {}) {
+    if (! isRetryImage(img) || imageHasPixels(img)) {
+        return false;
+    }
+
+    const wrap = wrapOf(img);
+
+    if (wrap?.hasAttribute('data-image-failed')) {
+        return true;
+    }
+
+    if (img.complete) {
+        return true;
+    }
+
+    return includeHung;
 }
 
 function isRetryImage(node) {
@@ -96,6 +122,22 @@ function hideRetryUi(img) {
     }
 }
 
+function markWaiting(img) {
+    const wrap = wrapOf(img);
+    const button = retryButton(img);
+
+    wrap?.setAttribute('data-image-failed', '');
+    showLoading(img);
+
+    if (button) {
+        button.hidden = true;
+    }
+}
+
+function currentSrcValue(img) {
+    return String(img.getAttribute('src') || img.currentSrc || img.src || '');
+}
+
 function applyRetry(img, token) {
     const src = originalSrc(img);
 
@@ -149,7 +191,7 @@ export function startImageRetry(options = {}) {
         }
 
         if (! online()) {
-            showRetryUi(img);
+            markWaiting(img);
 
             return;
         }
@@ -162,6 +204,9 @@ export function startImageRetry(options = {}) {
             return;
         }
 
+        showLoading(img);
+        hideRetryUi(img);
+
         const handle = schedule(() => {
             pending.delete(img);
             img.dataset.retryAttempt = String(attempt + 1);
@@ -171,18 +216,40 @@ export function startImageRetry(options = {}) {
         pending.set(img, handle);
     };
 
-    const retryVisibleFailed = () => {
-        doc.querySelectorAll('[data-image-retry-wrap][data-image-failed] [data-image-retry]').forEach((img) => {
-            if (isRetryImage(img)) {
-                retryNow(img);
+    const recoverWaitingImages = ({ reset = true, includeHung = true } = {}) => {
+        if (! online()) {
+            return;
+        }
+
+        doc.querySelectorAll('[data-image-retry]').forEach((img) => {
+            if (imageNeedsRecover(img, { includeHung })) {
+                retryNow(img, { reset });
             }
+        });
+    };
+
+    const retryVisibleFailed = () => recoverWaitingImages({ reset: true, includeHung: true });
+
+    const recoverAfterRestore = () => {
+        recoverWaitingImages({ reset: true, includeHung: true });
+        schedule(() => recoverWaitingImages({ reset: true, includeHung: true }), RESTORE_FOLLOWUP_MS);
+    };
+
+    const markUnloadedWaiting = () => {
+        doc.querySelectorAll('[data-image-retry]').forEach((img) => {
+            if (! isRetryImage(img) || imageHasPixels(img)) {
+                return;
+            }
+
+            clearPending(img);
+            markWaiting(img);
         });
     };
 
     doc.addEventListener('error', (event) => {
         const img = event.target;
 
-        if (! isRetryImage(img)) {
+        if (! isRetryImage(img) || ! currentSrcValue(img)) {
             return;
         }
 
@@ -200,6 +267,10 @@ export function startImageRetry(options = {}) {
         img.dataset.retryAttempt = '0';
         hideRetryUi(img);
         hideLoading(img);
+
+        if (online()) {
+            recoverWaitingImages({ reset: true, includeHung: false });
+        }
     }, true);
 
     doc.addEventListener('click', (event) => {
@@ -222,19 +293,46 @@ export function startImageRetry(options = {}) {
         }
     }, true);
 
-    win.addEventListener('online', retryVisibleFailed);
+    win.addEventListener('online', recoverAfterRestore);
+    win.addEventListener('offline', markUnloadedWaiting);
+    win.addEventListener('pageshow', () => {
+        if (online()) {
+            recoverAfterRestore();
+        }
+    });
+    win.addEventListener('focus', () => {
+        if (online()) {
+            recoverWaitingImages({ reset: true, includeHung: true });
+        }
+    });
+
+    doc.addEventListener('visibilitychange', () => {
+        if ((doc.visibilityState ?? 'visible') === 'visible' && online()) {
+            recoverWaitingImages({ reset: true, includeHung: true });
+        }
+    });
+
+    const connection = win.navigator?.connection;
+
+    if (connection && typeof connection.addEventListener === 'function') {
+        connection.addEventListener('change', () => {
+            if (online()) {
+                recoverWaitingImages({ reset: true, includeHung: true });
+            }
+        });
+    }
 
     if (typeof win.IntersectionObserver === 'function') {
         const observer = new win.IntersectionObserver((entries) => {
             entries.forEach((entry) => {
-                if (! entry.isIntersecting) {
+                if (! entry.isIntersecting || ! online()) {
                     return;
                 }
 
                 const img = entry.target.querySelector?.('[data-image-retry]') ?? entry.target;
 
-                if (isRetryImage(img) && wrapOf(img)?.hasAttribute('data-image-failed')) {
-                    retryNow(img);
+                if (imageNeedsRecover(img, { includeHung: true })) {
+                    retryNow(img, { reset: true });
                 }
             });
         }, { rootMargin: '80px 0px' });
@@ -266,13 +364,15 @@ export function startImageRetry(options = {}) {
             return;
         }
 
-        if ((img.naturalWidth || 0) > 0) {
+        if (imageHasPixels(img)) {
             hideRetryUi(img);
             hideLoading(img);
-        } else {
+        } else if (online()) {
             queueRetry(img);
+        } else {
+            markWaiting(img);
         }
     });
 
-    return { retryNow, queueRetry, retryVisibleFailed };
+    return { retryNow, queueRetry, retryVisibleFailed, recoverWaitingImages };
 }

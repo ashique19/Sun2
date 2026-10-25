@@ -273,24 +273,47 @@ export function startImageRetry(options = {}) {
         }
     }, true);
 
-    doc.addEventListener('click', (event) => {
-        const target = event.target;
-        const button = target && typeof target.closest === 'function'
-            ? target.closest('[data-image-retry-btn]')
-            : null;
+    const imageFromClick = (target) => {
+        if (! target || typeof target.closest !== 'function') {
+            return { img: null, forced: false };
+        }
 
-        if (! button) {
+        const button = target.closest('[data-image-retry-btn]');
+
+        if (button) {
+            return {
+                img: button.closest('[data-image-retry-wrap]')?.querySelector('[data-image-retry]') ?? null,
+                forced: true,
+            };
+        }
+
+        const wrap = target.closest('[data-image-retry-wrap]');
+
+        if (wrap) {
+            return { img: wrap.querySelector('[data-image-retry]'), forced: false };
+        }
+
+        if (isRetryImage(target)) {
+            return { img: target, forced: false };
+        }
+
+        return { img: null, forced: false };
+    };
+
+    doc.addEventListener('click', (event) => {
+        const { img, forced } = imageFromClick(event.target);
+
+        if (! isRetryImage(img)) {
+            return;
+        }
+
+        if (! forced && ! imageNeedsRecover(img, { includeHung: false })) {
             return;
         }
 
         event.preventDefault();
         event.stopPropagation();
-
-        const img = button.closest('[data-image-retry-wrap]')?.querySelector('[data-image-retry]');
-
-        if (isRetryImage(img)) {
-            retryNow(img, { reset: true });
-        }
+        retryNow(img, { reset: true });
     }, true);
 
     win.addEventListener('online', recoverAfterRestore);

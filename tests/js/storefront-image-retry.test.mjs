@@ -100,7 +100,19 @@ function fakeImage(src) {
         querySelector(selector) {
             return selector === '[data-image-retry-btn]' ? this.button : selector === '[data-image-retry]' ? img : null;
         },
-        button: { hidden: true },
+        closest(selector) {
+            return selector === '[data-image-retry-wrap]' ? this : selector === '[data-image-retry-btn]' ? null : null;
+        },
+        button: {
+            hidden: true,
+            closest(selector) {
+                if (selector === '[data-image-retry-btn]') {
+                    return this;
+                }
+
+                return selector === '[data-image-retry-wrap]' ? wrap : null;
+            },
+        },
     };
 
     const img = {
@@ -119,7 +131,9 @@ function fakeImage(src) {
                 img.srcset = '';
             }
         },
-        closest: () => wrap,
+        closest(selector) {
+            return selector === '[data-image-retry-wrap]' ? wrap : selector === '[data-image-retry-btn]' ? null : wrap;
+        },
     };
 
     return img;
@@ -258,6 +272,66 @@ test('a successful image load recovers other failed images on the page', () => {
     assert.equal(failed.src, '/img/bad.jpg?retry=12');
     assert.equal(failed.wrap.loading, true);
     assert.equal(failed.wrap.button.hidden, true);
+});
+
+test('clicking a failed image or its wrap retries and blocks the product link', () => {
+    const { doc, images } = fakeDocument();
+    const img = fakeImage('/img/nupur.jpg');
+    img.complete = true;
+    img.naturalWidth = 0;
+    img.dataset.retryAttempt = String(MAX_AUTO_RETRIES);
+    img.wrap.failed = true;
+    img.wrap.loading = false;
+    img.wrap.button.hidden = false;
+    images.push(img);
+
+    start(doc, { now: () => 42 });
+
+    let prevented = 0;
+    const click = {
+        target: img,
+        preventDefault() {
+            prevented += 1;
+        },
+        stopPropagation() {
+            prevented += 1;
+        },
+    };
+
+    doc.listeners.click.forEach(({ fn }) => fn(click));
+
+    assert.equal(prevented, 2);
+    assert.equal(img.dataset.retryAttempt, '0');
+    assert.equal(img.src, '/img/nupur.jpg?retry=42');
+    assert.equal(img.wrap.loading, true);
+    assert.equal(img.wrap.button.hidden, true);
+});
+
+test('clicking a loaded listing image does not steal the product link', () => {
+    const { doc, images } = fakeDocument();
+    const img = fakeImage('/img/nupur.jpg');
+    img.complete = true;
+    img.naturalWidth = 400;
+    img.wrap.failed = false;
+    img.wrap.loading = false;
+    images.push(img);
+
+    start(doc, { now: () => 1 });
+    const srcBefore = img.src;
+    let prevented = 0;
+
+    doc.listeners.click.forEach(({ fn }) => fn({
+        target: img,
+        preventDefault() {
+            prevented += 1;
+        },
+        stopPropagation() {
+            prevented += 1;
+        },
+    }));
+
+    assert.equal(prevented, 0);
+    assert.equal(img.src, srcBefore);
 });
 
 test('imageNeedsRecover treats failed and broken images as waiting', () => {

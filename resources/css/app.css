@@ -321,6 +321,10 @@ body:has(.mobile-nav-toggle:checked) {
     opacity: 0;
 }
 
+[data-image-retry-wrap][data-image-failed] {
+    cursor: pointer;
+}
+
 /* Mobile bottom nav — explicit CSS so it stays a fixed row
    even if utility classes are missing from a stale Vite build. */
 .storefront-bottom-nav {

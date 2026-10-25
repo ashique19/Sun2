@@ -169,7 +169,7 @@ class AnalyticsYearCompareService
             ->groupBy('order_products.order_id');
 
         $steadfastBase = OrderEconomicsSql::greatest(
-            '(COALESCE(orders.collected_amount, 0) - COALESCE(orders.delivery_charge, 0))',
+            '(COALESCE(orders.collected_amount, 0) - COALESCE(orders.courier_charge, 0))',
             '0',
         );
         $codExpr = "CASE
@@ -188,7 +188,7 @@ class AnalyticsYearCompareService
             ->where('orders.created_at', 'not like', '0000-00-00%')
             ->selectRaw("{$yearExpr} as year")
             ->selectRaw("{$monthExpr} as month")
-            ->selectRaw('COALESCE(SUM(orders.collected_amount), 0) as revenue')
+            ->selectRaw('COALESCE(SUM('.OrderEconomicsSql::cashInExpression('orders').'), 0) as revenue')
             ->selectRaw('COALESCE(SUM(COALESCE(order_cogs.cogs, 0)), 0) as cogs')
             ->selectRaw('COALESCE(SUM(orders.packaging_cost), 0) as packaging')
             ->selectRaw('COALESCE(SUM(orders.courier_charge), 0) as courier')
@@ -254,7 +254,7 @@ class AnalyticsYearCompareService
             ->where('created_at', 'not like', '0000-00-00%')
             ->selectRaw("{$yearExpr} as year")
             ->selectRaw("{$monthExpr} as month")
-            ->selectRaw('COALESCE(SUM(collected_amount), 0) as value')
+            ->selectRaw('COALESCE(SUM('.OrderEconomicsSql::cashInExpression().'), 0) as value')
             ->groupByRaw("{$yearExpr}, {$monthExpr}")
             ->get();
 

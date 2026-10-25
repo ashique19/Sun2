@@ -116,7 +116,7 @@ class AdminCouriersSummarizePerformanceTest extends TestCase
         DB::disableQueryLog();
 
         $this->assertSame(1080.0, $summary['pending']);
-        $this->assertSame(810.0, $summary['receivable']);
+        $this->assertSame(809.8, $summary['receivable']);
         $this->assertSame(200.0, $summary['withdrawn']);
         $this->assertStringNotContainsStringIgnoringCase('order_products', $sql);
         $this->assertStringNotContainsStringIgnoringCase('order_adjustments', $sql);

@@ -92,8 +92,8 @@ class AdminAnalyticsOrdersWithCostsTest extends TestCase
         $this->actingAs($this->adminUser());
         $order = $this->orderWithCosts($this->steadfast());
 
-        // COGS 400 + pack 20 + courier 60 + COD (1080-80)*1% = 10 → direct 490
-        // P/L = 1080 - 490 = 590 · P/L % = 590/1080 ≈ 54.6% (shown under P/L)
+        // COGS 400 + pack 20 + courier 60 + COD (1080 − 60)×1% = 10.2 → direct 490.2
+        // Display rounds to whole taka: ৳ 10 / ৳ 490 / ৳ 590
         Livewire::test(AdminAnalyticsOrdersWithCosts::class)
             ->assertSee('All orders with costs')
             ->assertSeeHtml(route('admin.orders.show', $order))

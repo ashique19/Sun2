@@ -447,7 +447,7 @@
                                 − COD charge
                                 @if ($order->courier)
                                     <span class="text-[11px] font-normal text-[#8C8474]">
-                                        ({{ rtrim(rtrim(number_format((float) $order->courier->cod_percentage, 2, '.', ''), '0'), '.') ?: '0' }}%{{ $order->courier->slug === 'steadfast' ? ' of collected − delivery' : ' of collected' }})
+                                        ({{ rtrim(rtrim(number_format((float) $order->courier->cod_percentage, 2, '.', ''), '0'), '.') ?: '0' }}%{{ $order->courier->slug === 'steadfast' ? ' of collected − courier delivery fee' : ' of collected' }})
                                     </span>
                                 @endif
                             </span>

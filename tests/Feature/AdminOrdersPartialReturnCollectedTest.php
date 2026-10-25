@@ -130,8 +130,8 @@ class AdminOrdersPartialReturnCollectedTest extends TestCase
 
         $money = $order->moneyTotals();
         $this->assertSame(1220.0, $money->remittanceBase);
-        $this->assertSame(11.0, $money->codCharge); // (1220 - 120) × 1%
-        $this->assertSame(1220.0 - 60.0 - 11.0, $money->courierReceivable);
+        $this->assertSame(11.6, $money->codCharge); // (1220 − 60 courier fee) × 1%
+        $this->assertSame(1220.0 - 60.0 - 11.6, $money->courierReceivable);
     }
 
     #[Test]

@@ -131,9 +131,9 @@ class AdminExpensesTest extends TestCase
 
         $breakdown = app(AnalyticsService::class)->monthBreakdown(2026, 7);
 
-        // direct = 400 + 21 + 65 + 10 = 496; profit = 1080 - 496 - 100 = 484
+        // direct = 400 + 21 + 65 + (1080 − 65)×1% = 496.15; profit = 1080 − 496.15 − 100 = 483.85
         $this->assertSame(100.0, $breakdown['indirect']);
-        $this->assertSame(484.0, $breakdown['profit']);
+        $this->assertSame(483.85, $breakdown['profit']);
     }
 
     #[Test]

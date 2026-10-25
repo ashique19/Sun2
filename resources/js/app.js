@@ -54,6 +54,10 @@ window.sunCopyText = async function sunCopyText(text, feedbackEl) {
  * Echo/Pusher are only needed when Reverb is configured (admin inbox).
  * Dynamic import keeps laravel-echo + pusher-js out of the default storefront chunk.
  */
+import { startImageRetry } from './storefront-image-retry';
+
+startImageRetry();
+
 if (import.meta.env.VITE_REVERB_APP_KEY) {
     import('./echo');
 }

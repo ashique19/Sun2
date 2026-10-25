@@ -36,7 +36,20 @@
             <div class="min-w-0">
                 <div class="overflow-hidden rounded-xl border border-[#EFE7D6] bg-white aspect-square">
                     @if ($activeUrl)
-                        <img src="{{ $activeUrl }}" alt="{{ $product->name }}" class="h-full w-full object-cover" fetchpriority="high">
+                        <div class="relative h-full w-full" data-image-retry-wrap>
+                            <img src="{{ $activeUrl }}"
+                                data-image-retry
+                                data-image-src="{{ $activeUrl }}"
+                                alt="{{ $product->name }}"
+                                class="h-full w-full object-cover"
+                                fetchpriority="high">
+                            <button type="button"
+                                hidden
+                                data-image-retry-btn
+                                class="absolute inset-0 flex items-center justify-center bg-[#F1EADB]/90 px-3 text-center text-sm font-medium text-[#7A6114]">
+                                {{ __('storefront.image_retry') }}
+                            </button>
+                        </div>
                     @else
                         <div class="flex h-full w-full items-center justify-center bg-[#F1EADB] text-5xl text-[#7A6114]">&#9670;</div>
                     @endif
@@ -47,7 +60,13 @@
                             @if ($thumb = \App\Support\StorefrontAssets::smallUrl($image->path) ?? \App\Support\StorefrontAssets::url($image->path))
                                 <button type="button" wire:click="selectImage({{ $index }})"
                                     class="aspect-square overflow-hidden rounded-lg border-2 {{ $activeImage === $index ? 'border-[#C9A227]' : 'border-transparent' }}">
-                                    <img src="{{ $thumb }}" alt="" class="h-full w-full object-cover" loading="lazy" decoding="async">
+                                    <img src="{{ $thumb }}"
+                                        data-image-retry
+                                        data-image-src="{{ $thumb }}"
+                                        alt=""
+                                        class="h-full w-full object-cover"
+                                        loading="lazy"
+                                        decoding="async">
                                 </button>
                             @endif
                         @endforeach

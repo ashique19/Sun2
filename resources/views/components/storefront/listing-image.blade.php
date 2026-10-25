@@ -18,14 +18,24 @@
 @endphp
 
 @if ($src)
-    <img
-        src="{{ $src }}"
-        @if ($srcset) srcset="{{ $srcset }}" sizes="{{ $sizes }}" @endif
-        alt="{{ $alt }}"
-        @if ($priority) fetchpriority="high" @else loading="lazy" @endif
-        decoding="async"
-        width="400"
-        height="400"
-        {{ $attributes->class('bg-[#F1EADB]') }}
-    >
+    <div class="relative" data-image-retry-wrap>
+        <img
+            src="{{ $src }}"
+            data-image-retry
+            data-image-src="{{ $src }}"
+            @if ($srcset) srcset="{{ $srcset }}" sizes="{{ $sizes }}" @endif
+            alt="{{ $alt }}"
+            @if ($priority) fetchpriority="high" @else loading="lazy" @endif
+            decoding="async"
+            width="400"
+            height="400"
+            {{ $attributes->class('bg-[#F1EADB]') }}
+        >
+        <button type="button"
+            hidden
+            data-image-retry-btn
+            class="absolute inset-0 z-10 flex items-center justify-center bg-[#F1EADB]/90 px-2 text-center text-xs font-medium text-[#7A6114]">
+            {{ __('storefront.image_retry') }}
+        </button>
+    </div>
 @endif

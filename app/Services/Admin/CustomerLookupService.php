@@ -58,8 +58,6 @@ class CustomerLookupService
         $lastOrder = $orders->first();
         $orderCount = (clone $ordersQuery)->count();
 
-        [$steadfast, $steadfastError] = $this->steadfastStats($displayPhone);
-
         return [
             'phone' => $displayPhone,
             'valid' => true,
@@ -67,9 +65,25 @@ class CustomerLookupService
             'last_order' => $lastOrder,
             'order_count' => $orderCount,
             'orders' => $orders,
-            'steadfast' => $steadfast,
-            'steadfast_error' => $steadfastError,
+            'steadfast' => null,
+            'steadfast_error' => null,
         ];
+    }
+
+    /**
+     * Live Steadfast delivery history for a phone. Call this outside Livewire.
+     *
+     * @return array{0: array<string, mixed>|null, 1: string|null}
+     */
+    public function fraudStats(string $phone): array
+    {
+        $displayPhone = PhoneNumber::display($phone);
+
+        if (! PhoneNumber::isValidDisplayMobile($displayPhone)) {
+            return [null, null];
+        }
+
+        return $this->steadfastStats($displayPhone);
     }
 
     /**

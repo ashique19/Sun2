@@ -16,6 +16,12 @@ return [
     'status_timeout' => (int) env('STEADFAST_STATUS_TIMEOUT', 4),
 
     /*
+    | Timeout for /fraud_check/score/{phone} on the order form.
+    | Keep short so Inbox → Edit order can paint while Packzy is slow.
+    */
+    'fraud_timeout' => (int) env('STEADFAST_FRAUD_TIMEOUT', 5),
+
+    /*
     | Merchant-panel fraud check (fallback when Packzy /fraud_check fails or is unavailable).
     | Uses the same email/password as https://steadfast.com.bd login.
     */

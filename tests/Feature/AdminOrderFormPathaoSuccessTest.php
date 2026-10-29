@@ -88,7 +88,7 @@ class AdminOrderFormPathaoSuccessTest extends TestCase
         Livewire::test(AdminOrderForm::class)
             ->set('phone', '01712345678')
             ->call('lookupPhone')
-            ->assertSet('steadfastStats.success_ratio', 90)
+            ->assertSet('steadfastStats', null)
             ->assertSet('pathaoStats', null)
             ->call('loadPathaoStats')
             ->assertSet('pathaoStats.success_ratio', 75)

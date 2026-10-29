@@ -293,10 +293,15 @@ class SteadfastFraudCheckTest extends TestCase
 
         $result = app(CustomerLookupService::class)->lookup('01712345678');
 
+        $this->assertNull($result['steadfast']);
         $this->assertNull($result['steadfast_error']);
-        $this->assertSame('score', $result['steadfast']['data_type']);
-        $this->assertSame(80, $result['steadfast']['delivery_ratio']);
-        $this->assertSame('medium (6–20)', $result['steadfast']['volume_band_label']);
+
+        [$stats, $error] = app(CustomerLookupService::class)->fraudStats('01712345678');
+
+        $this->assertNull($error);
+        $this->assertSame('score', $stats['data_type']);
+        $this->assertSame(80, $stats['delivery_ratio']);
+        $this->assertSame('medium (6–20)', $stats['volume_band_label']);
     }
 
     #[Test]
@@ -341,6 +346,17 @@ class SteadfastFraudCheckTest extends TestCase
         Livewire::test(AdminOrderForm::class)
             ->set('phone', '01712075185')
             ->call('lookupPhone')
+            ->assertSet('steadfastStatsPending', true)
+            ->call('applySteadfastStats', [
+                'data_type' => 'score',
+                'delivery_ratio' => null,
+                'cancellation_ratio' => null,
+                'success_ratio' => null,
+                'volume_band' => 'none',
+                'volume_band_label' => 'none (0 finished)',
+                'total_reports' => 0,
+                'fraud_categories' => [],
+            ], null, '01712075185')
             ->assertSee('Steadfast: no finished parcels yet')
             ->assertDontSee('Steadfast delivery success: 0%')
             ->assertSee('Volume none (0 finished)');
@@ -392,6 +408,21 @@ class SteadfastFraudCheckTest extends TestCase
         Livewire::test(AdminOrderForm::class)
             ->set('phone', '01712345678')
             ->call('lookupPhone')
+            ->assertSet('steadfastStatsPending', true)
+            ->call('applySteadfastStats', [
+                'data_type' => 'score',
+                'delivery_ratio' => 92,
+                'cancellation_ratio' => 7,
+                'success_ratio' => 92,
+                'volume_band' => 'high',
+                'volume_range' => '50+',
+                'volume_band_label' => 'high (50+)',
+                'total_delivered' => 58,
+                'total_cancelled' => 5,
+                'total_parcels' => 63,
+                'total_reports' => 2,
+                'fraud_categories' => ['no_response' => 2],
+            ], null, '01712345678')
             ->assertSee('Steadfast delivery: 92%')
             ->assertSee('Delivered 58')
             ->assertSee('Cancelled 5')

@@ -79,7 +79,21 @@
 
                             <div wire:loading wire:target="phone,lookupPhone" class="text-xs text-[#8C8474] mt-2">Parsing &amp; looking up customer…</div>
 
-                            @if ($steadfastStats)
+                            <div
+                                data-admin-steadfast-stats-root
+                                data-admin-steadfast-stats-url="{{ route('admin.orders.steadfast-stats') }}"
+                                data-admin-steadfast-stats-phone="{{ $phone }}"
+                                data-admin-steadfast-stats-pending="{{ $steadfastStatsPending ? '1' : '0' }}"
+                            >
+                            @if ($steadfastStatsPending)
+                                <div class="mt-3 inline-flex items-center gap-2 text-xs text-[#8C8474]" data-admin-steadfast-stats-spinner aria-busy="true">
+                                    <svg class="h-3.5 w-3.5 animate-spin text-[#C9A227]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                                    </svg>
+                                    <span>Checking Steadfast…</span>
+                                </div>
+                            @elseif ($steadfastStats)
                                 <div class="mt-3 rounded-lg border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2 text-xs">
                                     @if (($steadfastStats['data_type'] ?? 'counts') === 'score')
                                         @if (($steadfastStats['delivery_ratio'] ?? null) === null)
@@ -129,6 +143,7 @@
                             @elseif ($steadfastStatsError && \App\Support\PhoneNumber::isValidDisplayMobile($phone))
                                 <p class="text-xs text-[#8C8474] mt-2">{{ $steadfastStatsError }}</p>
                             @endif
+                            </div>
 
                             @if (config('pathao.scrap'))
                                 <div wire:loading.flex wire:target="loadPathaoStats" class="mt-3 items-center gap-2 text-xs text-[#8C8474]">

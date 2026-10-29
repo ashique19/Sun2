@@ -56,6 +56,7 @@ window.sunCopyText = async function sunCopyText(text, feedbackEl) {
  */
 import { startImageRetry } from './storefront-image-retry';
 import './admin-courier-live.js';
+import './admin-order-steadfast-stats.js';
 
 startImageRetry();
 

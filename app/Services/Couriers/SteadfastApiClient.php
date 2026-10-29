@@ -37,6 +37,11 @@ class SteadfastApiClient
         return max(1, (int) config('steadfast.status_timeout', 4));
     }
 
+    private function fraudTimeout(): int
+    {
+        return max(1, (int) config('steadfast.fraud_timeout', 5));
+    }
+
     /**
      * Current merchant wallet balance at Steadfast/Packzy.
      *
@@ -107,7 +112,11 @@ class SteadfastApiClient
      */
     private function fraudCheckViaScoreApi(string $phoneDigits): array
     {
-        $response = $this->request('get', '/fraud_check/score/'.rawurlencode($phoneDigits));
+        $response = $this->request(
+            'get',
+            '/fraud_check/score/'.rawurlencode($phoneDigits),
+            timeout: $this->fraudTimeout(),
+        );
 
         return $this->normalizeScorePayload($response, $phoneDigits);
     }

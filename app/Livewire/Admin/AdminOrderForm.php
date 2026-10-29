@@ -18,6 +18,7 @@ use App\Services\Admin\ProductImageHashService;
 use App\Services\Admin\ProductImageService;
 use App\Services\Channels\ChannelMessageImageMatchService;
 use App\Services\Couriers\PathaoMerchantSuccessClient;
+use App\Services\Couriers\SteadfastApiClient;
 use App\Services\Locations\LocationAliasLearner;
 use App\Services\Orders\CouponStackingService;
 use App\Services\Orders\OrderCourierChargeSync;
@@ -132,6 +133,8 @@ class AdminOrderForm extends Component
     public ?array $steadfastStats = null;
 
     public ?string $steadfastStatsError = null;
+
+    public bool $steadfastStatsPending = false;
 
     public ?array $pathaoStats = null;
 
@@ -396,6 +399,10 @@ class AdminOrderForm extends Component
         }
 
         if (! PhoneNumber::isValidDisplayMobile($this->phone)) {
+            $this->steadfastStats = null;
+            $this->steadfastStatsError = null;
+            $this->steadfastStatsPending = false;
+
             return;
         }
 
@@ -416,8 +423,7 @@ class AdminOrderForm extends Component
                 'city' => $order->city,
             ])
             ->all();
-        $this->steadfastStats = $result['steadfast'];
-        $this->steadfastStatsError = $result['steadfast_error'];
+        $this->queueSteadfastStatsLookup();
         $this->queuePathaoStatsLookup();
 
         // Prefer pasted customer fields; fill gaps from last order.
@@ -453,6 +459,57 @@ class AdminOrderForm extends Component
         }
 
         $this->refreshDeliveryCharge();
+    }
+
+    /**
+     * Mark the Steadfast chip pending. The actual Packzy call runs in
+     * admin-order-steadfast-stats.js so Inbox → Edit cannot freeze the form.
+     */
+    private function queueSteadfastStatsLookup(): void
+    {
+        $this->steadfastStats = null;
+        $this->steadfastStatsError = null;
+        $this->steadfastStatsPending = false;
+
+        if (! PhoneNumber::isValidDisplayMobile($this->phone)) {
+            return;
+        }
+
+        if (! app(SteadfastApiClient::class)->isFraudCheckAvailable()) {
+            $this->steadfastStatsError = 'Steadfast fraud check is not configured.';
+
+            return;
+        }
+
+        $this->steadfastStatsPending = true;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $stats
+     */
+    public function applySteadfastStats(?array $stats, ?string $error = null, string $phone = ''): void
+    {
+        if ($phone !== '' && PhoneNumber::display($this->phone) !== PhoneNumber::display($phone)) {
+            return;
+        }
+
+        $this->steadfastStats = is_array($stats) && $stats !== [] ? $stats : null;
+        $this->steadfastStatsError = filled($error) ? $error : null;
+        $this->steadfastStatsPending = false;
+    }
+
+    public function settleSteadfastStats(string $phone = ''): void
+    {
+        if ($phone !== '' && PhoneNumber::display($this->phone) !== PhoneNumber::display($phone)) {
+            return;
+        }
+
+        if (! $this->steadfastStatsPending) {
+            return;
+        }
+
+        $this->steadfastStatsPending = false;
+        $this->steadfastStatsError ??= 'Steadfast delivery history is taking too long.';
     }
 
     public function loadPathaoStats(?PathaoMerchantSuccessClient $pathao = null): void

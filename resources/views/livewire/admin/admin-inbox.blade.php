@@ -6,6 +6,9 @@
 
 <div
     x-data
+    data-inbox-priced-image-url="{{ route('admin.inbox.send-priced-image') }}"
+    data-inbox-priced-image-wire="{{ $this->getId() }}"
+    data-inbox-priced-image-conversation="{{ $selectedConversationId ?? '' }}"
     x-init="document.body.dataset.inboxMobileThread = $wire.mobileThreadOpen ? '1' : '0'"
     x-effect="
         if (document.body.dataset.inboxClosingThread === '1') {
@@ -1026,13 +1029,14 @@
                                                     Price
                                                 </button>
                                                 <button type="button"
-                                                    wire:click="sendPricedImageFromMatch({{ $messageRow->id }})"
-                                                    wire:loading.attr="disabled"
-                                                    wire:target="sendPricedImageFromMatch({{ $messageRow->id }})"
+                                                    data-inbox-priced-image-send
+                                                    data-product-id="{{ $taggedProductId }}"
+                                                    data-conversation-id="{{ $messageRow->channel_conversation_id }}"
+                                                    data-reply-to-message-id="{{ $messageRow->id }}"
                                                     @click.stop
                                                     title="Send priced product image"
                                                     class="text-[10px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
-                                                    P.img
+                                                    <span data-inbox-priced-image-label>P.img</span>
                                                 </button>
                                                 <button type="button"
                                                     wire:click="sendMatchedProductAlbumImages({{ $messageRow->id }})"
@@ -1649,6 +1653,10 @@
                 <div
                     data-inbox-product-picker-modal
                     data-inbox-priced-send-modal
+                    data-inbox-priced-image-url="{{ route('admin.inbox.send-priced-image') }}"
+                    data-inbox-priced-image-wire="{{ $this->getId() }}"
+                    data-inbox-priced-image-conversation="{{ $selectedConversationId ?? '' }}"
+                    data-inbox-priced-image-reply-to="{{ $pricedSendMessageId ?: $replyToMessageId }}"
                     wire:key="product-picker-modal-{{ $productPickerKey }}"
                     wire:click.self="closePricedImageSend"
                     class="fixed inset-0 flex items-end justify-center overflow-y-auto overscroll-contain bg-black/50 p-0 sm:items-center sm:p-4"
@@ -1753,11 +1761,12 @@
                                                     Price
                                                 </button>
                                                 <button type="button"
-                                                    wire:click="sendPricedProductImage({{ $row['id'] }})"
-                                                    wire:loading.attr="disabled"
+                                                    data-inbox-priced-image-send
+                                                    data-product-id="{{ $row['id'] }}"
+                                                    data-conversation-id="{{ $selectedConversationId }}"
                                                     title="Send priced product image"
                                                     class="text-[11px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
-                                                    P.img
+                                                    <span data-inbox-priced-image-label>P.img</span>
                                                 </button>
                                             </div>
                                         </div>

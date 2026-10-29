@@ -264,7 +264,7 @@ class AdminInboxComposerProductPickerTest extends TestCase
             ->call('sendPricedProductImage', $product->id)
             ->assertHasNoErrors()
             ->assertSet('statusMessage', 'Priced image sent.')
-            ->assertSet('composerProductPickerOpen', false);
+            ->assertSet('composerProductPickerOpen', true);
 
         $this->assertSame(3, ChannelMessage::query()
             ->where('channel_conversation_id', $conversation->id)

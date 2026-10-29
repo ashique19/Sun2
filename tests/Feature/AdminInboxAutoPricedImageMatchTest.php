@@ -133,7 +133,8 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
             ->assertSeeHtml('href="'.route('admin.products.show', $product).'"')
             ->assertSeeHtml('aria-label="Open product details for '.$product->name.'"')
             ->assertSeeHtml('wire:click="sendMatchedProductPriceReply('.$inbound->id.')"')
-            ->assertSeeHtml('wire:click="sendPricedImageFromMatch('.$inbound->id.')"')
+            ->assertSeeHtml('data-inbox-priced-image-send')
+            ->assertSeeHtml('data-reply-to-message-id="'.$inbound->id.'"')
             ->assertSeeHtml('wire:click="sendMatchedProductAlbumImages('.$inbound->id.')"')
             ->assertSeeHtml('wire:click="sendMatchedProductLink('.$inbound->id.')"')
             ->assertSeeHtml('wire:click="addMatchedProductToOrder('.$inbound->id.')"')
@@ -173,7 +174,7 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
             ->call('selectConversation', $conversation->id)
             ->assertSeeHtml('wire:click.stop="openTagProductOnImage('.$inbound->id.')"')
             ->assertDontSeeHtml('wire:click="sendMatchedProductPriceReply('.$inbound->id.')"')
-            ->assertDontSeeHtml('wire:click="sendPricedImageFromMatch('.$inbound->id.')"')
+            ->assertDontSeeHtml('data-inbox-priced-image-send')
             ->assertDontSeeHtml('wire:click="addMatchedProductToOrder('.$inbound->id.')"')
             ->assertSee('No match — search product')
             ->assertSeeHtml('wire:click.stop="openTagProductOnImage('.$inbound->id.')"');

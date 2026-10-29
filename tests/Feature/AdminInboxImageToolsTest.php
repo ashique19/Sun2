@@ -245,10 +245,11 @@ class AdminInboxImageToolsTest extends TestCase
             ->set('pricedSendPriceMin', '3000')
             ->assertDontSee('Tiny Ring')
             ->assertSee('Gold Ring')
-            ->assertSeeHtml('wire:click="sendPricedProductImage('.$priceyRing->id.')"')
+            ->assertSeeHtml('data-inbox-priced-image-send')
+            ->assertSeeHtml('data-product-id="'.$priceyRing->id.'"')
             ->call('sendPricedProductImage', $priceyRing->id)
             ->assertHasNoErrors()
-            ->assertSet('pricedSendMessageId', null)
+            ->assertSet('pricedSendMessageId', $inbound->id)
             ->assertSet('statusMessage', 'Priced image sent.');
 
         $outbound = ChannelMessage::query()

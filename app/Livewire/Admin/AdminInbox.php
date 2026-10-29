@@ -6,7 +6,7 @@ use App\Models\Category;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Models\Product;
-use App\Services\Admin\ProductPricedImageService;
+use App\Services\Admin\InboxPricedImageSender;
 use App\Services\Channels\ChannelInboxDiagnostics;
 use App\Services\Channels\ChannelInboxPurgeService;
 use App\Services\Channels\ChannelMessageImageMatchService;
@@ -1002,22 +1002,47 @@ class AdminInbox extends Component
      */
     public function sendPricedImageFromMatch(
         int $messageId,
-        ChannelReplyService $replies,
-        ProductPricedImageService $pricedImages,
+        InboxPricedImageSender $sender,
     ): void {
         AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
 
         $message = $this->inboundImageMessage($messageId);
         $productId = $this->matchedProductIdForMessage($messageId, $message);
 
-        if ($productId <= 0) {
+        if (! $message || $productId <= 0) {
             $this->error = 'No product tagged on this image.';
 
             return;
         }
 
-        $this->pricedSendMessageId = $messageId;
-        $this->sendPricedProductImage($productId, $replies, $pricedImages);
+        $product = Product::query()->whereKey($productId)->first();
+        if (! $product) {
+            $this->error = 'Tagged product not found.';
+
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find((int) $message->channel_conversation_id);
+        if (! $conversation) {
+            $this->error = 'Conversation not found.';
+
+            return;
+        }
+
+        $this->ensureConversationSelected((int) $conversation->id);
+
+        $result = $sender->send($conversation, $product, $message, auth()->id());
+
+        if (! ($result['ok'] ?? false)) {
+            $this->error = $result['error'] ?? 'Failed to send priced image.';
+
+            return;
+        }
+
+        $this->statusMessage = 'Priced image sent.';
     }
 
     /**
@@ -1224,8 +1249,7 @@ class AdminInbox extends Component
 
     public function sendPricedProductImage(
         int $productId,
-        ChannelReplyService $replies,
-        ProductPricedImageService $pricedImages,
+        InboxPricedImageSender $sender,
     ): void {
         AdminAccess::ensureStaffAdmin();
 
@@ -1250,36 +1274,14 @@ class AdminInbox extends Component
             return;
         }
 
-        try {
-            $pricedPath = is_string($product->priced_image_path) ? trim($product->priced_image_path) : '';
-            if ($pricedPath === '' || ! is_file(public_path(ltrim($pricedPath, '/')))) {
-                $pricedPath = $pricedImages->generate($product);
-                $product->refresh();
-            }
+        $result = $sender->send($conversation, $product, $replyTo, auth()->id());
 
-            $upload = $this->uploadedFileFromPublicPath($pricedPath);
-        } catch (Throwable $e) {
-            $this->error = $e->getMessage();
-
-            return;
-        }
-
-        $result = $replies->sendImage(
-            $conversation,
-            $upload,
-            '',
-            false,
-            $replyTo,
-        );
-
-        if (! $result['ok']) {
+        if (! ($result['ok'] ?? false)) {
             $this->error = $result['error'] ?? 'Failed to send priced image.';
 
             return;
         }
 
-        $this->markConversationRead($conversation, $replies);
-        $this->closePricedImageSend();
         $this->statusMessage = 'Priced image sent.';
     }
 

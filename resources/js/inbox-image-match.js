@@ -1,4 +1,5 @@
 import { installInboxThreadHistory } from './inbox-thread-history.js';
+import './inbox-priced-image-send.js';
 
 globalThis.installInboxThreadHistory = installInboxThreadHistory;
 

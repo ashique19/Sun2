@@ -46,7 +46,7 @@ class AdminOrderSegment
 
     /**
      * Segments that show courier tracking (Steadfast link, tracker, timeline).
-     * Live API refresh uses the same set so Delivered / Cancel & Return match Dispatched.
+     * Live AJAX refresh uses the same set: dispatched, delivered, cancel & return, return pending.
      */
     public static function showsCourierTracking(string $segment): bool
     {

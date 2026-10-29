@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -98,29 +99,73 @@ class AdminOrdersCourierLiveAjaxTest extends TestCase
         return $order;
     }
 
+    /**
+     * @return array<string, array{0: string, 1: array<string, mixed>}>
+     */
+    public static function postDispatchSegmentsProvider(): array
+    {
+        return [
+            'dispatched' => ['dispatched', [
+                'status' => 'dispatched',
+                'name' => 'Dispatched Ajax Customer',
+            ]],
+            'delivered' => ['delivered', [
+                'status' => 'delivered',
+                'name' => 'Delivered Ajax Customer',
+                'collected_amount' => 1080,
+                'due_amount' => 0,
+                'payment_status' => 'paid',
+                'actual_delivery_date' => now()->subDay(),
+            ]],
+            'cancelled' => ['cancel-return', [
+                'status' => 'cancelled',
+                'name' => 'Cancelled Ajax Customer',
+                'collected_amount' => 0,
+                'due_amount' => 0,
+            ]],
+            'returned' => ['cancel-return', [
+                'status' => 'returned',
+                'name' => 'Returned Ajax Customer',
+                'collected_amount' => 0,
+                'due_amount' => 0,
+            ]],
+            'return-pending' => ['return-pending', [
+                'status' => 'delivered',
+                'name' => 'Return Pending Ajax Customer',
+                'has_return' => true,
+                'collected_amount' => 1080,
+                'due_amount' => 0,
+                'payment_status' => 'paid',
+                'actual_delivery_date' => now()->subDay(),
+            ]],
+        ];
+    }
+
     #[Test]
-    public function dispatched_list_paints_without_calling_courier_api(): void
+    #[DataProvider('postDispatchSegmentsProvider')]
+    public function post_dispatch_lists_paint_without_calling_courier_api(string $segment, array $overrides): void
     {
         $this->configureSteadfast();
         Http::fake(fn () => throw new \RuntimeException('Courier API must not run during first paint.'));
 
         $this->actingAs($this->adminUser());
-        $order = $this->dispatchedOrder($this->steadfast());
+        $order = $this->dispatchedOrder($this->steadfast(), $overrides);
 
-        Livewire::test(AdminOrders::class, ['segment' => 'dispatched'])
-            ->assertSet('segment', 'dispatched')
-            ->assertSee('Dispatched Customer')
+        Livewire::test(AdminOrders::class, ['segment' => $segment])
+            ->assertSet('segment', $segment)
+            ->assertSee($overrides['name'])
             ->assertSee('SF112233')
             ->assertSee('Parcel is in review')
             ->assertSeeHtml('data-admin-courier-live-root')
             ->assertSeeHtml('data-admin-courier-live-spinner')
             ->assertSeeHtml('aria-busy="true"')
-            ->assertSee((string) $order->id)
+            ->assertSeeHtml('wire:click="clearCourierLiveStatuses"')
             ->assertDontSeeHtml('wire:click="refreshCourierStatuses"')
-            ->assertDontSeeHtml('$wire.refreshCourierStatuses')
-            ->assertSeeHtml('wire:click="clearCourierLiveStatuses"');
+            ->assertDontSeeHtml('$wire.refreshCourierStatuses');
 
         Http::assertNothingSent();
+        $this->assertNotSame('new', $segment);
+        $this->assertGreaterThan(0, $order->id);
     }
 
     #[Test]
@@ -199,15 +244,17 @@ class AdminOrdersCourierLiveAjaxTest extends TestCase
     }
 
     #[Test]
-    public function order_show_paints_without_calling_courier_api(): void
+    #[DataProvider('postDispatchSegmentsProvider')]
+    public function order_show_paints_without_calling_courier_api(string $segment, array $overrides): void
     {
         $this->configureSteadfast();
         Http::fake(fn () => throw new \RuntimeException('Courier API must not run during first paint.'));
 
         $this->actingAs($this->adminUser());
-        $order = $this->dispatchedOrder($this->steadfast());
+        $order = $this->dispatchedOrder($this->steadfast(), $overrides);
 
         Livewire::test(AdminOrderShow::class, ['order' => $order])
+            ->assertSee($overrides['name'])
             ->assertSee('SF112233')
             ->assertSee('Parcel is in review')
             ->assertSeeHtml('data-admin-courier-live-root')
@@ -215,30 +262,84 @@ class AdminOrdersCourierLiveAjaxTest extends TestCase
             ->assertDontSeeHtml('wire:click="refreshCourierStatus"');
 
         Http::assertNothingSent();
+        $this->assertNotSame('', $segment);
     }
 
     #[Test]
-    public function delivered_and_cancel_return_lists_also_defer_live_fetch(): void
+    public function switching_to_delivered_and_cancel_return_starts_ajax_not_livewire_http(): void
     {
         $this->configureSteadfast();
-        Http::fake(fn () => throw new \RuntimeException('Courier API must not run during first paint.'));
+        Http::fake(fn () => throw new \RuntimeException('Courier API must not run during list navigation.'));
 
         $this->actingAs($this->adminUser());
         $courier = $this->steadfast();
-
         $this->dispatchedOrder($courier, [
             'status' => 'delivered',
-            'name' => 'Delivered Customer',
+            'name' => 'Delivered Switch Customer',
             'collected_amount' => 1080,
             'due_amount' => 0,
             'payment_status' => 'paid',
             'actual_delivery_date' => now()->subDay(),
         ]);
+        $this->dispatchedOrder($courier, [
+            'status' => 'cancelled',
+            'name' => 'Cancelled Switch Customer',
+            'collected_amount' => 0,
+            'due_amount' => 0,
+            'courier_tracker' => 'SFCANCEL1',
+            'courier_consignment_id' => '288000099',
+        ]);
 
-        Livewire::test(AdminOrders::class, ['segment' => 'delivered'])
-            ->assertSee('Delivered Customer')
+        Livewire::test(AdminOrders::class, ['segment' => 'dispatched'])
+            ->call('switchSegment', 'delivered')
+            ->assertSet('segment', 'delivered')
+            ->assertSee('Delivered Switch Customer')
+            ->assertSeeHtml('data-admin-courier-live-root')
+            ->assertSeeHtml('data-admin-courier-live-spinner')
+            ->call('switchSegment', 'cancel-return')
+            ->assertSet('segment', 'cancel-return')
+            ->assertSee('Cancelled Switch Customer')
+            ->assertSeeHtml('data-admin-courier-live-root')
             ->assertSeeHtml('data-admin-courier-live-spinner');
 
         Http::assertNothingSent();
+    }
+
+    #[Test]
+    public function live_endpoint_accepts_delivered_and_cancelled_orders(): void
+    {
+        $this->configureSteadfast();
+        Http::fake([
+            'portal.packzy.com/api/v1/status_by_invoice/*' => Http::response([
+                'delivery_status' => 'cancelled',
+            ], 200),
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+        $delivered = $this->dispatchedOrder($courier, [
+            'status' => 'delivered',
+            'name' => 'Delivered Endpoint Customer',
+            'collected_amount' => 1080,
+            'due_amount' => 0,
+            'payment_status' => 'paid',
+            'actual_delivery_date' => now()->subDay(),
+        ]);
+        $cancelled = $this->dispatchedOrder($courier, [
+            'status' => 'cancelled',
+            'name' => 'Cancelled Endpoint Customer',
+            'collected_amount' => 0,
+            'due_amount' => 0,
+            'courier_tracker' => 'SFCANCEL2',
+            'courier_consignment_id' => '288000088',
+            'order_number' => 'CAN-'.uniqid(),
+        ]);
+
+        $this->postJson(route('admin.orders.live-courier-status'), [
+            'order_ids' => [$delivered->id, $cancelled->id],
+        ])
+            ->assertOk()
+            ->assertJsonPath('statuses.'.$delivered->id, 'cancelled')
+            ->assertJsonPath('statuses.'.$cancelled->id, 'cancelled');
     }
 }

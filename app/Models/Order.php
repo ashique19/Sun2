@@ -719,7 +719,15 @@ class Order extends Model
 
     public function scopeMatchingPhone(Builder $query, string $phone): Builder
     {
-        return $query->whereIn('phone', PhoneNumber::matchCandidates($phone));
+        $candidates = PhoneNumber::matchCandidates($phone);
+
+        return $query->where(function (Builder $inner) use ($candidates, $phone) {
+            $inner->whereIn('phone', $candidates);
+
+            foreach (PhoneNumber::suffixLikePatterns($phone) as $pattern) {
+                $inner->orWhere('phone', 'like', $pattern);
+            }
+        });
     }
 
     private function consignmentIdFromCourierLogs(): ?string

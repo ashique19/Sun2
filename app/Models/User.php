@@ -108,7 +108,16 @@ class User extends Authenticatable
             return null;
         }
 
-        return static::query()->whereIn('phone', $candidates)->orderByDesc('id')->first();
+        return static::query()
+            ->where(function ($query) use ($candidates, $phone) {
+                $query->whereIn('phone', $candidates);
+
+                foreach (PhoneNumber::suffixLikePatterns($phone) as $pattern) {
+                    $query->orWhere('phone', 'like', $pattern);
+                }
+            })
+            ->orderByDesc('id')
+            ->first();
     }
 
     public static function findByLoginIdentifier(string $identifier): ?self

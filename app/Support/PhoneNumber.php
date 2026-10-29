@@ -6,7 +6,9 @@ class PhoneNumber
 {
     public static function normalize(string $phone): string
     {
-        $digits = preg_replace('/\D+/', '', self::toAsciiDigits($phone)) ?? '';
+        $extracted = self::extractFirstBangladeshMobile($phone);
+        $source = $extracted ?? $phone;
+        $digits = preg_replace('/\D+/', '', self::toAsciiDigits($source)) ?? '';
 
         if (str_starts_with($digits, '880')) {
             $digits = substr($digits, 3);
@@ -85,6 +87,31 @@ class PhoneNumber
             '8800'.$normalized,
             '+8800'.$normalized,
         ])));
+    }
+
+    /**
+     * Legacy import appended -{userId} when the same digits already existed
+     * (01866609878-26841). These LIKE patterns find those stored values.
+     *
+     * @return list<string>
+     */
+    public static function suffixLikePatterns(string $phone): array
+    {
+        $display = self::display($phone);
+
+        if (! self::isValidDisplayMobile($display)) {
+            return [];
+        }
+
+        $normalized = self::normalize($display);
+
+        return array_values(array_unique([
+            $display.'-%',
+            $normalized.'-%',
+            '0'.$normalized.'-%',
+            '880'.$normalized.'-%',
+            '+880'.$normalized.'-%',
+        ]));
     }
 
     private static function toAsciiDigits(string $value): string

@@ -232,6 +232,32 @@ class AdminCustomerDuplicateMergeTest extends TestCase
     }
 
     #[Test]
+    public function merge_groups_legacy_suffixed_phones_onto_the_latest_user(): void
+    {
+        $oldest = $this->customer('কাকলি চাকমা', '01866609878-22737');
+        $middle = $this->customer('কাকলি চাকমা', '01866609878-24973');
+        $newest = $this->customer('কাকলি চাকমা', '01866609878-26841');
+        $this->orderFor($oldest, '6001');
+        $this->orderFor($middle, '6002');
+
+        $service = app(CustomerDuplicateMergeService::class);
+        $this->assertSame(1, $service->duplicateGroupCount());
+
+        $result = $service->mergeNextBatch();
+
+        $this->assertSame(1, $result['merged_groups']);
+        $this->assertSame(2, $result['deleted_users']);
+        $this->assertSame(2, $result['reassigned_orders']);
+        $this->assertTrue($result['done']);
+
+        $this->assertDatabaseMissing('users', ['id' => $oldest->id]);
+        $this->assertDatabaseMissing('users', ['id' => $middle->id]);
+        $this->assertDatabaseHas('users', ['id' => $newest->id, 'phone' => '01866609878']);
+        $this->assertSame($newest->id, Order::query()->where('order_number', '6001')->value('user_id'));
+        $this->assertSame($newest->id, Order::query()->where('order_number', '6002')->value('user_id'));
+    }
+
+    #[Test]
     public function customers_page_can_preview_and_merge_duplicate_phones(): void
     {
         $this->actingAs($this->adminUser());

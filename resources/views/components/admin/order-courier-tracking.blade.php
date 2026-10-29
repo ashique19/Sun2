@@ -2,7 +2,7 @@
     'order',
     'events' => [],
     'courierStatus' => null,
-    'refreshTarget' => null,
+    'pending' => false,
 ])
 
 <div {{ $attributes->class('overflow-hidden rounded-lg border border-[#EFE7D6]') }} x-data="{ open: true }">
@@ -28,11 +28,14 @@
             <span class="text-[#C9B99A]">|</span>
             <span class="break-all text-[#6B6459]">{{ $order->courier_tracker ?: '—' }}</span>
             <span class="text-[#C9B99A]">|</span>
-            <span class="font-semibold uppercase tracking-wide">
-                @if (filled($refreshTarget))
-                    <span wire:loading.delay wire:target="{{ $refreshTarget }}">Loading…</span>
-                    <span wire:loading.remove wire:target="{{ $refreshTarget }}">
-                        {{ $courierStatus ? strtoupper($courierStatus) : '—' }}
+            <span class="font-semibold uppercase tracking-wide" @if ($pending) aria-busy="true" @endif>
+                @if ($pending)
+                    <span class="inline-flex items-center gap-1 text-[#C9A227]" data-admin-courier-live-spinner>
+                        <svg class="h-3 w-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                        </svg>
+                        <span>Loading…</span>
                     </span>
                 @else
                     {{ $courierStatus ? strtoupper($courierStatus) : '—' }}

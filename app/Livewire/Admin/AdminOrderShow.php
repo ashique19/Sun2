@@ -41,6 +41,8 @@ class AdminOrderShow extends Component
 
     public ?string $courierLiveStatus = null;
 
+    public bool $courierLiveSettled = false;
+
     public string $paymentAmount = '';
 
     public string $paymentMethod = 'cash';
@@ -154,7 +156,6 @@ class AdminOrderShow extends Component
             ?? ''
         );
 
-        $this->queueCourierStatusRefresh();
     }
 
     public function title(): string
@@ -162,36 +163,59 @@ class AdminOrderShow extends Component
         return 'Order #'.$this->order->order_number;
     }
 
-    public function refreshCourierStatus(CourierTrackingService $tracking): void
+    public function clearCourierLiveStatus(): void
     {
         AdminAccess::ensureStaffAdmin();
 
-        if (! $this->orderShowsCourierTracking()) {
+        $this->courierLiveStatus = null;
+        $this->courierLiveSettled = false;
+    }
+
+    public function applyCourierLiveStatus(?string $status): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->courierLiveStatus = filled($status) ? $status : null;
+        $this->courierLiveSettled = true;
+        $this->order->unsetRelation('courierLogs');
+        $this->order->load(['courier', 'courierLogs.courier']);
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $statuses
+     */
+    public function applyCourierLiveStatuses(array $statuses): void
+    {
+        $orderId = (int) $this->order->id;
+        $status = $statuses[$orderId] ?? $statuses[(string) $orderId] ?? null;
+
+        $this->applyCourierLiveStatus(is_string($status) ? $status : null);
+    }
+
+    /**
+     * @param  list<int|string>  $orderIds
+     */
+    public function settleCourierLiveStatuses(array $orderIds): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $orderId = (int) $this->order->id;
+        $targets = array_map('intval', $orderIds);
+
+        if ($targets !== [] && ! in_array($orderId, $targets, true)) {
             return;
         }
 
-        $this->courierLiveStatus = $tracking->fetchAndRecordLiveStatus($this->order);
-        $this->order->unsetRelation('courierLogs');
-        $this->order->load(['courier', 'courierLogs.courier']);
+        if (! $this->courierLiveSettled) {
+            $this->courierLiveStatus = null;
+            $this->courierLiveSettled = true;
+        }
     }
 
     private function orderShowsCourierTracking(): bool
     {
         return in_array($this->order->status, ['dispatched', 'delivered', 'cancelled', 'returned'], true)
             && $this->order->hasCourierTracking();
-    }
-
-    private function queueCourierStatusRefresh(): void
-    {
-        if (AdminAccess::isModeratorOnly() || ! $this->orderShowsCourierTracking()) {
-            return;
-        }
-
-        if (app(CourierApiRegistry::class)->configuredSlugs() === []) {
-            return;
-        }
-
-        $this->js('setTimeout(() => $wire.refreshCourierStatus(), 0)');
     }
 
     public function saveStatus(OrderStatusService $statusService): void
@@ -717,11 +741,14 @@ class AdminOrderShow extends Component
             ->get();
 
         $showCourierTracking = $this->orderShowsCourierTracking();
+        $courierApiAvailable = $courierRegistry->configuredSlugs() !== [];
+        $pollLiveCourier = $showCourierTracking && $courierApiAvailable && ! AdminAccess::isModeratorOnly();
+        $courierLivePending = $pollLiveCourier && ! $this->courierLiveSettled;
         $trackingEvents = $showCourierTracking
             ? $tracking->eventsFromLoadedLogs($this->order)
             : [];
         $courierStatus = $showCourierTracking
-            ? $tracking->displayStatus($this->order, $this->courierLiveStatus)
+            ? $tracking->displayStatus($this->order, $this->courierLiveSettled ? $this->courierLiveStatus : null)
             : null;
 
         return view('livewire.admin.admin-order-show', [
@@ -732,7 +759,9 @@ class AdminOrderShow extends Component
             'showCourierTracking' => $showCourierTracking,
             'trackingEvents' => $trackingEvents,
             'courierStatus' => $courierStatus,
-            'courierApiAvailable' => $courierRegistry->configuredSlugs() !== [],
+            'courierApiAvailable' => $courierApiAvailable,
+            'courierLivePending' => $courierLivePending,
+            'courierLivePendingIds' => $courierLivePending ? [(int) $this->order->id] : [],
         ])->title($this->title());
     }
 }

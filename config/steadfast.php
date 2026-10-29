@@ -10,6 +10,12 @@ return [
     'timeout' => (int) env('STEADFAST_TIMEOUT', 30),
 
     /*
+    | Timeout for status_by_invoice / status_by_cid / status_by_trackingcode.
+    | Keep this short so a down Packzy API cannot stall admin order lists.
+    */
+    'status_timeout' => (int) env('STEADFAST_STATUS_TIMEOUT', 4),
+
+    /*
     | Merchant-panel fraud check (fallback when Packzy /fraud_check fails or is unavailable).
     | Uses the same email/password as https://steadfast.com.bd login.
     */

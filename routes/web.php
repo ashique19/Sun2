@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminAiCandidateFileController;
 use App\Http\Controllers\Admin\AdminCustomerExportController;
+use App\Http\Controllers\Admin\AdminOrderCourierStatusController;
 use App\Http\Controllers\Admin\AdminProductImageFileController;
 use App\Http\Controllers\ChannelMessageCropSuggestionController;
 use App\Http\Controllers\ChannelMessageImageMatchController;
@@ -273,6 +274,7 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/orders/cancel-return', AdminOrders::class)->defaults('segment', 'cancel-return')->name('orders.cancel-return');
         Route::get('/orders/return-pending', AdminOrders::class)->defaults('segment', 'return-pending')->name('orders.return-pending');
         Route::get('/orders/all', AdminOrders::class)->defaults('segment', 'all')->name('orders.all');
+        Route::post('/orders/live-courier-status', AdminOrderCourierStatusController::class)->name('orders.live-courier-status');
         Route::get('/orders/create', AdminOrderForm::class)->name('orders.create');
         Route::get('/orders/{order}/edit', AdminOrderForm::class)->whereNumber('order')->name('orders.edit');
         Route::get('/products', AdminProducts::class)->name('products');

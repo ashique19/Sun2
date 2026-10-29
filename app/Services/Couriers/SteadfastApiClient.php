@@ -19,17 +19,22 @@ class SteadfastApiClient
 
     public function getStatusByInvoice(string $invoice): array
     {
-        return $this->request('get', '/status_by_invoice/'.urlencode($invoice));
+        return $this->request('get', '/status_by_invoice/'.urlencode($invoice), timeout: $this->statusTimeout());
     }
 
     public function getStatusByTrackingCode(string $trackingCode): array
     {
-        return $this->request('get', '/status_by_trackingcode/'.urlencode($trackingCode));
+        return $this->request('get', '/status_by_trackingcode/'.urlencode($trackingCode), timeout: $this->statusTimeout());
     }
 
     public function getStatusByConsignmentId(string|int $consignmentId): array
     {
-        return $this->request('get', '/status_by_cid/'.urlencode((string) $consignmentId));
+        return $this->request('get', '/status_by_cid/'.urlencode((string) $consignmentId), timeout: $this->statusTimeout());
+    }
+
+    private function statusTimeout(): int
+    {
+        return max(1, (int) config('steadfast.status_timeout', 4));
     }
 
     /**

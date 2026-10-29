@@ -44,10 +44,14 @@ class CourierTrackingService
 
     /**
      * Fetch live status and persist a tracking snapshot when it changes (or when none exist yet).
+     *
+     * @param  bool  $backfillLegacy  Skip on list polls — legacy copy is slow and not needed to paint live status.
      */
-    public function fetchAndRecordLiveStatus(Order $order): ?string
+    public function fetchAndRecordLiveStatus(Order $order, bool $backfillLegacy = true): ?string
     {
-        $this->backfillFromLegacy($order);
+        if ($backfillLegacy) {
+            $this->backfillFromLegacy($order);
+        }
 
         $status = $this->fetchLiveStatus($order);
 

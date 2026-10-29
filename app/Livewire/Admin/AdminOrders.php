@@ -136,8 +136,6 @@ class AdminOrders extends Component
             ->orderBy('name')
             ->value('id');
 
-        // Defer live API calls so the list paints first, then tracking fills in.
-        $this->queueCourierStatusRefresh();
     }
 
     public function switchSegment(string $segment): void
@@ -157,7 +155,6 @@ class AdminOrders extends Component
         $this->courierLiveStatuses = [];
 
         $this->js('history.replaceState({}, "", '.json_encode(route('admin.orders.'.$segment)).')');
-        $this->queueCourierStatusRefresh();
     }
 
     public function updatedSearch(): void
@@ -189,7 +186,6 @@ class AdminOrders extends Component
         $this->resetPage();
         $this->selected = [];
         $this->courierLiveStatuses = [];
-        $this->queueCourierStatusRefresh();
     }
 
     private function normalizedDate(string $value): string
@@ -1057,49 +1053,60 @@ class AdminOrders extends Component
     {
         $this->closeProductImage();
         $this->courierLiveStatuses = [];
-        $this->queueCourierStatusRefresh();
-    }
-
-    public function refreshCourierStatuses(CourierTrackingService $tracking): void
-    {
-        AdminAccess::ensureStaffAdmin();
-
-        if (! AdminOrderSegment::refreshesLiveCourierTracking($this->segment)) {
-            return;
-        }
-
-        $orders = $this->filteredOrdersQuery()
-            ->with(['courier:id,name,slug,cod_percentage', 'courierLogs'])
-            ->forPage($this->getPage(), 20)
-            ->get();
-
-        $statuses = [];
-
-        foreach ($orders as $order) {
-            $statuses[$order->id] = $tracking->fetchAndRecordLiveStatus($order);
-            $order->unsetRelation('courierLogs');
-            $order->load('courierLogs');
-        }
-
-        $this->courierLiveStatuses = $statuses;
-        $this->listRevision++;
     }
 
     /**
-     * Schedule a client-side tracking refresh after the current response
-     * (avoids blocking the first paint / segment switch on courier APIs).
+     * Drop live statuses so the tracking chips spin and AJAX refetches.
+     * Does not call courier APIs — those run outside Livewire.
      */
-    private function queueCourierStatusRefresh(): void
+    public function clearCourierLiveStatuses(): void
     {
-        if (! AdminOrderSegment::refreshesLiveCourierTracking($this->segment) || AdminAccess::isModeratorOnly()) {
-            return;
-        }
+        AdminAccess::ensureStaffAdmin();
 
-        if (app(CourierApiRegistry::class)->configuredSlugs() === []) {
-            return;
-        }
+        $this->courierLiveStatuses = [];
+    }
 
-        $this->js('setTimeout(() => $wire.refreshCourierStatuses(), 0)');
+    /**
+     * Apply statuses fetched by admin-courier-live.js. Do not bump listRevision:
+     * that remounts the list and would restart the fetch loop.
+     *
+     * @param  array<int|string, mixed>  $statuses
+     */
+    public function applyCourierLiveStatuses(array $statuses): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        foreach ($statuses as $orderId => $status) {
+            $id = (int) $orderId;
+
+            if ($id <= 0) {
+                continue;
+            }
+
+            $this->courierLiveStatuses[$id] = is_string($status) && $status !== ''
+                ? $status
+                : null;
+        }
+    }
+
+    /**
+     * Stop the spinner for IDs whose AJAX fetch failed or timed out.
+     *
+     * @param  list<int|string>  $orderIds
+     */
+    public function settleCourierLiveStatuses(array $orderIds): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        foreach ($orderIds as $orderId) {
+            $id = (int) $orderId;
+
+            if ($id <= 0 || array_key_exists($id, $this->courierLiveStatuses)) {
+                continue;
+            }
+
+            $this->courierLiveStatuses[$id] = null;
+        }
     }
 
     public function render(CourierApiRegistry $courierRegistry, CourierTrackingService $tracking)
@@ -1123,6 +1130,8 @@ class AdminOrders extends Component
 
         $showCourierTracking = AdminOrderSegment::showsCourierTracking($this->segment);
         $liveCourierRefresh = AdminOrderSegment::refreshesLiveCourierTracking($this->segment);
+        $courierApiAvailable = $courierRegistry->configuredSlugs() !== [];
+        $pollLiveCourier = $liveCourierRefresh && $courierApiAvailable && ! AdminAccess::isModeratorOnly();
         $loadCourierLogs = $showCourierTracking || $this->segment === 'all';
 
         if ($loadCourierLogs) {
@@ -1156,6 +1165,7 @@ class AdminOrders extends Component
             ->get(['id', 'name', 'slug', 'is_default']);
 
         $trackingByOrder = [];
+        $courierLivePendingIds = [];
 
         if ($loadCourierLogs) {
             foreach ($orders as $order) {
@@ -1163,13 +1173,19 @@ class AdminOrders extends Component
                     continue;
                 }
 
-                $live = $liveCourierRefresh
+                $pending = $pollLiveCourier && ! array_key_exists($order->id, $this->courierLiveStatuses);
+                $live = ($pollLiveCourier && ! $pending)
                     ? ($this->courierLiveStatuses[$order->id] ?? null)
                     : null;
                 $trackingByOrder[$order->id] = [
                     'status' => $tracking->displayStatus($order, is_string($live) ? $live : null),
                     'events' => $tracking->eventsFromLoadedLogs($order),
+                    'pending' => $pending,
                 ];
+
+                if ($pending) {
+                    $courierLivePendingIds[] = (int) $order->id;
+                }
             }
         }
 
@@ -1187,7 +1203,9 @@ class AdminOrders extends Component
             'apiCouriers' => $apiCouriers,
             'dispatchCouriers' => $dispatchCouriers,
             'trackingByOrder' => $trackingByOrder,
-            'courierApiAvailable' => $courierRegistry->configuredSlugs() !== [],
+            'courierApiAvailable' => $courierApiAvailable,
+            'courierLivePending' => $courierLivePendingIds !== [],
+            'courierLivePendingIds' => $courierLivePendingIds,
             'readOnly' => AdminAccess::isModeratorOnly(),
             'dateGroupCounts' => $this->dateGroupCounts(),
         ])->title(AdminOrderSegment::label($this->segment).' Orders');

@@ -4,11 +4,10 @@
         <div class="flex flex-wrap items-center gap-2">
             @if ($liveCourierRefresh && $courierApiAvailable && ! $readOnly)
                 <button type="button"
-                    wire:click="refreshCourierStatuses"
-                    wire:loading.attr="disabled"
+                    wire:click="clearCourierLiveStatuses"
+                    @disabled($courierLivePending)
                     class="rounded-lg border border-[#E0D6C2] bg-white px-4 py-2 text-sm font-medium text-[#6B6459] hover:bg-[#FAF6EF] disabled:opacity-60">
-                    <span wire:loading.remove wire:target="refreshCourierStatuses">Refresh tracking</span>
-                    <span wire:loading wire:target="refreshCourierStatuses">Refreshing…</span>
+                    {{ $courierLivePending ? 'Refreshing…' : 'Refresh tracking' }}
                 </button>
             @endif
             @unless ($readOnly)
@@ -198,7 +197,13 @@
             </label>
         </div>
 
-        <div class="space-y-3" wire:loading.class="opacity-60" wire:target="switchSegment,search,dateFrom,dateTo,clearDateRange,nextPage,previousPage,gotoPage,refreshCourierStatuses" wire:key="staff-orders-{{ $segment }}-{{ $listRevision }}">
+        <div class="space-y-3" wire:loading.class="opacity-60" wire:target="switchSegment,search,dateFrom,dateTo,clearDateRange,nextPage,previousPage,gotoPage" wire:key="staff-orders-{{ $segment }}-{{ $listRevision }}"
+            @if ($liveCourierRefresh && $courierApiAvailable && ! $readOnly)
+                data-admin-courier-live-root
+                data-admin-courier-live-url="{{ route('admin.orders.live-courier-status') }}"
+                data-admin-courier-live-pending-ids='@json($courierLivePendingIds)'
+            @endif
+        >
             @php($lastGroupKey = null)
             @php($groupByDate = in_array($segment, ['new', 'dispatched'], true))
             @forelse ($orders as $order)
@@ -483,7 +488,7 @@
                                     :order="$order"
                                     :events="$trackingByOrder[$order->id]['events'] ?? []"
                                     :courier-status="$trackingByOrder[$order->id]['status'] ?? null"
-                                    :refresh-target="$liveCourierRefresh ? 'refreshCourierStatuses' : null"
+                                    :pending="$trackingByOrder[$order->id]['pending'] ?? false"
                                 />
                             @endif
                         </div>

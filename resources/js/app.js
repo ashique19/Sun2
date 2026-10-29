@@ -55,6 +55,7 @@ window.sunCopyText = async function sunCopyText(text, feedbackEl) {
  * Dynamic import keeps laravel-echo + pusher-js out of the default storefront chunk.
  */
 import { startImageRetry } from './storefront-image-retry';
+import './admin-courier-live.js';
 
 startImageRetry();
 

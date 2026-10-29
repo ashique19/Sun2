@@ -728,21 +728,26 @@
                 </form>
 
                 @if ($showCourierTracking)
-                    <div class="space-y-3">
+                    <div class="space-y-3"
+                        @if ($courierApiAvailable && ! $readOnly)
+                            data-admin-courier-live-root
+                            data-admin-courier-live-url="{{ route('admin.orders.live-courier-status') }}"
+                            data-admin-courier-live-pending-ids='@json($courierLivePendingIds)'
+                        @endif
+                    >
                         @if ($courierApiAvailable && ! $readOnly)
                             <button type="button"
-                                wire:click="refreshCourierStatus"
-                                wire:loading.attr="disabled"
+                                wire:click="clearCourierLiveStatus"
+                                @disabled($courierLivePending)
                                 class="rounded-lg border border-[#E0D6C2] bg-white px-3 py-1.5 text-xs font-medium text-[#6B6459] hover:bg-[#FAF6EF] disabled:opacity-60">
-                                <span wire:loading.remove wire:target="refreshCourierStatus">Refresh tracking</span>
-                                <span wire:loading wire:target="refreshCourierStatus">Refreshing…</span>
+                                {{ $courierLivePending ? 'Refreshing…' : 'Refresh tracking' }}
                             </button>
                         @endif
                         <x-admin.order-courier-tracking
                             :order="$order"
                             :events="$trackingEvents"
                             :courier-status="$courierStatus"
-                            refresh-target="refreshCourierStatus"
+                            :pending="$courierLivePending"
                         />
                         @if ($order->dispatch_date)
                             <p class="text-xs text-[#8C8474]">Dispatched {{ $order->dispatch_date->format('d M Y, h:i A') }}</p>

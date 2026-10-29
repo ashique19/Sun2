@@ -52,4 +52,32 @@ class CustomerLookupServiceTest extends TestCase
         $this->assertSame($first->id, $second->id);
         $this->assertSame(1, User::query()->count());
     }
+
+    public function test_it_reuses_existing_user_stored_with_880_prefix(): void
+    {
+        $existing = User::factory()->create([
+            'name' => 'Legacy Phone',
+            'phone' => '8801712345678',
+        ]);
+        $existing->assignRole('customers');
+
+        $found = $this->customers->findOrCreateCustomer('01712345678', 'Someone Else');
+
+        $this->assertSame($existing->id, $found->id);
+        $this->assertSame(1, User::query()->count());
+    }
+
+    public function test_it_assigns_customers_role_when_reusing_a_user_without_one(): void
+    {
+        $existing = User::factory()->create([
+            'name' => 'No Role',
+            'phone' => '01712345679',
+        ]);
+
+        $found = $this->customers->findOrCreateCustomer('01712345679', 'No Role');
+
+        $this->assertSame($existing->id, $found->id);
+        $this->assertTrue($found->fresh()->hasRole('customers'));
+        $this->assertSame(1, User::query()->count());
+    }
 }

@@ -143,6 +143,43 @@ class GuestCheckoutAutoAccountTest extends TestCase
     }
 
     #[Test]
+    public function guest_checkout_reuses_existing_account_stored_with_880_phone(): void
+    {
+        [$product, $area] = $this->seedCheckout();
+
+        $existing = User::factory()->create([
+            'name' => 'Legacy Phone Customer',
+            'phone' => '8801710000003',
+        ]);
+        $existing->assignRole('customers');
+
+        $cart = app(CartService::class);
+        $cart->clear();
+        $cart->add($product->id, 1);
+
+        $pricing = CheckoutPricing::calculate(
+            $cart->subtotal(),
+            $area,
+            $cart->count(),
+            [],
+            $cart->lines(),
+        );
+
+        $order = app(OrderPlacer::class)->place($cart, $pricing, [
+            'name' => 'Legacy Phone Customer',
+            'phone' => '01710000003',
+            'email' => '',
+            'address' => 'House 1',
+            'area' => $area->name,
+            'city' => $area->city->name,
+            'state' => 'Dhaka',
+        ]);
+
+        $this->assertSame($existing->id, $order->fresh()->user_id);
+        $this->assertSame(1, User::query()->count());
+    }
+
+    #[Test]
     public function guest_checkout_does_not_overwrite_existing_customer_address(): void
     {
         [$product, $area] = $this->seedCheckout();

@@ -87,6 +87,8 @@ class CustomerLookupService
         $existing = User::findByPhone($displayPhone);
 
         if ($existing) {
+            $this->ensureCustomerRole($existing);
+
             return $existing;
         }
 
@@ -133,6 +135,20 @@ class CustomerLookupService
             'areaId' => $areaId,
             'location_hint' => $hint,
         ];
+    }
+
+    private function ensureCustomerRole(User $user): void
+    {
+        if ($user->hasAnyRole(['admin', 'dev', 'moderator', 'reseller'])) {
+            return;
+        }
+
+        if ($user->hasRole('customers')) {
+            return;
+        }
+
+        Role::findOrCreate('customers');
+        $user->assignRole('customers');
     }
 
     /**

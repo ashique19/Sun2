@@ -80,6 +80,10 @@ class PhoneNumber
             '0'.$normalized,
             '88'.$normalized,
             '+88'.$normalized,
+            '880'.$normalized,
+            '+880'.$normalized,
+            '8800'.$normalized,
+            '+8800'.$normalized,
         ])));
     }
 

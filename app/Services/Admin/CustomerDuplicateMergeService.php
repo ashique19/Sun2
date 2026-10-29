@@ -23,7 +23,6 @@ class CustomerDuplicateMergeService
     public function duplicateGroups(): Collection
     {
         $customers = User::query()
-            ->role('customers')
             ->whereDoesntHave('roles', function ($query) {
                 $query->whereIn('name', ['admin', 'dev', 'moderator', 'reseller']);
             })
@@ -43,6 +42,49 @@ class CustomerDuplicateMergeService
     public function duplicateGroupCount(): int
     {
         return $this->duplicateGroups()->count();
+    }
+
+    /**
+     * @return array{
+     *     groups: int,
+     *     users_to_remove: int,
+     *     orders_to_move: int,
+     *     samples: list<string>,
+     *     done: bool
+     * }
+     */
+    public function preview(int $sampleLimit = 12): array
+    {
+        $groups = $this->duplicateGroups();
+        $usersToRemove = 0;
+        $loserIds = [];
+        $samples = [];
+
+        foreach ($groups as $normalizedPhone => $group) {
+            $sorted = $group->sortByDesc('id')->values();
+            $keeper = $sorted->first();
+            $losers = $sorted->slice(1);
+            $usersToRemove += $losers->count();
+            $loserIds = array_merge($loserIds, $losers->pluck('id')->all());
+
+            if (count($samples) < max(1, $sampleLimit)) {
+                $samples[] = PhoneNumber::display((string) $normalizedPhone)
+                    .' → keep #'.$keeper->id
+                    .' (remove '.$losers->pluck('id')->implode(', ').')';
+            }
+        }
+
+        $ordersToMove = $loserIds === []
+            ? 0
+            : Order::query()->whereIn('user_id', $loserIds)->count();
+
+        return [
+            'groups' => $groups->count(),
+            'users_to_remove' => $usersToRemove,
+            'orders_to_move' => $ordersToMove,
+            'samples' => $samples,
+            'done' => $groups->isEmpty(),
+        ];
     }
 
     /**
@@ -176,13 +218,39 @@ class CustomerDuplicateMergeService
             ->where('referrer_id', $loserId)
             ->update(['referrer_id' => $keeperId]);
 
-        if (Schema::hasTable('reseller_wallet_transactions')) {
-            DB::table('reseller_wallet_transactions')
-                ->where('user_id', $loserId)
-                ->update(['user_id' => $keeperId]);
-        }
+        $this->reassignTable('reseller_wallet_entries', $loserId, $keeperId);
+        $this->reassignTable('comments', $loserId, $keeperId);
+        $this->reassignTable('ai_image_prompts', $loserId, $keeperId);
+        $this->reassignUniqueRows('expense_assistant_dismissals', $loserId, $keeperId, 'dedupe_key');
 
         return $ordersMoved;
+    }
+
+    private function reassignTable(string $table, int $loserId, int $keeperId): void
+    {
+        if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'user_id')) {
+            return;
+        }
+
+        DB::table($table)->where('user_id', $loserId)->update(['user_id' => $keeperId]);
+    }
+
+    private function reassignUniqueRows(string $table, int $loserId, int $keeperId, string $uniqueColumn): void
+    {
+        if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'user_id')) {
+            return;
+        }
+
+        $keeperKeys = DB::table($table)->where('user_id', $keeperId)->pluck($uniqueColumn);
+
+        if ($keeperKeys->isNotEmpty()) {
+            DB::table($table)
+                ->where('user_id', $loserId)
+                ->whereIn($uniqueColumn, $keeperKeys)
+                ->delete();
+        }
+
+        DB::table($table)->where('user_id', $loserId)->update(['user_id' => $keeperId]);
     }
 
     private function mergeWishlists(int $loserId, int $keeperId): void

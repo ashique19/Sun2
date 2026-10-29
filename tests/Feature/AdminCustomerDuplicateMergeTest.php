@@ -205,4 +205,28 @@ class AdminCustomerDuplicateMergeTest extends TestCase
         $this->assertDatabaseHas('users', ['id' => $keeperId]);
         $this->assertSame($keeperId, Order::query()->where('order_number', '2001')->value('user_id'));
     }
+
+    #[Test]
+    public function merge_includes_customers_without_the_customers_role(): void
+    {
+        $older = User::factory()->create([
+            'name' => 'No Role Older',
+            'phone' => '01714445566',
+        ]);
+        $newer = User::factory()->create([
+            'name' => 'No Role Newer',
+            'phone' => '01714445567',
+        ]);
+        DB::table('users')->where('id', $newer->id)->update(['phone' => '8801714445566']);
+        $newer->refresh();
+
+        $this->orderFor($older, '3001');
+
+        $result = app(CustomerDuplicateMergeService::class)->mergeNextBatch();
+
+        $this->assertSame(1, $result['merged_groups']);
+        $this->assertDatabaseMissing('users', ['id' => $older->id]);
+        $this->assertDatabaseHas('users', ['id' => $newer->id]);
+        $this->assertSame($newer->id, Order::query()->where('order_number', '3001')->value('user_id'));
+    }
 }

@@ -65,6 +65,15 @@
             class="min-w-0 flex-1 rounded-lg border border-[#E0D6C2] bg-white px-4 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
         @if ($segment === 'customers')
             <button type="button"
+                data-duplicate-merge-open
+                wire:click="openDuplicateMergeModal"
+                wire:loading.attr="disabled"
+                wire:target="openDuplicateMergeModal, loadDuplicateMergePreview"
+                class="shrink-0 rounded-lg border border-[#E0D6C2] bg-white px-3 py-2 text-sm font-medium text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60"
+                title="Merge customers that share the same phone number">
+                Merge duplicate phones
+            </button>
+            <button type="button"
                 wire:click="exportFilteredCustomers"
                 wire:loading.attr="disabled"
                 wire:target="exportFilteredCustomers"
@@ -239,6 +248,83 @@
                             {{ $promoSmsSending ? 'Sending…' : 'Send SMS' }}
                         </span>
                         <span wire:loading wire:target="sendPromoSms">Sending…</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    @if ($segment === 'customers' && $duplicateMergeModalOpen)
+        <div class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+            data-duplicate-merge-modal
+            wire:click.self="closeDuplicateMergeModal"
+            wire:key="duplicate-merge-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Merge duplicate phones">
+            <div class="flex max-h-[min(90dvh,40rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+                wire:click.stop>
+                <div class="flex shrink-0 items-center justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
+                    <div class="min-w-0">
+                        <h2 class="truncate font-semibold text-lg">Merge duplicate phones</h2>
+                        <p class="mt-0.5 text-xs text-[#8C8474]">Keep the latest user for each number, move orders, then delete extras.</p>
+                    </div>
+                    <button type="button" wire:click="closeDuplicateMergeModal"
+                        class="rounded-full border border-[#E0D6C2] px-3 py-1.5 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
+                        Close
+                    </button>
+                </div>
+
+                <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4 text-sm">
+                    @if ($duplicateMergeLoading)
+                        <div class="flex flex-col items-center justify-center gap-3 py-12 text-[#6B6459]">
+                            <span class="inline-block h-8 w-8 animate-spin rounded-full border-2 border-[#E0D6C2] border-t-[#C9A227]" aria-hidden="true"></span>
+                            <p>Scanning customers for duplicate phones…</p>
+                        </div>
+                    @else
+                        <div class="grid grid-cols-3 gap-3">
+                            <div class="rounded-lg border border-[#EFE7D6] bg-[#FAF6EF] px-3 py-3 text-center">
+                                <p class="text-xs uppercase tracking-wide text-[#8C8474]">Groups</p>
+                                <p class="mt-1 text-xl font-semibold tabular-nums">{{ number_format($duplicateMergePreview['groups']) }}</p>
+                            </div>
+                            <div class="rounded-lg border border-[#EFE7D6] bg-[#FAF6EF] px-3 py-3 text-center">
+                                <p class="text-xs uppercase tracking-wide text-[#8C8474]">Users to remove</p>
+                                <p class="mt-1 text-xl font-semibold tabular-nums">{{ number_format($duplicateMergePreview['users_to_remove']) }}</p>
+                            </div>
+                            <div class="rounded-lg border border-[#EFE7D6] bg-[#FAF6EF] px-3 py-3 text-center">
+                                <p class="text-xs uppercase tracking-wide text-[#8C8474]">Orders to move</p>
+                                <p class="mt-1 text-xl font-semibold tabular-nums">{{ number_format($duplicateMergePreview['orders_to_move']) }}</p>
+                            </div>
+                        </div>
+
+                        @if ($duplicateMergePreview['samples'] !== [])
+                            <ul class="mt-4 space-y-1.5 text-xs text-[#6B6459]">
+                                @foreach ($duplicateMergePreview['samples'] as $sample)
+                                    <li class="rounded-lg border border-[#EFE7D6] px-3 py-2 font-mono">{{ $sample }}</li>
+                                @endforeach
+                            </ul>
+                        @elseif ($duplicateMergePreview['done'])
+                            <p class="mt-4 text-center text-[#6B6459]">No duplicate customer phones found.</p>
+                        @endif
+                    @endif
+                </div>
+
+                <div class="flex shrink-0 justify-end gap-2 border-t border-[#EFE7D6] px-4 py-3">
+                    <button type="button" wire:click="closeDuplicateMergeModal"
+                        class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
+                        Cancel
+                    </button>
+                    <button type="button"
+                        data-duplicate-merge-confirm
+                        wire:click="mergeDuplicatePhones"
+                        wire:loading.attr="disabled"
+                        wire:target="mergeDuplicatePhones"
+                        @disabled($duplicateMergeLoading || $duplicateMergeRunning || $duplicateMergePreview['done'])
+                        class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:cursor-not-allowed disabled:opacity-60">
+                        <span wire:loading.remove wire:target="mergeDuplicatePhones">
+                            {{ $duplicateMergeRunning ? 'Merging…' : 'Merge now' }}
+                        </span>
+                        <span wire:loading wire:target="mergeDuplicatePhones">Merging…</span>
                     </button>
                 </div>
             </div>

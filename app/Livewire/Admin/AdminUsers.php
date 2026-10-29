@@ -5,6 +5,7 @@ namespace App\Livewire\Admin;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\Admin\CustomerAnalyticsService;
+use App\Services\Admin\CustomerDuplicateMergeService;
 use App\Services\Admin\CustomerExportService;
 use App\Services\Sms\PromotionalSmsService;
 use App\Support\AdminAccess;
@@ -77,6 +78,23 @@ class AdminUsers extends Component
 
     public bool $promoSmsSending = false;
 
+    public bool $duplicateMergeModalOpen = false;
+
+    public bool $duplicateMergeLoading = false;
+
+    public bool $duplicateMergeRunning = false;
+
+    /**
+     * @var array{groups: int, users_to_remove: int, orders_to_move: int, samples: list<string>, done: bool}
+     */
+    public array $duplicateMergePreview = [
+        'groups' => 0,
+        'users_to_remove' => 0,
+        'orders_to_move' => 0,
+        'samples' => [],
+        'done' => true,
+    ];
+
     public const SEGMENTS = [
         'customers' => 'Customers',
         'moderators' => 'Moderators',
@@ -106,6 +124,7 @@ class AdminUsers extends Component
         $this->resetPage();
         $this->selectedCustomerIds = [];
         $this->closePromoSmsModal();
+        $this->closeDuplicateMergeModal();
         $this->closeAnalyticsModal(clearCache: true);
         $this->cityFilter = '';
         $this->cityNoneOnly = false;
@@ -446,6 +465,84 @@ class AdminUsers extends Component
         $this->promoSmsMessage = '';
         $this->promoSmsCampaignId = '';
         $this->js('document.body.classList.remove("overflow-hidden")');
+    }
+
+    public function openDuplicateMergeModal(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->segment !== 'customers') {
+            return;
+        }
+
+        $this->closePromoSmsModal();
+        $this->closeAnalyticsModal();
+        $this->duplicateMergeModalOpen = true;
+        $this->duplicateMergeLoading = true;
+        $this->duplicateMergeRunning = false;
+        $this->error = null;
+        $this->js('document.body.classList.add("overflow-hidden")');
+        $this->loadDuplicateMergePreview();
+    }
+
+    public function loadDuplicateMergePreview(?CustomerDuplicateMergeService $merger = null): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->segment !== 'customers' || ! $this->duplicateMergeModalOpen) {
+            $this->duplicateMergeLoading = false;
+
+            return;
+        }
+
+        $merger ??= app(CustomerDuplicateMergeService::class);
+        $this->duplicateMergePreview = $merger->preview();
+        $this->duplicateMergeLoading = false;
+    }
+
+    public function closeDuplicateMergeModal(): void
+    {
+        $this->duplicateMergeModalOpen = false;
+        $this->duplicateMergeLoading = false;
+        $this->duplicateMergeRunning = false;
+        $this->js('document.body.classList.remove("overflow-hidden")');
+    }
+
+    public function mergeDuplicatePhones(?CustomerDuplicateMergeService $merger = null): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->segment !== 'customers' || ! $this->duplicateMergeModalOpen) {
+            return;
+        }
+
+        $this->duplicateMergeRunning = true;
+        $this->error = null;
+        $this->message = null;
+
+        $merger ??= app(CustomerDuplicateMergeService::class);
+        $mergedGroups = 0;
+        $deletedUsers = 0;
+        $reassignedOrders = 0;
+
+        do {
+            $result = $merger->mergeNextBatch();
+            $mergedGroups += $result['merged_groups'];
+            $deletedUsers += $result['deleted_users'];
+            $reassignedOrders += $result['reassigned_orders'];
+        } while (! $result['done'] && $result['merged_groups'] > 0);
+
+        $this->duplicateMergePreview = $merger->preview();
+        $this->duplicateMergeRunning = false;
+
+        if ($mergedGroups === 0) {
+            $this->message = 'No duplicate phone users to merge.';
+
+            return;
+        }
+
+        $this->message = 'Merged '.$mergedGroups.' phone group(s): moved '.$reassignedOrders
+            .' order(s) and removed '.$deletedUsers.' extra user(s).';
     }
 
     public function sendPromoSms(PromotionalSmsService $promotionalSms): void

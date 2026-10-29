@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Livewire\Admin\AdminCustomerShow;
+use App\Livewire\Admin\AdminUsers;
 use App\Models\Address;
 use App\Models\Area;
 use App\Models\City;
@@ -228,5 +229,32 @@ class AdminCustomerDuplicateMergeTest extends TestCase
         $this->assertDatabaseMissing('users', ['id' => $older->id]);
         $this->assertDatabaseHas('users', ['id' => $newer->id]);
         $this->assertSame($newer->id, Order::query()->where('order_number', '3001')->value('user_id'));
+    }
+
+    #[Test]
+    public function customers_page_can_preview_and_merge_duplicate_phones(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $older = $this->customer('Older Twin', '01718889900');
+        $newer = $this->customer('Newer Twin', '01718889901');
+        DB::table('users')->where('id', $newer->id)->update(['phone' => '8801718889900']);
+        $this->orderFor($older, '5001');
+
+        Livewire::test(AdminUsers::class, ['segment' => 'customers'])
+            ->assertSee('Merge duplicate phones')
+            ->call('openDuplicateMergeModal')
+            ->assertSet('duplicateMergeModalOpen', true)
+            ->assertSet('duplicateMergePreview.groups', 1)
+            ->assertSet('duplicateMergePreview.users_to_remove', 1)
+            ->assertSet('duplicateMergePreview.orders_to_move', 1)
+            ->assertSee('Merge now')
+            ->call('mergeDuplicatePhones')
+            ->assertSet('duplicateMergePreview.done', true)
+            ->assertSee('Merged 1 phone group');
+
+        $this->assertDatabaseMissing('users', ['id' => $older->id]);
+        $this->assertDatabaseHas('users', ['id' => $newer->id]);
+        $this->assertSame($newer->id, Order::query()->where('order_number', '5001')->value('user_id'));
     }
 }

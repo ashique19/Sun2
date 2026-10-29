@@ -22,12 +22,12 @@ class AdminCustomersListHeaderTest extends TestCase
         return $user;
     }
 
-    public function test_customers_header_is_compact_without_merge_or_segment_pills(): void
+    public function test_customers_header_is_compact_without_segment_pills(): void
     {
         $this->actingAs($this->adminUser());
 
         Livewire::test(AdminUsers::class, ['segment' => 'customers'])
-            ->assertDontSee('Merge duplicate phones')
+            ->assertSee('Merge duplicate phones')
             ->assertDontSeeHtml('>Create Customer</a>')
             ->assertSeeHtml('aria-label="Create Customer"')
             ->assertSeeHtml('id="admin-users-segment"')

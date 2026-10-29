@@ -262,6 +262,9 @@
             role="dialog"
             aria-modal="true"
             aria-label="Merge duplicate phones">
+            @if ($duplicateMergeRunning)
+                <div wire:poll.1s="tickDuplicateMerge" wire:poll.keep-alive class="hidden" aria-hidden="true"></div>
+            @endif
             <div class="flex max-h-[min(90dvh,40rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-xl"
                 wire:click.stop>
                 <div class="flex shrink-0 items-center justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
@@ -297,13 +300,23 @@
                             </div>
                         </div>
 
+                        @if ($duplicateMergeRunning)
+                            <p class="mt-4 flex items-center gap-2 text-[#6B6459]">
+                                <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[#E0D6C2] border-t-[#C9A227]" aria-hidden="true"></span>
+                                Merging in small batches so the page does not time out…
+                                @if ($duplicateMergeDeletedUsers > 0)
+                                    removed {{ number_format($duplicateMergeDeletedUsers) }} extra user(s) so far.
+                                @endif
+                            </p>
+                        @endif
+
                         @if ($duplicateMergePreview['samples'] !== [])
                             <ul class="mt-4 space-y-1.5 text-xs text-[#6B6459]">
                                 @foreach ($duplicateMergePreview['samples'] as $sample)
                                     <li class="rounded-lg border border-[#EFE7D6] px-3 py-2 font-mono">{{ $sample }}</li>
                                 @endforeach
                             </ul>
-                        @elseif ($duplicateMergePreview['done'])
+                        @elseif ($duplicateMergePreview['done'] && ! $duplicateMergeRunning)
                             <p class="mt-4 text-center text-[#6B6459]">No duplicate customer phones found.</p>
                         @endif
                     @endif
@@ -312,7 +325,7 @@
                 <div class="flex shrink-0 justify-end gap-2 border-t border-[#EFE7D6] px-4 py-3">
                     <button type="button" wire:click="closeDuplicateMergeModal"
                         class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm font-medium text-[#1E1E1E] hover:bg-[#FAF6EF]">
-                        Cancel
+                        {{ $duplicateMergeRunning ? 'Stop' : 'Cancel' }}
                     </button>
                     <button type="button"
                         data-duplicate-merge-confirm
@@ -321,10 +334,7 @@
                         wire:target="mergeDuplicatePhones"
                         @disabled($duplicateMergeLoading || $duplicateMergeRunning || $duplicateMergePreview['done'])
                         class="rounded-full bg-[#C9A227] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:cursor-not-allowed disabled:opacity-60">
-                        <span wire:loading.remove wire:target="mergeDuplicatePhones">
-                            {{ $duplicateMergeRunning ? 'Merging…' : 'Merge now' }}
-                        </span>
-                        <span wire:loading wire:target="mergeDuplicatePhones">Merging…</span>
+                        {{ $duplicateMergeRunning ? 'Merging…' : 'Merge now' }}
                     </button>
                 </div>
             </div>

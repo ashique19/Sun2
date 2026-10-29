@@ -276,11 +276,152 @@ class AdminCustomerDuplicateMergeTest extends TestCase
             ->assertSet('duplicateMergePreview.orders_to_move', 1)
             ->assertSee('Merge now')
             ->call('mergeDuplicatePhones')
+            ->assertSet('duplicateMergeRunning', false)
             ->assertSet('duplicateMergePreview.done', true)
             ->assertSee('Merged 1 phone group');
 
         $this->assertDatabaseMissing('users', ['id' => $older->id]);
         $this->assertDatabaseHas('users', ['id' => $newer->id]);
         $this->assertSame($newer->id, Order::query()->where('order_number', '5001')->value('user_id'));
+    }
+
+    #[Test]
+    public function merge_caps_how_many_extra_users_one_batch_deletes(): void
+    {
+        $users = [];
+
+        for ($i = 0; $i < 10; $i++) {
+            $users[] = $this->customer('Kakoli '.$i, '01866609878-'.(20000 + $i));
+        }
+
+        $keeper = $users[array_key_last($users)];
+        $service = app(CustomerDuplicateMergeService::class);
+
+        $result = $service->mergeNextBatch(limit: 1, maxLosers: 3);
+
+        $this->assertSame(3, $result['deleted_users']);
+        $this->assertSame(0, $result['merged_groups']);
+        $this->assertFalse($result['done']);
+        $this->assertSame(1, $service->duplicateGroupCount());
+        $this->assertDatabaseHas('users', ['id' => $keeper->id]);
+        $this->assertSame(7, User::query()->whereIn('id', collect($users)->pluck('id'))->count());
+    }
+
+    #[Test]
+    public function merge_detaches_sessions_so_extra_users_can_be_deleted(): void
+    {
+        $older = $this->customer('Older Session', '01719990011');
+        $newer = $this->customer('Newer Session', '01719990012');
+        DB::table('users')->where('id', $newer->id)->update(['phone' => '8801719990011']);
+
+        DB::table('sessions')->insert([
+            'id' => 'merge-session-'.$older->id,
+            'user_id' => $older->id,
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'phpunit',
+            'payload' => 'payload',
+            'last_activity' => time(),
+        ]);
+
+        $result = app(CustomerDuplicateMergeService::class)->mergeNextBatch();
+
+        $this->assertSame(1, $result['deleted_users']);
+        $this->assertDatabaseMissing('users', ['id' => $older->id]);
+        $this->assertDatabaseMissing('sessions', ['user_id' => $older->id]);
+        $this->assertDatabaseHas('users', ['id' => $newer->id, 'phone' => '01719990011']);
+    }
+
+    #[Test]
+    public function merge_skips_a_user_that_cannot_be_deleted_and_continues(): void
+    {
+        $oldest = $this->customer('Keep Going', '01717778899');
+        $blocked = $this->customer('Boom', '01717778890');
+        $newest = $this->customer('Newest', '01717778891');
+        DB::table('users')->where('id', $blocked->id)->update(['phone' => '01717778899-'.$blocked->id]);
+        DB::table('users')->where('id', $newest->id)->update(['phone' => '8801717778899']);
+        $this->orderFor($oldest, '7001');
+
+        User::deleting(function (User $user): void {
+            if ($user->name === 'Boom') {
+                throw new \RuntimeException('cannot delete boom');
+            }
+        });
+
+        $result = app(CustomerDuplicateMergeService::class)->mergeNextBatch();
+
+        $this->assertContains($blocked->id, $result['skipped_user_ids']);
+        $this->assertSame(1, $result['deleted_users']);
+        $this->assertSame(0, $result['merged_groups']);
+        $this->assertDatabaseMissing('users', ['id' => $oldest->id]);
+        $this->assertDatabaseHas('users', ['id' => $blocked->id]);
+        $this->assertDatabaseHas('users', ['id' => $newest->id]);
+        $this->assertSame($newest->id, Order::query()->where('order_number', '7001')->value('user_id'));
+    }
+
+    #[Test]
+    public function preview_does_not_list_every_id_in_a_large_group(): void
+    {
+        for ($i = 0; $i < 6; $i++) {
+            $this->customer('Crowd '.$i, '01861112233-'.(30000 + $i));
+        }
+
+        $preview = app(CustomerDuplicateMergeService::class)->preview();
+
+        $this->assertSame(1, $preview['groups']);
+        $this->assertSame(5, $preview['users_to_remove']);
+        $this->assertCount(1, $preview['samples']);
+        $this->assertStringContainsString('+2 more', $preview['samples'][0]);
+    }
+
+    #[Test]
+    public function customers_page_merges_large_sets_across_poll_ticks(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $pairs = CustomerDuplicateMergeService::UI_BATCH_SIZE + 1;
+        $olders = [];
+        $newers = [];
+
+        for ($i = 0; $i < $pairs; $i++) {
+            $display = sprintf('01710%06d', $i);
+            $olders[] = $this->customer('Older '.$i, $display);
+            $newer = $this->customer('Newer '.$i, sprintf('01711%06d', $i));
+            DB::table('users')->where('id', $newer->id)->update(['phone' => '880'.substr($display, 1)]);
+            $newers[] = $newer->fresh();
+            $this->orderFor($olders[$i], '8'.sprintf('%03d', $i));
+        }
+
+        $component = Livewire::test(AdminUsers::class, ['segment' => 'customers'])
+            ->call('openDuplicateMergeModal')
+            ->assertSet('duplicateMergePreview.groups', $pairs)
+            ->call('mergeDuplicatePhones')
+            ->assertSet('duplicateMergeRunning', true)
+            ->assertSet('duplicateMergePreview.done', false)
+            ->assertSeeHtml('wire:poll.1s="tickDuplicateMerge"');
+
+        $this->assertTrue(
+            User::query()->whereIn('id', collect($olders)->pluck('id'))->exists(),
+            'The first Livewire request must leave some duplicates for later ticks.',
+        );
+
+        $guard = 0;
+
+        while ($component->get('duplicateMergeRunning') && $guard < 20) {
+            $component->call('tickDuplicateMerge');
+            $guard++;
+        }
+
+        $component
+            ->assertSet('duplicateMergeRunning', false)
+            ->assertSet('duplicateMergePreview.done', true)
+            ->assertSee('Merged '.$pairs.' phone group');
+
+        foreach ($olders as $older) {
+            $this->assertDatabaseMissing('users', ['id' => $older->id]);
+        }
+
+        foreach ($newers as $newer) {
+            $this->assertDatabaseHas('users', ['id' => $newer->id]);
+        }
     }
 }

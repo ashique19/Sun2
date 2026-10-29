@@ -12,10 +12,15 @@ use App\Support\PhoneNumber;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 class CustomerDuplicateMergeService
 {
     public const BATCH_SIZE = 25;
+
+    public const UI_BATCH_SIZE = 5;
+
+    public const MAX_LOSERS_PER_BATCH = 8;
 
     /**
      * @return Collection<string, Collection<int, User>>
@@ -68,15 +73,15 @@ class CustomerDuplicateMergeService
             $loserIds = array_merge($loserIds, $losers->pluck('id')->all());
 
             if (count($samples) < max(1, $sampleLimit)) {
-                $samples[] = PhoneNumber::display((string) $normalizedPhone)
-                    .' → keep #'.$keeper->id
-                    .' (remove '.$losers->pluck('id')->implode(', ').')';
+                $samples[] = $this->sampleLine((string) $normalizedPhone, (int) $keeper->id, $losers->pluck('id'));
             }
         }
 
-        $ordersToMove = $loserIds === []
-            ? 0
-            : Order::query()->whereIn('user_id', $loserIds)->count();
+        $ordersToMove = 0;
+
+        foreach (array_chunk($loserIds, 500) as $chunk) {
+            $ordersToMove += Order::query()->whereIn('user_id', $chunk)->count();
+        }
 
         return [
             'groups' => $groups->count(),
@@ -88,8 +93,9 @@ class CustomerDuplicateMergeService
     }
 
     /**
-     * Merge up to $limit duplicate phone groups. Keeps the highest-id (latest) user.
+     * Merge a small slice of duplicate phone groups. Keeps the highest-id (latest) user.
      *
+     * @param  list<int>  $skipUserIds
      * @return array{
      *     scanned_groups: int,
      *     merged_groups: int,
@@ -97,94 +103,213 @@ class CustomerDuplicateMergeService
      *     reassigned_orders: int,
      *     remaining_groups: int,
      *     done: bool,
-     *     samples: list<string>
+     *     samples: list<string>,
+     *     skipped_user_ids: list<int>,
+     *     errors: list<string>
      * }
      */
-    public function mergeNextBatch(int $limit = self::BATCH_SIZE): array
-    {
+    public function mergeNextBatch(
+        int $limit = self::BATCH_SIZE,
+        int $maxLosers = self::MAX_LOSERS_PER_BATCH,
+        bool $recountRemaining = true,
+        array $skipUserIds = [],
+    ): array {
         $limit = max(1, min(self::BATCH_SIZE, $limit));
-        $groups = $this->duplicateGroups()->take($limit);
+        $maxLosers = max(1, $maxLosers);
+        $skipUserIds = array_values(array_unique(array_map('intval', $skipUserIds)));
+
+        $groups = $this->duplicateGroups();
+        $work = [];
+
+        foreach ($groups as $normalizedPhone => $group) {
+            $sorted = $group->sortByDesc('id')->values();
+            $losers = $sorted->slice(1)
+                ->reject(fn (User $user): bool => in_array((int) $user->id, $skipUserIds, true))
+                ->values();
+
+            if ($losers->isEmpty()) {
+                continue;
+            }
+
+            $work[] = [
+                'phone' => (string) $normalizedPhone,
+                'sorted' => $sorted,
+                'losers' => $losers,
+            ];
+
+            if (count($work) >= $limit) {
+                break;
+            }
+        }
 
         $mergedGroups = 0;
         $deletedUsers = 0;
         $reassignedOrders = 0;
         $samples = [];
+        $skippedUserIds = [];
+        $errors = [];
+        $loserBudget = $maxLosers;
 
-        foreach ($groups as $normalizedPhone => $group) {
-            $result = DB::transaction(fn (): array => $this->mergeGroup($group));
+        foreach ($work as $item) {
+            if ($loserBudget <= 0) {
+                break;
+            }
 
-            if ($result['deleted_users'] > 0) {
+            $result = $this->mergeGroup($item['sorted'], $item['losers']->take($loserBudget)->values(), $skipUserIds);
+            $deletedUsers += $result['deleted_users'];
+            $reassignedOrders += $result['reassigned_orders'];
+            $skippedUserIds = array_merge($skippedUserIds, $result['skipped_user_ids']);
+            $errors = array_merge($errors, $result['errors']);
+            $loserBudget -= $result['deleted_users'] + count($result['skipped_user_ids']);
+
+            if ($result['fully_merged']) {
                 $mergedGroups++;
-                $deletedUsers += $result['deleted_users'];
-                $reassignedOrders += $result['reassigned_orders'];
+            }
 
-                if (count($samples) < 8) {
-                    $samples[] = PhoneNumber::display((string) $normalizedPhone)
-                        .' → kept #'.$result['keeper_id']
-                        .' (removed '.$result['deleted_users'].')';
-                }
+            if ($result['deleted_users'] > 0 && count($samples) < 8) {
+                $samples[] = $this->sampleLine(
+                    $item['phone'],
+                    $result['keeper_id'],
+                    collect($result['removed_user_ids']),
+                );
             }
         }
 
-        $remaining = $this->duplicateGroupCount();
+        $allSkip = array_values(array_unique(array_merge($skipUserIds, $skippedUserIds)));
+        $remaining = $recountRemaining
+            ? $this->duplicateGroups()
+                ->filter(function (Collection $group) use ($allSkip): bool {
+                    $sorted = $group->sortByDesc('id')->values();
+
+                    return $sorted->slice(1)->contains(
+                        fn (User $user): bool => ! in_array((int) $user->id, $allSkip, true)
+                    );
+                })
+                ->count()
+            : (count($work) === 0 ? 0 : max(0, $groups->count() - $mergedGroups));
 
         return [
-            'scanned_groups' => $groups->count(),
+            'scanned_groups' => count($work),
             'merged_groups' => $mergedGroups,
             'deleted_users' => $deletedUsers,
             'reassigned_orders' => $reassignedOrders,
             'remaining_groups' => $remaining,
-            'done' => $remaining === 0,
+            'done' => count($work) === 0 || $remaining === 0,
             'samples' => $samples,
+            'skipped_user_ids' => array_values(array_unique($skippedUserIds)),
+            'errors' => $errors,
         ];
     }
 
     /**
-     * @param  Collection<int, User>  $group
-     * @return array{keeper_id: int, deleted_users: int, reassigned_orders: int}
+     * @param  Collection<int, User>  $sorted
+     * @param  Collection<int, User>  $losers
+     * @param  list<int>  $skipUserIds
+     * @return array{
+     *     keeper_id: int,
+     *     deleted_users: int,
+     *     reassigned_orders: int,
+     *     fully_merged: bool,
+     *     skipped_user_ids: list<int>,
+     *     errors: list<string>,
+     *     removed_user_ids: list<int>
+     * }
      */
-    private function mergeGroup(Collection $group): array
+    private function mergeGroup(Collection $sorted, Collection $losers, array $skipUserIds): array
     {
-        $sorted = $group->sortByDesc('id')->values();
         $keeper = User::query()->findOrFail((int) $sorted->first()->id);
-        $losers = $sorted->slice(1)->values();
-
         $deleted = 0;
         $ordersMoved = 0;
+        $skipped = [];
+        $errors = [];
+        $removedIds = [];
 
         foreach ($losers as $loserStub) {
-            $loser = User::query()->find((int) $loserStub->id);
+            $loserId = (int) $loserStub->id;
 
-            if (! $loser || (int) $loser->id === (int) $keeper->id) {
+            if ($loserId === (int) $keeper->id || in_array($loserId, $skipUserIds, true)) {
                 continue;
             }
 
-            $ordersMoved += $this->reassignUserOwnedRows($loser, $keeper);
-            $this->absorbProfileFields($keeper, $loser);
-            $passwordHash = $loser->getRawOriginal('password');
-            $loser->delete();
-            $deleted++;
+            try {
+                $ordersMoved += DB::transaction(function () use ($keeper, $loserId): int {
+                    $loser = User::query()->find($loserId);
 
-            if ($keeper->getRawOriginal('password') === null && filled($passwordHash)) {
-                DB::table('users')->where('id', $keeper->id)->update(['password' => $passwordHash]);
-                $keeper->refresh();
+                    if (! $loser || (int) $loser->id === (int) $keeper->id) {
+                        return 0;
+                    }
+
+                    $moved = $this->reassignUserOwnedRows($loser, $keeper);
+                    $this->absorbProfileFields($keeper, $loser);
+                    $passwordHash = $loser->getRawOriginal('password');
+                    $this->detachLeftoverUserRows($loser);
+                    $loser->delete();
+
+                    if ($keeper->getRawOriginal('password') === null && filled($passwordHash)) {
+                        DB::table('users')->where('id', $keeper->id)->update(['password' => $passwordHash]);
+                        $keeper->refresh();
+                    }
+
+                    $keeper->save();
+
+                    return $moved;
+                });
+
+                $deleted++;
+                $removedIds[] = $loserId;
+            } catch (Throwable $e) {
+                report($e);
+                $skipped[] = $loserId;
+                $errors[] = 'User #'.$loserId.': '.$e->getMessage();
             }
         }
 
-        $displayPhone = PhoneNumber::display((string) $keeper->phone);
-        if (PhoneNumber::isValidDisplayMobile($displayPhone) && $keeper->phone !== $displayPhone) {
-            if (! User::query()->where('phone', $displayPhone)->where('id', '!=', $keeper->id)->exists()) {
-                $keeper->phone = $displayPhone;
-            }
-        }
+        $remainingLosers = $sorted->slice(1)->filter(function (User $user) use ($removedIds, $skipUserIds, $skipped): bool {
+            $id = (int) $user->id;
 
-        $keeper->save();
+            if (in_array($id, $removedIds, true) || in_array($id, $skipUserIds, true) || in_array($id, $skipped, true)) {
+                return false;
+            }
+
+            return User::query()->whereKey($id)->exists();
+        });
+
+        $fullyMerged = $remainingLosers->isEmpty() && $deleted > 0 && $skipped === [];
+
+        if ($fullyMerged) {
+            $this->canonicalizeKeeperPhone($keeper);
+        }
 
         return [
             'keeper_id' => (int) $keeper->id,
             'deleted_users' => $deleted,
             'reassigned_orders' => $ordersMoved,
+            'fully_merged' => $fullyMerged,
+            'skipped_user_ids' => $skipped,
+            'errors' => $errors,
+            'removed_user_ids' => $removedIds,
         ];
+    }
+
+    private function canonicalizeKeeperPhone(User $keeper): void
+    {
+        $displayPhone = PhoneNumber::display((string) $keeper->phone);
+
+        if (! PhoneNumber::isValidDisplayMobile($displayPhone) || $keeper->phone === $displayPhone) {
+            return;
+        }
+
+        $taken = User::query()
+            ->where('phone', $displayPhone)
+            ->where('id', '!=', $keeper->id)
+            ->exists();
+
+        if ($taken) {
+            return;
+        }
+
+        $keeper->phone = $displayPhone;
+        $keeper->save();
     }
 
     private function reassignUserOwnedRows(User $loser, User $keeper): int
@@ -224,6 +349,29 @@ class CustomerDuplicateMergeService
         $this->reassignUniqueRows('expense_assistant_dismissals', $loserId, $keeperId, 'dedupe_key');
 
         return $ordersMoved;
+    }
+
+    private function detachLeftoverUserRows(User $loser): void
+    {
+        $loserId = (int) $loser->id;
+
+        if (method_exists($loser, 'roles')) {
+            $loser->roles()->detach();
+        }
+
+        if (method_exists($loser, 'permissions')) {
+            $loser->permissions()->detach();
+        }
+
+        if (Schema::hasTable('sessions') && Schema::hasColumn('sessions', 'user_id')) {
+            DB::table('sessions')->where('user_id', $loserId)->delete();
+        }
+
+        if (filled($loser->email)
+            && Schema::hasTable('password_reset_tokens')
+            && Schema::hasColumn('password_reset_tokens', 'email')) {
+            DB::table('password_reset_tokens')->where('email', $loser->email)->delete();
+        }
     }
 
     private function reassignTable(string $table, int $loserId, int $keeperId): void
@@ -290,5 +438,20 @@ class CustomerDuplicateMergeService
         if (! $keeper->is_active && $loser->is_active) {
             $keeper->is_active = true;
         }
+    }
+
+    /**
+     * @param  Collection<int, mixed>  $loserIds
+     */
+    private function sampleLine(string $normalizedPhone, int $keeperId, Collection $loserIds): string
+    {
+        $ids = $loserIds->map(fn ($id): int => (int) $id)->values();
+        $shown = $ids->take(3)->implode(', ');
+        $extra = $ids->count() - 3;
+        $remove = $extra > 0 ? $shown.', +'.$extra.' more' : $shown;
+
+        return PhoneNumber::display($normalizedPhone)
+            .' → keep #'.$keeperId
+            .' (remove '.$remove.')';
     }
 }

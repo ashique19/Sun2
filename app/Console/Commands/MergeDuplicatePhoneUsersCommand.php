@@ -46,17 +46,23 @@ class MergeDuplicatePhoneUsersCommand extends Command
         $mergedGroups = 0;
         $deletedUsers = 0;
         $reassignedOrders = 0;
+        $skipUserIds = [];
 
         do {
-            $result = $merger->mergeNextBatch($limit);
+            $result = $merger->mergeNextBatch($limit, skipUserIds: $skipUserIds);
             $mergedGroups += $result['merged_groups'];
             $deletedUsers += $result['deleted_users'];
             $reassignedOrders += $result['reassigned_orders'];
+            $skipUserIds = array_values(array_unique(array_merge($skipUserIds, $result['skipped_user_ids'])));
 
             foreach ($result['samples'] as $sample) {
                 $this->line('  … '.$sample);
             }
-        } while (! $result['done'] && ! $this->option('once') && $result['merged_groups'] > 0);
+
+            foreach ($result['errors'] as $error) {
+                $this->warn('  '.$error);
+            }
+        } while (! $result['done'] && ! $this->option('once') && ($result['merged_groups'] > 0 || $result['deleted_users'] > 0));
 
         $this->table(
             ['Metric', 'Count'],

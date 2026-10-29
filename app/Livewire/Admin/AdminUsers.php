@@ -84,6 +84,15 @@ class AdminUsers extends Component
 
     public bool $duplicateMergeRunning = false;
 
+    public int $duplicateMergeMergedGroups = 0;
+
+    public int $duplicateMergeDeletedUsers = 0;
+
+    public int $duplicateMergeReassignedOrders = 0;
+
+    /** @var list<int> */
+    public array $duplicateMergeSkippedUserIds = [];
+
     /**
      * @var array{groups: int, users_to_remove: int, orders_to_move: int, samples: list<string>, done: bool}
      */
@@ -480,6 +489,10 @@ class AdminUsers extends Component
         $this->duplicateMergeModalOpen = true;
         $this->duplicateMergeLoading = true;
         $this->duplicateMergeRunning = false;
+        $this->duplicateMergeMergedGroups = 0;
+        $this->duplicateMergeDeletedUsers = 0;
+        $this->duplicateMergeReassignedOrders = 0;
+        $this->duplicateMergeSkippedUserIds = [];
         $this->error = null;
         $this->js('document.body.classList.add("overflow-hidden")');
         $this->loadDuplicateMergePreview();
@@ -512,37 +525,96 @@ class AdminUsers extends Component
     {
         AdminAccess::ensureStaffAdmin();
 
-        if ($this->segment !== 'customers' || ! $this->duplicateMergeModalOpen) {
+        if ($this->segment !== 'customers' || ! $this->duplicateMergeModalOpen || $this->duplicateMergeRunning) {
             return;
         }
 
         $this->duplicateMergeRunning = true;
+        $this->duplicateMergeMergedGroups = 0;
+        $this->duplicateMergeDeletedUsers = 0;
+        $this->duplicateMergeReassignedOrders = 0;
         $this->error = null;
         $this->message = null;
 
-        $merger ??= app(CustomerDuplicateMergeService::class);
-        $mergedGroups = 0;
-        $deletedUsers = 0;
-        $reassignedOrders = 0;
+        $this->runDuplicateMergeTick($merger);
+    }
 
-        do {
-            $result = $merger->mergeNextBatch();
-            $mergedGroups += $result['merged_groups'];
-            $deletedUsers += $result['deleted_users'];
-            $reassignedOrders += $result['reassigned_orders'];
-        } while (! $result['done'] && $result['merged_groups'] > 0);
+    public function tickDuplicateMerge(?CustomerDuplicateMergeService $merger = null): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if ($this->segment !== 'customers' || ! $this->duplicateMergeModalOpen || ! $this->duplicateMergeRunning) {
+            return;
+        }
+
+        $this->runDuplicateMergeTick($merger);
+    }
+
+    private function runDuplicateMergeTick(?CustomerDuplicateMergeService $merger = null): void
+    {
+        $merger ??= app(CustomerDuplicateMergeService::class);
+
+        try {
+            $result = $merger->mergeNextBatch(
+                CustomerDuplicateMergeService::UI_BATCH_SIZE,
+                CustomerDuplicateMergeService::MAX_LOSERS_PER_BATCH,
+                false,
+                $this->duplicateMergeSkippedUserIds,
+            );
+        } catch (\Throwable $e) {
+            report($e);
+            $this->duplicateMergeRunning = false;
+            $this->error = 'Merge stopped unexpectedly. Click Merge now to continue from where it left off.';
+
+            return;
+        }
+
+        $this->duplicateMergeMergedGroups += $result['merged_groups'];
+        $this->duplicateMergeDeletedUsers += $result['deleted_users'];
+        $this->duplicateMergeReassignedOrders += $result['reassigned_orders'];
+        $this->duplicateMergeSkippedUserIds = array_values(array_unique(array_merge(
+            $this->duplicateMergeSkippedUserIds,
+            $result['skipped_user_ids'],
+        )));
+
+        if ($result['samples'] !== []) {
+            $this->duplicateMergePreview['samples'] = $result['samples'];
+        }
+
+        $this->duplicateMergePreview['users_to_remove'] = max(
+            0,
+            $this->duplicateMergePreview['users_to_remove'] - $result['deleted_users'],
+        );
+        $this->duplicateMergePreview['orders_to_move'] = max(
+            0,
+            $this->duplicateMergePreview['orders_to_move'] - $result['reassigned_orders'],
+        );
+        $this->duplicateMergePreview['groups'] = max(
+            0,
+            $this->duplicateMergePreview['groups'] - $result['merged_groups'],
+        );
+        $this->duplicateMergePreview['done'] = $result['done'];
+
+        if (! $result['done']) {
+            return;
+        }
 
         $this->duplicateMergePreview = $merger->preview();
         $this->duplicateMergeRunning = false;
 
-        if ($mergedGroups === 0) {
+        if ($this->duplicateMergeMergedGroups === 0 && $this->duplicateMergeDeletedUsers === 0) {
             $this->message = 'No duplicate phone users to merge.';
 
             return;
         }
 
-        $this->message = 'Merged '.$mergedGroups.' phone group(s): moved '.$reassignedOrders
-            .' order(s) and removed '.$deletedUsers.' extra user(s).';
+        $this->message = 'Merged '.$this->duplicateMergeMergedGroups.' phone group(s): moved '
+            .$this->duplicateMergeReassignedOrders.' order(s) and removed '
+            .$this->duplicateMergeDeletedUsers.' extra user(s).';
+
+        if ($this->duplicateMergeSkippedUserIds !== [] && ! $this->duplicateMergePreview['done']) {
+            $this->error = 'Some extra users could not be deleted. Remaining duplicates are listed — you can try Merge now again.';
+        }
     }
 
     public function sendPromoSms(PromotionalSmsService $promotionalSms): void

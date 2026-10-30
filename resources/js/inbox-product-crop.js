@@ -42,17 +42,24 @@ const registerInboxProductCrop = () => {
 
             this.cropper = new Cropper(image, {
                 viewMode: 1,
-                dragMode: 'move',
+                dragMode: 'crop',
+                cropBoxMovable: true,
+                cropBoxResizable: true,
                 autoCropArea: 0.85,
                 responsive: true,
                 background: false,
                 // Keep Cropper inside the fixed-height wrapper so tall chat
                 // images cannot blow the product modal past the viewport.
                 checkOrientation: false,
+                cropstart: (event) => this.holdPointer(event),
+                ready: () => {
+                    this.safeResize();
+                    this.applySuggestionIfReady();
+                },
             });
 
             this.$nextTick(() => {
-                this.cropper?.resize();
+                this.safeResize();
                 this.applySuggestionIfReady();
             });
         },
@@ -92,6 +99,14 @@ const registerInboxProductCrop = () => {
                 return;
             }
 
+            // A near-full-frame box sits on the overflow:hidden edge, so drag/resize
+            // handles are unusable (viewMode 1 also refuses to move it).
+            if (Number(this.suggestion.width) >= 0.92 && Number(this.suggestion.height) >= 0.92) {
+                this.suggestionApplied = true;
+
+                return;
+            }
+
             this.cropper.setData({
                 x: this.suggestion.left * image.naturalWidth,
                 y: this.suggestion.top * image.naturalHeight,
@@ -115,6 +130,27 @@ const registerInboxProductCrop = () => {
             if (this.cropper) {
                 this.cropper.destroy();
                 this.cropper = null;
+            }
+        },
+
+        safeResize() {
+            try {
+                this.cropper?.resize();
+            } catch {
+                // Cropper.ready can fire while Livewire is remorphing the modal.
+            }
+        },
+
+        holdPointer(event) {
+            const original = event?.originalEvent;
+            if (! original?.target?.setPointerCapture || original.pointerId == null) {
+                return;
+            }
+
+            try {
+                original.target.setPointerCapture(original.pointerId);
+            } catch {
+                // Capture is best-effort; Cropper still listens on document.
             }
         },
 

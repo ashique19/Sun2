@@ -62,7 +62,7 @@
             @foreach ($socialLinks as $routeName => $label)
                 @php
                     $isActive = match ($routeName) {
-                        'admin.inbox' => request()->routeIs('admin.inbox') && ! request()->routeIs('admin.inbox.quick-replies'),
+                        'admin.inbox' => request()->routeIs('admin.inbox', 'admin.inbox.thread'),
                         'admin.inbox.quick-replies' => request()->routeIs('admin.inbox.quick-replies'),
                         'admin.social-posts' => request()->routeIs('admin.social-posts*'),
                         default => request()->routeIs($routeName),
@@ -81,7 +81,7 @@
                 @foreach ($socialLinks as $routeName => $label)
                     @php
                         $isActive = match ($routeName) {
-                            'admin.inbox' => request()->routeIs('admin.inbox') && ! request()->routeIs('admin.inbox.quick-replies'),
+                            'admin.inbox' => request()->routeIs('admin.inbox', 'admin.inbox.thread'),
                             'admin.inbox.quick-replies' => request()->routeIs('admin.inbox.quick-replies'),
                             'admin.social-posts' => request()->routeIs('admin.social-posts*'),
                             default => request()->routeIs($routeName),

@@ -313,6 +313,20 @@ body:has(.mobile-nav-toggle:checked) {
     }
 }
 
+/* Inbox croppers live in a scrollable modal; keep pointer drags on the crop box. */
+[data-inbox-cropper-stage],
+[data-inbox-cropper-stage] .cropper-container,
+[data-inbox-cropper-stage] .cropper-wrap-box,
+[data-inbox-cropper-stage] .cropper-canvas,
+[data-inbox-cropper-stage] .cropper-drag-box,
+[data-inbox-cropper-stage] .cropper-crop-box,
+[data-inbox-cropper-stage] .cropper-modal,
+[data-inbox-cropper-stage] .cropper-face,
+[data-inbox-cropper-stage] .cropper-line,
+[data-inbox-cropper-stage] .cropper-point {
+    touch-action: none;
+}
+
 [data-image-retry-wrap]:not([data-image-loading]) [data-image-loading-spinner] {
     display: none;
 }

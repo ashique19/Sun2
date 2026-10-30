@@ -1396,7 +1396,6 @@
                         class="relative flex w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-[#E7DFCF] bg-white shadow-2xl sm:rounded-2xl"
                         style="max-height: calc(100vh - 1rem); max-height: calc(100dvh - 1rem); max-height: calc(100svh - 1rem); min-height: 0;"
                         @click.stop
-                        @mousedown.stop
                     >
                         <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#E7DFCF] px-4 py-3">
                             <div class="min-w-0">
@@ -1465,14 +1464,16 @@
                                 >
                                     <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Crop chat image</p>
                                     <div
-                                        class="relative overflow-hidden rounded-lg bg-black/5"
-                                        style="height: min(52vh, 26rem); max-height: min(52vh, 26rem);"
+                                        data-inbox-cropper-stage
+                                        class="relative overflow-hidden rounded-lg bg-black/5 p-2"
+                                        style="height: min(52vh, 26rem); max-height: min(52vh, 26rem); touch-action: none; overscroll-behavior: none;"
                                     >
                                         <img
                                             x-ref="cropImage"
                                             src="{{ route('admin.inbox.media', $mappingMessage) }}"
                                             alt="Chat image"
-                                            class="block h-full w-full object-contain"
+                                            class="block max-w-full"
+                                            draggable="false"
                                         >
                                     </div>
                                     <div class="mt-2 flex flex-wrap gap-2">
@@ -1552,7 +1553,6 @@
                         class="relative flex w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-[#E7DFCF] bg-white shadow-2xl sm:rounded-2xl"
                         style="max-height: calc(100vh - 1rem); max-height: calc(100dvh - 1rem); max-height: calc(100svh - 1rem); min-height: 0;"
                         @click.stop
-                        @mousedown.stop
                         wire:ignore.self
                         x-data="inboxImageEdit(@js(route('admin.inbox.media', $imageEditMessage)), @js($this->getId()))"
                     >
@@ -1566,14 +1566,16 @@
 
                         <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4" style="-webkit-overflow-scrolling: touch;">
                             <div
-                                class="relative overflow-hidden rounded-lg bg-black/5"
-                                style="height: min(42vh, 22rem); max-height: min(42vh, 22rem);"
+                                data-inbox-cropper-stage
+                                class="relative overflow-hidden rounded-lg bg-black/5 p-2"
+                                style="height: min(42vh, 22rem); max-height: min(42vh, 22rem); touch-action: none; overscroll-behavior: none;"
                             >
                                 <img
                                     x-ref="editImage"
                                     src="{{ route('admin.inbox.media', $imageEditMessage) }}"
                                     alt="Customer image"
-                                    class="block h-full w-full object-contain"
+                                    class="block max-w-full"
+                                    draggable="false"
                                 >
                             </div>
 

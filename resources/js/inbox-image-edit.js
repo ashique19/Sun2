@@ -55,17 +55,24 @@ const registerInboxImageEdit = () => {
 
             this.cropper = new Cropper(image, {
                 viewMode: 1,
-                dragMode: 'move',
+                dragMode: 'crop',
+                cropBoxMovable: true,
+                cropBoxResizable: true,
                 autoCropArea: 0.92,
                 responsive: true,
                 background: false,
                 checkOrientation: false,
+                cropstart: (event) => this.holdPointer(event),
                 cropend: () => this.queuePreview(),
                 zoom: () => this.queuePreview(),
+                ready: () => {
+                    this.safeResize();
+                    this.queuePreview();
+                },
             });
 
             this.$nextTick(() => {
-                this.cropper?.resize();
+                this.safeResize();
                 this.queuePreview();
             });
         },
@@ -74,6 +81,27 @@ const registerInboxImageEdit = () => {
             if (this.cropper) {
                 this.cropper.destroy();
                 this.cropper = null;
+            }
+        },
+
+        safeResize() {
+            try {
+                this.cropper?.resize();
+            } catch {
+                // Cropper.ready can fire while Livewire is remorphing the modal.
+            }
+        },
+
+        holdPointer(event) {
+            const original = event?.originalEvent;
+            if (! original?.target?.setPointerCapture || original.pointerId == null) {
+                return;
+            }
+
+            try {
+                original.target.setPointerCapture(original.pointerId);
+            } catch {
+                // Capture is best-effort; Cropper still listens on document.
             }
         },
 

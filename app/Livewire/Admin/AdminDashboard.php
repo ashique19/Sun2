@@ -367,6 +367,8 @@ class AdminDashboard extends Component
                 'courierChargeAreaLabels' => [],
                 'courierChargeQuickAmounts' => [],
                 'returnHubArrivals' => collect(),
+                'returnHubArrivedCount' => 0,
+                'returnHubEnRouteCount' => 0,
                 'steadfastWebhookInbox' => collect(),
                 'steadfastWebhookSummaries' => [],
                 'dueExpenseReminders' => collect(),
@@ -426,7 +428,10 @@ class AdminDashboard extends Component
             }
         }
 
-        $returnHubArrivals = app(ReturnHubArrivalService::class)->ordersAwaitingReceive();
+        $returnHubService = app(ReturnHubArrivalService::class);
+        $returnHubArrivals = $returnHubService->ordersAwaitingReceive();
+        $returnHubArrivedCount = $returnHubService->countArrivedAtHub();
+        $returnHubEnRouteCount = $returnHubService->countOnTheWay();
 
         $webhookInbox = app(SteadfastWebhookInboxService::class);
         $steadfastWebhookInbox = $webhookInbox->latestIncoming();
@@ -453,6 +458,8 @@ class AdminDashboard extends Component
             'courierChargeAreaLabels' => $courierChargeAreaLabels,
             'courierChargeQuickAmounts' => $courierChargeQuickAmounts,
             'returnHubArrivals' => $returnHubArrivals,
+            'returnHubArrivedCount' => $returnHubArrivedCount,
+            'returnHubEnRouteCount' => $returnHubEnRouteCount,
             'steadfastWebhookInbox' => $steadfastWebhookInbox,
             'steadfastWebhookSummaries' => $steadfastWebhookSummaries,
             'dueExpenseReminders' => $dueExpenseReminders,

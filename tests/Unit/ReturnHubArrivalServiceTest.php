@@ -231,4 +231,16 @@ class ReturnHubArrivalServiceTest extends TestCase
         $this->assertTrue($awaiting->contains('id', $order->id));
         $this->assertNotNull($order->fresh()->return_hub_arrived_at);
     }
+
+    #[Test]
+    public function counts_parcels_arrived_at_hub_and_on_the_way(): void
+    {
+        $arrived = $this->returnPendingOrder(['order_number' => 'RH-AT-HUB']);
+        $arrived->forceFill(['return_hub_arrived_at' => now()])->save();
+        $this->returnPendingOrder(['order_number' => 'RH-ON-WAY-1']);
+        $this->returnPendingOrder(['order_number' => 'RH-ON-WAY-2']);
+
+        $this->assertSame(1, $this->service()->countArrivedAtHub());
+        $this->assertSame(2, $this->service()->countOnTheWay());
+    }
 }

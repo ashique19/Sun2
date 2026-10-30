@@ -173,6 +173,28 @@ class ReturnHubArrivalService
     }
 
     /**
+     * Has Return parcels already stamped at the Rampura hub.
+     */
+    public function countArrivedAtHub(): int
+    {
+        return Order::query()
+            ->where('has_return', true)
+            ->whereNotNull('return_hub_arrived_at')
+            ->count();
+    }
+
+    /**
+     * Has Return parcels that have not reached the Rampura hub yet.
+     */
+    public function countOnTheWay(): int
+    {
+        return Order::query()
+            ->where('has_return', true)
+            ->whereNull('return_hub_arrived_at')
+            ->count();
+    }
+
+    /**
      * Has Return orders whose parcels have arrived at the Rampura hub
      * (exchange, H/R-only, and product return-pending).
      *

@@ -103,8 +103,9 @@ class AdminDashboardReturnHubArrivalTest extends TestCase
         $stockBefore = (int) Product::query()->whereKey($productId)->value('stock_quantity');
 
         Livewire::test(AdminDashboard::class)
-            ->assertSee('Return parcels at Steadfast hub')
-            ->assertSee('arrived at Steadfast Rampura hub')
+            ->assertSee('Return parcels:')
+            ->assertSee('1 arrived at Steadfast Rampura hub.')
+            ->assertSee('0 on the way.')
             ->assertSee($order->name.' ('.$order->area.')')
             ->assertSee('#'.$order->order_number)
             ->assertSee('Mark as received')
@@ -161,7 +162,8 @@ class AdminDashboardReturnHubArrivalTest extends TestCase
         ]);
 
         Livewire::test(AdminDashboard::class)
-            ->assertSee('Return parcels at Steadfast hub')
+            ->assertSee('Return parcels:')
+            ->assertSee('1 arrived at Steadfast Rampura hub.')
             ->assertSeeHtml('wire:key="return-hub-arrival-'.$order->id.'"')
             ->assertSee('Exchange')
             ->call('markReturnHubReceived', $order->id)
@@ -216,5 +218,67 @@ class AdminDashboardReturnHubArrivalTest extends TestCase
         ])->assertOk();
 
         $this->assertNotNull($order->fresh()->return_hub_arrived_at);
+    }
+
+    #[Test]
+    public function dashboard_counts_return_parcels_on_the_way_and_at_the_hub(): void
+    {
+        $this->actingAs($this->adminUser());
+        $atHub = $this->returnAtHubOrder();
+
+        $enRoute = Order::query()->create([
+            'order_number' => 'HUB-WAY',
+            'name' => 'On The Way Customer',
+            'phone' => '01710000006',
+            'address' => 'Dhaka',
+            'status' => 'returned',
+            'subtotal' => 400,
+            'total' => 400,
+            'has_return' => true,
+            'placed_at' => now()->subDays(2),
+        ]);
+
+        OrderProduct::query()->create([
+            'order_id' => $enRoute->id,
+            'name' => 'Returning Scarf',
+            'quantity' => 1,
+            'returned_quantity' => 1,
+            'to_be_returned' => true,
+            'return_received' => false,
+            'price' => 400,
+            'purchase_price' => 150,
+            'line_total' => 400,
+        ]);
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSee('Return parcels:')
+            ->assertSee('1 arrived at Steadfast Rampura hub.')
+            ->assertSee('1 on the way.')
+            ->assertSee($atHub->name.' ('.$atHub->area.')')
+            ->assertDontSee($enRoute->name);
+    }
+
+    #[Test]
+    public function dashboard_shows_on_the_way_count_when_no_parcels_are_at_the_hub(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        Order::query()->create([
+            'order_number' => 'HUB-ONLY-WAY',
+            'name' => 'Transit Only Customer',
+            'phone' => '01710000007',
+            'address' => 'Dhaka',
+            'status' => 'returned',
+            'subtotal' => 300,
+            'total' => 300,
+            'has_return' => true,
+            'placed_at' => now()->subDay(),
+        ]);
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSee('Return parcels:')
+            ->assertSee('0 arrived at Steadfast Rampura hub.')
+            ->assertSee('1 on the way.')
+            ->assertDontSee('Mark as received');
     }
 }

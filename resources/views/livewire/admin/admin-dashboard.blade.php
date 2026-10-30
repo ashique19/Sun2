@@ -270,15 +270,16 @@
         <div class="mb-4 rounded-lg bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">{{ $returnHubMessage }}</div>
     @endif
 
-    @if (($returnHubArrivals ?? collect())->isNotEmpty())
+    @if (($returnHubArrivedCount ?? 0) > 0 || ($returnHubEnRouteCount ?? 0) > 0)
         <div class="mb-6 rounded-xl border border-sky-200 bg-white overflow-hidden">
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-sky-100 px-4 py-3">
                 <div class="min-w-0">
-                    <h2 class="text-sm font-semibold text-sky-950">Return parcels at Steadfast hub</h2>
+                    <h2 class="text-sm font-semibold text-sky-950">Return parcels:</h2>
                     <p class="text-xs text-sky-800/80">
-                        {{ $returnHubArrivals->count() }}{{ $returnHubArrivals->count() >= 50 ? '+' : '' }}
-                        Has Return {{ $returnHubArrivals->count() === 1 ? 'parcel has' : 'parcels have' }}
-                        arrived at Steadfast Rampura hub — mark received (restores stock when return qty is set, clears H/R)
+                        {{ (int) $returnHubArrivedCount }} arrived at Steadfast Rampura hub.
+                    </p>
+                    <p class="text-xs text-sky-800/80">
+                        {{ (int) $returnHubEnRouteCount }} on the way.
                     </p>
                 </div>
                 <a href="{{ route('admin.orders.return-pending') }}"
@@ -287,6 +288,7 @@
                 </a>
             </div>
 
+            @if (($returnHubArrivals ?? collect())->isNotEmpty())
             <div class="divide-y divide-[#EFE7D6]">
                 @foreach ($returnHubArrivals as $order)
                     <div wire:key="return-hub-arrival-{{ $order->id }}" class="space-y-2.5 px-4 py-3 hover:bg-[#FAF6EF]/50">
@@ -354,6 +356,7 @@
                     </div>
                 @endforeach
             </div>
+            @endif
         </div>
     @endif
 

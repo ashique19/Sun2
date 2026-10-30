@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AdminAiCandidateFileController;
 use App\Http\Controllers\Admin\AdminCustomerExportController;
 use App\Http\Controllers\Admin\AdminInboxPricedImageController;
+use App\Http\Controllers\Admin\AdminInboxSnapshotController;
 use App\Http\Controllers\Admin\AdminOrderCourierStatusController;
 use App\Http\Controllers\Admin\AdminOrderSteadfastStatsController;
 use App\Http\Controllers\Admin\AdminProductImageFileController;
@@ -271,6 +272,8 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
             ->name('inbox.image-match');
         Route::post('/inbox/send-priced-image', AdminInboxPricedImageController::class)
             ->name('inbox.send-priced-image');
+        Route::get('/inbox/snapshot', AdminInboxSnapshotController::class)
+            ->name('inbox.snapshot');
         Route::get('/issues', AdminIssues::class)->name('issues.index');
         Route::get('/orders/draft-ai', AdminOrders::class)->defaults('segment', 'draft-ai')->name('orders.draft-ai');
         Route::get('/orders/dispatched', AdminOrders::class)->defaults('segment', 'dispatched')->name('orders.dispatched');

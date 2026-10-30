@@ -7,6 +7,7 @@ use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Models\Product;
 use App\Services\Admin\InboxPricedImageSender;
+use App\Services\Admin\InboxSnapshotBuilder;
 use App\Services\Channels\ChannelInboxDiagnostics;
 use App\Services\Channels\ChannelInboxPurgeService;
 use App\Services\Channels\ChannelMessageImageMatchService;
@@ -2488,6 +2489,9 @@ class AdminInbox extends Component
         return view('livewire.admin.admin-inbox', [
             'conversations' => $conversations,
             'selectedConversation' => $selectedConversation,
+            'inboxOpenThread' => $selectedConversation
+                ? app(InboxSnapshotBuilder::class)->thread($selectedConversation, $lookbackHours)
+                : null,
             'replyToMessage' => $replyToMessage,
             'mappingMessage' => $mappingMessage,
             'imageEditMessage' => $imageEditMessage,

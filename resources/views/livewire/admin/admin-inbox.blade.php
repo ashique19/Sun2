@@ -6,6 +6,12 @@
 
 <div
     x-data
+    data-inbox-snapshot-root
+    data-inbox-user-id="{{ auth()->id() }}"
+    data-inbox-snapshot-url="{{ route('admin.inbox.snapshot') }}"
+    @if ($inboxOpenThread)
+        data-inbox-open-thread="{{ e(json_encode($inboxOpenThread, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) }}"
+    @endif
     data-inbox-priced-image-url="{{ route('admin.inbox.send-priced-image') }}"
     data-inbox-priced-image-wire="{{ $this->getId() }}"
     data-inbox-priced-image-conversation="{{ $selectedConversationId ?? '' }}"
@@ -519,6 +525,8 @@
                     @endphp
                     <button type="button"
                         wire:key="inbox-conversation-{{ $conversation->id }}"
+                        data-inbox-conversation-id="{{ $conversation->id }}"
+                        data-inbox-conversation-name="{{ $displayName }}"
                         wire:loading.class="opacity-60"
                         wire:target="selectConversation({{ $conversation->id }})"
                         @click="typeof window.__inboxPrepareThreadHistory === 'function' && window.__inboxPrepareThreadHistory($wire.mobileThreadOpen, {{ $conversation->id }}); $wire.selectConversation({{ $conversation->id }})"
@@ -591,13 +599,30 @@
                 ? 'inset-0 flex bg-white'
                 : 'inset-x-0 bottom-0 hidden bg-[#F7F3EA] xl:flex xl:bg-white',
         ])>
+            <style>
+                [data-inbox-skip-opening] [data-inbox-opening-overlay] { display: none !important; }
+            </style>
             <div
+                data-inbox-opening-overlay
                 wire:loading.delay.shortest
                 wire:target="selectConversation"
                 class="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-[1px] xl:rounded-2xl"
                 aria-live="polite"
                 aria-busy="true">
                 <p class="text-sm font-medium text-[#6B6459]">Opening conversation…</p>
+            </div>
+            <div
+                data-inbox-cache-thread
+                hidden
+                aria-hidden="true"
+                class="absolute inset-0 z-20 flex flex-col bg-white xl:rounded-2xl"
+            >
+                <div class="shrink-0 border-b border-[#E7DFCF] bg-white px-3 py-2.5 xl:px-4 xl:py-3">
+                    <h2 data-inbox-cache-thread-name class="truncate text-base font-semibold text-[#1E1E1E]"></h2>
+                    <p data-inbox-cache-thread-window class="mt-0.5 truncate text-[11px] text-[#8C8474]"></p>
+                </div>
+                <div data-inbox-cache-thread-messages class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3 xl:px-4 xl:py-4"></div>
+                <p class="shrink-0 border-t border-[#E7DFCF] px-3 py-2 text-[11px] text-[#8C8474]">Updating from server…</p>
             </div>
 
             @if ($selectedConversation)

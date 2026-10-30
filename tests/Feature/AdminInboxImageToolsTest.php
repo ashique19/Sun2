@@ -145,7 +145,46 @@ class AdminInboxImageToolsTest extends TestCase
             ->assertSet('mappingField', 'product')
             ->assertSet('mappingMode', 'tag')
             ->assertSeeHtml('data-inbox-product-map-modal')
-            ->assertSee('Tag product on photo');
+            ->assertSee('Tag product on photo')
+            ->assertSeeHtml('data-inbox-cropper-stage')
+            ->assertSeeHtml('touch-action: none')
+            ->assertSeeHtml('overscroll-behavior: none')
+            ->assertDontSeeHtml('class="block h-full w-full object-contain"');
+    }
+
+    #[Test]
+    public function thread_route_loads_cropper_scripts_and_inbox_shell(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $this->get(route('admin.inbox.thread', ['thread' => $conversation->id]))
+            ->assertOk()
+            ->assertSee($conversation->customer_name)
+            ->assertSee('inbox-product-crop', false)
+            ->assertSee('inbox-image-edit', false)
+            ->assertSeeHtml('h-dvh');
+    }
+
+    #[Test]
+    public function cropper_scripts_use_draggable_crop_selection(): void
+    {
+        $crop = file_get_contents(resource_path('js/inbox-product-crop.js'));
+        $edit = file_get_contents(resource_path('js/inbox-image-edit.js'));
+
+        $this->assertIsString($crop);
+        $this->assertIsString($edit);
+        $this->assertStringContainsString("dragMode: 'crop'", $crop);
+        $this->assertStringContainsString('cropBoxMovable: true', $crop);
+        $this->assertStringContainsString('cropBoxResizable: true', $crop);
+        $this->assertStringContainsString('holdPointer', $crop);
+        $this->assertStringContainsString('safeResize', $crop);
+        $this->assertStringContainsString('setPointerCapture', $crop);
+        $this->assertStringContainsString('0.92', $crop);
+        $this->assertStringNotContainsString("dragMode: 'move'", $crop);
+        $this->assertStringContainsString("dragMode: 'crop'", $edit);
+        $this->assertStringContainsString('cropBoxMovable: true', $edit);
+        $this->assertStringContainsString('setPointerCapture', $edit);
     }
 
     #[Test]

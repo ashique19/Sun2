@@ -224,8 +224,9 @@
                     <div>
                         <h2 class="text-lg font-semibold">Withdraw from {{ $withdrawCourierName }}</h2>
                         <p class="mt-1 text-xs text-[#8C8474]">
+                            Receivable: &#2547; {{ number_format((float) $withdrawReceivable, 0) }}.
                             Book balance: &#2547; {{ number_format((float) $withdrawBookBalance, 0) }}.
-                            Enter the amount you received from the courier.
+                            Amount defaults to receivable; edit if you received a different amount.
                         </p>
                     </div>
                     <button type="button" wire:click="closeWithdraw" class="inline-flex min-h-11 items-center text-sm text-[#8C8474] hover:text-[#1E1E1E] sm:min-h-0">Close</button>

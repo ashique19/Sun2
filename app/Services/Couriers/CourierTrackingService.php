@@ -230,7 +230,7 @@ class CourierTrackingService
     {
         $message = trim((string) ($data['tracking_message'] ?? ''));
         $status = $this->normalizeStatus($data['delivery_status'] ?? $data['status'] ?? null);
-        $rawAt = $data['updated_at'] ?? $fallbackAt;
+        $rawAt = $data['updated_at'] ?? $data['timestamp'] ?? $fallbackAt;
 
         // create_order / API booking payload
         if (isset($data['consignment']) && is_array($data['consignment'])) {
@@ -377,6 +377,11 @@ class CourierTrackingService
         return ucwords(str_replace('_', ' ', $status));
     }
 
+    /**
+     * Courier payloads mix Eloquent UTC instants with Steadfast/Pathao wall-clock
+     * strings. APP_TIMEZONE is UTC, so naive ISO `T` datetimes must not be
+     * parsed as UTC — that shifts the blue timeline +6h vs the courier panel.
+     */
     private function parseTimestamp(mixed $value): ?Carbon
     {
         if ($value instanceof Carbon) {
@@ -387,18 +392,52 @@ class CourierTrackingService
             return Carbon::instance($value);
         }
 
+        if (is_int($value) || (is_float($value) && $value == (int) $value)) {
+            return $this->parseUnixTimestamp((int) $value);
+        }
+
         if (! is_string($value) || trim($value) === '') {
             return null;
         }
 
+        $value = trim($value);
+
         try {
-            if (str_contains($value, 'T') || str_ends_with($value, 'Z')) {
+            if (preg_match('/^\d{9,13}$/', $value) === 1) {
+                return $this->parseUnixTimestamp((int) $value);
+            }
+
+            // Honor explicit numeric offsets (+06:00, -00:00, +0600).
+            if (preg_match('/[+-]\d{2}:?\d{2}$/', $value) === 1) {
                 return Carbon::parse($value);
             }
 
+            // Laravel/Steadfast JSON (`…000000Z`) is an honest UTC instant.
+            if (str_ends_with(strtoupper($value), 'Z')) {
+                return Carbon::parse($value);
+            }
+
+            // Naive wall-clock, including ISO `T` without an offset, is Dhaka.
             return Carbon::parse($value, self::DHAKA_TZ);
         } catch (Throwable) {
             return null;
         }
+    }
+
+    private function parseUnixTimestamp(int $value): ?Carbon
+    {
+        if ($value <= 0) {
+            return null;
+        }
+
+        if ($value > 1_000_000_000_000) {
+            $value = (int) floor($value / 1000);
+        }
+
+        if ($value < 1_000_000_000) {
+            return null;
+        }
+
+        return Carbon::createFromTimestamp($value);
     }
 }

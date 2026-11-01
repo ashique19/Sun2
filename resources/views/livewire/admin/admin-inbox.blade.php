@@ -1421,6 +1421,35 @@
                                     placeholder="Name, SKU, or price…"
                                     class="w-full rounded-xl border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
                                     aria-label="Search products">
+                                <div class="mt-2 grid grid-cols-2 gap-2">
+                                    <select wire:model.live="mappingProductCategory"
+                                        class="w-full rounded-xl border border-[#E0D6C2] bg-white px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
+                                        aria-label="Filter by category">
+                                        <option value="">All categories</option>
+                                        @foreach ($mappingProductCategories as $category)
+                                            <option value="{{ $category->id }}">{{ $category->name }}</option>
+                                        @endforeach
+                                    </select>
+                                    <select wire:model.live="mappingProductStock"
+                                        class="w-full rounded-xl border border-[#E0D6C2] bg-white px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
+                                        aria-label="Filter by stock">
+                                        <option value="">Any stock</option>
+                                        <option value="in">In stock</option>
+                                        <option value="out">Out of stock</option>
+                                    </select>
+                                    <input type="text"
+                                        wire:model.live.debounce.250ms="mappingProductPriceMin"
+                                        inputmode="numeric"
+                                        placeholder="Min price"
+                                        class="w-full rounded-xl border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
+                                        aria-label="Minimum price">
+                                    <input type="text"
+                                        wire:model.live.debounce.250ms="mappingProductPriceMax"
+                                        inputmode="numeric"
+                                        placeholder="Max price"
+                                        class="w-full rounded-xl border border-[#E0D6C2] px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"
+                                        aria-label="Maximum price">
+                                </div>
                                 <div class="mt-2 max-h-36 space-y-1.5 overflow-y-auto overscroll-contain sm:max-h-40">
                                     @forelse ($mappingProductSuggestions as $suggestion)
                                         <button type="button"
@@ -1443,7 +1472,7 @@
                                             </div>
                                         </button>
                                     @empty
-                                        @if (trim($mappingProductSearch) !== '')
+                                        @if ($this->mappingProductSearchIsActive())
                                             <p class="text-xs text-[#8C8474]">No products match that search.</p>
                                         @elseif ($mappingMode !== 'tag' && ! $mappingMessage->isImageAttachment())
                                             <button type="button"
@@ -1451,6 +1480,8 @@
                                                 class="w-full rounded-xl border border-dashed border-[#E0D6C2] px-3 py-2 text-left text-xs text-[#6B6459] hover:border-[#C9A227]">
                                                 Use message text as unmatched product
                                             </button>
+                                        @else
+                                            <p class="text-xs text-[#8C8474]">Type at least 2 characters, pick a category, filter by stock, or set a price range.</p>
                                         @endif
                                     @endforelse
                                 </div>

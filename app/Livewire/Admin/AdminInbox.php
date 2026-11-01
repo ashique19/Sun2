@@ -142,6 +142,14 @@ class AdminInbox extends Component
     /** Product search when mapping a message to Products. */
     public string $mappingProductSearch = '';
 
+    public string $mappingProductCategory = '';
+
+    public string $mappingProductStock = '';
+
+    public string $mappingProductPriceMin = '';
+
+    public string $mappingProductPriceMax = '';
+
     /**
      * @var list<array{id: int, name: string, price: float, sku?: ?string, stock_quantity?: int, image_url?: ?string}>
      */
@@ -389,8 +397,7 @@ class AdminInbox extends Component
         $this->mappingSelectedText = $selectedText !== '' ? $selectedText : null;
         $this->mappingField = null;
         $this->mappingMode = 'order';
-        $this->mappingProductSearch = '';
-        $this->mappingProductSuggestions = [];
+        $this->resetMappingProductSearchState();
         $this->clearMappingImageMatchState();
         $this->error = null;
     }
@@ -401,8 +408,7 @@ class AdminInbox extends Component
         $this->mappingSelectedText = null;
         $this->mappingField = null;
         $this->mappingMode = 'order';
-        $this->mappingProductSearch = '';
-        $this->mappingProductSuggestions = [];
+        $this->resetMappingProductSearchState();
         $this->clearMappingImageMatchState();
     }
 
@@ -540,17 +546,65 @@ class AdminInbox extends Component
 
     public function updatedMappingProductSearch(): void
     {
+        $this->refreshMappingProductSuggestions();
+    }
+
+    public function updatedMappingProductCategory(): void
+    {
+        $this->refreshMappingProductSuggestions();
+    }
+
+    public function updatedMappingProductStock(): void
+    {
+        $this->refreshMappingProductSuggestions();
+    }
+
+    public function updatedMappingProductPriceMin(): void
+    {
+        $this->refreshMappingProductSuggestions();
+    }
+
+    public function updatedMappingProductPriceMax(): void
+    {
+        $this->refreshMappingProductSuggestions();
+    }
+
+    public function mappingProductSearchIsActive(): bool
+    {
         $term = trim($this->mappingProductSearch);
-        if (mb_strlen($term) < 2) {
+
+        return mb_strlen($term) >= 2
+            || $this->mappingProductCategory !== ''
+            || $this->mappingProductStock !== ''
+            || $this->normalizedPriceBound($this->mappingProductPriceMin) !== null
+            || $this->normalizedPriceBound($this->mappingProductPriceMax) !== null;
+    }
+
+    public function refreshMappingProductSuggestions(): void
+    {
+        if (! $this->mappingProductSearchIsActive()) {
             $this->mappingProductSuggestions = [];
 
             return;
         }
 
+        $term = trim($this->mappingProductSearch);
+        $priceMin = $this->normalizedPriceBound($this->mappingProductPriceMin);
+        $priceMax = $this->normalizedPriceBound($this->mappingProductPriceMax);
+
+        if ($priceMin !== null && $priceMax !== null && $priceMin > $priceMax) {
+            [$priceMin, $priceMax] = [$priceMax, $priceMin];
+        }
+
         $this->mappingProductSuggestions = Product::query()
             ->published()
             ->with(['images' => fn ($q) => $q->orderBy('sort_order')->limit(1)])
-            ->searchTerm($term)
+            ->when($term !== '', fn ($q) => $q->searchTerm($term))
+            ->when($this->mappingProductCategory !== '', fn ($q) => $q->where('category_id', (int) $this->mappingProductCategory))
+            ->when($this->mappingProductStock === 'in', fn ($q) => $q->where('stock_quantity', '>', 0))
+            ->when($this->mappingProductStock === 'out', fn ($q) => $q->where('stock_quantity', '<=', 0))
+            ->when($priceMin !== null, fn ($q) => $q->where('price', '>=', $priceMin))
+            ->when($priceMax !== null, fn ($q) => $q->where('price', '<=', $priceMax))
             ->orderBy('name')
             ->limit(12)
             ->get()
@@ -1850,9 +1904,18 @@ class AdminInbox extends Component
         $this->orderPanelOpen = false;
         $this->mappingMessageId = null;
         $this->mappingField = null;
-        $this->mappingProductSearch = '';
-        $this->mappingProductSuggestions = [];
+        $this->resetMappingProductSearchState();
         $this->clearMappingImageMatchState();
+    }
+
+    private function resetMappingProductSearchState(): void
+    {
+        $this->mappingProductSearch = '';
+        $this->mappingProductCategory = '';
+        $this->mappingProductStock = '';
+        $this->mappingProductPriceMin = '';
+        $this->mappingProductPriceMax = '';
+        $this->mappingProductSuggestions = [];
     }
 
     private function resetImageTools(): void
@@ -2496,6 +2559,9 @@ class AdminInbox extends Component
             'mappingMessage' => $mappingMessage,
             'imageEditMessage' => $imageEditMessage,
             'pricedSendMessage' => $pricedSendMessage,
+            'mappingProductCategories' => $this->mappingField === ChannelMessageOrderMapper::FIELD_PRODUCT
+                ? Category::query()->orderBy('name')->get(['id', 'name'])
+                : collect(),
             'pricedSendCategories' => $this->isProductPickerOpen()
                 ? Category::query()->orderBy('name')->get(['id', 'name'])
                 : collect(),

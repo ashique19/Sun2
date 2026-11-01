@@ -124,6 +124,32 @@ class ProductImageService
         }
     }
 
+    public function storeFromBinary(Product $product, string $bytes, ?string $alt = null, bool $adminOnly = false): ProductImage
+    {
+        if ($bytes === '') {
+            throw new RuntimeException('Image data is empty.');
+        }
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'pimgbin_');
+        if ($tempPath === false) {
+            throw new RuntimeException('Could not create a temporary file.');
+        }
+
+        $path = $tempPath.'.jpg';
+        @unlink($tempPath);
+        file_put_contents($path, $bytes);
+
+        try {
+            $file = new UploadedFile($path, 'inbox-tag.jpg', 'image/jpeg', null, true);
+
+            return $this->store($product, $file, $alt, $adminOnly);
+        } finally {
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
     public function store(Product $product, UploadedFile $file, ?string $alt = null, bool $adminOnly = false): ProductImage
     {
         $directory = $this->productDirectory($product->id);

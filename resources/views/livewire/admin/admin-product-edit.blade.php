@@ -365,6 +365,16 @@
                     </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
+                    @if ($product?->images->count() >= 2)
+                        <button type="button"
+                            data-make-collage
+                            @click="openCollage()"
+                            :disabled="collageSelected.length < 2 || collageSaving"
+                            class="rounded-full border border-[#C9A227] px-4 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF] disabled:cursor-not-allowed disabled:opacity-50">
+                            Make collage
+                            <span x-show="collageSelected.length > 0" x-text="'(' + collageSelected.length + ')'"></span>
+                        </button>
+                    @endif
                     <button type="button" wire:click="openAiGenerateModal"
                         class="rounded-full border border-[#C9A227] px-4 py-2 text-sm font-medium text-[#C9A227] hover:bg-[#FAF6EF]">
                         Generate with AI
@@ -375,7 +385,12 @@
 
             @if ($product?->images->isNotEmpty())
                 <div>
-                    <h3 class="text-sm font-medium mb-3">Saved images</h3>
+                    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <h3 class="text-sm font-medium">Saved images</h3>
+                        @if ($product->images->count() >= 2)
+                            <p class="text-xs text-[#8C8474]">Select 2 or more, then Make collage.</p>
+                        @endif
+                    </div>
                     <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                         @foreach ($product->images as $image)
                             @php
@@ -391,6 +406,15 @@
                                     @if (! $image->is_primary && $image->is_admin_only)
                                         <span class="absolute top-2 left-2 rounded bg-[#1E1E1E] px-2 py-0.5 text-[10px] font-semibold text-white">Admin only</span>
                                     @endif
+                                    <label class="absolute bottom-2 left-2 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-2 py-1 text-[11px] font-medium text-[#1E1E1E] shadow-sm ring-1 ring-[#E0D6C2]"
+                                        data-collage-select>
+                                        <input type="checkbox"
+                                            class="rounded border-[#E0D6C2] text-[#C9A227] focus:ring-[#C9A227]/40"
+                                            :checked="isCollageSelected({{ $image->id }})"
+                                            @change="toggleCollageImage({{ $image->id }}, @js($galleryPreviewUrl), @js($image->alt ?: $product->name))"
+                                            aria-label="Select {{ $image->alt ?: $product->name }} for collage">
+                                        Collage
+                                    </label>
                                     <button type="button"
                                         @click.stop="openSavedEditor({{ $image->id }}, @js($galleryPreviewUrl))"
                                         class="absolute top-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-[#1E1E1E] shadow-sm ring-1 ring-[#E0D6C2] hover:bg-[#FAF6EF]"
@@ -935,6 +959,124 @@
                                         class="rounded-full bg-[#C9A227] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
                                         <span x-show="! savedSaving">Save changes</span>
                                         <span x-show="savedSaving" x-cloak>Saving…</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </template>
+
+                <template x-teleport="body">
+                    <template x-if="collageOpen">
+                        <div
+                            class="fixed inset-0 z-[86] flex items-center justify-center bg-black/60 p-4"
+                            @keydown.escape.window="if (! collageSaving) closeCollage()"
+                            @click.self="onCollageOutside()"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label="Make collage"
+                            data-collage-modal
+                        >
+                            <div class="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-xl" @click.stop>
+                                <div class="flex items-center justify-between border-b border-[#EFE7D6] px-4 py-3">
+                                    <div>
+                                        <h3 class="font-semibold">Make collage</h3>
+                                        <p class="text-xs text-[#8C8474]">Pick a layout, then drag or resize each photo inside its slot.</p>
+                                    </div>
+                                    <button type="button" @click="closeCollage()" :disabled="collageSaving"
+                                        class="text-sm text-[#6B6459] hover:text-[#1E1E1E] disabled:opacity-60">Close</button>
+                                </div>
+
+                                <div class="min-h-0 flex-1 overflow-y-auto">
+                                    <div class="grid gap-0 lg:grid-cols-[minmax(0,1fr)_18rem]">
+                                        <div class="border-b border-[#EFE7D6] bg-[#2A2A2A] p-4 lg:border-b-0 lg:border-r">
+                                            <div
+                                                class="relative mx-auto aspect-square w-full max-w-[min(100%,36rem)] overflow-hidden rounded-lg bg-[#FAF6EF]"
+                                                data-collage-canvas
+                                            >
+                                                <template x-for="(slot, index) in collageSlots" :key="'slot-' + index + '-' + slot.imageId">
+                                                    <div
+                                                        class="absolute overflow-hidden"
+                                                        :class="collageActiveSlot === index ? 'ring-2 ring-[#C9A227] z-10' : 'ring-1 ring-black/10'"
+                                                        :style="collageSlotFrameStyle(index)"
+                                                        @pointerdown="collageActiveSlot = index"
+                                                    >
+                                                        <img
+                                                            :src="collageImageSrc(slot.imageId)"
+                                                            alt=""
+                                                            draggable="false"
+                                                            class="absolute max-w-none select-none pointer-events-none"
+                                                            :style="collageSlotImageStyle(index)"
+                                                        >
+                                                        <div
+                                                            class="absolute inset-0 cursor-grab touch-none"
+                                                            @pointerdown.stop="startCollagePan($event, index)"
+                                                            title="Drag to reposition"
+                                                        ></div>
+                                                        <button
+                                                            type="button"
+                                                            class="absolute bottom-1 right-1 h-5 w-5 cursor-nwse-resize rounded-sm border border-white bg-[#C9A227] shadow"
+                                                            @pointerdown.stop="startCollageZoom($event, index)"
+                                                            aria-label="Resize photo in this slot"
+                                                            title="Drag to zoom"
+                                                        ></button>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                            <p class="mt-3 text-center text-[11px] text-white/70">Drag a photo to pan · drag the gold corner to zoom</p>
+                                        </div>
+
+                                        <div class="space-y-4 px-4 py-4">
+                                            <div>
+                                                <p class="mb-2 text-xs font-medium text-[#6B6459]">Pattern</p>
+                                                <div class="grid grid-cols-2 gap-2" data-collage-patterns>
+                                                    <template x-for="pattern in availableCollagePatterns()" :key="pattern.id">
+                                                        <button
+                                                            type="button"
+                                                            @click="applyCollagePattern(pattern.id)"
+                                                            :data-collage-pattern="pattern.id"
+                                                            class="rounded-lg border px-2 py-2 text-left text-xs hover:bg-[#FAF6EF]"
+                                                            :class="collagePatternId === pattern.id ? 'border-[#C9A227] bg-[#FAF6EF]' : 'border-[#E0D6C2]'"
+                                                        >
+                                                            <span class="block font-medium text-[#1E1E1E]" x-text="pattern.label"></span>
+                                                            <span class="mt-0.5 block text-[10px] text-[#8C8474]" x-text="pattern.cells.length + ' photos'"></span>
+                                                        </button>
+                                                    </template>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <p class="mb-2 text-xs font-medium text-[#6B6459]">Selected photos</p>
+                                                <ol class="space-y-2">
+                                                    <template x-for="(item, index) in collageSelected" :key="'sel-' + item.id">
+                                                        <li class="flex items-center gap-2">
+                                                            <img :src="item.src" alt="" class="h-10 w-10 rounded object-cover bg-[#FAF6EF]">
+                                                            <span class="min-w-0 flex-1 truncate text-xs" x-text="item.alt || ('Photo ' + (index + 1))"></span>
+                                                            <button type="button" class="rounded border border-[#E0D6C2] px-1.5 py-0.5 text-[11px]" @click="moveCollageSelected(index, -1)" :disabled="index === 0">↑</button>
+                                                            <button type="button" class="rounded border border-[#E0D6C2] px-1.5 py-0.5 text-[11px]" @click="moveCollageSelected(index, 1)" :disabled="index === collageSelected.length - 1">↓</button>
+                                                        </li>
+                                                    </template>
+                                                </ol>
+                                            </div>
+
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <button type="button" @click="nudgeCollageZoom(-0.15)" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Zoom −</button>
+                                                <button type="button" @click="nudgeCollageZoom(0.15)" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Zoom +</button>
+                                                <button type="button" @click="resetCollageSlot()" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF]">Reset slot</button>
+                                            </div>
+
+                                            <p x-show="collageError" x-text="collageError" class="text-xs text-rose-600" x-cloak></p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="flex flex-wrap items-center justify-end gap-2 border-t border-[#EFE7D6] px-4 py-3">
+                                    <button type="button" @click="closeCollage()" :disabled="collageSaving"
+                                        class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm disabled:opacity-60">Cancel</button>
+                                    <button type="button" data-collage-save @click="saveCollage()" :disabled="collageSaving"
+                                        class="rounded-full bg-[#C9A227] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b8931f] disabled:opacity-60">
+                                        <span x-show="! collageSaving">Save as product image</span>
+                                        <span x-show="collageSaving" x-cloak>Saving…</span>
                                     </button>
                                 </div>
                             </div>

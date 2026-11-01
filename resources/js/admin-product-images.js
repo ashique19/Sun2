@@ -9,6 +9,43 @@ const afterPaint = (callback) => {
     });
 };
 
+const COLLAGE_GAP = 0.012;
+const COLLAGE_PATTERNS = [
+    { id: 'split-h', label: 'Side by side', cells: [[0, 0, 0.5, 1], [0.5, 0, 0.5, 1]] },
+    { id: 'split-v', label: 'Stacked', cells: [[0, 0, 1, 0.5], [0, 0.5, 1, 0.5]] },
+    { id: 'left-wide', label: 'Wide left', cells: [[0, 0, 0.62, 1], [0.62, 0, 0.38, 1]] },
+    { id: 'right-wide', label: 'Wide right', cells: [[0, 0, 0.38, 1], [0.38, 0, 0.62, 1]] },
+    { id: 'trio-row', label: 'Three across', cells: [[0, 0, 1 / 3, 1], [1 / 3, 0, 1 / 3, 1], [2 / 3, 0, 1 / 3, 1]] },
+    { id: 'trio-left', label: 'Feature left', cells: [[0, 0, 0.56, 1], [0.56, 0, 0.44, 0.5], [0.56, 0.5, 0.44, 0.5]] },
+    { id: 'trio-right', label: 'Feature right', cells: [[0, 0, 0.44, 0.5], [0, 0.5, 0.44, 0.5], [0.44, 0, 0.56, 1]] },
+    { id: 'trio-top', label: 'Feature top', cells: [[0, 0, 1, 0.56], [0, 0.56, 0.5, 0.44], [0.5, 0.56, 0.5, 0.44]] },
+    { id: 'quad', label: '2 × 2 grid', cells: [[0, 0, 0.5, 0.5], [0.5, 0, 0.5, 0.5], [0, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5]] },
+    { id: 'quad-hero', label: 'Hero + three', cells: [[0, 0, 1, 0.56], [0, 0.56, 1 / 3, 0.44], [1 / 3, 0.56, 1 / 3, 0.44], [2 / 3, 0.56, 1 / 3, 0.44]] },
+    { id: 'quad-left', label: 'Tall left + three', cells: [[0, 0, 0.56, 1], [0.56, 0, 0.44, 1 / 3], [0.56, 1 / 3, 0.44, 1 / 3], [0.56, 2 / 3, 0.44, 1 / 3]] },
+];
+
+const collageCellRect = (cell) => ({
+    x: cell[0] + COLLAGE_GAP / 2,
+    y: cell[1] + COLLAGE_GAP / 2,
+    w: Math.max(0.04, cell[2] - COLLAGE_GAP),
+    h: Math.max(0.04, cell[3] - COLLAGE_GAP),
+});
+
+const collageSourceWindow = (imgW, imgH, slotW, slotH, focusX, focusY, zoom) => {
+    const cover = Math.max(slotW / Math.max(1, imgW), slotH / Math.max(1, imgH)) * Math.max(1, zoom);
+    const sw = Math.min(imgW, slotW / cover);
+    const sh = Math.min(imgH, slotH / cover);
+    const maxSx = Math.max(0, imgW - sw);
+    const maxSy = Math.max(0, imgH - sh);
+
+    return {
+        sx: maxSx * Math.max(0, Math.min(1, focusX)),
+        sy: maxSy * Math.max(0, Math.min(1, focusY)),
+        sw,
+        sh,
+    };
+};
+
 const registerProductImageAlpineData = () => {
     Alpine.data('productImageUploader', (wireId = null) => ({
         wireId,
@@ -68,6 +105,15 @@ const registerProductImageAlpineData = () => {
         /** Active window-bound pointer gesture for stable touch drag/resize. */
         overlayGesture: null,
         _savedOverlayUnwatch: null,
+        collageOpen: false,
+        collageAllowOutsideClose: false,
+        collageSelected: [],
+        collagePatternId: 'split-h',
+        collageSlots: [],
+        collageSaving: false,
+        collageError: null,
+        collageActiveSlot: 0,
+        collageBitmaps: {},
 
         wire() {
             const id = this.wireId
@@ -537,6 +583,7 @@ const registerProductImageAlpineData = () => {
                 return errors.first('newImages')
                     || errors.first('newImages.0')
                     || errors.first('editedImage')
+                    || errors.first('collageImage')
                     || errors.first('name')
                     || errors.first('slug')
                     || errors.first('price')
@@ -1681,6 +1728,332 @@ const registerProductImageAlpineData = () => {
             }
 
             throw new Error('Edited image is still too large to save. Try a tighter crop.');
+        },
+
+        isCollageSelected(id) {
+            return this.collageSelected.some((item) => Number(item.id) === Number(id));
+        },
+
+        toggleCollageImage(id, src, alt) {
+            const imageId = Number(id);
+            const index = this.collageSelected.findIndex((item) => Number(item.id) === imageId);
+
+            if (index >= 0) {
+                this.collageSelected.splice(index, 1);
+
+                return;
+            }
+
+            this.collageSelected.push({
+                id: imageId,
+                src,
+                alt: alt || '',
+            });
+        },
+
+        availableCollagePatterns() {
+            const count = this.collageSelected.length;
+
+            return COLLAGE_PATTERNS.filter((pattern) => pattern.cells.length <= count && pattern.cells.length >= 2);
+        },
+
+        collagePattern() {
+            return this.availableCollagePatterns().find((pattern) => pattern.id === this.collagePatternId)
+                || this.availableCollagePatterns()[0]
+                || COLLAGE_PATTERNS[0];
+        },
+
+        collageImageSrc(imageId) {
+            return this.collageSelected.find((item) => Number(item.id) === Number(imageId))?.src || '';
+        },
+
+        collageSlotRect(index) {
+            const cell = this.collagePattern().cells[index];
+
+            return cell ? collageCellRect(cell) : { x: 0, y: 0, w: 1, h: 1 };
+        },
+
+        collageSlotFrameStyle(index) {
+            const rect = this.collageSlotRect(index);
+
+            return `left:${rect.x * 100}%;top:${rect.y * 100}%;width:${rect.w * 100}%;height:${rect.h * 100}%;`;
+        },
+
+        collageSlotImageStyle(index) {
+            const slot = this.collageSlots[index];
+            const img = this.collageBitmaps[slot?.imageId];
+            const frame = document.querySelector('[data-collage-canvas]');
+
+            if (! slot || ! img || ! frame || ! img.naturalWidth) {
+                return 'inset:0;width:100%;height:100%;object-fit:cover;';
+            }
+
+            const rect = this.collageSlotRect(index);
+            const slotW = Math.max(1, frame.clientWidth * rect.w);
+            const slotH = Math.max(1, frame.clientHeight * rect.h);
+            const window = collageSourceWindow(
+                img.naturalWidth,
+                img.naturalHeight,
+                slotW,
+                slotH,
+                slot.focusX,
+                slot.focusY,
+                slot.zoom,
+            );
+            const scale = slotW / Math.max(1, window.sw);
+
+            return `left:${-window.sx * scale}px;top:${-window.sy * scale}px;width:${img.naturalWidth * scale}px;height:${img.naturalHeight * scale}px;`;
+        },
+
+        applyCollagePattern(id) {
+            this.collagePatternId = id;
+            const pattern = this.collagePattern();
+            const previous = this.collageSlots;
+
+            this.collageSlots = pattern.cells.map((_, index) => {
+                const image = this.collageSelected[index] || this.collageSelected[0];
+                const reused = previous.find((slot) => Number(slot.imageId) === Number(image?.id));
+
+                return {
+                    imageId: image?.id,
+                    focusX: reused?.focusX ?? 0.5,
+                    focusY: reused?.focusY ?? 0.5,
+                    zoom: reused?.zoom ?? 1,
+                };
+            });
+            this.collageActiveSlot = Math.min(this.collageActiveSlot, Math.max(0, this.collageSlots.length - 1));
+        },
+
+        moveCollageSelected(index, delta) {
+            const next = index + delta;
+
+            if (next < 0 || next >= this.collageSelected.length) {
+                return;
+            }
+
+            const copy = [...this.collageSelected];
+            const [item] = copy.splice(index, 1);
+            copy.splice(next, 0, item);
+            this.collageSelected = copy;
+            this.applyCollagePattern(this.collagePattern().id);
+        },
+
+        async ensureCollageBitmap(item) {
+            const existing = this.collageBitmaps[item.id];
+
+            if (existing?.complete && existing.naturalWidth > 0) {
+                return existing;
+            }
+
+            const image = await new Promise((resolve, reject) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => resolve(img);
+                img.onerror = () => reject(new Error('Could not load a selected photo.'));
+                img.src = item.src;
+            });
+
+            this.collageBitmaps = { ...this.collageBitmaps, [item.id]: image };
+
+            return image;
+        },
+
+        async openCollage() {
+            if (this.collageSelected.length < 2) {
+                this.collageError = 'Select at least two photos first.';
+
+                return;
+            }
+
+            this.collageError = null;
+            this.collageSaving = false;
+            this.collageAllowOutsideClose = false;
+            this.collageActiveSlot = 0;
+            this.applyCollagePattern(this.availableCollagePatterns()[0]?.id || 'split-h');
+            this.collageOpen = true;
+            document.body.classList.add('overflow-hidden');
+
+            try {
+                await Promise.all(this.collageSelected.map((item) => this.ensureCollageBitmap(item)));
+            } catch (error) {
+                this.collageError = error?.message || 'Could not load selected photos.';
+            }
+
+            this.$nextTick(() => {
+                afterPaint(() => {
+                    this.collageAllowOutsideClose = true;
+                });
+            });
+        },
+
+        closeCollage() {
+            this.collageOpen = false;
+            this.collageSaving = false;
+            this.collageAllowOutsideClose = false;
+            this.collageError = null;
+            document.body.classList.remove('overflow-hidden');
+        },
+
+        onCollageOutside() {
+            if (this.collageAllowOutsideClose && ! this.collageSaving) {
+                this.closeCollage();
+            }
+        },
+
+        startCollagePan(event, index) {
+            const slot = this.collageSlots[index];
+            const frame = event.currentTarget?.getBoundingClientRect?.();
+
+            if (! slot || ! frame) {
+                return;
+            }
+
+            this.collageActiveSlot = index;
+            const startX = slot.focusX;
+            const startY = slot.focusY;
+            const width = Math.max(1, frame.width);
+            const height = Math.max(1, frame.height);
+
+            this.beginOverlayGesture(event, {
+                kind: 'collage-pan',
+                onMove: (moveEvent) => {
+                    const zoom = Math.max(1, slot.zoom);
+                    slot.focusX = this.clamp01(startX - ((moveEvent.clientX - event.clientX) / width) / zoom);
+                    slot.focusY = this.clamp01(startY - ((moveEvent.clientY - event.clientY) / height) / zoom);
+                },
+            });
+        },
+
+        startCollageZoom(event, index) {
+            const slot = this.collageSlots[index];
+
+            if (! slot) {
+                return;
+            }
+
+            this.collageActiveSlot = index;
+            const startZoom = Math.max(1, slot.zoom);
+            const startX = event.clientX;
+            const startY = event.clientY;
+
+            this.beginOverlayGesture(event, {
+                kind: 'collage-zoom',
+                onMove: (moveEvent) => {
+                    const delta = ((moveEvent.clientX - startX) + (startY - moveEvent.clientY)) / 140;
+                    slot.zoom = Math.max(1, Math.min(4, startZoom + delta));
+                },
+            });
+        },
+
+        nudgeCollageZoom(delta) {
+            const slot = this.collageSlots[this.collageActiveSlot];
+
+            if (! slot) {
+                return;
+            }
+
+            slot.zoom = Math.max(1, Math.min(4, (Number(slot.zoom) || 1) + delta));
+        },
+
+        resetCollageSlot() {
+            const slot = this.collageSlots[this.collageActiveSlot];
+
+            if (! slot) {
+                return;
+            }
+
+            slot.focusX = 0.5;
+            slot.focusY = 0.5;
+            slot.zoom = 1;
+        },
+
+        async composeCollageCanvas(edge = 1600) {
+            await Promise.all(this.collageSelected.map((item) => this.ensureCollageBitmap(item)));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = edge;
+            canvas.height = edge;
+            const context = canvas.getContext('2d', { alpha: false });
+
+            if (! context) {
+                throw new Error('Could not create the collage canvas.');
+            }
+
+            context.fillStyle = '#FAF6EF';
+            context.fillRect(0, 0, edge, edge);
+
+            this.collageSlots.forEach((slot, index) => {
+                const img = this.collageBitmaps[slot.imageId];
+                const rect = this.collageSlotRect(index);
+
+                if (! img?.naturalWidth) {
+                    return;
+                }
+
+                const dx = rect.x * edge;
+                const dy = rect.y * edge;
+                const dw = rect.w * edge;
+                const dh = rect.h * edge;
+                const window = collageSourceWindow(
+                    img.naturalWidth,
+                    img.naturalHeight,
+                    dw,
+                    dh,
+                    slot.focusX,
+                    slot.focusY,
+                    slot.zoom,
+                );
+
+                context.save();
+                context.beginPath();
+                context.rect(dx, dy, dw, dh);
+                context.clip();
+                context.drawImage(img, window.sx, window.sy, window.sw, window.sh, dx, dy, dw, dh);
+                context.restore();
+            });
+
+            return canvas;
+        },
+
+        async saveCollage() {
+            if (this.collageSaving || this.collageSlots.length < 2) {
+                return;
+            }
+
+            this.collageSaving = true;
+            this.collageError = null;
+
+            try {
+                const canvas = await this.composeCollageCanvas(1600);
+                const base64 = await this.canvasToSaveJpeg(canvas);
+                const result = await Promise.race([
+                    this.wire().saveCollageImage(base64, 'image/jpeg'),
+                    new Promise((_, reject) => {
+                        setTimeout(() => {
+                            reject(new Error('Save timed out after 60 seconds. Try again.'));
+                        }, 60000);
+                    }),
+                ]);
+
+                const livewireMessage = this.firstLivewireError();
+
+                if (livewireMessage) {
+                    throw new Error(livewireMessage);
+                }
+
+                const returnedPath = result && typeof result === 'object' ? String(result.path || '') : '';
+
+                if (! returnedPath) {
+                    throw new Error('Collage was not saved. Please try again.');
+                }
+
+                this.closeCollage();
+            } catch (error) {
+                console.error(error);
+                const livewireMessage = this.firstLivewireError();
+                this.collageError = livewireMessage || error?.message || 'Could not save the collage.';
+                this.collageSaving = false;
+            }
         },
 
         async saveSavedEdit() {

@@ -1,3 +1,6 @@
+@php
+    $isInboxShell = request()->routeIs('admin.inbox', 'admin.inbox.thread');
+@endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
@@ -10,17 +13,16 @@
     <meta name="inbox-image-match-concurrency" content="{{ (int) config('channels.image_match.client_concurrency', 3) }}">
     <meta name="inbox-image-match-timeout-ms" content="{{ (int) config('channels.image_match.client_timeout_ms', 30000) }}">
     <meta name="inbox-image-match-retries" content="{{ (int) config('channels.image_match.client_retries', 2) }}">
-    @vite(['resources/css/app.css', 'resources/js/app.js', 'resources/js/inbox-image-match.js'])
-    @if (request()->routeIs('admin.inbox'))
-        @vite(['resources/js/inbox-product-crop.js', 'resources/js/inbox-image-edit.js'])
-    @endif
+    {{-- Crop/edit Alpine modules must load on thread URLs too (/admin/inbox/c/{id})
+         and on every admin page so wire:navigate into Inbox still has Cropper. --}}
+    @vite(['resources/css/app.css', 'resources/js/app.js', 'resources/js/inbox-image-match.js', 'resources/js/inbox-product-crop.js', 'resources/js/inbox-image-edit.js'])
     @livewireStyles
 </head>
 <body @class([
     'bg-[#FAF6EF] text-[#1E1E1E] antialiased',
-    'min-h-screen' => ! request()->routeIs('admin.inbox'),
-    'flex h-dvh flex-col overflow-hidden' => request()->routeIs('admin.inbox'),
-]) @if (request()->routeIs('admin.inbox') && filled(request()->query('conversation')))
+    'min-h-screen' => ! $isInboxShell,
+    'flex h-dvh flex-col overflow-hidden' => $isInboxShell,
+]) @if ($isInboxShell && (request()->routeIs('admin.inbox.thread') || filled(request()->query('conversation'))))
     data-inbox-mobile-thread="1"
 @endif>
     @php
@@ -31,8 +33,8 @@
     {{-- Small screen top bar (hidden while mobile inbox thread is open — see data-inbox-mobile-thread) --}}
     <div id="admin-mobile-top-bar" @class([
         'md:hidden border-b border-[#E7DFCF] bg-white px-4 py-3 flex items-center justify-between gap-3',
-        'sticky top-0 z-20' => ! request()->routeIs('admin.inbox'),
-        'shrink-0 z-20' => request()->routeIs('admin.inbox'),
+        'sticky top-0 z-20' => ! $isInboxShell,
+        'shrink-0 z-20' => $isInboxShell,
     ])>
         <a href="{{ $isModeratorOnly ? route('admin.orders.new') : route('admin.dashboard') }}" wire:navigate class="font-serif font-semibold text-[#C9A227]">Admin</a>
         <div class="flex items-center gap-2">
@@ -52,14 +54,14 @@
 
     <div @class([
         'flex',
-        'min-h-screen' => ! request()->routeIs('admin.inbox'),
-        'min-h-0 flex-1' => request()->routeIs('admin.inbox'),
+        'min-h-screen' => ! $isInboxShell,
+        'min-h-0 flex-1' => $isInboxShell,
     ])>
         <x-admin.sidebar />
 
         <div @class([
             'flex-1 min-w-0',
-            'flex flex-col min-h-0' => request()->routeIs('admin.inbox'),
+            'flex flex-col min-h-0' => $isInboxShell,
         ])>
             <header class="hidden md:flex border-b border-[#E7DFCF] bg-white/90 backdrop-blur px-4 sm:px-6 py-4 items-center justify-between gap-4">
                 <div>
@@ -76,8 +78,8 @@
             </header>
 
             <main @class([
-                'p-4 sm:p-6' => ! request()->routeIs('admin.inbox'),
-                'flex min-h-0 flex-1 flex-col overflow-hidden p-0 xl:px-6 xl:py-4' => request()->routeIs('admin.inbox'),
+                'p-4 sm:p-6' => ! $isInboxShell,
+                'flex min-h-0 flex-1 flex-col overflow-hidden p-0 xl:px-6 xl:py-4' => $isInboxShell,
             ])>
                 {{ $slot }}
             </main>

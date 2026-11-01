@@ -63,7 +63,7 @@
     "src": "_instrument-sans-600-normal-DMks36a2.woff"
   },
   "resources/css/app.css": {
-    "file": "assets/app-BCKv1KTL.css",
+    "file": "assets/app-CKd2eAfK.css",
     "name": "app",
     "names": [
       "app.css"
@@ -87,16 +87,16 @@
     "isEntry": true
   },
   "resources/js/app.js": {
-    "file": "assets/app-B9auXCyD.js",
+    "file": "assets/app-CXpu1GqR.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true,
     "css": [
-      "assets/app-BCKv1KTL.css"
+      "assets/app-CKd2eAfK.css"
     ]
   },
   "resources/js/inbox-image-edit.js": {
-    "file": "assets/inbox-image-edit-C7yAtbvo.js",
+    "file": "assets/inbox-image-edit-062h_HHw.js",
     "name": "inbox-image-edit",
     "src": "resources/js/inbox-image-edit.js",
     "isEntry": true,
@@ -111,7 +111,7 @@
     "isEntry": true
   },
   "resources/js/inbox-product-crop.js": {
-    "file": "assets/inbox-product-crop-DDjofdqH.js",
+    "file": "assets/inbox-product-crop-BHMQtYBY.js",
     "name": "inbox-product-crop",
     "src": "resources/js/inbox-product-crop.js",
     "isEntry": true,

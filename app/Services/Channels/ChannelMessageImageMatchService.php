@@ -7,8 +7,10 @@ use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductImageMatchMemory;
 use App\Models\User;
+use App\Services\Admin\ProductImageHashService;
 use App\Services\Admin\ProductImageMatcher;
 use App\Services\Admin\ProductImageMatchIndex;
+use App\Services\Admin\ProductImageService;
 use App\Services\Admin\ProductImageSignatureService;
 use App\Support\StorefrontAssets;
 use Illuminate\Contracts\Cache\LockTimeoutException;
@@ -57,6 +59,8 @@ class ChannelMessageImageMatchService
     public const STATE_STALLED = 'stalled';
 
     public const STATE_DONE = 'done';
+
+    public const INBOX_TAG_ALT_PREFIX = 'Inbox tag · ';
 
     /**
      * Admin-facing text for failure reasons stored in image_match_meta.error.
@@ -482,6 +486,7 @@ class ChannelMessageImageMatchService
      */
     public function tag(ChannelMessage $message, Product $product, ?User $user = null, ?array $regionFractions = null): void
     {
+        $previousProductId = (int) ($message->matched_product_id ?? 0);
         $meta = $this->meta($message);
         $meta['v'] ??= self::META_VERSION;
         $meta['status'] = self::STATUS_TAGGED;
@@ -498,12 +503,25 @@ class ChannelMessageImageMatchService
             return;
         }
 
+        if ($previousProductId > 0 && $previousProductId !== (int) $product->id) {
+            $this->forgetCatalogImage($message, $previousProductId);
+        }
+
         $this->matchMemory->rememberFromStaffTag($message, $product, $user);
 
         try {
             $this->learnSignature($message, $product, $user, $regionFractions ?? $this->regionFor($meta, (int) $product->id));
         } catch (Throwable $e) {
             Log::warning('Inbox image tag signature learning failed.', [
+                'message_id' => $message->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        try {
+            $this->learnCatalogImage($message, $product, $regionFractions ?? $this->regionFor($meta, (int) $product->id));
+        } catch (Throwable $e) {
+            Log::warning('Inbox image tag catalog learning failed.', [
                 'message_id' => $message->id,
                 'error' => $e->getMessage(),
             ]);
@@ -523,6 +541,7 @@ class ChannelMessageImageMatchService
             $message->refresh();
             if ($productId > 0) {
                 $this->forgetMemoriesFor($message, $productId);
+                $this->forgetCatalogImage($message, $productId);
             }
         }
 
@@ -858,6 +877,159 @@ class ChannelMessageImageMatchService
         }
 
         return null;
+    }
+
+    public static function inboxTagAlt(ChannelMessage $message): string
+    {
+        return self::INBOX_TAG_ALT_PREFIX.$message->id;
+    }
+
+    /**
+     * Persist the tagged chat photo as an admin-only catalog image (hashes + signature)
+     * so future inbound copies match from product image meta.
+     *
+     * @param  array{left: float, top: float, width: float, height: float}|null  $regionFractions
+     */
+    private function learnCatalogImage(ChannelMessage $message, Product $product, ?array $regionFractions): void
+    {
+        $cached = $this->media->ensureCached($message);
+        $minBytes = max(1, (int) config('channels.ai_draft.image_min_bytes', 5000));
+        if ($cached === null || strlen($cached['bytes']) < $minBytes) {
+            return;
+        }
+
+        $bytes = $this->bytesForCatalogLearn($cached['bytes'], $regionFractions);
+        if ($bytes === '') {
+            return;
+        }
+
+        $hasher = app(ProductImageHashService::class);
+        $sourceHash = null;
+        try {
+            $sourceHash = $hasher->hashBinary($bytes);
+        } catch (Throwable) {
+            $sourceHash = is_string($cached['dhash'] ?? null) ? $cached['dhash'] : null;
+        }
+
+        $alt = self::inboxTagAlt($message);
+        $existing = ProductImage::query()
+            ->where('product_id', $product->id)
+            ->where(function ($query) use ($alt, $sourceHash): void {
+                $query->where('alt', $alt);
+                if (is_string($sourceHash) && $sourceHash !== '') {
+                    $query->orWhere('perceptual_hash', $sourceHash);
+                }
+            })
+            ->first();
+
+        if ($existing === null) {
+            $existing = app(ProductImageService::class)->storeFromBinary(
+                $product,
+                $bytes,
+                $alt,
+                true,
+            );
+        }
+
+        $this->mergeInboxTagHashes($existing, $sourceHash, is_string($cached['dct_hash'] ?? null) ? $cached['dct_hash'] : null);
+    }
+
+    private function forgetCatalogImage(ChannelMessage $message, int $productId): void
+    {
+        $images = ProductImage::query()
+            ->where('product_id', $productId)
+            ->where('is_admin_only', true)
+            ->where('alt', self::inboxTagAlt($message))
+            ->get();
+
+        $imagesService = app(ProductImageService::class);
+        foreach ($images as $image) {
+            $imagesService->delete($image);
+        }
+    }
+
+    /**
+     * @param  array{left: float, top: float, width: float, height: float}|null  $regionFractions
+     */
+    private function bytesForCatalogLearn(string $bytes, ?array $regionFractions): string
+    {
+        if ($regionFractions === null) {
+            return $bytes;
+        }
+
+        $image = @imagecreatefromstring($bytes);
+        if ($image === false) {
+            return $bytes;
+        }
+
+        $width = imagesx($image);
+        $height = imagesy($image);
+        $left = (int) round(max(0.0, min(1.0, (float) ($regionFractions['left'] ?? 0))) * $width);
+        $top = (int) round(max(0.0, min(1.0, (float) ($regionFractions['top'] ?? 0))) * $height);
+        $cropWidth = (int) round(max(0.0, min(1.0, (float) ($regionFractions['width'] ?? 1))) * $width);
+        $cropHeight = (int) round(max(0.0, min(1.0, (float) ($regionFractions['height'] ?? 1))) * $height);
+        $cropWidth = min($cropWidth, $width - $left);
+        $cropHeight = min($cropHeight, $height - $top);
+
+        if ($cropWidth < 8 || $cropHeight < 8 || ($cropWidth * $cropHeight) > (int) (0.9 * $width * $height)) {
+            imagedestroy($image);
+
+            return $bytes;
+        }
+
+        $cropped = imagecrop($image, [
+            'x' => $left,
+            'y' => $top,
+            'width' => $cropWidth,
+            'height' => $cropHeight,
+        ]);
+        imagedestroy($image);
+
+        if ($cropped === false) {
+            return $bytes;
+        }
+
+        ob_start();
+        imagejpeg($cropped, null, 90);
+        $encoded = (string) ob_get_clean();
+        imagedestroy($cropped);
+
+        return $encoded !== '' ? $encoded : $bytes;
+    }
+
+    private function mergeInboxTagHashes(ProductImage $image, ?string $sourceHash, ?string $dctHash): void
+    {
+        $variants = is_array($image->perceptual_hashes) ? $image->perceptual_hashes : [];
+        $known = [];
+        foreach ($variants as $variant) {
+            $hash = is_array($variant) ? ($variant['hash'] ?? null) : null;
+            if (is_string($hash) && $hash !== '') {
+                $known[$hash] = true;
+            }
+        }
+
+        if (is_string($image->perceptual_hash) && $image->perceptual_hash !== '') {
+            $known[$image->perceptual_hash] = true;
+        }
+
+        $dirty = false;
+        if (is_string($sourceHash) && $sourceHash !== '' && ! isset($known[$sourceHash])) {
+            $variants[] = ['strategy' => 'inbox_tag', 'hash' => $sourceHash];
+            $dirty = true;
+        }
+
+        $updates = [];
+        if ($dirty) {
+            $updates['perceptual_hashes'] = $variants;
+        }
+
+        if ((! is_string($image->dct_hash) || $image->dct_hash === '') && is_string($dctHash) && $dctHash !== '') {
+            $updates['dct_hash'] = $dctHash;
+        }
+
+        if ($updates !== []) {
+            $image->forceFill($updates)->save();
+        }
     }
 
     /**

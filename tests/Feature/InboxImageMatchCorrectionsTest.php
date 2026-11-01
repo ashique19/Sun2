@@ -128,13 +128,20 @@ class InboxImageMatchCorrectionsTest extends TestCase
             ->where('product_id', $product->id)
             ->first();
         $this->assertNotNull($learned?->signature);
+        $this->assertTrue(
+            $product->images()
+                ->where('is_admin_only', true)
+                ->where('alt', ChannelMessageImageMatchService::inboxTagAlt($first))
+                ->whereNotNull('perceptual_hash')
+                ->exists(),
+        );
 
         $second = $this->photoMessage($this->conversation('psid-corrections-2'), $secondUrl);
         $match = app(ChannelMessageImageMatchService::class)->bestAutoMatch($second);
 
-        $this->assertSame($product->id, $match['product_id'] ?? null, 'A screenshot of the tagged photo should match the learned signature.');
+        $this->assertSame($product->id, $match['product_id'] ?? null, 'A screenshot of the tagged photo should match the learned catalog image.');
         $this->assertSame('visual', $match['strategy']);
-        $this->assertSame('memory', $second->fresh()->image_match_meta['candidates'][0]['source']);
+        $this->assertContains($second->fresh()->image_match_meta['candidates'][0]['source'] ?? null, ['catalog', 'memory']);
     }
 
     #[Test]

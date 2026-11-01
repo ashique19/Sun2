@@ -56,6 +56,11 @@ class AdminInboxQuickRepliesTest extends TestCase
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->assertSee('Hi')
+            ->assertSeeHtml('data-inbox-quick-replies')
+            ->assertSeeHtml('data-inbox-quick-reply-body="Hello there"')
+            ->assertSeeHtml('$wire.$set(\'replyText\', body, false)')
+            ->assertSeeHtml('data-inbox-reply-text')
+            ->assertDontSeeHtml('wire:click="insertQuickReply')
             ->set('replyText', 'Existing draft')
             ->call('insertQuickReply', 0)
             ->assertSet('replyText', 'Hello there');
@@ -84,6 +89,7 @@ class AdminInboxQuickRepliesTest extends TestCase
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->assertSeeHtml('<textarea')
+            ->assertSeeHtml('data-inbox-quick-reply-body="'.e($body).'"')
             ->call('insertQuickReply', 0)
             ->assertSet('replyText', $body)
             ->assertSeeHtml('rows="3"');

@@ -295,12 +295,22 @@ body:has(.mobile-nav-toggle:checked) {
         margin-top: 0;
     }
 
-    /* Swipe-back sets data-inbox-mobile-thread before Livewire morphs. */
+    /* Swipe-back sets data-inbox-mobile-thread before Livewire morphs.
+       Keep the Inbox / Auto sync header in lockstep with the list so the
+       title panel cannot appear after conversations and reshuffle the UI. */
+    body:not([data-inbox-mobile-thread="1"]) [data-inbox-page-header] {
+        display: flex !important;
+    }
+
     body:not([data-inbox-mobile-thread="1"]) [data-inbox-conversation-list] {
         display: flex !important;
     }
 
     body:not([data-inbox-mobile-thread="1"]) [data-inbox-mobile-thread-sheet] {
+        display: none !important;
+    }
+
+    body[data-inbox-mobile-thread="1"] [data-inbox-page-header] {
         display: none !important;
     }
 

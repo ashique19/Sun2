@@ -224,8 +224,11 @@
     {{-- Invalid Facebook token banner host (component teleports here). Valid token is an icon beside Filters. --}}
     <div id="inbox-fb-token-banner" class="shrink-0 px-4 pt-2 empty:hidden empty:p-0 xl:px-0 xl:pt-0"></div>
 
-    {{-- Header: on small screens, Inbox title + icon actions share one row. --}}
+    {{-- Header: on small screens, Inbox title + icon actions share one row.
+         Visibility follows body[data-inbox-mobile-thread] immediately (same as the list)
+         so swipe-back / first paint cannot show conversations before this panel. --}}
     <div
+        data-inbox-page-header
         x-data="{ filtersOpen: @js($mobileFiltersOpen) }"
         @class([
             'relative shrink-0 flex flex-col gap-2 px-4 pt-2 xl:gap-3 xl:px-0 xl:pt-0',
@@ -1283,10 +1286,20 @@
                     @enderror
 
                     @if (! empty($quickReplies))
-                        <div class="mb-2 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                        <div class="mb-2 flex items-center gap-1.5 overflow-x-auto pb-0.5" data-inbox-quick-replies>
                             @foreach ($quickReplies as $index => $quickReply)
                                 <button type="button"
-                                    wire:click="insertQuickReply({{ $index }})"
+                                    data-inbox-quick-reply
+                                    data-inbox-quick-reply-body="{{ $quickReply['body'] }}"
+                                    x-on:click="
+                                        const body = {{ \Illuminate\Support\Js::from($quickReply['body']) }};
+                                        $wire.$set('replyText', body, false);
+                                        const ta = document.querySelector('[data-inbox-reply-text]');
+                                        if (ta) {
+                                            ta.rows = Math.max(1, Math.min(8, (String(body).match(/\n/g) || []).length + 1));
+                                            ta.focus();
+                                        }
+                                    "
                                     class="shrink-0 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-2.5 py-1 text-[11px] font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
                                     {{ $quickReply['label'] }}
                                 </button>
@@ -1331,6 +1344,7 @@
                             @endphp
                             <div class="relative min-w-0">
                             <textarea
+                                data-inbox-reply-text
                                 wire:model="replyText"
                                 rows="{{ $replyRows }}"
                                 placeholder="{{ $replyToMessage ? 'Write a reply…' : 'Message…' }}"

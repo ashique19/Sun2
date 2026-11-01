@@ -620,12 +620,29 @@
                             aria-modal="true"
                             aria-label="Edit saved image">
                             <div class="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-xl" @click.stop>
-                                <div class="flex items-center justify-between border-b border-[#EFE7D6] px-4 py-3">
-                                    <div>
+                                <div class="flex items-center justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
+                                    <div class="min-w-0">
                                         <h3 class="font-semibold">Edit image</h3>
-                                                    <p class="text-xs text-[#8C8474]">Drag the crop box, then drag/resize text, logo, or image overlay on the live preview.</p>
+                                        <p class="text-xs text-[#8C8474]">Rotate, crop, then drag/resize text, logo, or image overlay on the live preview.</p>
                                     </div>
-                                    <button type="button" @click="closeSavedEditor()" :disabled="savedSaving" class="text-sm text-[#6B6459] hover:text-[#1E1E1E] disabled:opacity-60">Close</button>
+                                    <div class="flex shrink-0 items-center gap-2" data-saved-rotate>
+                                        <button type="button" @click="rotateSaved(-90)" :disabled="savedSaving"
+                                            data-saved-rotate-left
+                                            class="rounded-full border border-[#E0D6C2] bg-white px-3 py-1.5 text-xs font-semibold text-[#1E1E1E] hover:bg-[#FAF6EF] disabled:opacity-60"
+                                            aria-label="Rotate left 90 degrees"
+                                            title="Rotate left 90°">
+                                            ↺ Rotate left
+                                        </button>
+                                        <span class="min-w-[2.5rem] text-center text-xs tabular-nums text-[#6B6459]" x-text="savedRotation + '°'">0°</span>
+                                        <button type="button" @click="rotateSaved(90)" :disabled="savedSaving"
+                                            data-saved-rotate-right
+                                            class="rounded-full border border-[#E0D6C2] bg-white px-3 py-1.5 text-xs font-semibold text-[#1E1E1E] hover:bg-[#FAF6EF] disabled:opacity-60"
+                                            aria-label="Rotate right 90 degrees"
+                                            title="Rotate right 90°">
+                                            Rotate right ↻
+                                        </button>
+                                        <button type="button" @click="closeSavedEditor()" :disabled="savedSaving" class="text-sm text-[#6B6459] hover:text-[#1E1E1E] disabled:opacity-60">Close</button>
+                                    </div>
                                 </div>
 
                                 <div class="min-h-0 flex-1 overflow-y-auto">
@@ -641,10 +658,13 @@
                                                     crossorigin="anonymous">
                                             </div>
                                             <div class="space-y-3 border-t border-[#EFE7D6] px-4 py-3">
-                                                <div class="flex flex-wrap gap-2">
-                                                    <button type="button" @click="rotateSaved(-90)" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Rotate left</button>
-                                                    <button type="button" @click="rotateSaved(90)" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Rotate right</button>
-                                                    <button type="button" @click="resetSavedCrop()" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Reset crop</button>
+                                                <div>
+                                                    <p class="mb-1.5 text-[11px] font-medium text-[#6B6459]">Rotate</p>
+                                                    <div class="flex flex-wrap gap-2">
+                                                        <button type="button" @click="rotateSaved(-90)" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Rotate left 90°</button>
+                                                        <button type="button" @click="rotateSaved(90)" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Rotate right 90°</button>
+                                                        <button type="button" @click="resetSavedCrop()" :disabled="savedSaving" class="rounded border border-[#E0D6C2] px-3 py-1.5 text-xs hover:bg-[#FAF6EF] disabled:opacity-60">Reset crop</button>
+                                                    </div>
                                                 </div>
                                                 <div>
                                                     <p class="mb-1.5 text-[11px] text-[#8C8474]">Aspect ratio</p>

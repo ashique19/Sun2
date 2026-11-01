@@ -1357,6 +1357,51 @@ class AdminProductEdit extends Component
     }
 
     /**
+     * @return array{id: int, path: string, url: string}
+     */
+    public function saveCollageImage(string $imageBase64 = '', string $mime = 'image/jpeg'): array
+    {
+        if (! $this->product) {
+            $this->addError('collageImage', 'Save the product first.');
+
+            return [];
+        }
+
+        $upload = $this->uploadedFileFromBase64($imageBase64, $mime, 'collage', 'collageImage');
+
+        if (! $upload) {
+            return [];
+        }
+
+        try {
+            $image = app(ProductImageService::class)->store(
+                $this->product,
+                $upload,
+                trim($this->product->name.' collage') ?: 'Collage',
+            );
+        } finally {
+            $path = $upload->getPathname();
+            if (is_string($path) && is_file($path)) {
+                @unlink($path);
+            }
+        }
+
+        $this->imagesEpoch++;
+        $this->refreshImages();
+        $this->syncImageAlts();
+        $this->message = 'Collage saved as a product image.';
+
+        $previewUrl = route('admin.products.images.raw', [$this->product, $image])
+            .'?v='.rawurlencode(md5((string) $image->path).'-'.$this->imagesEpoch);
+
+        return [
+            'id' => $image->id,
+            'path' => $image->path,
+            'url' => $previewUrl,
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function persistProduct(): array
@@ -1688,6 +1733,67 @@ class AdminProductEdit extends Component
             ->where('product_id', $this->product->id)
             ->whereKey($imageId)
             ->firstOrFail();
+    }
+
+    private function uploadedFileFromBase64(
+        string $imageBase64,
+        string $mime,
+        string $basename,
+        string $errorKey,
+    ): ?UploadedFile {
+        $imageBase64 = trim($imageBase64);
+
+        if ($imageBase64 === '') {
+            $this->addError($errorKey, 'The image is required.');
+
+            return null;
+        }
+
+        $binary = base64_decode($imageBase64, true);
+
+        if ($binary === false || $binary === '') {
+            $this->addError($errorKey, 'The image data is invalid.');
+
+            return null;
+        }
+
+        if (strlen($binary) > 8 * 1024 * 1024) {
+            $this->addError($errorKey, 'The image must be 8 MB or smaller.');
+
+            return null;
+        }
+
+        $mime = strtolower(trim($mime));
+
+        if (! in_array($mime, ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'], true)) {
+            $mime = 'image/jpeg';
+        }
+
+        $extension = match (true) {
+            str_contains($mime, 'png') => 'png',
+            str_contains($mime, 'webp') => 'webp',
+            default => 'jpg',
+        };
+
+        $tempPath = tempnam(sys_get_temp_dir(), $basename.'_');
+
+        if ($tempPath === false) {
+            $this->addError($errorKey, 'Could not create a temporary file.');
+
+            return null;
+        }
+
+        $pathWithExt = $tempPath.'.'.$extension;
+        rename($tempPath, $pathWithExt);
+        file_put_contents($pathWithExt, $binary);
+
+        return new UploadedFile(
+            $pathWithExt,
+            $basename.'.'.$extension,
+            $mime === 'image/jpg' ? 'image/jpeg' : $mime,
+            null,
+            true,
+        );
     }
 
     private function refreshImages(): void

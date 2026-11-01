@@ -182,6 +182,38 @@ class AdminInboxTest extends TestCase
     }
 
     #[Test]
+    public function inbox_header_is_marked_to_paint_before_the_conversation_list(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $html = Livewire::test(AdminInbox::class)->html();
+        $headerPos = strpos($html, 'data-inbox-page-header');
+        $listPos = strpos($html, 'data-inbox-conversation-list');
+
+        $this->assertNotFalse($headerPos);
+        $this->assertNotFalse($listPos);
+        $this->assertLessThan($listPos, $headerPos, 'Inbox / Auto sync header must render before the conversation list.');
+        $this->assertStringContainsString('Auto sync in', $html);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSet('mobileThreadOpen', true)
+            ->assertSeeHtml('data-inbox-page-header')
+            ->assertSeeHtml('hidden xl:flex');
+
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertIsString($css);
+        $this->assertStringContainsString('body:not([data-inbox-mobile-thread="1"]) [data-inbox-page-header]', $css);
+        $this->assertStringContainsString('body[data-inbox-mobile-thread="1"] [data-inbox-page-header]', $css);
+        $headerRulePos = strpos($css, 'body:not([data-inbox-mobile-thread="1"]) [data-inbox-page-header]');
+        $listRulePos = strpos($css, 'body:not([data-inbox-mobile-thread="1"]) [data-inbox-conversation-list]');
+        $this->assertNotFalse($headerRulePos);
+        $this->assertNotFalse($listRulePos);
+        $this->assertLessThan($listRulePos, $headerRulePos);
+    }
+
+    #[Test]
     public function thread_path_deep_link_opens_the_conversation(): void
     {
         $this->actingAs($this->adminUser());

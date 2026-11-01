@@ -224,8 +224,11 @@
     {{-- Invalid Facebook token banner host (component teleports here). Valid token is an icon beside Filters. --}}
     <div id="inbox-fb-token-banner" class="shrink-0 px-4 pt-2 empty:hidden empty:p-0 xl:px-0 xl:pt-0"></div>
 
-    {{-- Header: on small screens, Inbox title + icon actions share one row. --}}
+    {{-- Header: on small screens, Inbox title + icon actions share one row.
+         Visibility follows body[data-inbox-mobile-thread] immediately (same as the list)
+         so swipe-back / first paint cannot show conversations before this panel. --}}
     <div
+        data-inbox-page-header
         x-data="{ filtersOpen: @js($mobileFiltersOpen) }"
         @class([
             'relative shrink-0 flex flex-col gap-2 px-4 pt-2 xl:gap-3 xl:px-0 xl:pt-0',

@@ -64,10 +64,18 @@ class AdminProductImageEditTest extends TestCase
             ->assertSeeHtml('aria-label="Edit image"')
             ->assertSeeHtml('x-if="savedEditorOpen"')
             ->assertSeeHtml('rotateSaved(-90)')
+            ->assertSeeHtml('rotateSaved(90)')
+            ->assertSeeHtml('data-saved-rotate')
+            ->assertSeeHtml('data-saved-rotate-left')
+            ->assertSeeHtml('data-saved-rotate-right')
+            ->assertSeeHtml('Rotate left 90°')
+            ->assertSeeHtml('Rotate right 90°')
+            ->assertSeeHtml('savedRotation')
+            ->assertSeeHtml('Rotate, crop, then drag/resize')
             ->assertSeeHtml('setSavedAspect')
             ->assertSeeHtml('Live preview')
             ->assertSeeHtml('savedPreviewUrl')
-            ->assertSeeHtml('Drag the crop box')
+            ->assertSeeHtml('Rotate, crop, then drag/resize')
             ->assertSeeHtml('Put text on image')
             ->assertSeeHtml('Put logo on image')
             ->assertSeeHtml('Adjust tone')
@@ -184,6 +192,8 @@ class AdminProductImageEditTest extends TestCase
         $this->assertStringContainsString('returnedUrl', $source);
         $this->assertStringContainsString('Livewire.find', $source);
         $this->assertStringContainsString('this.wire().replaceEditedImage', $source);
+        $this->assertStringContainsString('savedRotation', $source);
+        $this->assertStringContainsString('rotateTo(next)', $source);
         $this->assertStringNotContainsString('this.$wire.message', $source);
         $this->assertStringNotContainsString("\$wire.upload(\n                        'editedImage'", $source);
     }

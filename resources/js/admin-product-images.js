@@ -69,6 +69,7 @@ const registerProductImageAlpineData = () => {
         savedPreviewPending: false,
         savedPreviewTimer: null,
         savedAspect: 'free',
+        savedRotation: 0,
         editBrightness: 0,
         editRedTone: 0,
         overlayText: '',
@@ -602,6 +603,7 @@ const registerProductImageAlpineData = () => {
             this.savedPreviewUrl = '';
             this.savedPreviewPending = false;
             this.savedAspect = 'free';
+            this.savedRotation = 0;
             this.editBrightness = 0;
             this.editRedTone = 0;
             this.overlayText = '';
@@ -751,6 +753,9 @@ const registerProductImageAlpineData = () => {
                     ready: () => {
                         try {
                             this.savedCropper?.resize();
+                            if (this.savedRotation) {
+                                this.savedCropper?.rotateTo(this.savedRotation);
+                            }
                         } catch {
                             // ignore resize probe failures
                         }
@@ -796,6 +801,7 @@ const registerProductImageAlpineData = () => {
             this.savedAllowOutsideClose = false;
             this.savedSaving = false;
             this.savedError = null;
+            this.savedRotation = 0;
         },
 
         onSavedEditorOutside() {
@@ -805,12 +811,19 @@ const registerProductImageAlpineData = () => {
         },
 
         rotateSaved(degrees) {
-            this.savedCropper?.rotate(degrees);
+            const next = (((Number(this.savedRotation) || 0) + Number(degrees || 0)) % 360 + 360) % 360;
+            this.savedRotation = next;
+
+            if (this.savedCropper) {
+                this.savedCropper.rotateTo(next);
+            }
+
             this.schedulePreview();
         },
 
         resetSavedCrop() {
             this.savedAspect = 'free';
+            this.savedRotation = 0;
             this.savedCropper?.reset();
             this.savedCropper?.setAspectRatio(NaN);
             this.schedulePreview();

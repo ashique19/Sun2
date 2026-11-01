@@ -25,6 +25,8 @@ class AdminCouriers extends Component
 
     public string $withdrawBookBalance = '0';
 
+    public string $withdrawReceivable = '0';
+
     public string $withdrawAmount = '';
 
     public string $withdrawNote = '';
@@ -106,18 +108,21 @@ class AdminCouriers extends Component
         $this->message = 'Courier deleted.';
     }
 
-    public function openWithdraw(int $courierId): void
+    public function openWithdraw(int $courierId, CourierBalanceService $balances): void
     {
         $this->error = null;
         $this->message = null;
         $this->resetValidation();
 
         $courier = Courier::query()->findOrFail($courierId);
+        $summary = $balances->summarize($courier);
+        $receivable = (int) round((float) $summary['receivable']);
 
         $this->withdrawCourierId = $courier->id;
         $this->withdrawCourierName = $courier->name;
         $this->withdrawBookBalance = (string) (int) round((float) $courier->balance);
-        $this->withdrawAmount = '';
+        $this->withdrawReceivable = (string) $receivable;
+        $this->withdrawAmount = $receivable > 0 ? (string) $receivable : '';
         $this->withdrawNote = '';
         $this->showWithdrawModal = true;
     }
@@ -126,6 +131,7 @@ class AdminCouriers extends Component
     {
         $this->showWithdrawModal = false;
         $this->withdrawCourierId = null;
+        $this->withdrawReceivable = '0';
         $this->withdrawAmount = '';
         $this->withdrawNote = '';
         $this->resetValidation();

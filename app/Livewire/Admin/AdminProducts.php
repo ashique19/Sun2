@@ -13,6 +13,7 @@ use App\Services\Admin\ProductUnitCostService;
 use App\Services\Admin\SharedCartService;
 use App\Support\AdminAccess;
 use App\Support\AdminProductListFilters;
+use App\Support\StorefrontAssets;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -427,6 +428,41 @@ class AdminProducts extends Component
     {
         $product = Product::query()->findOrFail($productId);
         $product->update(['is_published' => ! $product->is_published]);
+    }
+
+    public function openProductGallery(int $productId): void
+    {
+        $product = Product::query()
+            ->with(['images' => fn ($q) => $q
+                ->where('is_admin_only', false)
+                ->orderByDesc('is_primary')
+                ->orderBy('sort_order')
+                ->orderBy('id')])
+            ->find($productId);
+
+        if (! $product) {
+            return;
+        }
+
+        $imageUrls = $product->images
+            ->map(fn ($image) => StorefrontAssets::largestAvailableUrl($image->path) ?? StorefrontAssets::url($image->path))
+            ->filter()
+            ->values()
+            ->all();
+
+        if ($imageUrls === []) {
+            return;
+        }
+
+        $this->dispatch(
+            'open-product-image',
+            imageUrl: $imageUrls[0],
+            imageUrls: $imageUrls,
+            productName: $product->name,
+            productUrl: route('admin.products.show', $product),
+            linkLabel: 'View product details',
+            linkTarget: '',
+        );
     }
 
     public function delete(int $productId, ProductImageService $images): void

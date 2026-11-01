@@ -227,7 +227,17 @@
                                 <div class="flex items-center gap-3">
                                     @php $thumb = $product->images->first()?->path @endphp
                                     @if ($thumb)
-                                        <img src="{{ \App\Support\StorefrontAssets::url($thumb) }}" alt="" class="h-[7.5rem] w-[7.5rem] shrink-0 rounded object-cover bg-[#FAF6EF]">
+                                        <button type="button"
+                                            wire:click="openProductGallery({{ $product->id }})"
+                                            data-product-gallery-thumb
+                                            title="{{ $product->name }} — click to view images"
+                                            aria-label="View images for {{ $product->name }}"
+                                            class="h-[7.5rem] w-[7.5rem] shrink-0 overflow-hidden rounded bg-[#FAF6EF] p-0 cursor-zoom-in transition hover:ring-2 hover:ring-[#C9A227]/60 focus:outline-none focus:ring-2 focus:ring-[#C9A227]">
+                                            <img src="{{ \App\Support\StorefrontAssets::url($thumb) }}"
+                                                alt=""
+                                                draggable="false"
+                                                class="pointer-events-none h-full w-full object-cover select-none">
+                                        </button>
                                     @endif
                                     <div>
                                         <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">

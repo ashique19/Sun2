@@ -42,6 +42,7 @@
                     </div>
                 </div>
                 <div class="grid gap-3 sm:grid-cols-[12rem_1fr]">
+                    <input type="hidden" wire:model="replies.{{ $index }}.id">
                     <div>
                         <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Label</label>
                         <input type="text"

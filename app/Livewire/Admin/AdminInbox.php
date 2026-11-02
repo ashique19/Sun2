@@ -18,6 +18,7 @@ use App\Services\Channels\ChannelMessageOrderMapper;
 use App\Services\Channels\ChannelOrderDraftCatcher;
 use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
+use App\Services\Channels\InboxQuickReplyMatcher;
 use App\Services\Channels\InboxQuickReplyService;
 use App\Services\Channels\MessengerConversationSyncService;
 use App\Services\Facebook\FacebookPageTokenService;
@@ -128,6 +129,9 @@ class AdminInbox extends Component
 
     /** Message currently targeted by the “Add to order fields” menu. */
     public ?int $mappingMessageId = null;
+
+    /** Inbound message whose quick-reply tag picker is open. */
+    public ?int $taggingQuickReplyMessageId = null;
 
     /** Browser text selection captured when opening the map menu (optional). */
     public ?string $mappingSelectedText = null;
@@ -385,6 +389,7 @@ class AdminInbox extends Component
         $this->mappingSelectedText = $selectedText !== '' ? $selectedText : null;
         $this->mappingField = null;
         $this->mappingMode = 'order';
+        $this->taggingQuickReplyMessageId = null;
         $this->resetMappingProductSearchState();
         $this->clearMappingImageMatchState();
         $this->error = null;
@@ -893,6 +898,89 @@ class AdminInbox extends Component
         }
 
         $this->replyText = $body;
+        $this->error = null;
+    }
+
+    public function insertQuickReplyById(string $quickReplyId, InboxQuickReplyService $quickReplies): void
+    {
+        $reply = $quickReplies->find($quickReplyId);
+        if ($reply === null) {
+            return;
+        }
+
+        $this->replyText = $reply['body'];
+        $this->error = null;
+    }
+
+    public function openQuickReplyTagMenu(int $messageId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        $exists = ChannelMessage::query()
+            ->where('channel_conversation_id', $this->selectedConversationId)
+            ->where('direction', ChannelMessage::DIRECTION_INBOUND)
+            ->whereKey($messageId)
+            ->exists();
+
+        if (! $exists) {
+            return;
+        }
+
+        $this->taggingQuickReplyMessageId = $messageId;
+        $this->mappingMessageId = null;
+        $this->mappingField = null;
+        $this->error = null;
+    }
+
+    public function closeQuickReplyTagMenu(): void
+    {
+        $this->taggingQuickReplyMessageId = null;
+    }
+
+    public function tagMessageQuickReply(int $messageId, string $quickReplyId, InboxQuickReplyMatcher $matcher, InboxQuickReplyService $quickReplies): void
+    {
+        AdminAccess::ensureStaffAdmin();
+        if (! $this->selectedConversationId || $quickReplies->find($quickReplyId) === null) {
+            return;
+        }
+
+        $message = ChannelMessage::query()
+            ->where('channel_conversation_id', $this->selectedConversationId)
+            ->where('direction', ChannelMessage::DIRECTION_INBOUND)
+            ->whereKey($messageId)
+            ->first();
+
+        if ($message === null) {
+            return;
+        }
+
+        $matcher->tag($message, $quickReplyId, auth()->id());
+        $this->taggingQuickReplyMessageId = null;
+        $this->error = null;
+    }
+
+    public function clearMessageQuickReply(int $messageId, InboxQuickReplyMatcher $matcher): void
+    {
+        AdminAccess::ensureStaffAdmin();
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        $message = ChannelMessage::query()
+            ->where('channel_conversation_id', $this->selectedConversationId)
+            ->where('direction', ChannelMessage::DIRECTION_INBOUND)
+            ->whereKey($messageId)
+            ->first();
+
+        if ($message === null) {
+            return;
+        }
+
+        $matcher->clearTag($message);
+        $this->taggingQuickReplyMessageId = null;
         $this->error = null;
     }
 
@@ -1695,6 +1783,7 @@ class AdminInbox extends Component
         $this->orderPanelOpen = false;
         $this->mappingMessageId = null;
         $this->mappingField = null;
+        $this->taggingQuickReplyMessageId = null;
         $this->resetMappingProductSearchState();
         $this->clearMappingImageMatchState();
     }
@@ -2367,6 +2456,22 @@ class AdminInbox extends Component
 
         $replyToMessage = $this->findMessageInThread($selectedConversation, $this->replyToMessageId);
         $quickReplies = app(InboxQuickReplyService::class)->all();
+        $quickReplyMatcher = app(InboxQuickReplyMatcher::class);
+        $quickReplyMatches = $selectedConversation
+            ? $quickReplyMatcher->matchThread($selectedConversation, $quickReplies)
+            : [];
+        $pricedImageHints = [];
+        if ($selectedConversation) {
+            foreach ($selectedConversation->messages as $threadMessage) {
+                if ($quickReplyMatcher->shouldHighlightPricedImage(
+                    $threadMessage,
+                    $selectedConversation->messages,
+                    $quickReplyMatches,
+                )) {
+                    $pricedImageHints[(int) $threadMessage->id] = true;
+                }
+            }
+        }
         $mappingMessage = $this->findMessageInThread($selectedConversation, $this->mappingMessageId);
         $imageEditMessage = $this->findMessageInThread($selectedConversation, $this->imageEditMessageId);
         $pricedSendMessage = $this->findMessageInThread($selectedConversation, $this->pricedSendMessageId);
@@ -2404,6 +2509,8 @@ class AdminInbox extends Component
             'pricedSendCategories' => $inboxProductCategories,
             'composerProductPickerOpen' => $this->composerProductPickerOpen,
             'quickReplies' => $quickReplies,
+            'quickReplyMatches' => $quickReplyMatches,
+            'pricedImageHints' => $pricedImageHints,
             'hasOlderMessages' => $hasOlderMessages,
             'threadLookbackHours' => $lookbackHours,
             'realtimeEnabled' => $this->realtimeEnabled(),

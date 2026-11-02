@@ -10,7 +10,7 @@ class InboxQuickReplyService
     public const SETTING_KEY = 'channels.inbox.quick_replies';
 
     /**
-     * @return list<array{label: string, body: string}>
+     * @return list<array{id: string, label: string, body: string}>
      */
     public function all(): array
     {
@@ -23,8 +23,8 @@ class InboxQuickReplyService
     }
 
     /**
-     * @param  list<array{label?: mixed, body?: mixed}|mixed>  $rows
-     * @return list<array{label: string, body: string}>
+     * @param  list<array{id?: mixed, label?: mixed, body?: mixed}|mixed>  $rows
+     * @return list<array{id: string, label: string, body: string}>
      */
     public function save(array $rows): array
     {
@@ -43,7 +43,26 @@ class InboxQuickReplyService
     }
 
     /**
-     * @return list<array{label: string, body: string}>
+     * @return array{id: string, label: string, body: string}|null
+     */
+    public function find(string $id): ?array
+    {
+        $id = trim($id);
+        if ($id === '') {
+            return null;
+        }
+
+        foreach ($this->all() as $reply) {
+            if ($reply['id'] === $id) {
+                return $reply;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<array{id: string, label: string, body: string}>
      */
     public function normalize(mixed $rows): array
     {
@@ -52,6 +71,7 @@ class InboxQuickReplyService
         }
 
         $out = [];
+        $seen = [];
         foreach ($rows as $row) {
             if (! is_array($row)) {
                 continue;
@@ -63,9 +83,21 @@ class InboxQuickReplyService
                 continue;
             }
 
+            $label = mb_substr($label, 0, 40);
+            $body = mb_substr($body, 0, 2000);
+            $id = trim((string) ($row['id'] ?? ''));
+            if (preg_match('/^[A-Za-z0-9_-]{4,40}$/', $id) !== 1) {
+                $id = 'qr_'.substr(hash('sha256', $label."\0".$body), 0, 16);
+            }
+            if (isset($seen[$id])) {
+                $id = 'qr_'.substr(hash('sha256', $id."\0".$label."\0".$body.chr(count($out))), 0, 16);
+            }
+            $seen[$id] = true;
+
             $out[] = [
-                'label' => mb_substr($label, 0, 40),
-                'body' => mb_substr($body, 0, 2000),
+                'id' => $id,
+                'label' => $label,
+                'body' => $body,
             ];
         }
 
@@ -73,7 +105,7 @@ class InboxQuickReplyService
     }
 
     /**
-     * @return list<array{label: string, body: string}>|null
+     * @return list<array{id: string, label: string, body: string}>|null
      */
     private function decodeStored(): ?array
     {

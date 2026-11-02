@@ -12,7 +12,7 @@ use Livewire\Component;
 #[Layout('components.layouts.admin')]
 class AdminInboxQuickReplies extends Component
 {
-    /** @var list<array{label: string, body: string}> */
+    /** @var list<array{id?: string, label: string, body: string}> */
     public array $replies = [];
 
     public ?string $statusMessage = null;
@@ -24,14 +24,14 @@ class AdminInboxQuickReplies extends Component
         AdminAccess::ensureStaffAdmin();
         $this->replies = $quickReplies->all();
         if ($this->replies === []) {
-            $this->replies = [['label' => '', 'body' => '']];
+            $this->replies = [['id' => '', 'label' => '', 'body' => '']];
         }
     }
 
     public function addRow(): void
     {
         AdminAccess::ensureStaffAdmin();
-        $this->replies[] = ['label' => '', 'body' => ''];
+        $this->replies[] = ['id' => '', 'label' => '', 'body' => ''];
     }
 
     public function removeRow(int $index): void
@@ -40,7 +40,7 @@ class AdminInboxQuickReplies extends Component
         unset($this->replies[$index]);
         $this->replies = array_values($this->replies);
         if ($this->replies === []) {
-            $this->replies = [['label' => '', 'body' => '']];
+            $this->replies = [['id' => '', 'label' => '', 'body' => '']];
         }
     }
 
@@ -86,7 +86,7 @@ class AdminInboxQuickReplies extends Component
         $this->error = null;
         $this->replies = $quickReplies->resetToDefaults();
         if ($this->replies === []) {
-            $this->replies = [['label' => '', 'body' => '']];
+            $this->replies = [['id' => '', 'label' => '', 'body' => '']];
         }
         $this->statusMessage = 'Restored default quick replies from config.';
     }

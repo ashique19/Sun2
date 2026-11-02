@@ -558,9 +558,17 @@ class AdminInboxTest extends TestCase
             ->assertSet('replyText', '')
             ->assertSet('statusMessage', 'Reply sent.')
             ->assertSeeHtml('role="status"')
-            ->assertSee('Reply sent.');
+            ->assertSee('Reply sent.')
+            ->assertSeeHtml('data-admin-toast-dismiss="tap"')
+            ->assertSeeHtml('data-inbox-keep-composer-focus')
+            ->assertSeeHtml('data-inbox-thread-scroller')
+            ->assertSeeHtml('data-inbox-reply-text');
 
-        $this->assertSame(1, substr_count($component->html(), 'Reply sent.'));
+        $html = $component->html();
+        $this->assertSame(1, substr_count($html, 'Reply sent.'));
+        $this->assertDoesNotMatchRegularExpression('/data-inbox-reply-text[^>]*\sdisabled/', $html);
+        $this->assertStringContainsString('x-on:pointerdown.prevent', $html);
+        $this->assertStringContainsString("document.querySelector('[data-inbox-reply-text]')?.blur()", $html);
 
         $component
             ->call('dismissStatusMessage')

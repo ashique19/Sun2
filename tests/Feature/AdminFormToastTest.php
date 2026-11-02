@@ -120,6 +120,7 @@ class AdminFormToastTest extends TestCase
             ->assertHasNoErrors()
             ->assertSet('message', 'Order updated.')
             ->assertSeeHtml('data-order-form-toast="success"')
+            ->assertSeeHtml('data-admin-toast-dismiss="tap"')
             ->assertSee('Order updated.')
             ->assertDontSeeHtml('rounded-lg bg-emerald-50 text-emerald-700 text-sm px-4 py-3 mb-4 break-words')
             ->call('dismissMessage')

@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Channels\InboxQuickReplyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
@@ -32,6 +33,18 @@ class AdminInboxQuickReplySuggestTest extends TestCase
 
         $this->assertNotSame('', $replies[0]['id']);
         $this->assertSame($replies[0]['id'], app(InboxQuickReplyService::class)->all()[0]['id']);
+    }
+
+    #[Test]
+    public function quick_reply_example_index_names_fit_mysql_identifier_limit(): void
+    {
+        $names = collect(Schema::getIndexes('inbox_quick_reply_examples'))->pluck('name');
+
+        $this->assertTrue($names->contains('iqre_qr_normalized_index'));
+
+        foreach ($names as $name) {
+            $this->assertLessThanOrEqual(64, strlen((string) $name), $name);
+        }
     }
 
     #[Test]

@@ -26,7 +26,8 @@ return new class extends Migration
                 $table->timestamps();
 
                 $table->unique('channel_message_id');
-                $table->index(['quick_reply_id', 'example_normalized']);
+                // Named under MySQL's 64-char identifier limit (auto name is 67).
+                $table->index(['quick_reply_id', 'example_normalized'], 'iqre_qr_normalized_index');
             });
         }
     }

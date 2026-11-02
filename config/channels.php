@@ -8,8 +8,9 @@ return [
     |--------------------------------------------------------------------------
     |
     | Used when ChannelOrderDraftService parses a conversation on demand.
-    | Webhooks and Graph sync do not auto-create Draft by AI rows — staff
-    | start orders from Inbox. Weak / empty parses still create nothing.
+    | Inbound webhooks may create a draft only after ChannelOrderIntentGate
+    | passes (phone + selected product + name/address). Staff still confirm.
+    | Weak / empty parses still create nothing.
     |
     */
 
@@ -26,6 +27,9 @@ return [
 
         // Require a valid Bangladesh mobile before creating a draft.
         'require_phone' => filter_var(env('CHANNEL_AI_DRAFT_REQUIRE_PHONE', true), FILTER_VALIDATE_BOOL),
+
+        // After inbound ingest, run the intent gate and maybe upsert a draft.
+        'catch_on_inbound' => filter_var(env('CHANNEL_AI_DRAFT_CATCH_ON_INBOUND', true), FILTER_VALIDATE_BOOL),
 
         // Auto-attach catalog product when inbound image dHash match is at least this %.
         'image_match_auto_percent' => (float) env(

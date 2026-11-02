@@ -166,6 +166,53 @@ class AdminOrdersTrackingPanelTest extends TestCase
     }
 
     #[Test]
+    public function dispatched_timeline_keeps_iso_event_time_in_dhaka(): void
+    {
+        $this->actingAs($this->adminUser());
+        $courier = $this->steadfast();
+
+        $order = Order::query()->create([
+            'order_number' => 'DSP-TIME-'.uniqid(),
+            'name' => 'Dispatched Time Customer',
+            'phone' => '01710000077',
+            'address' => 'Dhaka',
+            'city' => 'Dhaka',
+            'status' => 'dispatched',
+            'subtotal' => 1000,
+            'delivery_charge' => 80,
+            'courier_charge' => 60,
+            'total' => 1080,
+            'cod_amount' => 1080,
+            'due_amount' => 1080,
+            'payment_status' => 'unpaid',
+            'payment_method' => 'cod',
+            'courier_id' => $courier->id,
+            'courier_tracker' => 'SF112244',
+            'courier_consignment_id' => '288112244',
+            'dispatch_date' => now()->subHours(2),
+            'placed_at' => now()->subDay(),
+            'placed_via' => Order::PLACED_VIA_STOREFRONT,
+        ]);
+
+        CourierData::query()->create([
+            'order_id' => $order->id,
+            'courier_id' => $courier->id,
+            'api_data' => [
+                'notification_type' => 'tracking_update',
+                'tracking_message' => 'Parcel received at hub',
+                'updated_at' => '2026-11-01T14:30:00',
+            ],
+            'created_at' => now()->subHours(2),
+        ]);
+
+        Livewire::test(AdminOrders::class, ['segment' => 'dispatched'])
+            ->assertSee('Dispatched Time Customer')
+            ->assertSee('Parcel received at hub')
+            ->assertSee('01-Nov 14:30')
+            ->assertDontSee('01-Nov 20:30');
+    }
+
+    #[Test]
     public function new_segment_does_not_show_tracking_timeline(): void
     {
         $this->actingAs($this->adminUser());

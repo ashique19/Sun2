@@ -632,6 +632,7 @@
                 <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div
                     data-inbox-thread-header
+                    x-on:pointerdown="document.querySelector('[data-inbox-reply-text]')?.blur()"
                     class="shrink-0 border-b border-[#E7DFCF] bg-white px-3 pb-2.5 pt-[env(safe-area-inset-top,0px)] backdrop-blur max-xl:pt-[max(0.375rem,env(safe-area-inset-top,0px))] max-xl:pr-[max(0.75rem,env(safe-area-inset-right))] xl:bg-white/95 xl:px-4 xl:py-3">
                     <div class="flex min-w-0 max-w-full items-center gap-1 xl:gap-2">
                         <button type="button"
@@ -772,6 +773,8 @@
 
                 <div
                     wire:key="thread-{{ $selectedConversation->id }}"
+                    data-inbox-thread-scroller
+                    x-on:pointerdown="document.querySelector('[data-inbox-reply-text]')?.blur()"
                     x-data="{
                         stick: true,
                         threshold: 96,
@@ -1242,7 +1245,9 @@
                     @endif
                 </div>
 
-                <div class="shrink-0 border-t border-[#E7DFCF] bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 xl:px-4 xl:py-3">
+                <div
+                    data-inbox-composer
+                    class="shrink-0 border-t border-[#E7DFCF] bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 xl:px-4 xl:py-3">
                     @if ($error)
                         <p class="mb-2 text-xs text-rose-600">{{ $error }}</p>
                     @endif
@@ -1345,18 +1350,20 @@
                             <div class="relative min-w-0">
                             <textarea
                                 data-inbox-reply-text
+                                wire:key="inbox-reply-text"
                                 wire:model="replyText"
                                 rows="{{ $replyRows }}"
                                 placeholder="{{ $replyToMessage ? 'Write a reply…' : 'Message…' }}"
-                                class="block w-full min-w-0 min-h-10 resize-none rounded-2xl border border-[#E0D6C2] bg-[#FAF6EF] py-2 pl-4 pr-12 text-sm leading-5 focus:border-[#C9A227] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C9A227] disabled:opacity-60 xl:min-h-11 xl:py-2.5 xl:pr-4"
+                                class="block w-full min-w-0 min-h-10 resize-none rounded-2xl border border-[#E0D6C2] bg-[#FAF6EF] py-2 pl-4 pr-12 text-sm leading-5 focus:border-[#C9A227] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C9A227] xl:min-h-11 xl:py-2.5 xl:pr-4"
                                 wire:keydown.enter.exact.prevent="sendReply"
-                                @disabled($outboundSending)
                                 title="Enter to send · Shift+Enter for a new line"
                             ></textarea>
                             <button type="button"
                                 wire:click="sendReply"
                                 wire:loading.attr="disabled"
                                 wire:target="sendReply,flushPendingOutbound"
+                                x-on:pointerdown.prevent
+                                data-inbox-keep-composer-focus
                                 @disabled($outboundSending)
                                 class="absolute right-1.5 top-1/2 inline-flex h-8 w-8 shrink-0 -translate-y-1/2 items-center justify-center rounded-full bg-[#C9A227] text-white hover:bg-[#b89220] disabled:opacity-60 xl:hidden"
                                 aria-label="Send">
@@ -1370,6 +1377,8 @@
                             wire:click="sendReply"
                             wire:loading.attr="disabled"
                             wire:target="sendReply,flushPendingOutbound"
+                            x-on:pointerdown.prevent
+                            data-inbox-keep-composer-focus
                             @disabled($outboundSending)
                             class="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#C9A227] text-white hover:bg-[#b89220] disabled:opacity-60 xl:inline-flex"
                             aria-label="Send">

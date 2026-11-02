@@ -16,6 +16,7 @@
     };
     $role = $type === 'error' ? 'alert' : 'status';
     $key = md5(($type).'|'.($prefix ?? '').'|'.(string) $message);
+    $tapDismiss = filled($dismissMethod);
 @endphp
 
 <div
@@ -23,12 +24,43 @@
         'fixed left-1/2 z-[70] w-[min(24rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border px-3 py-2.5 text-sm shadow-lg',
         $bottom,
         $styles,
+        'cursor-pointer' => $tapDismiss,
     ]) }}
     wire:key="admin-toast-{{ $key }}"
-    x-data="{ show: true }"
+    x-data="{
+        show: true,
+        key: @js($key),
+        ms: {{ (int) $ms }},
+        dismiss() {
+            if (! this.show) {
+                return;
+            }
+            this.show = false;
+            const store = window.__adminToastUntil || {};
+            delete store[this.key];
+            window.__adminToastUntil = store;
+            @if ($dismissMethod)
+                $wire.{{ $dismissMethod }}();
+            @endif
+        },
+        startTimer() {
+            const store = window.__adminToastUntil || (window.__adminToastUntil = {});
+            if (store[this.key] == null) {
+                store[this.key] = Date.now() + this.ms;
+            }
+            const left = store[this.key] - Date.now();
+            window.setTimeout(() => this.dismiss(), Math.max(0, left));
+        },
+    }"
     x-show="show"
     x-transition.opacity.duration.200ms
-    x-init="setTimeout(() => { show = false; @if ($dismissMethod) $wire.{{ $dismissMethod }}() @endif }, {{ (int) $ms }})"
+    x-init="startTimer()"
+    @if ($tapDismiss)
+        x-on:click="dismiss()"
+        x-on:keydown.escape.window="dismiss()"
+        data-admin-toast-dismiss="tap"
+        title="Tap to dismiss"
+    @endif
     role="{{ $role }}"
     data-admin-toast="{{ $type }}"
 >

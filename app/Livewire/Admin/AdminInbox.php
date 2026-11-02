@@ -1637,17 +1637,28 @@ class AdminInbox extends Component
         $this->clearPendingOutbound();
         $this->markConversationRead($conversation, $replies);
         $this->statusMessage = 'Reply sent.';
+        $this->keepComposerFocused();
     }
 
     private function dispatchPendingOutboundFlush(): void
     {
+        $this->keepComposerFocused();
+
         if (app()->runningUnitTests()) {
             $this->flushPendingOutbound(app(ChannelReplyService::class));
 
             return;
         }
 
-        $this->js('queueMicrotask(() => $wire.flushPendingOutbound())');
+        $this->js(<<<'JS'
+            queueMicrotask(() => {
+                const ta = document.querySelector('[data-inbox-reply-text]');
+                if (ta && ! ta.disabled) {
+                    ta.focus({ preventScroll: true });
+                }
+                $wire.flushPendingOutbound();
+            });
+        JS);
     }
 
     private function failPendingOutbound(string $error): void
@@ -1658,6 +1669,19 @@ class AdminInbox extends Component
         $this->clearPendingOutbound();
         $this->error = $error;
         $this->statusMessage = null;
+        $this->keepComposerFocused();
+    }
+
+    private function keepComposerFocused(): void
+    {
+        $this->js(<<<'JS'
+            queueMicrotask(() => {
+                const ta = document.querySelector('[data-inbox-reply-text]');
+                if (ta && ! ta.disabled) {
+                    ta.focus({ preventScroll: true });
+                }
+            });
+        JS);
     }
 
     private function clearPendingOutbound(): void

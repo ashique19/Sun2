@@ -114,10 +114,174 @@ class AdminInboxTest extends TestCase
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->set('pendingReplyText', 'On the way')
+            ->set('pendingOutboundConversationId', $conversation->id)
             ->set('outboundSending', true)
             ->assertSeeHtml('data-inbox-pending-outbound')
             ->assertSee('Sending…')
             ->assertSee('On the way');
+    }
+
+    #[Test]
+    public function pending_outbound_stays_on_the_conversation_that_sent(): void
+    {
+        $this->actingAs($this->adminUser());
+        $first = $this->conversation([
+            'external_user_id' => 'psid-pending-a',
+            'customer_name' => 'Sender A',
+        ]);
+        $second = $this->conversation([
+            'external_user_id' => 'psid-pending-b',
+            'customer_name' => 'Sender B',
+        ]);
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $second->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Hello from B',
+            'sent_at' => now(),
+        ]);
+
+        $component = Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $first->id)
+            ->set('pendingReplyText', 'On the way')
+            ->set('pendingOutboundConversationId', $first->id)
+            ->set('outboundSending', true)
+            ->assertSeeHtml('data-inbox-pending-outbound')
+            ->call('selectConversation', $second->id)
+            ->assertSet('selectedConversationId', $second->id)
+            ->assertSet('outboundSending', true)
+            ->assertSet('pendingOutboundConversationId', $first->id)
+            ->assertSet('pendingReplyText', 'On the way')
+            ->assertDontSeeHtml('data-inbox-pending-outbound')
+            ->assertDontSee('On the way')
+            ->assertSee('Hello from B');
+
+        $this->assertFalse($component->instance()->isSendingInOpenThread());
+
+        $component
+            ->call('selectConversation', $first->id)
+            ->assertSeeHtml('data-inbox-pending-outbound')
+            ->assertSee('Sending…')
+            ->assertSee('On the way');
+
+        $this->assertTrue($component->instance()->isSendingInOpenThread());
+    }
+
+    #[Test]
+    public function flushing_after_switching_threads_sends_to_the_original_conversation(): void
+    {
+        $this->actingAs($this->adminUser());
+        $first = $this->conversation([
+            'external_user_id' => 'psid-flush-a',
+            'customer_name' => 'Flush A',
+        ]);
+        $second = $this->conversation([
+            'external_user_id' => 'psid-flush-b',
+            'customer_name' => 'Flush B',
+        ]);
+
+        $replies = Mockery::mock(ChannelReplyService::class);
+        $replies->shouldReceive('sendText')
+            ->once()
+            ->withArgs(function ($conversation, $text, $force, $replyTo) use ($first) {
+                return (int) $conversation->id === (int) $first->id
+                    && $text === 'On the way'
+                    && $force === false
+                    && $replyTo === null;
+            })
+            ->andReturn([
+                'ok' => true,
+                'message' => null,
+                'error' => null,
+                'outside_window' => false,
+            ]);
+        $replies->shouldReceive('markSeen')->zeroOrMoreTimes();
+        $replies->shouldReceive('lastMarkSeenError')->zeroOrMoreTimes()->andReturn(null);
+        $this->app->instance(ChannelReplyService::class, $replies);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $first->id)
+            ->set('pendingReplyText', 'On the way')
+            ->set('pendingOutboundConversationId', $first->id)
+            ->set('outboundSending', true)
+            ->call('selectConversation', $second->id)
+            ->assertDontSeeHtml('data-inbox-pending-outbound')
+            ->call('flushPendingOutbound')
+            ->assertSet('outboundSending', false)
+            ->assertSet('pendingOutboundConversationId', null)
+            ->assertSet('statusMessage', 'Reply sent.');
+    }
+
+    #[Test]
+    public function failed_send_after_switching_threads_does_not_restore_the_composer(): void
+    {
+        $this->actingAs($this->adminUser());
+        $first = $this->conversation([
+            'external_user_id' => 'psid-fail-a',
+            'customer_name' => 'Fail A',
+        ]);
+        $second = $this->conversation([
+            'external_user_id' => 'psid-fail-b',
+            'customer_name' => 'Fail B',
+        ]);
+
+        $replies = Mockery::mock(ChannelReplyService::class);
+        $replies->shouldReceive('sendText')
+            ->once()
+            ->withArgs(function ($conversation) use ($first) {
+                return (int) $conversation->id === (int) $first->id;
+            })
+            ->andReturn([
+                'ok' => false,
+                'message' => null,
+                'error' => 'Messenger Send API error (400): boom',
+                'outside_window' => false,
+            ]);
+        $replies->shouldReceive('markSeen')->zeroOrMoreTimes();
+        $replies->shouldReceive('lastMarkSeenError')->zeroOrMoreTimes()->andReturn(null);
+        $this->app->instance(ChannelReplyService::class, $replies);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $first->id)
+            ->set('pendingReplyText', 'On the way')
+            ->set('pendingOutboundConversationId', $first->id)
+            ->set('outboundSending', true)
+            ->call('selectConversation', $second->id)
+            ->set('replyText', 'Draft for B')
+            ->call('flushPendingOutbound')
+            ->assertSet('replyText', 'Draft for B')
+            ->assertSet('outboundSending', false)
+            ->assertSet('pendingOutboundConversationId', null)
+            ->assertDontSeeHtml('data-inbox-pending-outbound')
+            ->assertDontSee('On the way');
+    }
+
+    #[Test]
+    public function send_is_blocked_while_another_conversation_is_still_sending(): void
+    {
+        $this->actingAs($this->adminUser());
+        $first = $this->conversation([
+            'external_user_id' => 'psid-block-a',
+            'customer_name' => 'Block A',
+        ]);
+        $second = $this->conversation([
+            'external_user_id' => 'psid-block-b',
+            'customer_name' => 'Block B',
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $first->id)
+            ->set('pendingReplyText', 'On the way')
+            ->set('pendingOutboundConversationId', $first->id)
+            ->set('outboundSending', true)
+            ->call('selectConversation', $second->id)
+            ->set('replyText', 'Reply for B')
+            ->call('sendReply')
+            ->assertSet('error', 'Still sending a reply in another conversation.')
+            ->assertSet('replyText', 'Reply for B')
+            ->assertSet('outboundSending', true)
+            ->assertSet('pendingOutboundConversationId', $first->id)
+            ->assertSet('pendingReplyText', 'On the way');
     }
 
     #[Test]

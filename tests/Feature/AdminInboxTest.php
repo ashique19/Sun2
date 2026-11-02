@@ -238,6 +238,40 @@ class AdminInboxTest extends TestCase
     }
 
     #[Test]
+    public function mobile_thread_sheet_is_viewport_fixed_so_the_list_keeps_height(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $html = Livewire::test(AdminInbox::class)
+            ->assertSee($conversation->customer_name)
+            ->assertSeeHtml('data-inbox-panes')
+            ->assertSeeHtml('data-inbox-conversation-list')
+            ->assertSeeHtml('data-inbox-mobile-thread-sheet')
+            ->assertSeeHtml('fixed z-30')
+            ->assertDontSeeHtml('relative flex min-h-0 flex-col overflow-hidden')
+            ->html();
+
+        $sheetPos = strpos($html, 'data-inbox-mobile-thread-sheet');
+        $this->assertNotFalse($sheetPos);
+        $sheetTag = substr($html, $sheetPos, 500);
+        $this->assertStringContainsString('fixed z-30', $sheetTag);
+        $this->assertStringNotContainsString(' relative ', $sheetTag);
+
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertIsString($css);
+        $mediaPos = strpos($css, '@media (max-width: 1279px)');
+        $this->assertNotFalse($mediaPos);
+        $sheetRulePos = strpos($css, '[data-inbox-mobile-thread-sheet]', $mediaPos);
+        $this->assertNotFalse($sheetRulePos);
+        $fixedPos = strpos($css, 'position: fixed;', $sheetRulePos);
+        $this->assertNotFalse($fixedPos);
+        $this->assertLessThan($sheetRulePos + 400, $fixedPos, 'Mobile sheet rule must pin position:fixed before later rules.');
+        $this->assertStringContainsString('[data-inbox-panes]', $css);
+        $this->assertStringContainsString('[data-inbox-panes] > [data-inbox-conversation-list]', $css);
+    }
+
+    #[Test]
     public function thread_path_deep_link_opens_the_conversation(): void
     {
         $this->actingAs($this->adminUser());

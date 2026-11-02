@@ -497,7 +497,9 @@
         </div>
     @endif
 
-    <div @class([
+    <div
+        data-inbox-panes
+        @class([
         'grid min-h-0 flex-1 grid-rows-1 xl:grid-cols-[22rem_minmax(0,1fr)] xl:gap-6',
         $mobileThreadOpen ? 'mt-0' : 'mt-2 xl:mt-0',
     ])>
@@ -599,7 +601,7 @@
         <div
             data-inbox-mobile-thread-sheet
             @class([
-            'relative flex min-h-0 flex-col overflow-hidden',
+            'flex min-h-0 flex-col overflow-hidden',
             'fixed z-30 xl:static xl:inset-auto xl:z-auto xl:h-full xl:max-h-full xl:min-h-0 xl:rounded-2xl xl:border xl:border-[#EFE7D6] xl:bg-white',
             $mobileThreadOpen
                 ? 'inset-0 flex bg-white'

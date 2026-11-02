@@ -275,10 +275,32 @@ body:has(.mobile-nav-toggle:checked) {
 }
 
 /* Admin inbox: mobile thread is a full-viewport sheet that slides over the list.
-   List + Inbox header stay painted underneath so swipe-back does not flash empty. */
+   List + Inbox header stay painted underneath so swipe-back does not flash empty.
+
+   The sheet also has Tailwind `relative` + `fixed`. Utility source order makes
+   `relative` win, which left the sheet in-flow at ~100dvh and collapsed the
+   conversation list to height 0 (blank beige Inbox). Pin it to the viewport
+   here so the list keeps its flex/grid height. */
 @media (max-width: 1279px) {
+    [data-inbox-panes] {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        flex: 1 1 auto;
+    }
+
+    [data-inbox-panes] > [data-inbox-conversation-list] {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
+        max-height: none;
+    }
+
     [data-inbox-mobile-thread-sheet] {
-        top: 0;
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        z-index: 30;
         max-height: 100dvh;
         display: flex !important;
         transform: translate3d(100%, 0, 0);

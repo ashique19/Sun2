@@ -340,6 +340,17 @@ body:has(.mobile-nav-toggle:checked) {
     animation: inbox-pending-in 0.16s ease-out;
 }
 
+.inbox-msg-body {
+    font-variant-emoji: emoji;
+}
+
+[data-inbox-msg].is-quoted > div,
+[data-inbox-msg]:target > div {
+    outline: 2px solid #c9a227;
+    outline-offset: 3px;
+    box-shadow: 0 0 0 4px rgb(201 162 39 / 0.28);
+}
+
 @keyframes inbox-pending-in {
     from {
         opacity: 0;

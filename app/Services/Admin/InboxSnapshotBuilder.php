@@ -14,7 +14,7 @@ class InboxSnapshotBuilder
      *     id: int,
      *     name: string,
      *     window: bool,
-     *     messages: list<array{id: int, direction: string, body: string, is_image: bool, media_url: ?string, sent_at_label: string, reply_preview: ?string}>
+     *     messages: list<array{id: int, direction: string, body: string, is_image: bool, is_audio: bool, is_video: bool, media_url: ?string, poster_url: ?string, sent_at_label: string, reply_to_id: ?int, reply_preview: ?string, reply_is_image: bool, reply_media_url: ?string}>
      * }
      */
     public function thread(ChannelConversation $conversation, ?int $lookbackHours = null): array
@@ -32,7 +32,7 @@ class InboxSnapshotBuilder
             $since = now()->subHours($hours);
 
             $messages = ChannelMessage::query()
-                ->with('replyTo:id,body,media_url,media_path,media_mime')
+                ->with('replyTo:id,body,media_url,media_path,media_mime,raw_payload')
                 ->where('channel_conversation_id', $conversation->id)
                 ->where(function ($window) use ($since) {
                     $window->where('sent_at', '>=', $since)
@@ -55,7 +55,7 @@ class InboxSnapshotBuilder
     }
 
     /**
-     * @return array{id: int, direction: string, body: string, is_image: bool, media_url: ?string, sent_at_label: string, reply_preview: ?string}
+     * @return array{id: int, direction: string, body: string, is_image: bool, is_audio: bool, is_video: bool, media_url: ?string, poster_url: ?string, sent_at_label: string, reply_to_id: ?int, reply_preview: ?string, reply_is_image: bool, reply_media_url: ?string}
      */
     public function message(ChannelMessage $message): array
     {
@@ -65,17 +65,31 @@ class InboxSnapshotBuilder
         }
 
         $isImage = $message->isImageAttachment();
+        $isAudio = $message->isAudioAttachment();
+        $isVideo = $message->isVideoAttachment();
+        $hasPlayableMedia = $isImage || $isAudio || $isVideo;
+        $quoted = $message->replyTo;
+        $quotedImage = $quoted?->isImageAttachment() === true;
 
         return [
             'id' => (int) $message->id,
             'direction' => (string) $message->direction,
             'body' => $body,
             'is_image' => $isImage,
-            'media_url' => $isImage ? route('admin.inbox.media', $message) : null,
+            'is_audio' => $isAudio,
+            'is_video' => $isVideo,
+            'media_url' => $hasPlayableMedia ? $message->staffMediaUrl() : null,
+            'poster_url' => $isVideo && $message->videoPosterUrl()
+                ? $message->staffMediaUrl(poster: true)
+                : null,
             'sent_at_label' => $message->sent_at
                 ? $message->sent_at->timezone('Asia/Dhaka')->format('h:i A')
                 : '',
-            'reply_preview' => $message->replyTo?->previewText(60),
+            'reply_to_id' => $quoted?->id,
+            'reply_preview' => $quoted?->previewText(60)
+                ?? ($message->unresolvedReplyToMid() ? 'Previous message' : null),
+            'reply_is_image' => $quotedImage,
+            'reply_media_url' => $quotedImage ? $quoted->staffMediaUrl() : null,
         ];
     }
 

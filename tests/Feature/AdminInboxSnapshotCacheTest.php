@@ -131,6 +131,13 @@ class AdminInboxSnapshotCacheTest extends TestCase
         $this->assertStringContainsString('is-hiding', $source);
         $this->assertStringContainsString('prefetch', $source);
         $this->assertStringContainsString("import './inbox-snapshot-cache.js'", $boot);
+        $this->assertStringContainsString('<audio', $source);
+        $this->assertStringContainsString('<video', $source);
+        $this->assertStringContainsString('reply_is_image', $source);
+        $this->assertStringContainsString('inboxScrollToMessage', $boot);
+        $dom = file_get_contents(resource_path('js/inbox-dom.js'));
+        $this->assertIsString($dom);
+        $this->assertStringContainsString('data-inbox-quote-target', $dom);
 
         $history = file_get_contents(resource_path('js/inbox-thread-history.js'));
         $this->assertIsString($history);

@@ -1,9 +1,10 @@
-import { csrfToken, livewireFor } from './inbox-dom.js';
+import { csrfToken, inboxScrollToMessage, livewireFor } from './inbox-dom.js';
 import { installInboxThreadHistory } from './inbox-thread-history.js';
 import './inbox-priced-image-send.js';
 import './inbox-snapshot-cache.js';
 
 globalThis.installInboxThreadHistory = installInboxThreadHistory;
+globalThis.inboxScrollToMessage = inboxScrollToMessage;
 
 if (typeof document !== 'undefined') {
     document.dispatchEvent(new Event('inbox-thread-history-ready'));

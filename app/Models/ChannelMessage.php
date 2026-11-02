@@ -12,6 +12,16 @@ class ChannelMessage extends Model
 
     public const DIRECTION_OUTBOUND = 'outbound';
 
+    public const MEDIA_IMAGE = 'image';
+
+    public const MEDIA_AUDIO = 'audio';
+
+    public const MEDIA_VIDEO = 'video';
+
+    public const MEDIA_STICKER = 'sticker';
+
+    public const MEDIA_FILE = 'file';
+
     protected $guarded = [];
 
     protected function casts(): array
@@ -71,20 +81,44 @@ class ChannelMessage extends Model
             return Str::limit($body, $limit);
         }
 
+        return match ($this->mediaKind()) {
+            self::MEDIA_STICKER => 'Sticker',
+            self::MEDIA_IMAGE => 'Photo',
+            self::MEDIA_AUDIO => 'Audio',
+            self::MEDIA_VIDEO => 'Video',
+            self::MEDIA_FILE => 'Attachment',
+            default => 'Message',
+        };
+    }
+
+    public function mediaKind(): ?string
+    {
+        if (! $this->hasMedia()) {
+            return null;
+        }
+
+        if ($this->isAudioAttachment()) {
+            return self::MEDIA_AUDIO;
+        }
+
+        if ($this->isVideoAttachment()) {
+            return self::MEDIA_VIDEO;
+        }
+
+        if ($this->isStickerAttachment()) {
+            return self::MEDIA_STICKER;
+        }
+
         if ($this->isImageAttachment()) {
-            return 'Photo';
+            return self::MEDIA_IMAGE;
         }
 
-        if ($this->hasMedia()) {
-            return 'Attachment';
-        }
-
-        return 'Message';
+        return self::MEDIA_FILE;
     }
 
     public function isImageAttachment(): bool
     {
-        if (! $this->hasMedia()) {
+        if (! $this->hasMedia() || $this->isAudioAttachment() || $this->isVideoAttachment()) {
             return false;
         }
 
@@ -103,42 +137,169 @@ class ChannelMessage extends Model
             return filled($this->media_path);
         }
 
+        $attachment = $this->matchingAttachment();
+        if ($attachment !== null) {
+            if (($attachment['type'] ?? null) === 'image'
+                || data_get($attachment, 'image_data')
+                || filled(data_get($attachment, 'payload.sticker_id'))) {
+                return true;
+            }
+
+            if (($attachment['type'] ?? null) === 'video' || data_get($attachment, 'video_data')) {
+                return false;
+            }
+        }
+
+        if ($this->graphStickerUrl() === $url) {
+            return true;
+        }
+
         // Match this row's media URL to the corresponding Messenger attachment
         // (albums store one ChannelMessage per attachment with the full payload).
+        // Meta CDN/lookaside URLs rarely include a file extension.
+        return str_contains($url, 'fbcdn')
+            || str_contains($url, 'fbsbx.com')
+            || str_contains($url, 'lookaside');
+    }
+
+    public function isAudioAttachment(): bool
+    {
+        if (! $this->hasMedia() || $this->hasMimePrefix('video/') || $this->hasMimePrefix('image/')) {
+            return false;
+        }
+
+        if ($this->hasMimePrefix('audio/')) {
+            return true;
+        }
+
+        $path = (string) ($this->media_path ?: $this->media_url);
+        if (preg_match('/\.(mp3|m4a|aac|ogg|wav|amr|opus)(\?|$)/i', $path) === 1) {
+            return true;
+        }
+
+        $attachment = $this->matchingAttachment();
+
+        return ($attachment['type'] ?? null) === 'audio'
+            || str_starts_with(strtolower((string) data_get($attachment, 'mime_type', '')), 'audio/');
+    }
+
+    public function isVideoAttachment(): bool
+    {
+        if (! $this->hasMedia() || $this->hasMimePrefix('audio/') || $this->hasMimePrefix('image/')) {
+            return false;
+        }
+
+        if ($this->hasMimePrefix('video/')) {
+            return true;
+        }
+
+        $path = (string) ($this->media_path ?: $this->media_url);
+        if (preg_match('/\.(mp4|mov|webm|m4v|3gp)(\?|$)/i', $path) === 1) {
+            return true;
+        }
+
+        $attachment = $this->matchingAttachment();
+
+        return ($attachment['type'] ?? null) === 'video'
+            || filled(data_get($attachment, 'video_data'))
+            || str_starts_with(strtolower((string) data_get($attachment, 'mime_type', '')), 'video/');
+    }
+
+    public function isStickerAttachment(): bool
+    {
+        if (! $this->hasMedia()) {
+            return false;
+        }
+
+        if (filled(data_get($this->raw_payload, 'message.sticker_id'))
+            || filled(data_get($this->raw_payload, 'sticker_id'))
+            || filled($this->graphStickerUrl())) {
+            return true;
+        }
+
+        $attachment = $this->matchingAttachment();
+
+        return ($attachment['type'] ?? null) === 'sticker'
+            || filled(data_get($attachment, 'payload.sticker_id'));
+    }
+
+    public function staffMediaUrl(bool $poster = false): string
+    {
+        return route('admin.inbox.media', $poster
+            ? ['message' => $this, 'poster' => 1]
+            : $this);
+    }
+
+    public function videoPosterUrl(): ?string
+    {
+        if (! $this->isVideoAttachment()) {
+            return null;
+        }
+
+        $preview = data_get($this->matchingAttachment(), 'video_data.preview_url')
+            ?? data_get($this->matchingAttachment(), 'payload.preview_url')
+            ?? data_get($this->raw_payload, 'attachments.data.0.video_data.preview_url');
+
+        return is_string($preview) && $preview !== '' ? $preview : null;
+    }
+
+    public function unresolvedReplyToMid(): ?string
+    {
+        if ($this->reply_to_message_id) {
+            return null;
+        }
+
+        $mid = data_get($this->raw_payload, 'message.reply_to.mid')
+            ?? data_get($this->raw_payload, 'reply_to.mid');
+
+        return is_string($mid) && $mid !== '' ? $mid : null;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function matchingAttachment(): ?array
+    {
+        $url = (string) ($this->media_url ?? '');
         $attachments = data_get($this->raw_payload, 'message.attachments')
             ?? data_get($this->raw_payload, 'attachments.data')
             ?? data_get($this->raw_payload, 'attachments');
 
-        if (is_array($attachments)) {
-            foreach ($attachments as $attachment) {
-                if (! is_array($attachment)) {
-                    continue;
-                }
+        if (! is_array($attachments) || $attachments === []) {
+            return null;
+        }
 
-                $attachmentUrl = data_get($attachment, 'payload.url')
-                    ?? data_get($attachment, 'image_data.url')
-                    ?? data_get($attachment, 'file_url')
-                    ?? data_get($attachment, 'video_data.url');
+        foreach ($attachments as $attachment) {
+            if (! is_array($attachment)) {
+                continue;
+            }
 
-                if (! is_string($attachmentUrl) || $attachmentUrl !== $url) {
-                    continue;
-                }
+            if ($url === '') {
+                return $attachment;
+            }
 
-                if (($attachment['type'] ?? null) === 'image' || data_get($attachment, 'image_data')) {
-                    return true;
-                }
+            $attachmentUrl = data_get($attachment, 'payload.url')
+                ?? data_get($attachment, 'image_data.url')
+                ?? data_get($attachment, 'file_url')
+                ?? data_get($attachment, 'video_data.url');
 
-                if (($attachment['type'] ?? null) === 'video' || data_get($attachment, 'video_data')) {
-                    return false;
-                }
-
-                break;
+            if (is_string($attachmentUrl) && $attachmentUrl === $url) {
+                return $attachment;
             }
         }
 
-        // Meta CDN/lookaside URLs rarely include a file extension
-        return str_contains($url, 'fbcdn')
-            || str_contains($url, 'fbsbx.com')
-            || str_contains($url, 'lookaside');
+        return null;
+    }
+
+    private function graphStickerUrl(): ?string
+    {
+        $sticker = data_get($this->raw_payload, 'sticker');
+
+        return is_string($sticker) && $sticker !== '' ? $sticker : null;
+    }
+
+    private function hasMimePrefix(string $prefix): bool
+    {
+        return str_starts_with(strtolower((string) ($this->media_mime ?? '')), $prefix);
     }
 }

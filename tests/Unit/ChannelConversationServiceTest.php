@@ -53,4 +53,60 @@ class ChannelConversationServiceTest extends TestCase
         $this->assertNotNull($conversation->fresh()->last_inbound_at);
         $this->assertTrue($conversation->fresh()->isWithinMessagingWindow());
     }
+
+    public function test_resolve_reply_to_id_matches_bare_and_album_mids(): void
+    {
+        $service = app(ChannelConversationService::class);
+        $conversation = $service->findOrCreate(ChannelConversation::CHANNEL_MESSENGER, 'U-REPLY');
+
+        $parent = $service->storeMessage($conversation, [
+            'external_message_id' => 'm_parent',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'original',
+            'sent_at' => now()->subMinute(),
+        ]);
+        $album = $service->storeMessage($conversation, [
+            'external_message_id' => 'm_album#1',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.com/a.jpg',
+            'media_mime' => 'image/jpeg',
+            'sent_at' => now()->subSeconds(30),
+        ]);
+
+        $this->assertSame($parent->id, $service->resolveReplyToId($conversation, 'm_parent'));
+        $this->assertSame($album->id, $service->resolveReplyToId($conversation, 'm_album'));
+        $this->assertNull($service->resolveReplyToId($conversation, 'm_missing'));
+        $this->assertNull($service->resolveReplyToId($conversation, null));
+    }
+
+    public function test_store_message_backfills_missing_reply_to(): void
+    {
+        $service = app(ChannelConversationService::class);
+        $conversation = $service->findOrCreate(ChannelConversation::CHANNEL_MESSENGER, 'U-BACKFILL');
+
+        $parent = $service->storeMessage($conversation, [
+            'external_message_id' => 'm_orig',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'hi',
+            'sent_at' => now()->subMinute(),
+        ]);
+        $reply = $service->storeMessage($conversation, [
+            'external_message_id' => 'm_reply',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'later',
+            'sent_at' => now(),
+        ]);
+
+        $this->assertNull($reply->reply_to_message_id);
+
+        $updated = $service->storeMessage($conversation, [
+            'external_message_id' => 'm_reply',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'reply_to_message_id' => $parent->id,
+        ]);
+
+        $this->assertSame($reply->id, $updated->id);
+        $this->assertSame($parent->id, $updated->fresh()->reply_to_message_id);
+        $this->assertSame('later', $updated->fresh()->body);
+    }
 }

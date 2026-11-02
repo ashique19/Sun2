@@ -69,6 +69,8 @@ class ChannelConversationService
                     ->first();
 
                 if ($existing) {
+                    $this->backfillReplyTo($existing, $payload['reply_to_message_id'] ?? null);
+
                     return $existing;
                 }
             }
@@ -126,5 +128,47 @@ class ChannelConversationService
 
             return $message;
         });
+    }
+
+    public function resolveReplyToId(ChannelConversation $conversation, mixed $replyToMid): ?int
+    {
+        if (! is_string($replyToMid)) {
+            return null;
+        }
+
+        $mid = trim($replyToMid);
+        if ($mid === '') {
+            return null;
+        }
+
+        $id = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('external_message_id', $mid)
+            ->value('id');
+
+        if ($id) {
+            return (int) $id;
+        }
+
+        $id = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('external_message_id', 'like', $mid.'#%')
+            ->orderBy('id')
+            ->value('id');
+
+        return $id ? (int) $id : null;
+    }
+
+    private function backfillReplyTo(ChannelMessage $message, mixed $replyToId): void
+    {
+        if ($message->reply_to_message_id !== null || ! is_int($replyToId) || $replyToId <= 0) {
+            return;
+        }
+
+        if ($replyToId === $message->id) {
+            return;
+        }
+
+        $message->forceFill(['reply_to_message_id' => $replyToId])->save();
     }
 }

@@ -286,9 +286,7 @@ class MessengerConversationSyncService
         int $messagesPerThread,
     ): array {
         $pageSize = min(50, $conversationLimit);
-        $fields = 'id,updated_time,participants{id,name},messages.limit('
-            .$messagesPerThread
-            .'){id,message,from,created_time,attachments}';
+        $fields = $this->conversationFields($messagesPerThread);
 
         $threads = [];
         $nextUrl = null;
@@ -452,9 +450,7 @@ class MessengerConversationSyncService
         array $ids,
         int $messagesPerThread,
     ): array {
-        $fields = 'id,updated_time,participants{id,name},messages.limit('
-            .$messagesPerThread
-            .'){id,message,from,created_time,attachments}';
+        $fields = $this->conversationFields($messagesPerThread);
 
         $response = Http::timeout(20)
             ->withToken($token)
@@ -621,6 +617,11 @@ class MessengerConversationSyncService
             return 0;
         }
 
+        $replyToId = $this->conversations->resolveReplyToId(
+            $conversation,
+            data_get($message, 'reply_to.mid'),
+        );
+
         $sentAt = null;
         if (! empty($message['created_time'])) {
             try {
@@ -635,6 +636,13 @@ class MessengerConversationSyncService
 
         if ($attachments === []) {
             if ($this->messageExists($conversation->id, $mid)) {
+                $this->conversations->storeMessage($conversation, [
+                    'external_message_id' => $mid,
+                    'direction' => $direction,
+                    'reply_to_message_id' => $replyToId,
+                    'raw_payload' => $message,
+                ]);
+
                 return 0;
             }
 
@@ -644,6 +652,7 @@ class MessengerConversationSyncService
                 'body' => $text !== '' ? $text : null,
                 'media_url' => null,
                 'media_mime' => null,
+                'reply_to_message_id' => $replyToId,
                 'raw_payload' => $message,
                 'sent_at' => $sentAt,
             ]);
@@ -657,10 +666,24 @@ class MessengerConversationSyncService
 
             // Legacy first-only ingest stored the first album image under the bare mid.
             if ($total > 1 && $index === 0 && $this->messageExists($conversation->id, $mid)) {
+                $this->conversations->storeMessage($conversation, [
+                    'external_message_id' => $mid,
+                    'direction' => $direction,
+                    'reply_to_message_id' => $replyToId,
+                    'raw_payload' => $message,
+                ]);
+
                 continue;
             }
 
             if ($this->messageExists($conversation->id, $externalId)) {
+                $this->conversations->storeMessage($conversation, [
+                    'external_message_id' => $externalId,
+                    'direction' => $direction,
+                    'reply_to_message_id' => $replyToId,
+                    'raw_payload' => $message,
+                ]);
+
                 continue;
             }
 
@@ -670,6 +693,7 @@ class MessengerConversationSyncService
                 'body' => $index === 0 && $text !== null && $text !== '' ? $text : null,
                 'media_url' => $attachment['url'],
                 'media_mime' => $attachment['mime'],
+                'reply_to_message_id' => $replyToId,
                 'raw_payload' => $message,
                 'sent_at' => $sentAt,
             ]);
@@ -697,6 +721,16 @@ class MessengerConversationSyncService
     }
 
     /**
+     * Nested Graph fields for one Conversations API call — no extra round-trips.
+     */
+    private function conversationFields(int $messagesPerThread): string
+    {
+        return 'id,updated_time,participants{id,name},messages.limit('
+            .$messagesPerThread
+            .'){id,message,from,created_time,sticker,reply_to,attachments{mime_type,name,image_data{url,preview_url},video_data{url,preview_url},file_url}}';
+    }
+
+    /**
      * @param  array<string, mixed>  $message
      * @return list<array{url: string, mime: ?string}>
      */
@@ -704,10 +738,11 @@ class MessengerConversationSyncService
     {
         $attachments = data_get($message, 'attachments.data');
         if (! is_array($attachments)) {
-            return [];
+            $attachments = [];
         }
 
         $extracted = [];
+        $urls = [];
 
         foreach ($attachments as $attachment) {
             if (! is_array($attachment)) {
@@ -722,14 +757,28 @@ class MessengerConversationSyncService
                 continue;
             }
 
-            $mime = null;
+            $mime = data_get($attachment, 'mime_type');
+            if (! is_string($mime) || $mime === '') {
+                $mime = null;
+            }
+
             if (data_get($attachment, 'image_data')) {
-                $mime = 'image/jpeg';
+                $mime ??= 'image/jpeg';
             } elseif (data_get($attachment, 'video_data')) {
-                $mime = 'video/mp4';
+                $mime ??= 'video/mp4';
+            } elseif (is_string($mime) && str_starts_with(strtolower($mime), 'audio/')) {
+                // keep audio mime from Graph
+            } elseif (preg_match('/\.(mp3|m4a|aac|ogg|wav|amr|opus)(\?|$)/i', $url) === 1) {
+                $mime ??= 'audio/mpeg';
             }
 
             $extracted[] = ['url' => $url, 'mime' => $mime];
+            $urls[] = $url;
+        }
+
+        $sticker = $message['sticker'] ?? null;
+        if (is_string($sticker) && $sticker !== '' && ! in_array($sticker, $urls, true)) {
+            $extracted[] = ['url' => $sticker, 'mime' => 'image/png'];
         }
 
         return $extracted;

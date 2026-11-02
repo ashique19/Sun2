@@ -565,13 +565,13 @@
                                 @if ($latest)
                                     @if ($latest->isImageAttachment())
                                         <img
-                                            src="{{ route('admin.inbox.media', $latest) }}"
+                                            src="{{ $latest->staffMediaUrl() }}"
                                             alt=""
                                             class="h-5 w-5 shrink-0 rounded object-cover bg-[#F1EADB]"
                                             loading="lazy">
                                     @endif
-                                    <p class="min-w-0 flex-1 truncate text-xs text-[#8C8474]">
-                                        {{ $latest->direction === 'outbound' ? 'You: ' : '' }}{{ $latest->body ?: ($latest->isImageAttachment() ? 'Photo' : 'Attachment') }}
+                                    <p class="min-w-0 flex-1 truncate text-xs text-[#8C8474] inbox-msg-body">
+                                        {{ $latest->direction === 'outbound' ? 'You: ' : '' }}{{ $latest->body ?: $latest->previewText() }}
                                     </p>
                                 @else
                                     <p class="min-w-0 flex-1 truncate text-xs text-[#8C8474]">No messages yet</p>
@@ -798,9 +798,11 @@
                     @foreach ($selectedConversation->messages as $messageRow)
                         @php $isOutbound = $messageRow->direction === 'outbound'; @endphp
                         <div
+                            id="inbox-msg-{{ $messageRow->id }}"
                             data-inbox-msg
+                            data-inbox-msg-id="{{ $messageRow->id }}"
                             @class([
-                            'flex w-full',
+                            'flex w-full target:[&>div]:ring-2 target:[&>div]:ring-[#C9A227] target:[&>div]:ring-offset-2',
                             'justify-end' => $isOutbound,
                             'justify-start' => ! $isOutbound,
                         ])>
@@ -906,19 +908,37 @@
                                     'rounded-2xl rounded-br-md bg-[#C9A227] text-white' => $isOutbound,
                                     'rounded-2xl rounded-bl-md bg-white text-[#1E1E1E] ring-1 ring-[#EBE3D4]' => ! $isOutbound,
                                 ])>
-                                @if ($messageRow->replyTo)
-                                    <div @class([
-                                        'mb-2 rounded-xl px-2 py-1 text-[11px]',
-                                        'bg-black/10 text-white/90' => $isOutbound,
-                                        'border border-[#E7DFCF] bg-[#FAF6EF] text-[#6B6459]' => ! $isOutbound,
-                                    ])>
-                                        <span class="font-semibold">Replying to</span>
-                                        <span class="block truncate">{{ $messageRow->replyTo->previewText() }}</span>
-                                    </div>
+                                @if ($messageRow->replyTo || $messageRow->unresolvedReplyToMid())
+                                    <a
+                                        @if ($messageRow->replyTo)
+                                            href="#inbox-msg-{{ $messageRow->replyTo->id }}"
+                                            data-inbox-quote-target="{{ $messageRow->replyTo->id }}"
+                                        @endif
+                                        @class([
+                                            'mb-2 flex w-full items-center gap-2 rounded-xl px-2 py-1 text-left text-[11px] no-underline',
+                                            'bg-black/10 text-white/90' => $isOutbound,
+                                            'border border-[#E7DFCF] bg-[#FAF6EF] text-[#6B6459]' => ! $isOutbound,
+                                        ])>
+                                        @if ($messageRow->replyTo?->isImageAttachment())
+                                            <img
+                                                src="{{ $messageRow->replyTo->staffMediaUrl() }}"
+                                                alt=""
+                                                class="h-10 w-10 shrink-0 rounded-lg object-cover"
+                                                loading="lazy">
+                                        @elseif ($messageRow->replyTo?->isVideoAttachment())
+                                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/40 text-white" aria-hidden="true">▶</span>
+                                        @elseif ($messageRow->replyTo?->isAudioAttachment())
+                                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/20 text-[13px]" aria-hidden="true">♪</span>
+                                        @endif
+                                        <span class="min-w-0 flex-1">
+                                            <span class="font-semibold">Replying to</span>
+                                            <span class="inbox-msg-body block truncate">{{ $messageRow->replyTo?->previewText() ?? 'Previous message' }}</span>
+                                        </span>
+                                    </a>
                                 @endif
 
                                 @if (filled($messageRow->body))
-                                    <p class="whitespace-pre-wrap break-words leading-relaxed">{{ $messageRow->body }}</p>
+                                    <p class="inbox-msg-body whitespace-pre-wrap break-words leading-relaxed">{{ $messageRow->body }}</p>
                                 @endif
                                 @if ($messageRow->isImageAttachment())
                                     {{-- Not an <a>: mobile long-press / right-click on links opens the browser menu instead of map fields. --}}
@@ -930,9 +950,9 @@
                                         @touchmove.passive="onTouchMove($event)"
                                     >
                                         <img
-                                            src="{{ route('admin.inbox.media', $messageRow) }}"
-                                            alt="Photo"
-                                            class="max-h-72 w-full object-contain select-none"
+                                            src="{{ $messageRow->staffMediaUrl() }}"
+                                            alt="{{ $messageRow->isStickerAttachment() ? 'Sticker' : 'Photo' }}"
+                                            class="{{ $messageRow->isStickerAttachment() ? 'max-h-28 w-auto' : 'max-h-72 w-full' }} object-contain select-none"
                                             draggable="false"
                                             loading="lazy">
                                         @if (! $isOutbound)
@@ -1151,8 +1171,30 @@
                                                 x-data="window.inboxImageMatchRefresh ? window.inboxImageMatchRefresh(@js($imageMatchState['refresh_url'])) : {}"></span>
                                         @endif
                                     @endif
+                                @elseif ($messageRow->isAudioAttachment())
+                                    <audio
+                                        class="mt-2 w-full max-w-xs"
+                                        controls
+                                        preload="metadata"
+                                        src="{{ $messageRow->staffMediaUrl() }}">
+                                        Your browser cannot play this audio.
+                                    </audio>
+                                @elseif ($messageRow->isVideoAttachment())
+                                    <div class="relative mt-2 overflow-hidden rounded-xl bg-black">
+                                        <video
+                                            class="max-h-72 w-full"
+                                            controls
+                                            playsinline
+                                            preload="none"
+                                            @if ($messageRow->videoPosterUrl())
+                                                poster="{{ $messageRow->staffMediaUrl(poster: true) }}"
+                                            @endif
+                                            src="{{ $messageRow->staffMediaUrl() }}">
+                                            Your browser cannot play this video.
+                                        </video>
+                                    </div>
                                 @elseif ($messageRow->hasMedia())
-                                    <a href="{{ route('admin.inbox.media', $messageRow) }}" target="_blank" rel="noopener"
+                                    <a href="{{ $messageRow->staffMediaUrl() }}" target="_blank" rel="noopener"
                                         class="mt-1 inline-block text-xs {{ $isOutbound ? 'text-white/90 underline' : 'text-[#C9A227] hover:underline' }}">
                                         View attachment
                                     </a>
@@ -1238,10 +1280,21 @@
 
                     @if ($replyToMessage)
                         <div class="mb-2 flex items-start justify-between gap-3 rounded-2xl border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2">
-                            <div class="min-w-0">
-                                <div class="text-[11px] font-semibold text-[#6B6459]">Replying to</div>
-                                <div class="truncate text-xs text-[#1E1E1E]">{{ $replyToMessage->previewText(120) }}</div>
-                            </div>
+                            <a href="#inbox-msg-{{ $replyToMessage->id }}"
+                                class="flex min-w-0 flex-1 items-center gap-2 text-left no-underline"
+                                data-inbox-quote-target="{{ $replyToMessage->id }}">
+                                @if ($replyToMessage->isImageAttachment())
+                                    <img src="{{ $replyToMessage->staffMediaUrl() }}" alt="" class="h-10 w-10 shrink-0 rounded-lg object-cover" loading="lazy">
+                                @elseif ($replyToMessage->isVideoAttachment())
+                                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#1E1E1E] text-white" aria-hidden="true">▶</span>
+                                @elseif ($replyToMessage->isAudioAttachment())
+                                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#E7DFCF] text-[#1E1E1E]" aria-hidden="true">♪</span>
+                                @endif
+                                <span class="min-w-0">
+                                    <span class="block text-[11px] font-semibold text-[#6B6459]">Replying to</span>
+                                    <span class="inbox-msg-body block truncate text-xs text-[#1E1E1E]">{{ $replyToMessage->previewText(120) }}</span>
+                                </span>
+                            </a>
                             <button type="button" wire:click="clearReplyTo" class="shrink-0 text-xs text-[#8C8474] hover:text-[#1E1E1E]">
                                 Cancel
                             </button>

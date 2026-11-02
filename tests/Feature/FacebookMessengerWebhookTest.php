@@ -521,4 +521,106 @@ class FacebookMessengerWebhookTest extends TestCase
         $this->assertSame(1, ChannelConversation::query()->where('external_user_id', 'PSID_DEDUP')->count());
         $this->assertSame(1, ChannelMessage::query()->where('external_message_id', 'm_shared_mid')->count());
     }
+
+    public function test_stores_reply_to_and_audio_attachments(): void
+    {
+        config([
+            'facebook.messenger.enabled' => true,
+            'facebook.messenger.app_secret' => '',
+            'gemini.api_key' => null,
+        ]);
+
+        $this->postMessenger([
+            'sender' => ['id' => 'PSID_REPLY'],
+            'recipient' => ['id' => 'PAGE123'],
+            'message' => [
+                'mid' => 'm_parent_text',
+                'text' => 'Do you have gold?',
+            ],
+        ]);
+
+        $this->postMessenger([
+            'sender' => ['id' => 'PSID_REPLY'],
+            'recipient' => ['id' => 'PAGE123'],
+            'message' => [
+                'mid' => 'm_audio_reply',
+                'reply_to' => ['mid' => 'm_parent_text'],
+                'attachments' => [[
+                    'type' => 'audio',
+                    'payload' => [
+                        'url' => 'https://cdn.fbsbx.com/voice.m4a',
+                        'mime_type' => 'audio/mpeg',
+                    ],
+                ]],
+            ],
+        ]);
+
+        $parent = ChannelMessage::query()->where('external_message_id', 'm_parent_text')->first();
+        $audio = ChannelMessage::query()->where('external_message_id', 'm_audio_reply')->first();
+
+        $this->assertNotNull($parent);
+        $this->assertNotNull($audio);
+        $this->assertSame($parent->id, $audio->reply_to_message_id);
+        $this->assertSame('audio/mpeg', $audio->media_mime);
+        $this->assertTrue($audio->isAudioAttachment());
+        $this->assertFalse($audio->isImageAttachment());
+    }
+
+    public function test_stores_sticker_image_attachments(): void
+    {
+        config([
+            'facebook.messenger.enabled' => true,
+            'facebook.messenger.app_secret' => '',
+            'gemini.api_key' => null,
+        ]);
+
+        $this->postMessenger([
+            'sender' => ['id' => 'PSID_STICKER'],
+            'recipient' => ['id' => 'PAGE123'],
+            'message' => [
+                'mid' => 'm_sticker',
+                'sticker_id' => 369239263222822,
+                'attachments' => [[
+                    'type' => 'image',
+                    'payload' => [
+                        'url' => 'https://scontent.xx.fbcdn.net/sticker.png',
+                        'sticker_id' => 369239263222822,
+                    ],
+                ]],
+            ],
+        ]);
+
+        $sticker = ChannelMessage::query()->where('external_message_id', 'm_sticker')->first();
+        $this->assertNotNull($sticker);
+        $this->assertTrue($sticker->isStickerAttachment());
+        $this->assertTrue($sticker->isImageAttachment());
+        $this->assertSame('Sticker', $sticker->previewText());
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private function postMessenger(array $event): void
+    {
+        $event['timestamp'] ??= (int) (microtime(true) * 1000);
+
+        $body = json_encode([
+            'object' => 'page',
+            'entry' => [[
+                'id' => 'PAGE123',
+                'time' => time(),
+                'messaging' => [$event],
+            ]],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->call(
+            'POST',
+            '/api/webhooks/messenger',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            $body,
+        )->assertOk();
+    }
 }

@@ -9,7 +9,7 @@ import { inboxDesiredConversationId, shouldKeepCachedThread } from './inbox-thre
  * the authoritative thread and replaces this overlay.
  */
 
-const VERSION = 1;
+const VERSION = 2;
 const MAX_THREADS = 40;
 const MAX_BYTES = 3_500_000;
 const PREFETCH_BATCH = 6;
@@ -108,16 +108,28 @@ const messageHtml = (message) => {
 
     let inner = '';
     if (message.reply_preview) {
-        inner += `<div class="mb-2 rounded-xl px-2 py-1 text-[11px] ${outbound ? 'bg-black/10 text-white/90' : 'border border-[#E7DFCF] bg-[#FAF6EF] text-[#6B6459]'}">`
-            + `<span class="font-semibold">Replying to</span>`
-            + `<span class="block truncate">${escapeHtml(message.reply_preview)}</span></div>`;
+        const quoteThumb = message.reply_is_image && message.reply_media_url
+            ? `<img src="${escapeHtml(message.reply_media_url)}" alt="" class="h-9 w-9 shrink-0 rounded-lg object-cover" loading="lazy">`
+            : '';
+        inner += `<div class="mb-2 flex items-center gap-2 rounded-xl px-2 py-1 text-[11px] ${outbound ? 'bg-black/10 text-white/90' : 'border border-[#E7DFCF] bg-[#FAF6EF] text-[#6B6459]'}">`
+            + quoteThumb
+            + `<span class="min-w-0 flex-1"><span class="font-semibold">Replying to</span>`
+            + `<span class="inbox-msg-body block truncate">${escapeHtml(message.reply_preview)}</span></span></div>`;
     }
     if (message.body) {
-        inner += `<p class="whitespace-pre-wrap break-words leading-relaxed">${escapeHtml(message.body)}</p>`;
+        inner += `<p class="inbox-msg-body whitespace-pre-wrap break-words leading-relaxed">${escapeHtml(message.body)}</p>`;
     }
     if (message.is_image && message.media_url) {
         inner += `<div class="relative mt-2 overflow-hidden rounded-xl ${outbound ? 'bg-black/10' : 'bg-[#FAF6EF]'}">`
             + `<img src="${escapeHtml(message.media_url)}" alt="Photo" class="max-h-72 w-full object-contain" loading="lazy"></div>`;
+    } else if (message.is_audio && message.media_url) {
+        inner += `<audio class="mt-2 w-full max-w-xs" controls preload="metadata" src="${escapeHtml(message.media_url)}"></audio>`;
+    } else if (message.is_video && message.media_url) {
+        const poster = message.poster_url
+            ? ` poster="${escapeHtml(message.poster_url)}"`
+            : '';
+        inner += `<div class="relative mt-2 overflow-hidden rounded-xl bg-black">`
+            + `<video class="max-h-72 w-full" controls playsinline preload="none"${poster} src="${escapeHtml(message.media_url)}"></video></div>`;
     } else if (message.is_image) {
         inner += `<p class="mt-1 text-xs ${outbound ? 'text-white/90' : 'text-[#8C8474]'}">Photo</p>`;
     }

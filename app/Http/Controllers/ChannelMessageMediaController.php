@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ChannelMessage;
 use App\Services\Facebook\FacebookPageTokenService;
 use App\Support\AdminAccess;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Http;
 use Throwable;
@@ -15,9 +16,16 @@ class ChannelMessageMediaController extends Controller
      * Stream a channel attachment for staff preview.
      * Facebook CDN/Graph URLs often require a token, which browsers cannot send on <img>.
      */
-    public function __invoke(ChannelMessage $message, FacebookPageTokenService $tokens): Response
+    public function __invoke(Request $request, ChannelMessage $message, FacebookPageTokenService $tokens): Response
     {
         AdminAccess::ensureStaffAdmin();
+
+        if ($request->boolean('poster')) {
+            $poster = $message->videoPosterUrl();
+            abort_if(! is_string($poster) || $poster === '', 404);
+
+            return $this->remoteFileResponse($poster, 'image/jpeg', $tokens->token());
+        }
 
         $localPath = $message->localMediaPath();
         if ($localPath !== null) {
@@ -35,27 +43,36 @@ class ChannelMessageMediaController extends Controller
                 return $local;
             }
 
-            $response = $this->fetchMedia($url, $tokens->token());
-
-            if ($response === null || ! $response->successful()) {
-                abort(404, 'Attachment could not be fetched.');
-            }
-
-            $contentType = (string) (
-                $message->media_mime
-                ?: $response->header('Content-Type')
-                ?: 'application/octet-stream'
+            return $this->remoteFileResponse(
+                $url,
+                $message->media_mime,
+                $tokens->token(),
             );
-            $contentType = explode(';', $contentType)[0];
-
-            return response($response->body(), 200, [
-                'Content-Type' => $contentType,
-                'Cache-Control' => 'private, max-age=300',
-                'X-Content-Type-Options' => 'nosniff',
-            ]);
         } catch (Throwable) {
             abort(404, 'Attachment could not be fetched.');
         }
+    }
+
+    private function remoteFileResponse(string $url, ?string $preferredMime, string $token): Response
+    {
+        $response = $this->fetchMedia($url, $token);
+
+        if ($response === null || ! $response->successful()) {
+            abort(404, 'Attachment could not be fetched.');
+        }
+
+        $contentType = (string) (
+            $preferredMime
+            ?: $response->header('Content-Type')
+            ?: 'application/octet-stream'
+        );
+        $contentType = explode(';', $contentType)[0];
+
+        return response($response->body(), 200, [
+            'Content-Type' => $contentType,
+            'Cache-Control' => 'private, max-age=300',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     private function localFileResponse(string $url, ?string $mime): ?Response

@@ -147,6 +147,11 @@ class MessengerInboundService
             $conversation->forceFill(['customer_name' => $customerName])->save();
         }
 
+        $replyToId = $this->conversations->resolveReplyToId(
+            $conversation,
+            data_get($message, 'reply_to.mid'),
+        );
+
         if ($attachments === []) {
             $this->conversations->storeMessage($conversation, [
                 'external_message_id' => $mid,
@@ -154,6 +159,7 @@ class MessengerInboundService
                 'body' => $text !== '' ? $text : null,
                 'media_url' => null,
                 'media_mime' => null,
+                'reply_to_message_id' => $replyToId,
                 'raw_payload' => $event,
                 'sent_at' => $sentAt,
             ]);
@@ -167,6 +173,7 @@ class MessengerInboundService
                     'body' => $index === 0 && $text !== null && $text !== '' ? $text : null,
                     'media_url' => $attachment['url'],
                     'media_mime' => $attachment['mime'],
+                    'reply_to_message_id' => $replyToId,
                     'raw_payload' => $event,
                     'sent_at' => $sentAt,
                 ]);
@@ -247,9 +254,9 @@ class MessengerInboundService
 
             $type = (string) ($attachment['type'] ?? '');
 
-            // Accept common media types that could contain product images
-            // 'fallback' is used when Meta can't determine exact type but still provides a URL
-            if (! in_array($type, ['image', 'file', 'audio', 'video', 'fallback'], true)) {
+            // Accept common media types. Stickers are image attachments with sticker_id.
+            // 'fallback' is used when Meta can't determine exact type but still provides a URL.
+            if (! in_array($type, ['image', 'file', 'audio', 'video', 'fallback', 'sticker'], true)) {
                 continue;
             }
 
@@ -261,7 +268,7 @@ class MessengerInboundService
             $mime = data_get($attachment, 'payload.mime_type');
             if (! is_string($mime) || $mime === '') {
                 $mime = match ($type) {
-                    'image' => 'image/jpeg',
+                    'image', 'sticker' => 'image/jpeg',
                     'audio' => 'audio/mpeg',
                     'video' => 'video/mp4',
                     default => null,

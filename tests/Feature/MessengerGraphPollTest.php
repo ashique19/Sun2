@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ChannelConversation;
+use App\Models\ChannelMessage;
 use App\Services\Channels\MessengerConversationSyncService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -67,6 +68,8 @@ class MessengerGraphPollTest extends TestCase
                 $this->assertStringContainsString('t_fresh', $url);
                 $this->assertStringNotContainsString('t_stale', $url);
                 $this->assertStringContainsString('messages.limit%288%29', $url);
+                $this->assertStringContainsString('reply_to', $url);
+                $this->assertStringContainsString('sticker', $url);
 
                 return Http::response([
                     't_fresh' => $this->threadPayload(
@@ -169,6 +172,78 @@ class MessengerGraphPollTest extends TestCase
             'external_message_id' => 'm_full',
             'body' => 'Catch-up hello',
         ]);
+    }
+
+    #[Test]
+    public function graph_sync_stores_reply_to_audio_and_sticker(): void
+    {
+        Http::fake(function (Request $request) {
+            $url = $request->url();
+            $this->assertStringContainsString('reply_to', $url);
+            $this->assertStringContainsString('sticker', $url);
+
+            return Http::response([
+                'data' => [[
+                    'id' => 't_media',
+                    'updated_time' => now()->toIso8601String(),
+                    'participants' => [
+                        'data' => [
+                            ['id' => 'PAGE42', 'name' => 'Sun Page'],
+                            ['id' => 'PSID_MEDIA', 'name' => 'Media Customer'],
+                        ],
+                    ],
+                    'messages' => [
+                        'data' => [
+                            [
+                                'id' => 'm_audio',
+                                'message' => '',
+                                'from' => ['id' => 'PSID_MEDIA', 'name' => 'Media Customer'],
+                                'created_time' => now()->subSeconds(30)->toIso8601String(),
+                                'reply_to' => ['mid' => 'm_parent'],
+                                'attachments' => [
+                                    'data' => [[
+                                        'mime_type' => 'audio/mpeg',
+                                        'file_url' => 'https://cdn.fbsbx.com/voice.m4a',
+                                    ]],
+                                ],
+                            ],
+                            [
+                                'id' => 'm_sticker',
+                                'message' => '',
+                                'from' => ['id' => 'PSID_MEDIA', 'name' => 'Media Customer'],
+                                'created_time' => now()->subSeconds(45)->toIso8601String(),
+                                'sticker' => 'https://scontent.xx.fbcdn.net/like.png',
+                            ],
+                            [
+                                'id' => 'm_parent',
+                                'message' => 'Please send voice',
+                                'from' => ['id' => 'PSID_MEDIA', 'name' => 'Media Customer'],
+                                'created_time' => now()->subMinute()->toIso8601String(),
+                            ],
+                        ],
+                    ],
+                ]],
+            ], 200);
+        });
+
+        $result = app(MessengerConversationSyncService::class)->sync();
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame(3, $result['messages']);
+
+        $parent = ChannelMessage::query()->where('external_message_id', 'm_parent')->first();
+        $audio = ChannelMessage::query()->where('external_message_id', 'm_audio')->first();
+        $sticker = ChannelMessage::query()->where('external_message_id', 'm_sticker')->first();
+
+        $this->assertNotNull($parent);
+        $this->assertNotNull($audio);
+        $this->assertNotNull($sticker);
+        $this->assertSame($parent->id, $audio->reply_to_message_id);
+        $this->assertTrue($audio->isAudioAttachment());
+        $this->assertFalse($audio->isImageAttachment());
+        $this->assertTrue($sticker->isStickerAttachment());
+        $this->assertTrue($sticker->isImageAttachment());
+        $this->assertSame('https://scontent.xx.fbcdn.net/like.png', $sticker->media_url);
     }
 
     /**

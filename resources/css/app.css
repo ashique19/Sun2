@@ -362,6 +362,17 @@ body:has(.mobile-nav-toggle:checked) {
     animation: inbox-pending-in 0.16s ease-out;
 }
 
+[data-inbox-quick-reply-match] {
+    box-shadow: 0 0 0 2px #059669;
+}
+
+[data-inbox-price-query] [data-inbox-priced-image-label],
+[data-inbox-priced-image-send][data-inbox-price-query] {
+    font-weight: 700;
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+}
+
 .inbox-msg-body {
     font-variant-emoji: emoji;
 }

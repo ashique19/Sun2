@@ -886,7 +886,11 @@
                     @scroll.passive="onScroll()"
                     class="min-h-0 flex-1 overflow-y-auto space-y-2 px-3 py-3 xl:px-4 xl:py-4">
                     @foreach ($selectedConversation->messages as $messageRow)
-                        @php $isOutbound = $messageRow->direction === 'outbound'; @endphp
+                        @php
+                            $isOutbound = $messageRow->direction === 'outbound';
+                            $quickReplyMatch = $quickReplyMatches[$messageRow->id] ?? null;
+                            $highlightPricedImage = ! empty($pricedImageHints[$messageRow->id]);
+                        @endphp
                         <div
                             id="inbox-msg-{{ $messageRow->id }}"
                             data-inbox-msg
@@ -996,8 +1000,15 @@
                                 @class([
                                     'group relative max-w-[82%] px-3 py-2 text-sm shadow-sm sm:max-w-[70%]',
                                     'rounded-2xl rounded-br-md bg-[#C9A227] text-white' => $isOutbound,
-                                    'rounded-2xl rounded-bl-md bg-white text-[#1E1E1E] ring-1 ring-[#EBE3D4]' => ! $isOutbound,
-                                ])>
+                                    'rounded-2xl rounded-bl-md bg-white text-[#1E1E1E]' => ! $isOutbound,
+                                    'ring-1 ring-[#EBE3D4]' => ! $isOutbound && ! $quickReplyMatch,
+                                    'ring-2 ring-emerald-600' => ! $isOutbound && $quickReplyMatch,
+                                ])
+                                @if (! $isOutbound && $quickReplyMatch)
+                                    data-inbox-quick-reply-match="{{ $quickReplyMatch['id'] }}"
+                                    data-inbox-quick-reply-via="{{ $quickReplyMatch['via'] }}"
+                                    @if ($quickReplyMatch['tagged']) data-inbox-quick-reply-tagged="1" @endif
+                                @endif>
                                 @if ($messageRow->replyTo || $messageRow->unresolvedReplyToMid())
                                     <a
                                         @if ($messageRow->replyTo)
@@ -1160,9 +1171,13 @@
                                                     data-product-id="{{ $taggedProductId }}"
                                                     data-conversation-id="{{ $messageRow->channel_conversation_id }}"
                                                     data-reply-to-message-id="{{ $messageRow->id }}"
+                                                    @if ($highlightPricedImage) data-inbox-price-query="1" @endif
                                                     @click.stop
                                                     title="Send priced product image"
-                                                    class="text-[10px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60">
+                                                    @class([
+                                                        'text-[10px] font-semibold text-[#C9A227] hover:underline disabled:opacity-60',
+                                                        'font-bold underline decoration-2' => $highlightPricedImage,
+                                                    ])>
                                                     <span data-inbox-priced-image-label>P.img</span>
                                                 </button>
                                                 <button type="button"
@@ -1289,6 +1304,26 @@
                                         View attachment
                                     </a>
                                 @endif
+                                @if (! $isOutbound && $quickReplyMatch)
+                                    <button type="button"
+                                        data-inbox-quick-reply-suggestion
+                                        x-on:click.stop="
+                                            const body = {{ \Illuminate\Support\Js::from($quickReplyMatch['body']) }};
+                                            if (body) {
+                                                $wire.$set('replyText', body, false);
+                                                const ta = document.querySelector('[data-inbox-reply-text]');
+                                                if (ta) {
+                                                    ta.rows = Math.max(1, Math.min(8, (String(body).match(/\n/g) || []).length + 1));
+                                                    ta.focus();
+                                                }
+                                            }
+                                        "
+                                        class="mt-1.5 inline-flex max-w-full items-center gap-1 rounded-full border border-emerald-600 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800"
+                                        title="Insert {{ $quickReplyMatch['label'] }} into the reply box (does not send)">
+                                        <span aria-hidden="true">→</span>
+                                        <span class="truncate">{{ $quickReplyMatch['label'] }}</span>
+                                    </button>
+                                @endif
                                 <div class="mt-1 flex items-center justify-end gap-2">
                                     @if ($messageRow->sent_at)
                                         <p @class([
@@ -1298,6 +1333,20 @@
                                         ])>
                                             {{ $messageRow->sent_at->timezone('Asia/Dhaka')->format('h:i A') }}
                                         </p>
+                                    @endif
+                                    @if (! $isOutbound)
+                                        <button type="button"
+                                            wire:click.stop="openQuickReplyTagMenu({{ $messageRow->id }})"
+                                            title="Tag a quick reply"
+                                            aria-label="Tag a quick reply"
+                                            @class([
+                                                'inline-flex h-6 w-6 items-center justify-center rounded-full',
+                                                $quickReplyMatch ? 'text-emerald-700' : 'text-[#C9A227]',
+                                            ])>
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
+                                                <path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v4.879a1.5 1.5 0 0 0 .44 1.06l6.879 6.88a1.5 1.5 0 0 0 2.122 0l4.878-4.879a1.5 1.5 0 0 0 0-2.121L10.44 2.44A1.5 1.5 0 0 0 9.379 2H4.5ZM7 6.75A1.75 1.75 0 1 0 7 3.25a1.75 1.75 0 0 0 0 3.5Z" clip-rule="evenodd" />
+                                            </svg>
+                                        </button>
                                     @endif
                                     <button type="button"
                                         wire:click="setReplyTo({{ $messageRow->id }})"
@@ -1338,6 +1387,37 @@
                                                 {{ $fieldLabel }}
                                             </button>
                                         @endforeach
+                                    </div>
+                                @endif
+                                @if (! $isOutbound && $taggingQuickReplyMessageId === $messageRow->id)
+                                    <div
+                                        data-inbox-quick-reply-tag-menu
+                                        wire:click.stop
+                                        @click.outside="$wire.closeQuickReplyTagMenu()"
+                                        class="absolute left-0 right-0 top-full z-30 mt-1 min-w-[11rem] rounded-xl border border-[#E7DFCF] bg-white p-1.5 text-left text-[#1E1E1E] shadow-lg"
+                                    >
+                                        <p class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#8C8474]">
+                                            Tag a quick reply
+                                        </p>
+                                        @forelse ($quickReplies as $tagReply)
+                                            <button type="button"
+                                                wire:click="tagMessageQuickReply({{ $messageRow->id }}, '{{ $tagReply['id'] }}')"
+                                                @class([
+                                                    'block w-full rounded-lg px-2 py-1.5 text-left text-xs font-medium hover:bg-[#FAF6EF]',
+                                                    'bg-emerald-50 text-emerald-900' => ($quickReplyMatch['id'] ?? null) === $tagReply['id'],
+                                                ])>
+                                                {{ $tagReply['label'] }}
+                                            </button>
+                                        @empty
+                                            <p class="px-2 py-1.5 text-xs text-[#8C8474]">Save a quick reply first.</p>
+                                        @endforelse
+                                        @if ($quickReplyMatch)
+                                            <button type="button"
+                                                wire:click="clearMessageQuickReply({{ $messageRow->id }})"
+                                                class="mt-0.5 block w-full rounded-lg px-2 py-1.5 text-left text-xs font-medium text-rose-700 hover:bg-rose-50">
+                                                Clear tag
+                                            </button>
+                                        @endif
                                     </div>
                                 @endif
                             </div>
@@ -1418,10 +1498,25 @@
                     @enderror
 
                     @if (! empty($quickReplies))
+                        @php
+                            $latestInboundMatchId = null;
+                            foreach (array_reverse($selectedConversation->messages->all()) as $composerHintMessage) {
+                                if ($composerHintMessage->direction !== 'inbound') {
+                                    continue;
+                                }
+                                $matchId = $quickReplyMatches[$composerHintMessage->id]['id'] ?? null;
+                                if ($matchId === null) {
+                                    continue;
+                                }
+                                $latestInboundMatchId = $matchId;
+                                break;
+                            }
+                        @endphp
                         <div class="mb-2 flex items-center gap-1.5 overflow-x-auto pb-0.5" data-inbox-quick-replies>
                             @foreach ($quickReplies as $index => $quickReply)
                                 <button type="button"
                                     data-inbox-quick-reply
+                                    data-inbox-quick-reply-id="{{ $quickReply['id'] }}"
                                     data-inbox-quick-reply-body="{{ $quickReply['body'] }}"
                                     x-on:click="
                                         const body = {{ \Illuminate\Support\Js::from($quickReply['body']) }};
@@ -1432,7 +1527,11 @@
                                             ta.focus();
                                         }
                                     "
-                                    class="shrink-0 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-2.5 py-1 text-[11px] font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]">
+                                    @class([
+                                        'shrink-0 rounded-full border bg-[#FAF6EF] px-2.5 py-1 text-[11px] font-semibold hover:border-[#C9A227] hover:text-[#C9A227]',
+                                        'border-emerald-600 text-emerald-800 ring-2 ring-emerald-600' => $latestInboundMatchId === $quickReply['id'],
+                                        'border-[#E0D6C2] text-[#6B6459]' => $latestInboundMatchId !== $quickReply['id'],
+                                    ])>
                                     {{ $quickReply['label'] }}
                                 </button>
                             @endforeach

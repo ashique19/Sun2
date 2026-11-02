@@ -1,3 +1,5 @@
+import { csrfToken } from './inbox-dom.js';
+
 /**
  * Inbox conversation cache.
  *
@@ -16,10 +18,6 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 let paintedConversationId = 0;
 let prefetchTimer = null;
 let lastPrefetchAt = 0;
-
-const csrfToken = () => (typeof document === 'undefined'
-    ? ''
-    : document.querySelector('meta[name="csrf-token"]')?.content ?? '');
 
 const root = () => document.querySelector('[data-inbox-snapshot-root]');
 

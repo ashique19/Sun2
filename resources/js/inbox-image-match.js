@@ -1,3 +1,4 @@
+import { csrfToken, livewireFor } from './inbox-dom.js';
 import { installInboxThreadHistory } from './inbox-thread-history.js';
 import './inbox-priced-image-send.js';
 import './inbox-snapshot-cache.js';
@@ -38,17 +39,9 @@ const concurrency = () => Math.max(1, meta('inbox-image-match-concurrency', 3));
 const timeoutMs = () => meta('inbox-image-match-timeout-ms', 30000);
 const retries = () => Math.max(0, Math.round(meta('inbox-image-match-retries', 2)));
 
-const csrfToken = () => (typeof document === 'undefined'
-    ? ''
-    : document.querySelector('meta[name="csrf-token"]')?.content ?? '');
-
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const wireFor = (el) => {
-    const id = el?.closest?.('[wire\\:id]')?.getAttribute('wire:id');
-
-    return id && window.Livewire ? window.Livewire.find(id) : null;
-};
+const wireFor = (el) => livewireFor(el);
 
 const scheduleRefresh = (wire) => {
     clearTimeout(refreshTimer);

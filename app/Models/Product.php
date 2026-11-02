@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 class Product extends Model
@@ -123,6 +124,31 @@ class Product extends Model
     public function images(): HasMany
     {
         return $this->hasMany(ProductImage::class)->orderBy('sort_order');
+    }
+
+    /**
+     * Catalog photos used for Messenger album send (excludes the priced stamp file).
+     *
+     * @return Collection<int, ProductImage>
+     */
+    public function catalogImagesExcludingPriced(): Collection
+    {
+        $images = $this->relationLoaded('images')
+            ? $this->images
+            : $this->images()->orderBy('sort_order')->orderBy('id')->get();
+
+        $priced = is_string($this->priced_image_path) ? trim($this->priced_image_path) : '';
+
+        return $images
+            ->filter(function (ProductImage $image) use ($priced): bool {
+                $path = is_string($image->path) ? trim($image->path) : '';
+                if ($path === '') {
+                    return false;
+                }
+
+                return $priced === '' || ltrim($path, '/') !== ltrim($priced, '/');
+            })
+            ->values();
     }
 
     /** Single image for cards/lists (primary preferred, else lowest sort_order). Storefront-visible only. */

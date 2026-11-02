@@ -6,8 +6,7 @@ use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Models\Product;
 use App\Services\Channels\ChannelReplyService;
-use Illuminate\Http\UploadedFile;
-use RuntimeException;
+use App\Support\PublicImageUpload;
 use Throwable;
 
 class InboxPricedImageSender
@@ -35,7 +34,7 @@ class InboxPricedImageSender
                 $product->refresh();
             }
 
-            $upload = $this->uploadedFileFromPublicPath($pricedPath);
+            $upload = PublicImageUpload::fromRelativePath($pricedPath);
         } catch (Throwable $e) {
             return [
                 'ok' => false,
@@ -69,27 +68,5 @@ class InboxPricedImageSender
             'error' => null,
             'message' => $result['message'] ?? null,
         ];
-    }
-
-    private function uploadedFileFromPublicPath(string $relativePath): UploadedFile
-    {
-        $absolute = public_path(ltrim($relativePath, '/'));
-
-        if (! is_file($absolute) || ! is_readable($absolute)) {
-            throw new RuntimeException('Image file is missing on disk.');
-        }
-
-        $mime = mime_content_type($absolute) ?: 'image/jpeg';
-        if (! str_starts_with($mime, 'image/')) {
-            throw new RuntimeException('File is not a valid image.');
-        }
-
-        return new UploadedFile(
-            $absolute,
-            basename($absolute),
-            $mime,
-            null,
-            true,
-        );
     }
 }

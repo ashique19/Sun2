@@ -1,3 +1,5 @@
+import { csrfToken, livewireFor } from './inbox-dom.js';
+
 /**
  * Inbox P.img clicks are queued here, outside Livewire.
  *
@@ -17,10 +19,6 @@ const states = new Map();
 let draining = false;
 let refreshTimer = null;
 
-const csrfToken = () => (typeof document === 'undefined'
-    ? ''
-    : document.querySelector('meta[name="csrf-token"]')?.content ?? '');
-
 const closestDataset = (el, name) => {
     const node = el?.closest?.(`[${name}]`);
 
@@ -34,7 +32,7 @@ const wireFor = (wireId, el) => {
         || el?.closest?.('[data-inbox-priced-image-wire]')?.getAttribute('data-inbox-priced-image-wire')
         || el?.closest?.('[wire\\:id]')?.getAttribute('wire:id');
 
-    return id && window.Livewire ? window.Livewire.find(id) : null;
+    return livewireFor(el, id);
 };
 
 const buttonsFor = (key) => {

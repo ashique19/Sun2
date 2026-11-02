@@ -97,7 +97,7 @@
             window.__inboxPrepareList = function () {
                 document.body.dataset.inboxDesiredPane = 'list';
                 delete document.body.dataset.inboxDesiredId;
-                document.body.dataset.inboxClosingThread = '1';
+                delete document.body.dataset.inboxClosingThread;
                 document.body.dataset.inboxMobileThread = '0';
                 window.history.replaceState(listState(), '', listUrl(window.location.href));
             };
@@ -167,7 +167,11 @@
                         if (inboxPath(here) && inboxPath(destPath)) {
                             event.preventDefault();
                         }
-                        if (document.body.dataset.inboxClosingThread === '1' && ! inboxPath(destPath)) {
+                        // history:true = browser Back restoring a cached page.
+                        // Do not block wire:navigate clicks (history: false) on top nav.
+                        if (event.detail && event.detail.history
+                            && document.body.dataset.inboxClosingThread === '1'
+                            && ! inboxPath(destPath)) {
                             event.preventDefault();
                         }
                     } catch (error) {

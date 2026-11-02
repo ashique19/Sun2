@@ -10,6 +10,8 @@ import {
     isSameInboxDocument,
     liveThreadMatchesDesired,
     preventSameDocumentInboxNavigate,
+    setInboxDesiredList,
+    shouldBlockClosingInboxNavigate,
     shouldKeepCachedThread,
     syncInboxDesiredPane,
 } from '../../resources/js/inbox-thread-history.js';
@@ -295,6 +297,62 @@ test('when Safari skips the list, close pushes Inbox back on top of the referrer
     assert.match(history.href, /\/admin\/inbox$/);
     assert.equal(conversationIdFromHref(history.href), null);
     assert.equal(wire.mobileThreadOpen, false);
+});
+
+test('closing a thread does not block top-nav wire:navigate clicks', () => {
+    const previous = globalThis.document;
+    globalThis.document = { body: { dataset: { inboxClosingThread: '1' } } };
+
+    try {
+        assert.equal(
+            shouldBlockClosingInboxNavigate({
+                detail: { url: 'https://example.test/admin/orders/new', history: false },
+            }),
+            false,
+        );
+        assert.equal(
+            shouldBlockClosingInboxNavigate({
+                detail: { url: 'https://example.test/admin/dashboard', history: true },
+            }),
+            true,
+        );
+        assert.equal(
+            shouldBlockClosingInboxNavigate({
+                detail: { url: 'https://example.test/admin/inbox', history: true },
+            }),
+            false,
+        );
+    } finally {
+        if (previous === undefined) {
+            delete globalThis.document;
+        } else {
+            globalThis.document = previous;
+        }
+    }
+});
+
+test('returning to the list drops the closing lock once the thread is closed', () => {
+    const previous = globalThis.document;
+    globalThis.document = {
+        body: { dataset: { inboxClosingThread: '1', inboxMobileThread: '1' } },
+        querySelector() {
+            return null;
+        },
+    };
+
+    try {
+        setInboxDesiredList();
+        assert.equal(globalThis.document.body.dataset.inboxClosingThread, undefined);
+        assert.equal(globalThis.document.body.dataset.inboxMobileThread, '0');
+        syncInboxDesiredPane(false);
+        assert.equal(globalThis.document.body.dataset.inboxClosingThread, undefined);
+    } finally {
+        if (previous === undefined) {
+            delete globalThis.document;
+        } else {
+            globalThis.document = previous;
+        }
+    }
 });
 
 test('same-document inbox Back is not a wire:navigate restore', () => {

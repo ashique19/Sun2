@@ -85,6 +85,27 @@ export function preventSameDocumentInboxNavigate(event, currentHref) {
     return true;
 }
 
+/**
+ * While a thread is closing, block Alpine history restores to the page before
+ * Inbox. Do not block user clicks (wire:navigate) — those have history: false.
+ */
+export function shouldBlockClosingInboxNavigate(event) {
+    if (! event?.detail?.history) {
+        return false;
+    }
+
+    if (typeof document === 'undefined' || document.body?.dataset?.inboxClosingThread !== '1') {
+        return false;
+    }
+
+    const dest = event.detail.url;
+    if (dest == null || dest === '') {
+        return false;
+    }
+
+    return ! isInboxLocation(dest);
+}
+
 export const INBOX_NAV_METHODS = ['selectConversation', 'clearConversationFromUrl', 'closeMobileThread'];
 
 let desiredPane = null;
@@ -171,6 +192,9 @@ export function syncInboxDesiredPane(wireOpen) {
         document.body.dataset.inboxDesiredPane = 'list';
         delete document.body.dataset.inboxDesiredId;
         document.body.dataset.inboxMobileThread = '0';
+        if (! wireOpen) {
+            delete document.body.dataset.inboxClosingThread;
+        }
 
         return desiredPane;
     }
@@ -187,7 +211,7 @@ export function showInboxListPane() {
 
     document.body.dataset.inboxDesiredPane = 'list';
     delete document.body.dataset.inboxDesiredId;
-    document.body.dataset.inboxClosingThread = '1';
+    delete document.body.dataset.inboxClosingThread;
     document.body.dataset.inboxMobileThread = '0';
     const sheet = document.querySelector('[data-inbox-mobile-thread-sheet]');
     sheet?.removeAttribute('data-inbox-pending-id');
@@ -241,6 +265,9 @@ export function createInboxThreadHistory(wire, env) {
 
     const armCloseLock = () => {
         closingToList = true;
+        if (typeof document !== 'undefined') {
+            document.body.dataset.inboxClosingThread = '1';
+        }
         clearTimeout(closeTimer);
         closeTimer = delay(() => {
             closingToList = false;
@@ -482,7 +509,7 @@ export function installInboxThreadHistory(wire) {
                 return;
             }
 
-            if (document.body.dataset.inboxClosingThread === '1' && event.detail?.url && ! isInboxLocation(event.detail.url)) {
+            if (shouldBlockClosingInboxNavigate(event)) {
                 event.preventDefault();
             }
         });

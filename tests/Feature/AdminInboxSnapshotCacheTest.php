@@ -145,5 +145,7 @@ class AdminInboxSnapshotCacheTest extends TestCase
         $this->assertStringContainsString('showThread(id)', $history);
         $this->assertStringContainsString('interceptAction', $history);
         $this->assertStringContainsString('cancelStaleInboxNavigation', $history);
+        $this->assertStringContainsString('shouldBlockClosingInboxNavigate', $history);
+        $this->assertStringContainsString('event?.detail?.history', $history);
     }
 }

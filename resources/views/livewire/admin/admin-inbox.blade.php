@@ -1424,7 +1424,7 @@
                         </div>
                     @endforeach
 
-                    @if ($outboundSending)
+                    @if ($this->isSendingInOpenThread())
                         <div class="flex w-full justify-end" wire:key="pending-outbound" data-inbox-pending-outbound>
                             <div class="max-w-[82%] rounded-2xl rounded-br-md bg-[#C9A227]/80 px-3 py-2 text-sm text-white shadow-sm sm:max-w-[70%]">
                                 @if (filled($pendingReplyText))
@@ -1581,14 +1581,14 @@
                                 placeholder="{{ $replyToMessage ? 'Write a reply…' : 'Message…' }}"
                                 class="block w-full min-w-0 min-h-10 resize-none rounded-2xl border border-[#E0D6C2] bg-[#FAF6EF] py-2 pl-4 pr-12 text-sm leading-5 focus:border-[#C9A227] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C9A227] disabled:opacity-60 xl:min-h-11 xl:py-2.5 xl:pr-4"
                                 wire:keydown.enter.exact.prevent="sendReply"
-                                @disabled($outboundSending)
+                                @disabled($this->isSendingInOpenThread())
                                 title="Enter to send · Shift+Enter for a new line"
                             ></textarea>
                             <button type="button"
                                 wire:click="sendReply"
                                 wire:loading.attr="disabled"
                                 wire:target="sendReply,flushPendingOutbound"
-                                @disabled($outboundSending)
+                                @disabled($this->isSendingInOpenThread())
                                 class="absolute right-1.5 top-1/2 inline-flex h-8 w-8 shrink-0 -translate-y-1/2 items-center justify-center rounded-full bg-[#C9A227] text-white hover:bg-[#b89220] disabled:opacity-60 xl:hidden"
                                 aria-label="Send">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
@@ -1601,7 +1601,7 @@
                             wire:click="sendReply"
                             wire:loading.attr="disabled"
                             wire:target="sendReply,flushPendingOutbound"
-                            @disabled($outboundSending)
+                            @disabled($this->isSendingInOpenThread())
                             class="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#C9A227] text-white hover:bg-[#b89220] disabled:opacity-60 xl:inline-flex"
                             aria-label="Send">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">

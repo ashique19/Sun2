@@ -93,6 +93,9 @@ class AdminInbox extends Component
 
     public bool $outboundSending = false;
 
+    /** Conversation the in-flight composer send belongs to. */
+    public ?int $pendingOutboundConversationId = null;
+
     public ?string $error = null;
 
     public ?string $statusMessage = null;
@@ -1358,6 +1361,11 @@ class AdminInbox extends Component
         $this->statusMessage = null;
 
         if ($this->outboundSending) {
+            if ($this->pendingOutboundConversationId !== null
+                && (int) $this->pendingOutboundConversationId !== (int) $this->selectedConversationId) {
+                $this->error = 'Still sending a reply in another conversation.';
+            }
+
             return;
         }
 
@@ -1408,6 +1416,7 @@ class AdminInbox extends Component
         $this->pendingReplyText = $this->replyText;
         $this->pendingReplyImages = $images;
         $this->pendingReplyToMessageId = $this->replyToMessageId;
+        $this->pendingOutboundConversationId = (int) $conversation->id;
         $this->outboundSending = true;
         $this->resetComposer();
         $this->dispatchPendingOutboundFlush();
@@ -1424,13 +1433,14 @@ class AdminInbox extends Component
             return;
         }
 
-        if (! $this->selectedConversationId) {
+        $conversationId = $this->pendingOutboundConversationId;
+        if (! $conversationId) {
             $this->failPendingOutbound('Conversation not found.');
 
             return;
         }
 
-        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+        $conversation = ChannelConversation::query()->find($conversationId);
 
         if (! $conversation) {
             $this->failPendingOutbound('Conversation not found.');
@@ -1508,9 +1518,11 @@ class AdminInbox extends Component
 
     private function failPendingOutbound(string $error): void
     {
-        $this->replyText = $this->pendingReplyText;
-        $this->replyImages = array_values($this->pendingReplyImages);
-        $this->replyToMessageId = $this->pendingReplyToMessageId;
+        if ($this->isSendingInOpenThread()) {
+            $this->replyText = $this->pendingReplyText;
+            $this->replyImages = array_values($this->pendingReplyImages);
+            $this->replyToMessageId = $this->pendingReplyToMessageId;
+        }
         $this->clearPendingOutbound();
         $this->error = $error;
         $this->statusMessage = null;
@@ -1521,7 +1533,15 @@ class AdminInbox extends Component
         $this->pendingReplyText = '';
         $this->pendingReplyImages = [];
         $this->pendingReplyToMessageId = null;
+        $this->pendingOutboundConversationId = null;
         $this->outboundSending = false;
+    }
+
+    public function isSendingInOpenThread(): bool
+    {
+        return $this->outboundSending
+            && $this->pendingOutboundConversationId !== null
+            && (int) $this->pendingOutboundConversationId === (int) $this->selectedConversationId;
     }
 
     public function syncFromFacebook(MessengerConversationSyncService $sync): void

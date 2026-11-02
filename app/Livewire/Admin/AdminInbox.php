@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Services\Admin\InboxCatalogSearch;
 use App\Services\Admin\InboxPricedImageSender;
 use App\Services\Admin\InboxProductReplyService;
+use App\Services\Admin\InboxRecentOrders;
 use App\Services\Admin\InboxSnapshotBuilder;
 use App\Services\Channels\ChannelInboxDiagnostics;
 use App\Services\Channels\ChannelInboxPurgeService;
@@ -817,6 +818,34 @@ class AdminInbox extends Component
         $this->syncInboundImageMatchState();
 
         $this->statusMessage = 'Product tag cleared.';
+        $this->error = null;
+    }
+
+    public function fillOrderConfirmMessage(int $orderId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        $conversation = ChannelConversation::query()
+            ->with(['draftOrder:id,phone', 'user:id,phone'])
+            ->find($this->selectedConversationId);
+
+        if (! $conversation) {
+            return;
+        }
+
+        $orders = app(InboxRecentOrders::class);
+        $order = $orders->findForConversation($conversation, $orderId);
+        if (! $order) {
+            $this->error = 'That order is not in this conversation’s last 7 days.';
+
+            return;
+        }
+
+        $this->replyText = $orders->confirmMessage($order);
         $this->error = null;
     }
 
@@ -2273,6 +2302,7 @@ class AdminInbox extends Component
             ? ChannelConversation::query()
                 ->with([
                     'draftOrder.items',
+                    'user:id,phone',
                     'messages' => function ($q) use ($threadSearch, $threadSince) {
                         $q->with([
                             'replyTo',
@@ -2327,6 +2357,9 @@ class AdminInbox extends Component
         return view('livewire.admin.admin-inbox', [
             'conversations' => $conversations,
             'selectedConversation' => $selectedConversation,
+            'recentConversationOrders' => $selectedConversation
+                ? app(InboxRecentOrders::class)->recent($selectedConversation)
+                : collect(),
             'inboxOpenThread' => $selectedConversation
                 ? app(InboxSnapshotBuilder::class)->thread($selectedConversation, $lookbackHours)
                 : null,

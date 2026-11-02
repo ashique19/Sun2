@@ -687,6 +687,71 @@
                         <x-admin.inbox-sync-button variant="thread-label" />
                         </div>
                     </div>
+                    @if ($recentConversationOrders->isNotEmpty())
+                        <div class="mt-1.5 flex flex-wrap items-center gap-x-0.5 gap-y-1 text-[11px]" data-inbox-recent-orders>
+                            @foreach ($recentConversationOrders as $recentOrder)
+                                @if (! $loop->first)
+                                    <span class="pr-0.5 text-[#8C8474]">,</span>
+                                @endif
+                                <div
+                                    wire:key="inbox-recent-order-{{ $recentOrder->id }}"
+                                    class="relative"
+                                    x-data="{ open: false, top: 0, left: 0, ignoreOutside: false }"
+                                    @keydown.escape.window="open = false"
+                                >
+                                    <button type="button"
+                                        data-inbox-recent-order-trigger="{{ $recentOrder->id }}"
+                                        @click="
+                                            open = ! open;
+                                            ignoreOutside = true;
+                                            if (open) {
+                                                const rect = $el.getBoundingClientRect();
+                                                top = rect.bottom + 4;
+                                                left = Math.max(8, Math.min(rect.left, window.innerWidth - 220));
+                                            }
+                                            $nextTick(() => ignoreOutside = false);
+                                        "
+                                        class="font-semibold text-[#C9A227] hover:underline"
+                                        x-bind:aria-expanded="open.toString()"
+                                        aria-haspopup="menu"
+                                        title="Order {{ $recentOrder->order_number }}">
+                                        {{ $recentOrder->order_number }}
+                                    </button>
+                                    {{-- Thread pane is overflow-hidden; teleport so the menu is not clipped or offset. --}}
+                                    <template x-teleport="body">
+                                        <div
+                                            x-show="open"
+                                            x-cloak
+                                            x-bind:style="'position:fixed;top:' + top + 'px;left:' + left + 'px;z-index:80'"
+                                            @click.outside="if (! ignoreOutside) open = false"
+                                            x-transition.opacity.duration.100ms
+                                            role="menu"
+                                            data-inbox-recent-order-menu="{{ $recentOrder->id }}"
+                                            class="min-w-[12.5rem] rounded-xl border border-[#E7DFCF] bg-white p-1.5 text-left text-[#1E1E1E] shadow-lg"
+                                        >
+                                            <a href="{{ route('admin.orders.show', $recentOrder) }}"
+                                                target="_blank"
+                                                rel="noopener"
+                                                role="menuitem"
+                                                class="block rounded-lg px-2 py-1.5 text-xs font-medium hover:bg-[#FAF6EF]"
+                                                @click="open = false">
+                                                Order details
+                                            </a>
+                                            <button type="button"
+                                                role="menuitem"
+                                                class="block w-full rounded-lg px-2 py-1.5 text-left text-xs font-medium hover:bg-[#FAF6EF]"
+                                                @click="
+                                                    open = false;
+                                                    $wire.fillOrderConfirmMessage({{ $recentOrder->id }});
+                                                ">
+                                                Order confirm msg
+                                            </button>
+                                        </div>
+                                    </template>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
                     @if ($mappingField !== 'product')
                         @if ($hasOlderMessages && ! $threadHistoryExpanded)
                             <button type="button"

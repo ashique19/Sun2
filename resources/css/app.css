@@ -274,21 +274,23 @@ body:has(.mobile-nav-toggle:checked) {
     overflow: hidden;
 }
 
-/* Admin inbox: mobile thread sheet fits below top bar, or full viewport when thread mode hides the bar. */
+/* Admin inbox: mobile thread is a full-viewport sheet that slides over the list.
+   List + Inbox header stay painted underneath so swipe-back does not flash empty. */
 @media (max-width: 1279px) {
-    body:not([data-inbox-mobile-thread="1"]) [data-inbox-mobile-thread-sheet] {
-        top: 4rem;
-        max-height: calc(100dvh - 4rem);
-    }
-
-    body[data-inbox-mobile-thread="1"] #admin-mobile-top-bar {
-        display: none;
+    [data-inbox-mobile-thread-sheet] {
+        top: 0;
+        max-height: 100dvh;
+        display: flex !important;
+        transform: translate3d(100%, 0, 0);
+        transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+        pointer-events: none;
+        will-change: transform;
+        background-color: #ffffff;
     }
 
     body[data-inbox-mobile-thread="1"] [data-inbox-mobile-thread-sheet] {
-        top: 0;
-        max-height: 100dvh;
-        background-color: #ffffff;
+        transform: translate3d(0, 0, 0);
+        pointer-events: auto;
     }
 
     body[data-inbox-mobile-thread="1"] [data-inbox-mobile-thread-sheet] [data-inbox-thread-header] {
@@ -306,20 +308,59 @@ body:has(.mobile-nav-toggle:checked) {
         display: flex !important;
     }
 
-    body:not([data-inbox-mobile-thread="1"]) [data-inbox-mobile-thread-sheet] {
-        display: none !important;
-    }
-
     body[data-inbox-mobile-thread="1"] [data-inbox-page-header] {
-        display: none !important;
+        display: flex !important;
     }
 
     body[data-inbox-mobile-thread="1"] [data-inbox-conversation-list] {
-        display: none !important;
+        display: flex !important;
     }
 
-    body[data-inbox-mobile-thread="1"] [data-inbox-mobile-thread-sheet] {
+    /* Hide the previous/preview thread until the pending id matches. */
+    [data-inbox-mobile-thread-sheet][data-inbox-pending-id] [data-inbox-live-thread] {
+        visibility: hidden;
+    }
+
+    [data-inbox-mobile-thread-sheet][data-inbox-pending-id]:not([data-inbox-skip-opening]) [data-inbox-opening-overlay] {
         display: flex !important;
+    }
+}
+
+[data-inbox-cache-thread] {
+    opacity: 1;
+    transition: opacity 0.16s ease;
+}
+
+[data-inbox-cache-thread].is-hiding {
+    opacity: 0;
+    pointer-events: none;
+}
+
+[data-inbox-pending-outbound] {
+    animation: inbox-pending-in 0.16s ease-out;
+}
+
+@keyframes inbox-pending-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-inbox-mobile-thread-sheet],
+    [data-inbox-cache-thread],
+    .inbox-mobile-filters {
+        transition: none;
+    }
+
+    [data-inbox-pending-outbound] {
+        animation: none;
     }
 }
 
@@ -520,7 +561,7 @@ body:has(.mobile-nav-toggle:checked) {
 /* Inbox filter panel: absolute overlay on mobile so the conversation list
    height stays stable when filters open/close. */
 .inbox-mobile-filters {
-    display: none;
+    display: grid;
     position: absolute;
     left: 1rem;
     right: 1rem;
@@ -534,10 +575,16 @@ body:has(.mobile-nav-toggle:checked) {
     background: #fff;
     padding: 0.75rem;
     box-shadow: 0 10px 30px rgba(30, 30, 30, 0.12);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-0.25rem);
+    transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
 .inbox-mobile-filters.is-open {
-    display: grid;
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
 }
 
 @media (width >= 80rem) {
@@ -559,5 +606,9 @@ body:has(.mobile-nav-toggle:checked) {
         background: transparent;
         padding: 0;
         box-shadow: none;
+        opacity: 1;
+        pointer-events: auto;
+        transform: none;
+        transition: none;
     }
 }

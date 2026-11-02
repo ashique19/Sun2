@@ -86,6 +86,23 @@ test('list url drops the conversation query', () => {
     assert.equal(conversationIdFromHref('https://example.test/admin/inbox'), null);
 });
 
+test('opening a thread tells the pane to slide in for that conversation id', () => {
+    const history = fakeHistory('https://example.test/admin/inbox');
+    const wire = fakeWire(null);
+    const shown = [];
+    const api = createInboxThreadHistory(wire, {
+        history,
+        getHref: () => history.href,
+        isMobile: () => true,
+        showThread: (id) => shown.push(id),
+        showList: () => shown.push('list'),
+    });
+
+    api.prepare(false, 5343);
+
+    assert.deepEqual(shown, [5343]);
+});
+
 test('opening a thread from the list parks a distinct list URL under the thread', () => {
     const history = fakeHistory('https://example.test/admin/inbox', { alpine: { snapshotIdx: 1 } });
     const wire = fakeWire(null);

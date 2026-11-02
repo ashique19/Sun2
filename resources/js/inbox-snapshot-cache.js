@@ -129,18 +129,53 @@ const messageHtml = (message) => {
     return `<div class="flex w-full ${wrap}"><div class="max-w-[82%] px-3 py-2 text-sm shadow-sm sm:max-w-[70%] ${bubble}">${inner}</div></div>`;
 };
 
+const OVERLAY_FADE_MS = 160;
+
 const overlay = () => document.querySelector('[data-inbox-cache-thread]');
 
-const hideOverlay = () => {
+const sheet = () => document.querySelector('[data-inbox-mobile-thread-sheet]');
+
+const prefersReducedMotion = () => typeof window !== 'undefined'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const finishHideOverlay = (el) => {
+    el.hidden = true;
+    el.classList.remove('is-hiding');
+    el.setAttribute('aria-hidden', 'true');
+    paintedConversationId = 0;
+    sheet()?.removeAttribute('data-inbox-skip-opening');
+};
+
+const hideOverlay = (options = {}) => {
+    sheet()?.removeAttribute('data-inbox-pending-id');
     const el = overlay();
     if (! el) {
+        paintedConversationId = 0;
+
         return;
     }
 
-    el.hidden = true;
-    el.setAttribute('aria-hidden', 'true');
-    paintedConversationId = 0;
-    document.querySelector('[data-inbox-mobile-thread-sheet]')?.removeAttribute('data-inbox-skip-opening');
+    if (el.hidden && ! el.classList.contains('is-hiding')) {
+        paintedConversationId = 0;
+
+        return;
+    }
+
+    const instant = options.instant === true || prefersReducedMotion();
+
+    if (instant) {
+        finishHideOverlay(el);
+
+        return;
+    }
+
+    el.classList.add('is-hiding');
+    window.setTimeout(() => {
+        if (! el.classList.contains('is-hiding')) {
+            return;
+        }
+        finishHideOverlay(el);
+    }, OVERLAY_FADE_MS);
 };
 
 const showOverlay = (thread) => {
@@ -163,10 +198,15 @@ const showOverlay = (thread) => {
         scroller.scrollTop = scroller.scrollHeight;
     }
 
+    el.classList.remove('is-hiding');
     el.hidden = false;
     el.setAttribute('aria-hidden', 'false');
     paintedConversationId = Number(thread.id) || 0;
-    document.querySelector('[data-inbox-mobile-thread-sheet]')?.setAttribute('data-inbox-skip-opening', '1');
+    const host = sheet();
+    host?.setAttribute('data-inbox-skip-opening', '1');
+    if (paintedConversationId > 0) {
+        host?.setAttribute('data-inbox-pending-id', String(paintedConversationId));
+    }
 
     return true;
 };
@@ -202,8 +242,12 @@ const persistFromDom = () => {
             const thread = JSON.parse(payloadRaw);
             if (thread?.id) {
                 cache.threads[String(thread.id)] = { ...thread, savedAt: Date.now() };
-                if (paintedConversationId === Number(thread.id)) {
+                const liveId = Number(thread.id);
+                const pending = Number(sheet()?.getAttribute('data-inbox-pending-id') || '0');
+                if (paintedConversationId === liveId) {
                     hideOverlay();
+                } else if (pending === liveId) {
+                    sheet()?.removeAttribute('data-inbox-pending-id');
                 }
             }
         } catch {
@@ -323,4 +367,4 @@ if (typeof document !== 'undefined') {
     });
 }
 
-export { readCache, showOverlay };
+export { readCache, showOverlay, hideOverlay };

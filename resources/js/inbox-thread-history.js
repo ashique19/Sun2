@@ -92,15 +92,28 @@ export function showInboxListPane() {
 
     document.body.dataset.inboxClosingThread = '1';
     document.body.dataset.inboxMobileThread = '0';
+    const sheet = document.querySelector('[data-inbox-mobile-thread-sheet]');
+    sheet?.removeAttribute('data-inbox-pending-id');
+    sheet?.removeAttribute('data-inbox-skip-opening');
+    const cache = document.querySelector('[data-inbox-cache-thread]');
+    if (cache) {
+        cache.hidden = true;
+        cache.classList.remove('is-hiding');
+        cache.setAttribute('aria-hidden', 'true');
+    }
 }
 
-export function showInboxThreadPane() {
+export function showInboxThreadPane(conversationId) {
     if (typeof document === 'undefined') {
         return;
     }
 
     delete document.body.dataset.inboxClosingThread;
     document.body.dataset.inboxMobileThread = '1';
+    const sheet = document.querySelector('[data-inbox-mobile-thread-sheet]');
+    if (sheet && conversationId != null) {
+        sheet.setAttribute('data-inbox-pending-id', String(conversationId));
+    }
 }
 
 function cloneState(history) {
@@ -144,10 +157,10 @@ export function createInboxThreadHistory(wire, env) {
         }
 
         closingToList = false;
-        showThread();
 
         const href = getHref();
         const id = conversationId ?? conversationIdFromHref(href);
+        showThread(id);
         const state = cloneState(history);
 
         if (state.inboxPane === 'thread' && (mobileThreadOpen || conversationIdFromHref(href) !== null)) {

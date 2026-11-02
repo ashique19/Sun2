@@ -126,7 +126,14 @@ class AdminInboxSnapshotCacheTest extends TestCase
         $this->assertStringContainsString('sun-inbox-cache:v', $source);
         $this->assertStringContainsString('data-inbox-cache-thread', $source);
         $this->assertStringContainsString('data-inbox-skip-opening', $source);
+        $this->assertStringContainsString('data-inbox-pending-id', $source);
+        $this->assertStringContainsString('is-hiding', $source);
         $this->assertStringContainsString('prefetch', $source);
         $this->assertStringContainsString("import './inbox-snapshot-cache.js'", $boot);
+
+        $history = file_get_contents(resource_path('js/inbox-thread-history.js'));
+        $this->assertIsString($history);
+        $this->assertStringContainsString('data-inbox-pending-id', $history);
+        $this->assertStringContainsString('showThread(id)', $history);
     }
 }

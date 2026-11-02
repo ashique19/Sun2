@@ -248,7 +248,7 @@
                 </p>
                 <p
                     class="mt-0.5 text-[11px] tabular-nums text-[#8C8474] xl:mt-1"
-                    wire:key="auto-sync-countdown-{{ $lastSyncedAt ?? 'pending' }}-{{ $graphPollSeconds }}"
+                    wire:key="auto-sync-countdown-{{ $graphPollSeconds }}"
                     x-data="{
                         interval: {{ (int) $graphPollSeconds }},
                         remaining: {{ (int) $graphPollSeconds }},
@@ -289,6 +289,7 @@
                             }
                         },
                     }"
+                    x-effect="lastAt = $wire.lastSyncedAt; refreshFromLastSync()"
                 >
                     <span x-text="label()">Auto sync in {{ (int) $graphPollSeconds }}s</span>
                 </p>
@@ -607,7 +608,7 @@
             </style>
             <div
                 data-inbox-opening-overlay
-                wire:loading.delay.shortest
+                wire:loading
                 wire:target="selectConversation"
                 class="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-[1px] xl:rounded-2xl"
                 aria-live="polite"
@@ -629,7 +630,10 @@
             </div>
 
             @if ($selectedConversation)
-                <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div
+                    data-inbox-live-thread
+                    data-inbox-live-thread-id="{{ $selectedConversation->id }}"
+                    class="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div
                     data-inbox-thread-header
                     class="shrink-0 border-b border-[#E7DFCF] bg-white px-3 pb-2.5 pt-[env(safe-area-inset-top,0px)] backdrop-blur max-xl:pt-[max(0.375rem,env(safe-area-inset-top,0px))] max-xl:pr-[max(0.75rem,env(safe-area-inset-right))] xl:bg-white/95 xl:px-4 xl:py-3">
@@ -772,6 +776,9 @@
 
                 <div
                     wire:key="thread-{{ $selectedConversation->id }}"
+                    data-inbox-thread-scroller
+                    wire:loading.class="opacity-70"
+                    wire:target="selectConversation,loadOlderThreadHistory"
                     x-data="{
                         stick: true,
                         threshold: 96,
@@ -1224,7 +1231,7 @@
                     @endforeach
 
                     @if ($outboundSending)
-                        <div class="flex w-full justify-end" wire:key="pending-outbound">
+                        <div class="flex w-full justify-end" wire:key="pending-outbound" data-inbox-pending-outbound>
                             <div class="max-w-[82%] rounded-2xl rounded-br-md bg-[#C9A227]/80 px-3 py-2 text-sm text-white shadow-sm sm:max-w-[70%]">
                                 @if (filled($pendingReplyText))
                                     <p class="whitespace-pre-wrap break-words leading-relaxed">{{ $pendingReplyText }}</p>

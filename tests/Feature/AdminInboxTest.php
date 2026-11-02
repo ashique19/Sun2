@@ -94,12 +94,30 @@ class AdminInboxTest extends TestCase
             ->assertSet('mobileThreadOpen', true)
             ->assertSeeHtml('aria-label="Back to conversations"')
             ->assertSeeHtml('data-inbox-mobile-thread-sheet')
+            ->assertSeeHtml('data-inbox-live-thread')
+            ->assertSeeHtml('data-inbox-live-thread-id="'.$conversation->id.'"')
+            ->assertSeeHtml('data-inbox-thread-scroller')
             ->assertSeeHtml('fixed z-30')
             ->assertSeeHtml('inset-0 flex')
             ->assertSeeHtml('aria-label="Send"')
             ->call('closeMobileThread')
             ->assertSet('mobileThreadOpen', false)
             ->assertSet('selectedConversationId', null);
+    }
+
+    #[Test]
+    public function sending_reply_paints_a_pending_outbound_bubble(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->set('pendingReplyText', 'On the way')
+            ->set('outboundSending', true)
+            ->assertSeeHtml('data-inbox-pending-outbound')
+            ->assertSee('Sending…')
+            ->assertSee('On the way');
     }
 
     #[Test]
@@ -206,6 +224,10 @@ class AdminInboxTest extends TestCase
         $this->assertIsString($css);
         $this->assertStringContainsString('body:not([data-inbox-mobile-thread="1"]) [data-inbox-page-header]', $css);
         $this->assertStringContainsString('body[data-inbox-mobile-thread="1"] [data-inbox-page-header]', $css);
+        $this->assertStringContainsString('transform: translate3d(100%, 0, 0)', $css);
+        $this->assertStringContainsString('[data-inbox-cache-thread].is-hiding', $css);
+        $this->assertStringContainsString('[data-inbox-pending-outbound]', $css);
+        $this->assertStringContainsString('data-inbox-pending-id', $css);
         $headerRulePos = strpos($css, 'body:not([data-inbox-mobile-thread="1"]) [data-inbox-page-header]');
         $listRulePos = strpos($css, 'body:not([data-inbox-mobile-thread="1"]) [data-inbox-conversation-list]');
         $this->assertNotFalse($headerRulePos);

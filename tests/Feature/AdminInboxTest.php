@@ -196,6 +196,8 @@ class AdminInboxTest extends TestCase
             ->assertSeeHtml('inbox-thread-history-ready')
             ->assertSeeHtml('alpine:navigate')
             ->assertSeeHtml('inboxClosingThread')
+            ->assertSeeHtml('__inboxPrepareList')
+            ->assertSeeHtml('inboxDesiredPane')
             ->assertSeeHtml('data-inbox-conversation-list');
     }
 

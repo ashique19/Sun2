@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+    cancelStaleInboxNavigation,
     conversationIdFromHref,
     createInboxThreadHistory,
+    inboxDesiredConversationId,
     inboxListUrl,
     inboxThreadUrl,
     isSameInboxDocument,
+    liveThreadMatchesDesired,
     preventSameDocumentInboxNavigate,
+    shouldKeepCachedThread,
+    syncInboxDesiredPane,
 } from '../../resources/js/inbox-thread-history.js';
 
 function fakeHistory(initialHref, initialState = {}) {
@@ -344,6 +349,89 @@ test('desktop Back still restores the conversation from the URL', () => {
 
     assert.equal(wire.selectedConversationId, 3);
     assert.equal(wire.mobileThreadOpen, true);
+});
+
+test('fast back then another tap keeps the new thread even if Livewire is still on the previous one', () => {
+    const history = fakeHistory('https://example.test/admin/inbox');
+    const wire = fakeWire(null);
+    const shown = [];
+    const api = createInboxThreadHistory(wire, {
+        history,
+        getHref: () => history.href,
+        isMobile: () => true,
+        showThread: (id) => shown.push(id),
+        showList: () => shown.push('list'),
+    });
+
+    api.prepare(false, 11);
+    wire.set('selectedConversationId', 11);
+    history.back();
+    api.onPopState();
+    api.prepare(false, 22);
+
+    wire.set('selectedConversationId', 11);
+    wire.mobileThreadOpen = true;
+    syncInboxDesiredPane(true);
+
+    assert.equal(inboxDesiredConversationId(), 22);
+    assert.equal(shown.at(-1), 22);
+    assert.equal(shouldKeepCachedThread(11), true);
+    assert.equal(liveThreadMatchesDesired(11), false);
+    assert.equal(liveThreadMatchesDesired(22), true);
+});
+
+test('stale inbox navigation actions are cancelled when a newer tap arrives', () => {
+    const cancelled = [];
+    const first = {
+        name: 'selectConversation',
+        isCancelled() {
+            return cancelled.includes('first');
+        },
+        cancel() {
+            cancelled.push('first');
+        },
+        message: {
+            cancel() {
+                cancelled.push('first-message');
+            },
+        },
+    };
+    const second = {
+        name: 'selectConversation',
+        isCancelled() {
+            return false;
+        },
+        cancel() {},
+    };
+
+    cancelStaleInboxNavigation(first, null);
+    cancelStaleInboxNavigation(second);
+
+    assert.deepEqual(cancelled, ['first', 'first-message']);
+});
+
+test('non-navigation Livewire actions are not cancelled as stale inbox nav', () => {
+    const cancelled = [];
+    const send = {
+        name: 'sendReply',
+        cancel() {
+            cancelled.push('send');
+        },
+    };
+    const previous = {
+        name: 'selectConversation',
+        isCancelled() {
+            return false;
+        },
+        cancel() {
+            cancelled.push('previous');
+        },
+    };
+
+    const kept = cancelStaleInboxNavigation(send, previous);
+
+    assert.equal(kept, previous);
+    assert.deepEqual(cancelled, []);
 });
 
 test('conversation click still selects when the prepare helper is missing', () => {

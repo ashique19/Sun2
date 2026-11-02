@@ -1,4 +1,5 @@
 import { csrfToken } from './inbox-dom.js';
+import { inboxDesiredConversationId, shouldKeepCachedThread } from './inbox-thread-history.js';
 
 /**
  * Inbox conversation cache.
@@ -145,7 +146,15 @@ const finishHideOverlay = (el) => {
 };
 
 const hideOverlay = (options = {}) => {
-    sheet()?.removeAttribute('data-inbox-pending-id');
+    const desired = inboxDesiredConversationId();
+    const liveId = Number(document.querySelector('[data-inbox-live-thread-id]')?.getAttribute('data-inbox-live-thread-id') || '0');
+    if (options.force !== true && desired != null && liveId !== desired) {
+        return;
+    }
+
+    if (options.force === true || desired == null || liveId === desired) {
+        sheet()?.removeAttribute('data-inbox-pending-id');
+    }
     const el = overlay();
     if (! el) {
         paintedConversationId = 0;
@@ -242,9 +251,14 @@ const persistFromDom = () => {
                 cache.threads[String(thread.id)] = { ...thread, savedAt: Date.now() };
                 const liveId = Number(thread.id);
                 const pending = Number(sheet()?.getAttribute('data-inbox-pending-id') || '0');
-                if (paintedConversationId === liveId) {
-                    hideOverlay();
-                } else if (pending === liveId) {
+                const desired = inboxDesiredConversationId();
+                if (shouldKeepCachedThread(liveId)) {
+                    if (desired && paintedConversationId === desired) {
+                        sheet()?.setAttribute('data-inbox-pending-id', String(desired));
+                    }
+                } else if (paintedConversationId === liveId) {
+                    hideOverlay({ force: true });
+                } else if (pending === liveId && (desired == null || pending === desired)) {
                     sheet()?.removeAttribute('data-inbox-pending-id');
                 }
             }
@@ -252,7 +266,10 @@ const persistFromDom = () => {
             // Ignore a truncated attribute; prefetch can fill it.
         }
     } else if (paintedConversationId) {
-        hideOverlay();
+        const desired = inboxDesiredConversationId();
+        if (desired == null || paintedConversationId !== desired) {
+            hideOverlay();
+        }
     }
 
     writeCache(cache);

@@ -17,7 +17,12 @@
     data-inbox-priced-image-conversation="{{ $selectedConversationId ?? '' }}"
     x-init="document.body.dataset.inboxMobileThread = $wire.mobileThreadOpen ? '1' : '0'"
     x-effect="
-        if (document.body.dataset.inboxClosingThread === '1') {
+        if (typeof window.__inboxSyncDesiredPane === 'function') {
+            window.__inboxSyncDesiredPane($wire.mobileThreadOpen);
+        } else if (document.body.dataset.inboxDesiredPane === 'thread') {
+            document.body.dataset.inboxMobileThread = '1';
+            delete document.body.dataset.inboxClosingThread;
+        } else if (document.body.dataset.inboxDesiredPane === 'list' || document.body.dataset.inboxClosingThread === '1') {
             document.body.dataset.inboxMobileThread = '0';
             if (! $wire.mobileThreadOpen) {
                 delete document.body.dataset.inboxClosingThread;
@@ -89,6 +94,14 @@
                 return state;
             };
 
+            window.__inboxPrepareList = function () {
+                document.body.dataset.inboxDesiredPane = 'list';
+                delete document.body.dataset.inboxDesiredId;
+                document.body.dataset.inboxClosingThread = '1';
+                document.body.dataset.inboxMobileThread = '0';
+                window.history.replaceState(listState(), '', listUrl(window.location.href));
+            };
+
             window.__inboxPrepareThreadHistory = function (mobileThreadOpen, conversationId) {
                 if (typeof window.__inboxThreadHistoryApi?.prepare === 'function' && ! window.__inboxThreadHistoryApi.__fallback) {
                     window.__inboxThreadHistoryApi.prepare(mobileThreadOpen, conversationId);
@@ -100,6 +113,8 @@
                     return;
                 }
 
+                document.body.dataset.inboxDesiredPane = 'thread';
+                document.body.dataset.inboxDesiredId = String(conversationId);
                 delete document.body.dataset.inboxClosingThread;
                 document.body.dataset.inboxMobileThread = '1';
 
@@ -127,6 +142,8 @@
                     }
 
                     if ($wire.mobileThreadOpen || $wire.selectedConversationId) {
+                        document.body.dataset.inboxDesiredPane = 'list';
+                        delete document.body.dataset.inboxDesiredId;
                         document.body.dataset.inboxClosingThread = '1';
                         document.body.dataset.inboxMobileThread = '0';
                         window.history.replaceState(listState(), '', listUrl(window.location.href));
@@ -625,6 +642,7 @@
                     <div class="flex min-w-0 max-w-full items-center gap-1 xl:gap-2">
                         <button type="button"
                             wire:click="closeMobileThread"
+                            @click="typeof window.__inboxPrepareList === 'function' && window.__inboxPrepareList()"
                             class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#6B6459] hover:bg-[#FAF6EF] xl:hidden"
                             aria-label="Back to conversations">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">

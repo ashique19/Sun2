@@ -85,11 +85,108 @@ export function preventSameDocumentInboxNavigate(event, currentHref) {
     return true;
 }
 
+export const INBOX_NAV_METHODS = ['selectConversation', 'clearConversationFromUrl', 'closeMobileThread'];
+
+let desiredPane = null;
+let desiredConversationId = null;
+let lastInboxNavAction = null;
+
+export function inboxDesiredConversationId() {
+    return desiredPane === 'thread' ? desiredConversationId : null;
+}
+
+export function inboxDesiredPane() {
+    return desiredPane;
+}
+
+export function setInboxDesiredThread(conversationId) {
+    desiredPane = 'thread';
+    const id = conversationId == null || conversationId === '' ? null : Number(conversationId);
+    desiredConversationId = Number.isFinite(id) ? id : null;
+    showInboxThreadPane(desiredConversationId);
+}
+
+export function setInboxDesiredList() {
+    desiredPane = 'list';
+    desiredConversationId = null;
+    showInboxListPane();
+}
+
+export function liveThreadMatchesDesired(liveId = null) {
+    const desired = inboxDesiredConversationId();
+    if (desired == null) {
+        return false;
+    }
+
+    const live = liveId == null
+        ? Number(typeof document === 'undefined'
+            ? 0
+            : document.querySelector('[data-inbox-live-thread-id]')?.getAttribute('data-inbox-live-thread-id') || '0')
+        : Number(liveId);
+
+    return Number.isFinite(live) && live === desired;
+}
+
+export function shouldKeepCachedThread(liveId) {
+    const desired = inboxDesiredConversationId();
+    if (desired == null) {
+        return false;
+    }
+
+    return Number(liveId) !== desired;
+}
+
+export function cancelStaleInboxNavigation(action, previous = lastInboxNavAction) {
+    if (! action || ! INBOX_NAV_METHODS.includes(action.name)) {
+        return previous;
+    }
+
+    if (previous && previous !== action && typeof previous.cancel === 'function' && ! previous.isCancelled?.()) {
+        previous.cancel();
+        previous.message?.cancel?.();
+    }
+
+    lastInboxNavAction = action;
+
+    return action;
+}
+
+export function syncInboxDesiredPane(wireOpen) {
+    if (typeof document === 'undefined') {
+        return desiredPane;
+    }
+
+    if (desiredPane === 'thread') {
+        document.body.dataset.inboxDesiredPane = 'thread';
+        if (desiredConversationId != null) {
+            document.body.dataset.inboxDesiredId = String(desiredConversationId);
+        }
+        document.body.dataset.inboxMobileThread = '1';
+        delete document.body.dataset.inboxClosingThread;
+
+        return desiredPane;
+    }
+
+    if (desiredPane === 'list') {
+        document.body.dataset.inboxDesiredPane = 'list';
+        delete document.body.dataset.inboxDesiredId;
+        document.body.dataset.inboxMobileThread = '0';
+
+        return desiredPane;
+    }
+
+    document.body.dataset.inboxMobileThread = wireOpen ? '1' : '0';
+
+    return desiredPane;
+}
+
 export function showInboxListPane() {
     if (typeof document === 'undefined') {
         return;
     }
 
+    document.body.dataset.inboxDesiredPane = 'list';
+    delete document.body.dataset.inboxDesiredId;
     document.body.dataset.inboxClosingThread = '1';
     document.body.dataset.inboxMobileThread = '0';
     const sheet = document.querySelector('[data-inbox-mobile-thread-sheet]');
@@ -109,9 +206,11 @@ export function showInboxThreadPane(conversationId) {
     }
 
     delete document.body.dataset.inboxClosingThread;
+    document.body.dataset.inboxDesiredPane = 'thread';
     document.body.dataset.inboxMobileThread = '1';
     const sheet = document.querySelector('[data-inbox-mobile-thread-sheet]');
     if (sheet && conversationId != null) {
+        document.body.dataset.inboxDesiredId = String(conversationId);
         sheet.setAttribute('data-inbox-pending-id', String(conversationId));
     }
 }
@@ -160,6 +259,8 @@ export function createInboxThreadHistory(wire, env) {
 
         const href = getHref();
         const id = conversationId ?? conversationIdFromHref(href);
+        desiredPane = 'thread';
+        desiredConversationId = id == null || id === '' ? null : Number(id);
         showThread(id);
         const state = cloneState(history);
 
@@ -191,14 +292,10 @@ export function createInboxThreadHistory(wire, env) {
         return isInboxLocation(href) ? inboxListUrl(href) : null;
     };
 
-    const closeToList = () => {
+    const parkListHistory = () => {
         const listUrl = parkedListHref();
         if (! listUrl) {
-            if (wire.selectedConversationId || wire.mobileThreadOpen) {
-                wire.clearConversationFromUrl();
-            }
-
-            return;
+            return false;
         }
 
         const listState = alpineWithoutConversation({ ...cloneState(history), inboxPane: 'list' });
@@ -207,6 +304,18 @@ export function createInboxThreadHistory(wire, env) {
             history.pushState(listState, '', listUrl);
         } else {
             history.replaceState(listState, '', listUrl);
+        }
+
+        return true;
+    };
+
+    const closeToList = () => {
+        if (! parkListHistory()) {
+            if (wire.selectedConversationId || wire.mobileThreadOpen) {
+                wire.clearConversationFromUrl();
+            }
+
+            return;
         }
 
         if (wire.selectedConversationId || wire.mobileThreadOpen) {
@@ -236,6 +345,8 @@ export function createInboxThreadHistory(wire, env) {
         const skippedList = closingToList && ! isInboxLocation(getHref());
 
         if (threadOpen || skippedList) {
+            desiredPane = 'list';
+            desiredConversationId = null;
             showList();
             closeToList();
             armCloseLock();
@@ -265,7 +376,7 @@ export function createInboxThreadHistory(wire, env) {
         prepare(false, wire.selectedConversationId ?? conversationIdFromHref(getHref()));
     };
 
-    return { prepare, onPopState, boot, closeToList };
+    return { prepare, onPopState, boot, closeToList, parkListHistory };
 }
 
 export function installInboxThreadHistory(wire) {
@@ -302,6 +413,64 @@ export function installInboxThreadHistory(wire) {
     window.__inboxPrepareThreadHistory = (mobileThreadOpen, conversationId) => {
         api.prepare(mobileThreadOpen, conversationId);
     };
+    window.__inboxPrepareList = () => {
+        desiredPane = 'list';
+        desiredConversationId = null;
+        showInboxListPane();
+        api.parkListHistory();
+    };
+    window.__inboxSyncDesiredPane = syncInboxDesiredPane;
+    window.__inboxDesiredConversationId = inboxDesiredConversationId;
+
+    const installNavInterceptor = () => {
+        if (! window.Livewire?.interceptAction || window.__inboxNavInterceptor) {
+            return;
+        }
+
+        window.__inboxNavInterceptor = true;
+        let inflightNavMessage = null;
+        const isInboxEl = (el) => Boolean(
+            el?.closest?.('[data-inbox-snapshot-root]') || el?.hasAttribute?.('data-inbox-snapshot-root'),
+        );
+        const isNavMessage = (message) => {
+            const actions = typeof message.getActions === 'function'
+                ? message.getActions()
+                : [...(message.actions || [])];
+
+            return actions.some((action) => INBOX_NAV_METHODS.includes(action.name));
+        };
+
+        window.Livewire.interceptAction(({ action }) => {
+            if (! INBOX_NAV_METHODS.includes(action.name) || ! isInboxEl(action.component?.el)) {
+                return;
+            }
+
+            if (inflightNavMessage && ! inflightNavMessage.isCancelled?.()) {
+                inflightNavMessage.cancel();
+                inflightNavMessage = null;
+            }
+        });
+
+        if (typeof window.Livewire.interceptMessage === 'function') {
+            window.Livewire.interceptMessage(({ message, onFinish, onCancel }) => {
+                if (! isNavMessage(message) || ! isInboxEl(message.component?.el)) {
+                    return;
+                }
+
+                inflightNavMessage = message;
+                const clear = () => {
+                    if (inflightNavMessage === message) {
+                        inflightNavMessage = null;
+                    }
+                };
+                onFinish(clear);
+                onCancel(clear);
+            });
+        }
+    };
+
+    installNavInterceptor();
+    document.addEventListener('livewire:init', installNavInterceptor);
 
     if (! window.__inboxThreadHistoryListener) {
         window.__inboxThreadHistoryListener = true;

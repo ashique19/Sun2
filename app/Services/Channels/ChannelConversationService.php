@@ -99,6 +99,8 @@ class ChannelConversationService
                 if ($message->hasMedia()) {
                     ChannelMessageImageMatchService::prewarmAfterResponse($message);
                 }
+
+                ChannelOrderDraftCatcher::scheduleAfterInbound($conversation);
             } elseif ($conversation->last_outbound_at === null || $sentAt->greaterThan($conversation->last_outbound_at)) {
                 $conversation->forceFill(['last_outbound_at' => $sentAt])->save();
             }

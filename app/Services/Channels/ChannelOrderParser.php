@@ -135,7 +135,19 @@ class ChannelOrderParser
             $weak = array_merge($weak, $nameMatch['weak_points']);
         }
 
-        $imageMatch = $this->matchProductFromImages($orderWindow);
+        $tagged = $inbound->last(
+            fn (ChannelMessage $message): bool => (int) ($message->matched_product_id ?? 0) > 0,
+        );
+        if ($tagged && ! $result['product_id']) {
+            $taggedProduct = Product::query()->find((int) $tagged->matched_product_id);
+            if ($taggedProduct) {
+                $result['product_id'] = (int) $taggedProduct->id;
+                $result['product_name'] = (string) $taggedProduct->name;
+                $result['source'] = 'local+image';
+            }
+        }
+
+        $imageMatch = $this->matchProductFromImages($inbound);
         $result['image_matches'] = $imageMatch['candidates'];
         $weak = array_merge($weak, $imageMatch['weak_points']);
 
@@ -191,6 +203,38 @@ class ChannelOrderParser
         $result['raw_text'] = $rawText;
 
         return $result;
+    }
+
+    public function textHasNameCue(string $text): bool
+    {
+        foreach ($this->textLines($text) as $line) {
+            if ($this->looksLikeName($line)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function textHasAddressCue(string $text): bool
+    {
+        foreach ($this->textLines($text) as $line) {
+            if ($this->looksLikeAddress($line)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function textLines(string $text): array
+    {
+        $lines = preg_split('/\R+/u', $text) ?: [];
+
+        return array_values(array_filter(array_map('trim', $lines), fn ($line) => $line !== ''));
     }
 
     /**

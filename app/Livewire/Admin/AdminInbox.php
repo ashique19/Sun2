@@ -15,6 +15,7 @@ use App\Services\Channels\ChannelInboxDiagnostics;
 use App\Services\Channels\ChannelInboxPurgeService;
 use App\Services\Channels\ChannelMessageImageMatchService;
 use App\Services\Channels\ChannelMessageOrderMapper;
+use App\Services\Channels\ChannelOrderDraftCatcher;
 use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
 use App\Services\Channels\InboxQuickReplyService;
@@ -847,6 +848,35 @@ class AdminInbox extends Component
 
         $this->replyText = $orders->confirmMessage($order);
         $this->error = null;
+    }
+
+    public function confirmConversationDraft(ChannelOrderDraftService $drafts): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        $conversation = ChannelConversation::query()
+            ->with('draftOrder.items')
+            ->find($this->selectedConversationId);
+
+        $draft = $conversation?->draftOrder;
+        if (! $draft || ! $draft->isAiDraft()) {
+            $this->error = 'No draft order is ready on this conversation.';
+
+            return;
+        }
+
+        try {
+            $drafts->confirm($draft, auth()->id());
+            $this->orderPanelOpen = false;
+            $this->statusMessage = 'Draft confirmed and moved to New.';
+            $this->error = null;
+        } catch (InvalidArgumentException $e) {
+            $this->error = $e->getMessage();
+        }
     }
 
     public function insertQuickReply(int $index, InboxQuickReplyService $quickReplies): void
@@ -2360,6 +2390,9 @@ class AdminInbox extends Component
             'recentConversationOrders' => $selectedConversation
                 ? app(InboxRecentOrders::class)->recent($selectedConversation)
                 : collect(),
+            'inboxDraftReady' => $selectedConversation
+                ? app(ChannelOrderDraftCatcher::class)->readySummary($selectedConversation)
+                : null,
             'inboxOpenThread' => $selectedConversation
                 ? app(InboxSnapshotBuilder::class)->thread($selectedConversation, $lookbackHours)
                 : null,

@@ -689,6 +689,29 @@
                         <x-admin.inbox-sync-button variant="thread-label" />
                         </div>
                     </div>
+                    @if ($inboxDraftReady)
+                        <div class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]" data-inbox-draft-ready>
+                            <span class="font-semibold text-[#1E1E1E]">Draft ready</span>
+                            @if ($inboxDraftReady['items'] !== '')
+                                <span class="min-w-0 truncate text-[#6B6459]">{{ $inboxDraftReady['items'] }}</span>
+                            @endif
+                            <span class="text-[#6B6459]">{{ $inboxDraftReady['phone'] }}</span>
+                            @if ($inboxDraftReady['area'] !== '')
+                                <span class="text-[#6B6459]">{{ $inboxDraftReady['area'] }}</span>
+                            @endif
+                            <a href="{{ $inboxDraftReady['edit_url'] }}"
+                                target="_blank"
+                                rel="noopener"
+                                class="inline-flex h-6 items-center rounded-full border border-[#E0D6C2] bg-white px-2 font-semibold text-[#C9A227] hover:border-[#C9A227]">
+                                Edit
+                            </a>
+                            <button type="button"
+                                wire:click="confirmConversationDraft"
+                                class="inline-flex h-6 items-center rounded-full border border-[#C9A227] bg-[#C9A227] px-2 font-semibold text-white hover:bg-[#b89220]">
+                                Confirm
+                            </button>
+                        </div>
+                    @endif
                     @if ($recentConversationOrders->isNotEmpty())
                         <div class="mt-1.5 flex flex-wrap items-center gap-x-0.5 gap-y-1 text-[11px]" data-inbox-recent-orders>
                             @foreach ($recentConversationOrders as $recentOrder)

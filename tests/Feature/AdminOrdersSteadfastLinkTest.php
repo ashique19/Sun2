@@ -187,6 +187,24 @@ class AdminOrdersSteadfastLinkTest extends TestCase
             ->assertSee('Steadfast ↗')
             ->assertSeeHtml('href="https://steadfast.com.bd/user/consignment/277193413"')
             ->assertSeeHtml('target="_blank"')
+            ->assertSeeHtml('data-order-courier-link')
             ->assertSee('SF123456');
+    }
+
+    #[Test]
+    public function order_show_omits_courier_link_when_there_is_no_consignment(): void
+    {
+        $this->actingAs($this->adminUser());
+        $order = $this->order($this->steadfast(), [
+            'status' => 'new',
+            'courier_id' => null,
+            'courier_tracker' => null,
+            'courier_consignment_id' => null,
+            'dispatch_date' => null,
+        ]);
+
+        Livewire::test(AdminOrderShow::class, ['order' => $order])
+            ->assertDontSeeHtml('data-order-courier-link')
+            ->assertDontSeeHtml('steadfast.com.bd/user/consignment/');
     }
 }

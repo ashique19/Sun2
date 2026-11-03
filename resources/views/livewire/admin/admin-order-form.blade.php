@@ -199,6 +199,12 @@
                                     </button>
                                 </div>
                             @endif
+
+                            <x-admin.open-new-order-offer
+                                :orders="$openNewOrders"
+                                :can-merge="$canMergeOpenNew"
+                                class="mt-3"
+                            />
                         </div>
                         <div class="sm:col-span-2">
                             <label class="block text-[#6B6459] mb-1">Name</label>

@@ -6,8 +6,10 @@ use App\Livewire\Concerns\ManagesProductImagePreview;
 use App\Models\Courier;
 use App\Models\Order;
 use App\Services\Admin\AdminOrderService;
+use App\Services\Admin\OpenNewOrderFinder;
 use App\Services\Admin\OrderDeliveryReturnService;
 use App\Services\Admin\OrderDispatchService;
+use App\Services\Admin\OrderMergeService;
 use App\Services\Admin\ProductShareListService;
 use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
@@ -309,6 +311,40 @@ class AdminOrders extends Component
 
         $drafts->confirm($order, auth()->id());
         $this->listRevision++;
+    }
+
+    public function acknowledgeOpenNew(int $targetId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $target = Order::query()
+            ->whereKey($targetId)
+            ->where('status', Order::STATUS_NEW)
+            ->first();
+
+        if (! $target) {
+            return;
+        }
+
+        $this->redirect(route('admin.orders.show', $target), navigate: true);
+    }
+
+    public function mergeIntoOpenNew(int $draftId, int $targetId, OrderMergeService $merge, OpenNewOrderFinder $finder): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $draft = Order::query()->find($draftId);
+        if (! $draft || ! $draft->isAiDraft()) {
+            return;
+        }
+
+        $target = $finder->findMatchingNew($targetId, (string) $draft->phone, (int) $draft->id);
+        if (! $target) {
+            return;
+        }
+
+        $merged = $merge->mergeDraftIntoNew($draft, $target, auth()->id());
+        $this->redirect(route('admin.orders.show', $merged), navigate: true);
     }
 
     public function clearCustomerNote(int $orderId): void
@@ -1189,8 +1225,13 @@ class AdminOrders extends Component
             }
         }
 
+        $openNewByOrderId = $this->segment === 'draft-ai'
+            ? app(OpenNewOrderFinder::class)->mapForOrders($orders->getCollection())
+            : [];
+
         return view('livewire.admin.admin-orders', [
             'orders' => $orders,
+            'openNewByOrderId' => $openNewByOrderId,
             'segment' => $this->segment,
             'segmentLabel' => AdminOrderSegment::label($this->segment),
             'segments' => AdminOrderSegment::SEGMENTS,

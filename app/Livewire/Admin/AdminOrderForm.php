@@ -13,6 +13,8 @@ use App\Models\User;
 use App\Rules\BangladeshMobile;
 use App\Services\Admin\AdminOrderService;
 use App\Services\Admin\CustomerLookupService;
+use App\Services\Admin\OpenNewOrderFinder;
+use App\Services\Admin\OrderMergeService;
 use App\Services\Admin\OrderPasteParser;
 use App\Services\Admin\ProductImageHashService;
 use App\Services\Admin\ProductImageService;
@@ -1288,6 +1290,49 @@ class AdminOrderForm extends Component
         return $lines;
     }
 
+    public function acknowledgeOpenNew(int $targetId, OpenNewOrderFinder $finder): void
+    {
+        $target = $finder->findMatchingNew($targetId, $this->phone, $this->order?->id);
+
+        if (! $target) {
+            return;
+        }
+
+        $this->redirect(route('admin.orders.show', $target), navigate: true);
+    }
+
+    public function mergeIntoOpenNew(int $targetId, OrderMergeService $merge, OpenNewOrderFinder $finder): void
+    {
+        $this->error = null;
+        $this->message = null;
+
+        $target = $finder->findMatchingNew($targetId, $this->phone, $this->order?->id);
+
+        if (! $target) {
+            $this->error = 'That New order is no longer available to merge into.';
+
+            return;
+        }
+
+        if ($this->order && ! $this->order->isAiDraft()) {
+            $this->error = 'Open the existing New order instead of merging this one.';
+
+            return;
+        }
+
+        try {
+            if ($this->order?->isAiDraft()) {
+                $merged = $merge->mergeDraftIntoNew($this->order, $target, auth()->id());
+            } else {
+                $merged = $merge->mergeLinesIntoNew($target, $this->linesForMerge(), auth()->id());
+            }
+
+            $this->redirect(route('admin.orders.show', $merged), navigate: true);
+        } catch (\Throwable $e) {
+            $this->error = $e->getMessage();
+        }
+    }
+
     public function save(AdminOrderService $orders): void
     {
         $this->error = null;
@@ -1494,6 +1539,13 @@ class AdminOrderForm extends Component
                 ->paginate(self::PRODUCT_SEARCH_PER_PAGE, ['*'], 'productPage');
         }
 
+        $canMergeOpenNew = ! $this->order || $this->order->isAiDraft();
+        $openNewOrders = PhoneNumber::isValidDisplayMobile($this->phone)
+            ? app(OpenNewOrderFinder::class)->summaries(
+                app(OpenNewOrderFinder::class)->forPhone($this->phone, $this->order?->id)
+            )
+            : [];
+
         return view('livewire.admin.admin-order-form', [
             'searchResults' => $searchResults,
             'searchActive' => $searchActive,
@@ -1502,7 +1554,26 @@ class AdminOrderForm extends Component
             'areas' => $this->cityId
                 ? Area::query()->active()->where('city_id', $this->cityId)->orderBy('name')->get(['id', 'name'])
                 : collect(),
+            'openNewOrders' => $openNewOrders,
+            'canMergeOpenNew' => $canMergeOpenNew,
         ])->title($this->title());
+    }
+
+    /**
+     * @return list<array{product_id:?int,name:string,quantity:int,price:float,purchase_price:float,line_total:float,product_image:?string,unit_cost:float}>
+     */
+    private function linesForMerge(): array
+    {
+        return array_values(array_map(fn (array $line) => [
+            'product_id' => isset($line['product_id']) ? (int) $line['product_id'] : null,
+            'name' => (string) ($line['name'] ?? 'Item'),
+            'quantity' => max(1, (int) ($line['quantity'] ?? 1)),
+            'price' => (float) $this->roundedMoney($line['price'] ?? 0),
+            'purchase_price' => (float) $this->roundedMoney($line['purchase_price'] ?? 0),
+            'unit_cost' => (float) $this->roundedMoney($line['unit_cost'] ?? $line['purchase_price'] ?? 0),
+            'line_total' => (float) $this->roundedMoney($line['line_total'] ?? 0),
+            'product_image' => $line['product_image'] ?? null,
+        ], $this->lines));
     }
 
     private function guessLocationFromAddress(?AddressLocationGuesser $guesser = null): void

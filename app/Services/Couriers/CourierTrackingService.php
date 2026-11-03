@@ -228,8 +228,8 @@ class CourierTrackingService
      */
     private function extractEvent(array $data, mixed $fallbackAt): ?array
     {
-        $message = trim((string) ($data['tracking_message'] ?? ''));
-        $status = $this->normalizeStatus($data['delivery_status'] ?? $data['status'] ?? null);
+        $message = SteadfastWebhookPayload::trackingMessage($data);
+        $status = $this->normalizeStatus($data['delivery_status'] ?? $data['status_type'] ?? $data['status'] ?? null);
         $rawAt = $data['updated_at'] ?? $data['timestamp'] ?? $fallbackAt;
 
         // create_order / API booking payload

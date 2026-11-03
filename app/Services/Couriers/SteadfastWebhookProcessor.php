@@ -36,13 +36,16 @@ class SteadfastWebhookProcessor
      */
     public function handle(array $payload): void
     {
-        $notificationType = (string) ($payload['notification_type'] ?? 'unknown');
+        $payload = SteadfastWebhookPayload::normalize($payload);
+        $notificationType = (string) ($payload['notification_type'] ?? SteadfastWebhookPayload::TYPE_TRACKING_UPDATE);
         $order = $this->findOrder($payload);
 
         if (! $order) {
             Log::warning('Steadfast webhook: order not found.', [
                 'invoice' => $payload['invoice'] ?? null,
-                'tracking_id' => $payload['tracking_id'] ?? null,
+                'tracking_id' => $payload['tracking_id'] ?? $payload['tracking_code'] ?? null,
+                'consignment_id' => $payload['consignment_id'] ?? null,
+                'notification_type' => $notificationType,
             ]);
 
             return;
@@ -94,7 +97,7 @@ class SteadfastWebhookProcessor
                 $this->handleTrackingUpdate($order, $payload);
             }
 
-            $message = (string) ($payload['tracking_message'] ?? '');
+            $message = SteadfastWebhookPayload::trackingMessage($payload);
             $this->returnHubArrival->observeMessage(
                 $order->fresh(),
                 $message,
@@ -110,7 +113,10 @@ class SteadfastWebhookProcessor
     {
         $steadfastStatus = strtolower((string) ($payload['status'] ?? ''));
         $mappedStatus = $this->mapDeliveryStatus($steadfastStatus);
-        $message = (string) ($payload['tracking_message'] ?? 'Steadfast delivery status: '.$steadfastStatus);
+        $message = SteadfastWebhookPayload::trackingMessage($payload);
+        if ($message === '') {
+            $message = 'Steadfast delivery status: '.$steadfastStatus;
+        }
 
         if ($mappedStatus === null) {
             $this->recordHistory($order, $order->status, $message);
@@ -225,7 +231,10 @@ class SteadfastWebhookProcessor
      */
     private function handleTrackingUpdate(Order $order, array $payload): void
     {
-        $message = (string) ($payload['tracking_message'] ?? 'Steadfast tracking update.');
+        $message = SteadfastWebhookPayload::trackingMessage($payload);
+        if ($message === '') {
+            $message = 'Steadfast tracking update.';
+        }
 
         if (preg_match('/delivered successfully/i', $message) && $order->status !== 'delivered') {
             $order->refresh();
@@ -307,19 +316,25 @@ class SteadfastWebhookProcessor
             }
         }
 
-        $tracking = $payload['tracking_id'] ?? $payload['tracking_code'] ?? null;
-        if ($tracking) {
-            $order = Order::query()->where('courier_tracker', (string) $tracking)->first();
+        $candidates = [];
+        foreach (['tracking_id', 'tracking_code', 'consignment_id'] as $key) {
+            if (! array_key_exists($key, $payload) || $payload[$key] === null || $payload[$key] === '') {
+                continue;
+            }
+            $candidates[] = (string) $payload[$key];
+        }
+        $candidates = array_values(array_unique($candidates));
+
+        foreach ($candidates as $candidate) {
+            $order = Order::query()
+                ->where(function ($query) use ($candidate) {
+                    $query->where('courier_tracker', $candidate)
+                        ->orWhere('courier_consignment_id', $candidate);
+                })
+                ->first();
             if ($order) {
                 return $order;
             }
-        }
-
-        $consignmentId = $payload['consignment_id'] ?? null;
-        if ($consignmentId !== null && $consignmentId !== '') {
-            return Order::query()
-                ->where('courier_consignment_id', (string) $consignmentId)
-                ->first();
         }
 
         return null;
@@ -334,7 +349,7 @@ class SteadfastWebhookProcessor
             'partial_delivered_approval_pending' => 'delivered',
             'cancelled', 'cancelled_approval_pending' => 'cancelled',
             'returned', 'cancel and return' => 'returned',
-            'pending', 'in_review', 'hold', 'in transit', 'processing' => 'dispatched',
+            'pending', 'in_review', 'hold', 'in transit', 'in_transit', 'processing' => 'dispatched',
             default => null,
         };
     }

@@ -420,6 +420,56 @@ class ChannelAiDraftOrdersTest extends TestCase
         $this->assertSame('Gift wrap requested.', $confirmed->admin_note);
     }
 
+    public function test_confirm_draft_removes_ai_weak_admin_note(): void
+    {
+        $admin = $this->adminUser();
+        $conversation = ChannelConversation::query()->create([
+            'channel' => ChannelConversation::CHANNEL_MESSENGER,
+            'external_user_id' => 'PSID_WEAK_NOTE',
+            'last_inbound_at' => now(),
+        ]);
+
+        $draft = $this->baseOrder([
+            'status' => Order::STATUS_DRAFT,
+            'order_number' => '3003',
+            'placed_via' => Order::PLACED_VIA_MESSENGER,
+            'channel_conversation_id' => $conversation->id,
+            'area' => 'Mirpur',
+            'admin_note' => 'Draft by AI (Messenger). Weak: name_heuristic, chatty_transcript_discarded, address_unresolved_location',
+        ]);
+        $conversation->update(['draft_order_id' => $draft->id]);
+
+        $confirmed = app(ChannelOrderDraftService::class)->confirm($draft, $admin->id);
+
+        $this->assertSame('new', $confirmed->status);
+        $this->assertNull($confirmed->admin_note);
+    }
+
+    public function test_confirm_draft_keeps_staff_text_after_ai_weak_note(): void
+    {
+        $admin = $this->adminUser();
+        $conversation = ChannelConversation::query()->create([
+            'channel' => ChannelConversation::CHANNEL_MESSENGER,
+            'external_user_id' => 'PSID_WEAK_KEEP',
+            'last_inbound_at' => now(),
+        ]);
+
+        $draft = $this->baseOrder([
+            'status' => Order::STATUS_DRAFT,
+            'order_number' => '3004',
+            'placed_via' => Order::PLACED_VIA_MESSENGER,
+            'channel_conversation_id' => $conversation->id,
+            'area' => 'Mirpur',
+            'admin_note' => 'Draft by AI (Messenger). Missing: area. Weak: name_heuristic, address_unresolved_location. Gift wrap requested.',
+        ]);
+        $conversation->update(['draft_order_id' => $draft->id]);
+
+        $confirmed = app(ChannelOrderDraftService::class)->confirm($draft, $admin->id);
+
+        $this->assertSame('new', $confirmed->status);
+        $this->assertSame('Gift wrap requested.', $confirmed->admin_note);
+    }
+
     public function test_conversation_viewer_and_reply_within_window(): void
     {
         Http::fake([

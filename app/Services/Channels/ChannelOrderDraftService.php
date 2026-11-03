@@ -496,7 +496,7 @@ class ChannelOrderDraftService
                 'updated_by' => $confirmedBy,
                 'placed_at' => $order->placed_at ?? now(),
             ], fn ($v) => $v !== null);
-            $extraAttributes['admin_note'] = $this->adminNoteWithoutInboxStaffDraftMarker($order->admin_note);
+            $extraAttributes['admin_note'] = $this->adminNoteWithoutDraftDiagnostics($order->admin_note);
 
             $order = $this->statusService->update(
                 $order,
@@ -537,17 +537,24 @@ class ChannelOrderDraftService
         });
     }
 
-    private function adminNoteWithoutInboxStaffDraftMarker(?string $note): ?string
+    /**
+     * Drop parser diagnostics so they do not follow the order into New.
+     * Keeps any staff-written remainder (gift wrap, call-before, etc.).
+     */
+    private function adminNoteWithoutDraftDiagnostics(?string $note): ?string
     {
         if ($note === null || $note === '') {
             return null;
         }
 
-        if (! str_contains($note, self::INBOX_STAFF_DRAFT_NOTE)) {
-            return $note;
-        }
-
-        $cleaned = trim(preg_replace('/\s{2,}/', ' ', str_replace(self::INBOX_STAFF_DRAFT_NOTE, '', $note)) ?? '');
+        $cleaned = str_replace(self::INBOX_STAFF_DRAFT_NOTE, '', $note);
+        $cleaned = preg_replace(
+            '/Draft by AI \([^)]+\)\.(?:\s*Missing:\s*[^.]+(?:\.|$))?(?:\s*Weak:\s*[^.]+(?:\.|$))?/i',
+            '',
+            $cleaned,
+        ) ?? $cleaned;
+        $cleaned = trim(preg_replace('/[ \t]{2,}/', ' ', $cleaned) ?? '');
+        $cleaned = trim(preg_replace('/\n{3,}/', "\n\n", $cleaned) ?? '');
 
         return $cleaned === '' ? null : $cleaned;
     }

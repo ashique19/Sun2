@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Couriers\SteadfastWebhookPayload;
 use App\Services\Couriers\SteadfastWebhookProcessor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,28 +20,49 @@ class SteadfastWebhookController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        $payload = $request->all();
+        $events = SteadfastWebhookPayload::eventsFrom($this->requestPayload($request));
 
-        if (! is_array($payload) || $payload === []) {
-            return response()->json(['error' => 'Empty payload'], 400);
-        }
+        if ($events === []) {
+            Log::warning('Steadfast webhook: empty or unusable payload.');
 
-        if (! isset($payload['notification_type'])) {
-            return response()->json(['error' => 'Missing notification_type'], 422);
+            // Steadfast never retries 4xx. Ack empty bodies so a parser miss is not fatal.
+            return response()->json(['status' => 'success']);
         }
 
         try {
-            $processor->handle($payload);
+            foreach ($events as $event) {
+                $processor->handle($event);
+            }
         } catch (\Throwable $e) {
             Log::error('Steadfast webhook processing failed.', [
                 'message' => $e->getMessage(),
-                'invoice' => $payload['invoice'] ?? null,
+                'invoice' => $events[0]['invoice'] ?? null,
             ]);
 
             return response()->json(['error' => 'Processing failed'], 500);
         }
 
-        return response()->json(['status' => 'ok']);
+        return response()->json(['status' => 'success']);
+    }
+
+    /**
+     * @return array<string, mixed>|list<mixed>
+     */
+    private function requestPayload(Request $request): array
+    {
+        $payload = $request->all();
+        if (is_array($payload) && $payload !== []) {
+            return $payload;
+        }
+
+        $raw = trim((string) $request->getContent());
+        if ($raw === '') {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     private function isAuthorized(Request $request): bool
@@ -53,14 +75,17 @@ class SteadfastWebhookController extends Controller
             return false;
         }
 
-        $authorization = (string) $request->header('Authorization', '');
+        $authorization = trim((string) $request->header('Authorization', ''));
 
-        if (str_starts_with($authorization, 'Bearer ')) {
-            $provided = substr($authorization, 7);
-
-            if (hash_equals($expected, $provided)) {
+        if (preg_match('/^Bearer\s+(\S.*)$/i', $authorization, $matches) === 1) {
+            $provided = trim($matches[1]);
+            if ($provided !== '' && hash_equals($expected, $provided)) {
                 return true;
             }
+        }
+
+        if ($authorization !== '' && ! str_contains($authorization, ' ') && hash_equals($expected, $authorization)) {
+            return true;
         }
 
         $alternate = (string) $request->header('X-Steadfast-Token', '');

@@ -4,6 +4,7 @@ namespace App\Services\Admin;
 
 use App\Models\Courier;
 use App\Models\CourierData;
+use App\Services\Couriers\SteadfastWebhookPayload;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -80,17 +81,16 @@ class SteadfastWebhookInboxService
     {
         $payload = is_array($entry->api_data) ? $entry->api_data : [];
         $type = strtolower((string) ($payload['notification_type'] ?? ''));
+        $message = SteadfastWebhookPayload::trackingMessage($payload);
 
         if ($type === 'delivery_status') {
-            $status = trim((string) ($payload['status'] ?? $payload['delivery_status'] ?? ''));
+            $status = trim((string) ($payload['status'] ?? $payload['delivery_status'] ?? $payload['status_type'] ?? ''));
 
-            return $status !== '' ? $status : 'delivery status update';
+            return $status !== '' ? $status : ($message !== '' ? $message : 'delivery status update');
         }
 
-        if ($type === 'tracking_update') {
-            $message = trim((string) ($payload['tracking_message'] ?? ''));
-
-            return $message !== '' ? $message : 'tracking update';
+        if ($message !== '') {
+            return $message;
         }
 
         return $type !== '' ? $type : 'webhook update';

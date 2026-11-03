@@ -1330,6 +1330,19 @@
                                         <span class="truncate">{{ $quickReplyMatch['label'] }}</span>
                                     </button>
                                 @endif
+                                @if (! $isOutbound && isset($priceQueryMessageIds[$messageRow->id]) && $bulkPricedImageTargets !== [])
+                                    <button type="button"
+                                        data-inbox-priced-image-send-all
+                                        data-inbox-priced-image-targets='@json($bulkPricedImageTargets)'
+                                        wire:click="sendUnrepliedPricedImages"
+                                        wire:loading.attr="disabled"
+                                        wire:target="sendUnrepliedPricedImages"
+                                        class="mt-1.5 inline-flex max-w-full items-center gap-1 rounded-full border border-[#C9A227] bg-[#FAF6EF] px-2 py-0.5 text-[10px] font-semibold text-[#C9A227] hover:bg-[#C9A227] hover:text-white disabled:opacity-60"
+                                        title="Send priced images for every unreplied photo matching above 84%">
+                                        <span data-inbox-priced-image-send-all-label>Send priced images</span>
+                                        <span class="tabular-nums">({{ count($bulkPricedImageTargets) }})</span>
+                                    </button>
+                                @endif
                                 <div class="mt-1 flex items-center justify-end gap-2">
                                     @if ($messageRow->sent_at)
                                         <p @class([
@@ -1521,6 +1534,19 @@
                             }
                         @endphp
                         <div class="mb-2 flex items-center gap-1.5 overflow-x-auto pb-0.5" data-inbox-quick-replies>
+                            @if ($bulkPricedImageTargets !== [])
+                                <button type="button"
+                                    data-inbox-priced-image-send-all
+                                    data-inbox-priced-image-targets='@json($bulkPricedImageTargets)'
+                                    wire:click="sendUnrepliedPricedImages"
+                                    wire:loading.attr="disabled"
+                                    wire:target="sendUnrepliedPricedImages"
+                                    class="shrink-0 rounded-full border border-[#C9A227] bg-[#C9A227] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#b8911f] disabled:opacity-60"
+                                    title="Send priced images for every unreplied photo matching above 84%">
+                                    <span data-inbox-priced-image-send-all-label>Send priced images</span>
+                                    <span class="tabular-nums">({{ count($bulkPricedImageTargets) }})</span>
+                                </button>
+                            @endif
                             @foreach ($quickReplies as $index => $quickReply)
                                 <button type="button"
                                     data-inbox-quick-reply

@@ -21,6 +21,19 @@ class InboxQuickReplyMatcher
 
     public const VIA_INTENT = 'intent';
 
+    /** Send every unreplied inbound photo whose catalog match is strictly above this. */
+    public const PRICED_IMAGE_BULK_MIN_PERCENT = 84.0;
+
+    /**
+     * Compacted labels/bodies that ask which catalog item — not a price quote.
+     *
+     * @var list<string>
+     */
+    private const WHICH_PRODUCT_CUES = [
+        'কোনপ্রডাক্ট', 'কোনপ্রোডাক্ট', 'কোনপণ্য',
+        'whichproduct', 'konproduct', 'konprodakt', 'konprodact',
+    ];
+
     /**
      * Bootstrap cues for the three query types staff see most.
      * Compacted (lowercase, no spaces/punct) so typos like "eta koto" / "etakoto" still hit.
@@ -74,9 +87,11 @@ class InboxQuickReplyMatcher
             ->whereIn('quick_reply_id', array_column($replies, 'id'))
             ->get();
 
+        $hasInboundProductImages = $this->threadHasInboundProductImages($conversation);
+
         $out = [];
         foreach ($messages as $message) {
-            $match = $this->matchMessage($message, $replies, $examples);
+            $match = $this->matchMessage($message, $replies, $examples, $hasInboundProductImages);
             if ($match !== null) {
                 $out[(int) $message->id] = $match;
             }
@@ -93,6 +108,7 @@ class InboxQuickReplyMatcher
         ChannelMessage $message,
         array $replies,
         Collection $examples,
+        bool $hasInboundProductImages = false,
     ): ?array {
         $repliesById = [];
         foreach ($replies as $reply) {
@@ -117,11 +133,14 @@ class InboxQuickReplyMatcher
         }
 
         $exampleHit = $this->matchExamples($haystack, $examples, $repliesById);
-        if ($exampleHit !== null) {
+        if (
+            $exampleHit !== null
+            && ! $this->shouldSuppressWhichProductMatch($message, $exampleHit, $hasInboundProductImages)
+        ) {
             return $exampleHit;
         }
 
-        return $this->matchIntent($haystack, $replies);
+        return $this->matchIntent($haystack, $replies, $message, $hasInboundProductImages);
     }
 
     /**
@@ -201,6 +220,95 @@ class InboxQuickReplyMatcher
     public function looksLikePriceQuery(string $text): bool
     {
         return $this->detectIntent($text) === self::INTENT_PRICE;
+    }
+
+    /**
+     * True when this saved reply asks which product, rather than quoting a price.
+     *
+     * @param  array{label?: string, body?: string}  $reply
+     */
+    public function isWhichProductReply(array $reply): bool
+    {
+        $compact = $this->compact(($reply['label'] ?? '').' '.($reply['body'] ?? ''));
+        if ($compact === '') {
+            return false;
+        }
+
+        foreach (self::WHICH_PRODUCT_CUES as $cue) {
+            $needle = $this->compact($cue);
+            if ($needle !== '' && str_contains($compact, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function threadHasInboundProductImages(ChannelConversation $conversation): bool
+    {
+        return $conversation->messages->contains(
+            fn (ChannelMessage $message): bool => $this->isInboundProductImage($message)
+        );
+    }
+
+    /**
+     * Inbound catalog photos that staff have not quoted with an outbound reply.
+     *
+     * @return list<ChannelMessage>
+     */
+    public function unrepliedInboundProductImages(ChannelConversation $conversation): array
+    {
+        $repliedIds = [];
+        foreach ($conversation->messages as $message) {
+            if ($message->direction !== ChannelMessage::DIRECTION_OUTBOUND) {
+                continue;
+            }
+            $replyToId = (int) ($message->reply_to_message_id ?? 0);
+            if ($replyToId > 0) {
+                $repliedIds[$replyToId] = true;
+            }
+        }
+
+        $out = [];
+        foreach ($this->inboundProductImages($conversation) as $message) {
+            if (isset($repliedIds[(int) $message->id])) {
+                continue;
+            }
+            $out[] = $message;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Unreplied inbound photos whose attached catalog match is strictly above 84%.
+     *
+     * @return list<array{message_id: int, product_id: int, match_percent: float}>
+     */
+    public function bulkPricedImageTargets(
+        ChannelConversation $conversation,
+        ChannelMessageImageMatchService $matches,
+    ): array {
+        $targets = [];
+        foreach ($this->unrepliedInboundProductImages($conversation) as $message) {
+            $productId = (int) ($message->matched_product_id ?? 0);
+            if ($productId <= 0) {
+                continue;
+            }
+
+            $percent = $matches->matchPercent($message);
+            if ($percent <= self::PRICED_IMAGE_BULK_MIN_PERCENT) {
+                continue;
+            }
+
+            $targets[] = [
+                'message_id' => (int) $message->id,
+                'product_id' => $productId,
+                'match_percent' => $percent,
+            ];
+        }
+
+        return $targets;
     }
 
     /**
@@ -387,26 +495,81 @@ class InboxQuickReplyMatcher
      * @param  list<array{id: string, label: string, body: string}>  $replies
      * @return array{id: string, label: string, body: string, via: string, intent: ?string, tagged: bool}|null
      */
-    private function matchIntent(string $text, array $replies): ?array
-    {
+    private function matchIntent(
+        string $text,
+        array $replies,
+        ChannelMessage $message,
+        bool $hasInboundProductImages,
+    ): ?array {
         $intent = $this->detectIntent($text);
         if ($intent === null) {
             return null;
         }
 
         foreach ($replies as $reply) {
-            if ($this->intentForReply($reply) === $intent) {
-                return [
-                    'id' => $reply['id'],
-                    'label' => $reply['label'],
-                    'body' => $reply['body'],
-                    'via' => self::VIA_INTENT,
-                    'intent' => $intent,
-                    'tagged' => false,
-                ];
+            if ($this->intentForReply($reply) !== $intent) {
+                continue;
             }
+
+            $match = [
+                'id' => $reply['id'],
+                'label' => $reply['label'],
+                'body' => $reply['body'],
+                'via' => self::VIA_INTENT,
+                'intent' => $intent,
+                'tagged' => false,
+            ];
+
+            if ($this->shouldSuppressWhichProductMatch($message, $match, $hasInboundProductImages)) {
+                continue;
+            }
+
+            return $match;
         }
 
         return null;
+    }
+
+    /**
+     * Price asks should not suggest "which product?" after the customer already sent photos.
+     *
+     * @param  array{id: string, label: string, body: string, via: string, intent: ?string, tagged: bool}  $match
+     */
+    private function shouldSuppressWhichProductMatch(
+        ChannelMessage $message,
+        array $match,
+        bool $hasInboundProductImages,
+    ): bool {
+        if (! $hasInboundProductImages || ($match['tagged'] ?? false)) {
+            return false;
+        }
+
+        if (! $this->isWhichProductReply($match)) {
+            return false;
+        }
+
+        return $this->looksLikePriceQuery((string) ($message->body ?? ''));
+    }
+
+    /**
+     * @return list<ChannelMessage>
+     */
+    private function inboundProductImages(ChannelConversation $conversation): array
+    {
+        $out = [];
+        foreach ($conversation->messages as $message) {
+            if ($this->isInboundProductImage($message)) {
+                $out[] = $message;
+            }
+        }
+
+        return $out;
+    }
+
+    private function isInboundProductImage(ChannelMessage $message): bool
+    {
+        return $message->direction === ChannelMessage::DIRECTION_INBOUND
+            && $message->isImageAttachment()
+            && ! $message->isStickerAttachment();
     }
 }

@@ -107,6 +107,78 @@ class AdminInboxQuickReplySuggestTest extends TestCase
     }
 
     #[Test]
+    public function price_query_does_not_suggest_which_product_after_customer_photos(): void
+    {
+        Http::fake();
+        $this->actingAs($this->adminUser());
+        $replies = $this->storeReplies([
+            ['label' => 'কোন প্রডাক্ট?', 'body' => 'কোন প্রডাক্টের দাম জানতে চাইলে বলুন কোনটা'],
+            ['label' => 'Delivery', 'body' => '৩-৫ দিনে ডেলিভারি'],
+        ]);
+        $conversation = $this->conversation('psid-qr-which-photo');
+        $this->inboundPhoto($conversation, now()->subMinute());
+        $message = $this->inbound($conversation, 'দাম কত');
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertDontSeeHtml('data-inbox-quick-reply-match="'.$replies[0]['id'].'"')
+            ->assertDontSeeHtml('data-inbox-quick-reply-suggestion');
+
+        $this->assertNotNull($message->fresh());
+    }
+
+    #[Test]
+    public function price_query_without_photos_still_suggests_which_product(): void
+    {
+        Http::fake();
+        $this->actingAs($this->adminUser());
+        $replies = $this->storeReplies([
+            ['label' => 'কোন প্রডাক্ট?', 'body' => 'কোন প্রডাক্টের দাম জানতে চাইলে বলুন কোনটা'],
+        ]);
+        $conversation = $this->conversation('psid-qr-which-plain');
+        $this->inbound($conversation, 'দাম কত');
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSeeHtml('data-inbox-quick-reply-match="'.$replies[0]['id'].'"')
+            ->assertSeeHtml('data-inbox-quick-reply-suggestion')
+            ->assertSee('কোন প্রডাক্ট?');
+    }
+
+    #[Test]
+    public function price_query_offers_send_all_priced_images_above_84(): void
+    {
+        $this->fakeMessenger();
+        $this->actingAs($this->adminUser());
+        $this->storeReplies();
+        $conversation = $this->conversation('psid-qr-bulk-send');
+        $high = $this->productWithPricedImage('High Match Necklace');
+        $low = $this->productWithPricedImage('Low Match Earring');
+        $keep = $this->inboundMatchedPhoto($conversation, $high, 0.91, now()->subMinutes(2));
+        $this->inboundMatchedPhoto($conversation, $low, 0.80, now()->subMinute());
+        $this->inbound($conversation, 'এটা কত');
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSeeHtml('data-inbox-priced-image-send-all')
+            ->assertSeeHtml('Send priced images')
+            ->assertSeeHtml('data-inbox-priced-image-targets')
+            ->assertSeeHtml('"message_id":'.$keep->id)
+            ->assertDontSeeHtml('"product_id":'.$low->id)
+            ->call('sendUnrepliedPricedImages')
+            ->assertHasNoErrors()
+            ->assertSet('statusMessage', 'Priced image sent.');
+
+        $outbound = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->get();
+
+        $this->assertCount(1, $outbound);
+        $this->assertSame($keep->id, $outbound->first()->reply_to_message_id);
+    }
+
+    #[Test]
     public function price_plus_photo_boldens_priced_image(): void
     {
         $this->actingAs($this->adminUser());
@@ -140,11 +212,12 @@ class AdminInboxQuickReplySuggestTest extends TestCase
     }
 
     /**
+     * @param  list<array{label: string, body: string}>|null  $rows
      * @return list<array{id: string, label: string, body: string}>
      */
-    private function storeReplies(): array
+    private function storeReplies(?array $rows = null): array
     {
-        $replies = app(InboxQuickReplyService::class)->save([
+        $replies = app(InboxQuickReplyService::class)->save($rows ?? [
             ['label' => 'Price', 'body' => 'দাম ১২০০ টাকা'],
             ['label' => 'Delivery', 'body' => '৩-৫ দিনে ডেলিভারি'],
             ['label' => 'Order', 'body' => 'নাম ঠিকানা মোবাইল দিন'],
@@ -167,14 +240,100 @@ class AdminInboxQuickReplySuggestTest extends TestCase
         return $user;
     }
 
-    private function conversation(): ChannelConversation
+    private function conversation(string $psid = 'psid-qr-suggest'): ChannelConversation
     {
         return ChannelConversation::query()->create([
             'channel' => ChannelConversation::CHANNEL_MESSENGER,
-            'external_user_id' => 'psid-qr-suggest',
+            'external_user_id' => $psid,
             'customer_name' => 'Karim',
             'last_inbound_at' => now(),
         ]);
+    }
+
+    private function inboundPhoto(ChannelConversation $conversation, mixed $sentAt = null): ChannelMessage
+    {
+        return ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.test/product-'.uniqid().'.jpg',
+            'media_mime' => 'image/jpeg',
+            'sent_at' => $sentAt ?? now(),
+        ]);
+    }
+
+    private function inboundMatchedPhoto(
+        ChannelConversation $conversation,
+        Product $product,
+        float $score,
+        mixed $sentAt = null,
+    ): ChannelMessage {
+        return ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.test/matched-'.$product->id.'.jpg',
+            'media_mime' => 'image/jpeg',
+            'matched_product_id' => $product->id,
+            'image_match_checked_at' => now(),
+            'image_match_meta' => [
+                'status' => 'matched',
+                'candidates' => [
+                    ['product_id' => $product->id, 'score' => $score, 'source' => 'catalog'],
+                ],
+            ],
+            'sent_at' => $sentAt ?? now(),
+        ]);
+    }
+
+    private function productWithPricedImage(string $name): Product
+    {
+        $product = Product::query()->create([
+            'name' => $name,
+            'slug' => str($name)->slug()->toString().'-'.uniqid(),
+            'sku' => 'SKU'.random_int(100, 999),
+            'price' => 1200,
+            'purchase_price' => 500,
+            'stock_quantity' => 4,
+            'is_published' => true,
+            'display_order' => 0,
+        ]);
+
+        $relativeDir = 'img/products/'.$product->id;
+        $absoluteDir = public_path($relativeDir);
+        if (! is_dir($absoluteDir)) {
+            mkdir($absoluteDir, 0775, true);
+        }
+
+        $absolute = $absoluteDir.DIRECTORY_SEPARATOR.'priced.jpg';
+        $image = imagecreatetruecolor(240, 240);
+        $fill = imagecolorallocate($image, 180, 90, 40);
+        imagefill($image, 0, 0, $fill);
+        imagejpeg($image, $absolute, 90);
+        imagedestroy($image);
+
+        $product->forceFill([
+            'priced_image_path' => $relativeDir.'/priced.jpg',
+        ])->save();
+
+        return $product->fresh();
+    }
+
+    private function fakeMessenger(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.graph_version' => 'v25.0',
+            'app.url' => 'https://example.test',
+        ]);
+
+        $messageIdIndex = 0;
+        Http::fake(function () use (&$messageIdIndex) {
+            $messageIdIndex++;
+
+            return Http::response([
+                'message_id' => 'm_priced_bulk_'.$messageIdIndex,
+                'recipient_id' => 'psid-qr-bulk-send',
+            ], 200);
+        });
     }
 
     private function inbound(ChannelConversation $conversation, string $body, mixed $sentAt = null): ChannelMessage

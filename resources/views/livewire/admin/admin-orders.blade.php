@@ -360,6 +360,14 @@
                                 </div>
                             @endif
 
+                            @if ($segment === 'draft-ai')
+                                <x-admin.open-new-order-offer
+                                    :orders="$openNewByOrderId[$order->id] ?? []"
+                                    :source-id="$order->id"
+                                    class="border-t border-amber-200"
+                                />
+                            @endif
+
                             <div class="flex flex-wrap items-center gap-2 border-t border-[#EFE7D6] pt-3">
                                 @if ($segment === 'draft-ai')
                                     <button type="button"

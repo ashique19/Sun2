@@ -123,6 +123,10 @@
         </div>
     </div>
 
+    @if ($order->isAiDraft() && ! $readOnly)
+        <x-admin.open-new-order-offer :orders="$openNewOrders" class="mb-4" />
+    @endif
+
     @if ($message)
         <div class="rounded-lg bg-emerald-50 text-emerald-700 text-sm px-4 py-3 mb-4">{{ $message }}</div>
     @endif

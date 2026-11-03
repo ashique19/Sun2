@@ -26,6 +26,8 @@ class Order extends Model
 
     public const STATUS_DRAFT = 'draft';
 
+    public const STATUS_NEW = 'new';
+
     /** @var list<string> */
     public const CUSTOMER_ACTIVE_STATUSES = ['new', 'confirmed', 'dispatched'];
 

@@ -6,8 +6,10 @@ use App\Livewire\Concerns\ManagesProductImagePreview;
 use App\Models\Courier;
 use App\Models\Order;
 use App\Models\PaymentMethod;
+use App\Services\Admin\OpenNewOrderFinder;
 use App\Services\Admin\OrderDeliveryReturnService;
 use App\Services\Admin\OrderDispatchService;
+use App\Services\Admin\OrderMergeService;
 use App\Services\Admin\OrderStatusService;
 use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
@@ -306,6 +308,48 @@ class AdminOrderShow extends Component
                 'createdBy:id,name',
             ]);
             $this->message = 'Draft confirmed and moved to New.';
+        } catch (\Throwable $e) {
+            $this->error = $e->getMessage();
+        }
+    }
+
+    public function acknowledgeOpenNew(int $targetId, OpenNewOrderFinder $finder): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $target = $finder->findMatchingNew($targetId, (string) $this->order->phone, (int) $this->order->id);
+
+        if (! $target) {
+            return;
+        }
+
+        $this->redirect(route('admin.orders.show', $target), navigate: true);
+    }
+
+    public function mergeIntoOpenNew(int $targetId, OrderMergeService $merge, OpenNewOrderFinder $finder): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        if (! $this->order->isAiDraft()) {
+            $this->error = 'Only AI drafts can be merged this way.';
+
+            return;
+        }
+
+        $target = $finder->findMatchingNew($targetId, (string) $this->order->phone, (int) $this->order->id);
+
+        if (! $target) {
+            $this->error = 'That New order is no longer available to merge into.';
+
+            return;
+        }
+
+        try {
+            $merged = $merge->mergeDraftIntoNew($this->order, $target, auth()->id());
+            $this->redirect(route('admin.orders.show', $merged), navigate: true);
         } catch (\Throwable $e) {
             $this->error = $e->getMessage();
         }
@@ -751,6 +795,12 @@ class AdminOrderShow extends Component
             ? $tracking->displayStatus($this->order, $this->courierLiveSettled ? $this->courierLiveStatus : null)
             : null;
 
+        $openNewOrders = $this->order->isAiDraft()
+            ? app(OpenNewOrderFinder::class)->summaries(
+                app(OpenNewOrderFinder::class)->forPhone((string) $this->order->phone, (int) $this->order->id)
+            )
+            : [];
+
         return view('livewire.admin.admin-order-show', [
             'couriers' => Courier::query()->where('is_active', true)->orderBy('name')->get(),
             'apiCouriers' => $apiCouriers,
@@ -762,6 +812,7 @@ class AdminOrderShow extends Component
             'courierApiAvailable' => $courierApiAvailable,
             'courierLivePending' => $courierLivePending,
             'courierLivePendingIds' => $courierLivePending ? [(int) $this->order->id] : [],
+            'openNewOrders' => $openNewOrders,
         ])->title($this->title());
     }
 }

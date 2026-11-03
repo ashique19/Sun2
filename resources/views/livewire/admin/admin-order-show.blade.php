@@ -27,6 +27,16 @@
                     <path fill="#6B6459" d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/>
                 </svg>
             </a>
+            @if ($steadfastUrl = $order->steadfastConsignmentUrl())
+                <a href="{{ $steadfastUrl }}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-order-courier-link
+                    title="Open {{ $order->courier?->name ?? 'Steadfast' }} consignment"
+                    class="inline-flex h-9 items-center rounded-lg border border-[#E0D6C2] bg-white px-3 text-sm font-semibold text-[#C9A227] hover:bg-[#FAF6EF] sm:px-4">
+                    {{ $order->courier?->name ?? 'Courier' }} ↗
+                </a>
+            @endif
             @unless ($readOnly)
                 @if ($order->isAiDraft())
                     <button type="button"
@@ -683,7 +693,19 @@
             </form>
 
             <div class="space-y-4 rounded-xl border border-[#EFE7D6] bg-white p-4 sm:p-6">
-                <h2 class="font-semibold">Courier Dispatch</h2>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h2 class="font-semibold">Courier Dispatch</h2>
+                    @if ($steadfastUrl = $order->steadfastConsignmentUrl())
+                        <a href="{{ $steadfastUrl }}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-order-courier-link
+                            title="Open {{ $order->courier?->name ?? 'Steadfast' }} consignment"
+                            class="text-sm font-semibold text-[#C9A227] hover:underline">
+                            {{ $order->courier?->name ?? 'Courier' }} ↗
+                        </a>
+                    @endif
+                </div>
 
                 <form wire:submit="updateCourierCharge" class="space-y-3 border-b border-[#E7DFCF] pb-4 text-sm">
                     <p class="text-xs font-medium uppercase tracking-wide text-[#8C8474]">Courier cost override</p>

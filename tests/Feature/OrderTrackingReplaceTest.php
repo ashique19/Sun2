@@ -192,4 +192,40 @@ class OrderTrackingReplaceTest extends TestCase
             'note' => 'Tracking replaced via Steadfast. SFR_OLD_CODE → SFR_NEW_CODE Parcel ID: 270697676',
         ]);
     }
+
+    public function test_update_tracking_fixes_codes_without_changing_status(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $courier = Courier::query()->create([
+            'name' => 'Steadfast',
+            'slug' => 'steadfast',
+            'is_active' => true,
+            'is_default' => true,
+        ]);
+
+        $order = $this->order([
+            'courier_id' => $courier->id,
+            'courier_tracker' => 'SFR_OLD_CODE',
+            'courier_consignment_id' => '111',
+            'status' => 'delivered',
+            'dispatch_date' => now()->subDay(),
+            'actual_delivery_date' => now()->subHour(),
+        ]);
+
+        $updated = app(OrderDispatchService::class)->updateTracking(
+            $order,
+            '15A4B80AA',
+            '277193413',
+        );
+
+        $this->assertSame('15A4B80AA', $updated->courier_tracker);
+        $this->assertSame('277193413', $updated->courier_consignment_id);
+        $this->assertSame('delivered', $updated->status);
+        $this->assertDatabaseHas('order_status_history', [
+            'order_id' => $order->id,
+            'status' => 'delivered',
+            'note' => 'Tracking updated. SFR_OLD_CODE → 15A4B80AA. Parcel ID updated. 111 → 277193413.',
+        ]);
+    }
 }

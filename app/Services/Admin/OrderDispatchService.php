@@ -110,6 +110,52 @@ class OrderDispatchService
     }
 
     /**
+     * Correct a stored tracking code / parcel id without changing order status
+     * or re-crediting dispatch balance.
+     */
+    public function updateTracking(Order $order, string $tracker, ?string $consignmentId = null, ?int $changedBy = null): Order
+    {
+        $tracker = trim($tracker);
+
+        if ($tracker === '') {
+            throw new RuntimeException('Tracking code is required.');
+        }
+
+        $previousTracker = filled($order->courier_tracker) ? (string) $order->courier_tracker : '';
+        $previousConsignment = filled($order->courier_consignment_id) ? (string) $order->courier_consignment_id : '';
+        $consignment = $consignmentId === null ? $previousConsignment : trim($consignmentId);
+
+        if ($tracker === $previousTracker && $consignment === $previousConsignment) {
+            return $order;
+        }
+
+        $parts = [];
+
+        if ($tracker !== $previousTracker) {
+            $parts[] = $previousTracker === ''
+                ? 'Tracking set to '.$tracker.'.'
+                : 'Tracking updated. '.$previousTracker.' → '.$tracker.'.';
+        }
+
+        if ($consignment !== $previousConsignment) {
+            $parts[] = $previousConsignment === ''
+                ? 'Parcel ID set to '.$consignment.'.'
+                : 'Parcel ID updated. '.$previousConsignment.' → '.($consignment === '' ? 'none' : $consignment).'.';
+        }
+
+        return DB::transaction(function () use ($order, $tracker, $consignment, $parts, $changedBy) {
+            $order->update([
+                'courier_tracker' => $tracker,
+                'courier_consignment_id' => $consignment !== '' ? $consignment : null,
+            ]);
+
+            $this->statusService->record($order->fresh(), implode(' ', $parts), $changedBy);
+
+            return $order->fresh(['courier', 'statusHistory.changedBy', 'courierLogs.courier']);
+        });
+    }
+
+    /**
      * Mark an order as dispatched for a courier (no API call). Credits book balance.
      */
     public function markAsDispatched(Order $order, int $courierId, ?int $changedBy = null): Order

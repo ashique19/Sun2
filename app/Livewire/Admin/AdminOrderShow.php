@@ -41,6 +41,10 @@ class AdminOrderShow extends Component
 
     public string $manualTracker = '';
 
+    public string $editTracker = '';
+
+    public string $editConsignmentId = '';
+
     public ?string $courierLiveStatus = null;
 
     public bool $courierLiveSettled = false;
@@ -158,6 +162,13 @@ class AdminOrderShow extends Component
             ?? ''
         );
 
+        $this->syncCourierTrackingFields();
+    }
+
+    private function syncCourierTrackingFields(): void
+    {
+        $this->editTracker = (string) ($this->order->courier_tracker ?? '');
+        $this->editConsignmentId = (string) ($this->order->courier_consignment_id ?? '');
     }
 
     public function title(): string
@@ -403,6 +414,7 @@ class AdminOrderShow extends Component
             $this->order = $dispatch->dispatchViaApi($this->order, $this->apiCourierSlug);
             $this->status = $this->order->status;
             $this->order->load(['courier', 'statusHistory.changedBy', 'courierLogs.courier', 'adjustments', 'adjustmentLogs.actor', 'paymentTransactions.receivedBy']);
+            $this->syncCourierTrackingFields();
             $this->message = 'Dispatched via '.$this->order->courier?->name.'. Tracking: '.$this->order->courier_tracker;
         } catch (\Throwable $e) {
             $this->error = $e->getMessage();
@@ -438,7 +450,35 @@ class AdminOrderShow extends Component
             $this->status = $this->order->status;
             $this->manualTracker = '';
             $this->order->load(['courier', 'statusHistory.changedBy']);
+            $this->syncCourierTrackingFields();
             $this->message = 'Courier assigned manually.';
+        } catch (\Throwable $e) {
+            $this->error = $e->getMessage();
+        }
+    }
+
+    public function saveCourierTracking(OrderDispatchService $dispatch): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->message = null;
+
+        $this->validate([
+            'editTracker' => ['required', 'string', 'max:120'],
+            'editConsignmentId' => ['nullable', 'string', 'max:64'],
+        ]);
+
+        try {
+            $this->order = $dispatch->updateTracking(
+                $this->order,
+                $this->editTracker,
+                $this->editConsignmentId,
+                auth()->id(),
+            );
+            $this->status = $this->order->status;
+            $this->syncCourierTrackingFields();
+            $this->message = 'Tracking saved.';
         } catch (\Throwable $e) {
             $this->error = $e->getMessage();
         }

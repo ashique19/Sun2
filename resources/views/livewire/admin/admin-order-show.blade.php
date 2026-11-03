@@ -779,6 +779,9 @@
                             <p class="text-xs text-[#8C8474]">Dispatched {{ $order->dispatch_date->format('d M Y, h:i A') }}</p>
                         @endif
                     </div>
+                    @unless ($readOnly)
+                        @include('livewire.admin.partials.order-courier-tracking-edit')
+                    @endunless
                 @elseif ($order->isDispatchable())
                     @if ($apiCouriers->isNotEmpty())
                         <div class="space-y-3">
@@ -818,7 +821,11 @@
                         </button>
                     </div>
                 @else
-                    <p class="text-sm text-[#8C8474]">Dispatch is only available for new or confirmed orders without a tracker.</p>
+                    @unless ($readOnly)
+                        @include('livewire.admin.partials.order-courier-tracking-edit')
+                    @else
+                        <p class="text-sm text-[#8C8474]">Dispatch is only available for new or confirmed orders without a tracker.</p>
+                    @endunless
                 @endif
             </div>
             @else

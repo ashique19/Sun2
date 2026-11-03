@@ -768,7 +768,9 @@ class MessengerConversationSyncService
                 $mime ??= 'video/mp4';
             } elseif (is_string($mime) && str_starts_with(strtolower($mime), 'audio/')) {
                 // keep audio mime from Graph
-            } elseif (preg_match('/\.(mp3|m4a|aac|ogg|wav|amr|opus)(\?|$)/i', $url) === 1) {
+            } elseif (preg_match('/\.(m4a|aac)(\?|$)/i', $url) === 1) {
+                $mime ??= 'audio/mp4';
+            } elseif (preg_match('/\.(mp3|ogg|wav|amr|opus)(\?|$)/i', $url) === 1) {
                 $mime ??= 'audio/mpeg';
             }
 

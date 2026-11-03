@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Services\Channels\ChannelConversationService;
 use App\Services\Channels\ChannelOrderDraftCatcher;
+use App\Services\Channels\ChannelOrderDraftService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -139,6 +140,138 @@ class ChannelOrderDraftCatcherTest extends TestCase
         $this->assertNotNull($draft);
         $this->assertTrue($draft->isAiDraft());
         $this->assertSame($product->id, (int) $draft->items->first()?->product_id);
+    }
+
+    #[Test]
+    public function catcher_skips_draft_and_notifies_when_a_new_order_already_exists(): void
+    {
+        $product = $this->product();
+        $this->seedDhakaMirpur();
+        $conversation = $this->conversation('PSID_CATCH_NEW');
+        $existing = $this->openOrder($conversation, 'new', '88001');
+
+        $this->closeMessages($conversation, $product);
+
+        $this->assertNull(app(ChannelOrderDraftCatcher::class)->catch($conversation->fresh()));
+        $this->assertSame(0, Order::query()->where('status', Order::STATUS_DRAFT)->count());
+
+        $conversation->refresh();
+        $block = $conversation->draftCatchBlock();
+        $this->assertNotNull($block);
+        $this->assertSame($existing->id, $block['order_id']);
+        $this->assertSame('New', $block['label']);
+        $this->assertSame('88001', $block['order_number']);
+
+        $summary = app(ChannelOrderDraftCatcher::class)->blockedSummary($conversation);
+        $this->assertSame($existing->id, $summary['order_id'] ?? null);
+        $this->assertSame('New', $summary['label'] ?? null);
+    }
+
+    #[Test]
+    public function catcher_skips_draft_when_a_dispatched_order_exists_for_the_same_phone(): void
+    {
+        $product = $this->product();
+        $this->seedDhakaMirpur();
+        $conversation = $this->conversation('PSID_CATCH_DISPATCH');
+        $existing = $this->openOrder(null, 'dispatched', '88002', '01627237432');
+
+        $this->closeMessages($conversation, $product);
+
+        $this->assertNull(app(ChannelOrderDraftCatcher::class)->catch($conversation->fresh()));
+        $this->assertSame(0, Order::query()->where('status', Order::STATUS_DRAFT)->count());
+
+        $block = $conversation->fresh()->draftCatchBlock();
+        $this->assertSame($existing->id, $block['order_id'] ?? null);
+        $this->assertSame('Dispatched', $block['label'] ?? null);
+    }
+
+    #[Test]
+    public function catcher_treats_confirmed_as_a_new_order_and_skips_the_draft(): void
+    {
+        $product = $this->product();
+        $this->seedDhakaMirpur();
+        $conversation = $this->conversation('PSID_CATCH_CONFIRMED');
+        $this->openOrder($conversation, 'confirmed', '88004');
+        $this->closeMessages($conversation, $product);
+
+        $this->assertNull(app(ChannelOrderDraftCatcher::class)->catch($conversation->fresh()));
+        $this->assertSame('New', $conversation->fresh()->draftCatchBlock()['label'] ?? null);
+        $this->assertSame(0, Order::query()->where('status', Order::STATUS_DRAFT)->count());
+    }
+
+    #[Test]
+    public function staff_can_still_start_a_draft_when_a_new_order_exists(): void
+    {
+        $conversation = $this->conversation('PSID_CATCH_STAFF');
+        $this->openOrder($conversation, 'new', '88005');
+
+        $draft = app(ChannelOrderDraftService::class)->ensureDraftForConversation($conversation);
+
+        $this->assertTrue($draft->isAiDraft());
+        $this->assertSame($conversation->fresh()->draft_order_id, $draft->id);
+    }
+
+    #[Test]
+    public function catcher_still_drafts_when_the_only_order_is_delivered(): void
+    {
+        $product = $this->product();
+        $this->seedDhakaMirpur();
+        $conversation = $this->conversation('PSID_CATCH_DELIVERED');
+        $this->openOrder($conversation, 'delivered', '88003');
+
+        $this->closeMessages($conversation, $product);
+
+        $draft = app(ChannelOrderDraftCatcher::class)->catch($conversation->fresh());
+
+        $this->assertNotNull($draft);
+        $this->assertTrue($draft->isAiDraft());
+        $this->assertNull($conversation->fresh()->draftCatchBlock());
+    }
+
+    private function closeMessages(ChannelConversation $conversation, Product $product): void
+    {
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.test/selected.jpg',
+            'media_mime' => 'image/jpeg',
+            'matched_product_id' => $product->id,
+            'sent_at' => now()->subMinutes(2),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => "Nila\n01627237432\nMirpur, Dhaka",
+            'sent_at' => now(),
+        ]);
+    }
+
+    private function openOrder(
+        ?ChannelConversation $conversation,
+        string $status,
+        string $orderNumber,
+        string $phone = '01627237432',
+    ): Order {
+        return Order::query()->create([
+            'order_number' => $orderNumber,
+            'name' => 'Nila',
+            'phone' => $phone,
+            'address' => 'Mirpur',
+            'city' => 'Dhaka',
+            'area' => 'Mirpur',
+            'subtotal' => 1200,
+            'delivery_charge' => 80,
+            'discount' => 0,
+            'total' => 1280,
+            'cod_amount' => 1280,
+            'due_amount' => 1280,
+            'payment_status' => 'unpaid',
+            'payment_method' => 'cod',
+            'status' => $status,
+            'placed_at' => now()->subDay(),
+            'placed_via' => Order::PLACED_VIA_MESSENGER,
+            'channel_conversation_id' => $conversation?->id,
+        ]);
     }
 
     private function conversation(string $psid): ChannelConversation

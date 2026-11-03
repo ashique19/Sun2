@@ -5,6 +5,7 @@ namespace App\Services\Admin;
 use App\Models\Area;
 use App\Models\ChannelConversation;
 use App\Models\Order;
+use App\Services\Channels\ChannelOrderDraftCatcher;
 use App\Support\Bangla;
 use Illuminate\Support\Collection;
 
@@ -47,6 +48,42 @@ class InboxRecentOrders
             ->orderByDesc('id')
             ->limit(self::MAX_ORDERS)
             ->get(['id', 'order_number', 'status', 'placed_at']);
+    }
+
+    /**
+     * Open New (including confirmed) or Dispatched orders for this customer.
+     *
+     * @param  list<string>  $extraPhones
+     * @return Collection<int, Order>
+     */
+    public function blockingOpenOrders(ChannelConversation $conversation, array $extraPhones = []): Collection
+    {
+        $phones = array_values(array_unique(array_filter(
+            array_merge($this->phones($conversation), array_map(
+                static fn (mixed $phone): string => trim((string) $phone),
+                $extraPhones,
+            )),
+            static fn (string $phone): bool => $phone !== '',
+        )));
+
+        return Order::query()
+            ->whereIn('status', ChannelOrderDraftCatcher::BLOCKING_STATUSES)
+            ->where(function ($match) use ($conversation, $phones) {
+                $match->where('channel_conversation_id', $conversation->id);
+
+                if ($conversation->user_id) {
+                    $match->orWhere('user_id', $conversation->user_id);
+                }
+
+                foreach ($phones as $phone) {
+                    $match->orWhere(function ($q) use ($phone) {
+                        $q->matchingPhone($phone);
+                    });
+                }
+            })
+            ->latest('id')
+            ->limit(5)
+            ->get(['id', 'order_number', 'status', 'phone']);
     }
 
     public function findForConversation(ChannelConversation $conversation, int $orderId): ?Order

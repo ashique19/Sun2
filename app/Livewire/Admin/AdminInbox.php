@@ -2630,6 +2630,9 @@ class AdminInbox extends Component
             'inboxDraftReady' => $selectedConversation
                 ? app(ChannelOrderDraftCatcher::class)->readySummary($selectedConversation)
                 : null,
+            'inboxDraftBlocked' => $selectedConversation
+                ? app(ChannelOrderDraftCatcher::class)->blockedSummary($selectedConversation)
+                : null,
             'inboxOpenThread' => $selectedConversation
                 ? app(InboxSnapshotBuilder::class)->thread($selectedConversation, $lookbackHours)
                 : null,

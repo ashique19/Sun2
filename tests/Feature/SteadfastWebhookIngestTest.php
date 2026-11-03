@@ -224,4 +224,152 @@ class SteadfastWebhookIngestTest extends TestCase
                 ->exists()
         );
     }
+
+    #[Test]
+    public function official_raw_body_hmac_signature_is_accepted(): void
+    {
+        $order = $this->order();
+
+        $payload = [
+            'notification_type' => 'delivery_status',
+            'consignment_id' => 12345,
+            'invoice' => $order->order_number,
+            'cod_amount' => 1500.0,
+            'status' => 'delivered',
+            'delivery_charge' => 100.0,
+            'tracking_message' => 'Your package has been delivered successfully.',
+            'updated_at' => '2023-03-02 12:45:30',
+        ];
+
+        $this->postWebhook($payload, [
+            'X-Signature' => $this->sign($payload),
+        ])->assertOk()->assertJson(['status' => 'success']);
+
+        $this->assertTrue(
+            CourierData::query()
+                ->where('order_id', $order->id)
+                ->get()
+                ->contains(fn (CourierData $row): bool => ($row->api_data['status'] ?? null) === 'delivered')
+        );
+    }
+
+    #[Test]
+    public function hmac_is_computed_against_the_untrimmed_raw_body(): void
+    {
+        $order = $this->order();
+
+        $raw = ' {"notification_type":"tracking_update","invoice":"'.$order->order_number.'","tracking_message":"At last mile hub"} ';
+        $signature = hash_hmac('sha256', $raw, 'secret-token');
+
+        $this->call(
+            'POST',
+            '/api/steadfast/webhook',
+            server: [
+                'HTTP_AUTHORIZATION' => 'Bearer secret-token',
+                'HTTP_X_SIGNATURE' => $signature,
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_ACCEPT' => 'application/json',
+            ],
+            content: $raw,
+        )->assertOk()->assertJson(['status' => 'success']);
+
+        $this->assertTrue(
+            OrderStatusHistory::query()
+                ->where('order_id', $order->id)
+                ->where('note', 'At last mile hub')
+                ->exists()
+        );
+    }
+
+    #[Test]
+    public function mismatched_x_signature_is_rejected(): void
+    {
+        $order = $this->order();
+
+        $this->postWebhook([
+            'notification_type' => 'tracking_update',
+            'invoice' => $order->order_number,
+            'tracking_message' => 'Should not land',
+        ], [
+            'X-Signature' => str_repeat('a', 64),
+        ])->assertUnauthorized();
+
+        $this->assertSame(0, CourierData::query()->where('order_id', $order->id)->count());
+        $this->assertFalse(
+            OrderStatusHistory::query()
+                ->where('order_id', $order->id)
+                ->where('note', 'Should not land')
+                ->exists()
+        );
+    }
+
+    #[Test]
+    public function missing_x_signature_still_authenticates_with_bearer(): void
+    {
+        $order = $this->order();
+
+        $this->postWebhook([
+            'notification_type' => 'tracking_update',
+            'invoice' => $order->order_number,
+            'tracking_message' => 'Picked up at warehouse',
+        ])->assertOk();
+
+        $this->assertSame(1, CourierData::query()->where('order_id', $order->id)->count());
+    }
+
+    #[Test]
+    public function duplicate_idempotency_key_is_not_processed_twice(): void
+    {
+        $order = $this->order();
+
+        $payload = [
+            'notification_type' => 'tracking_update',
+            'invoice' => $order->order_number,
+            'tracking_message' => 'Arrived at sorting center',
+            'updated_at' => '2026-11-03 13:15:00',
+        ];
+
+        $this->postWebhook($payload, [
+            'Idempotency-Key' => 'evt-delivery-1',
+            'X-Signature' => $this->sign($payload),
+        ])->assertOk()->assertJson(['status' => 'success']);
+
+        $this->postWebhook($payload, [
+            'Idempotency-Key' => 'evt-delivery-1',
+            'X-Signature' => $this->sign($payload),
+        ])->assertOk()->assertJson(['status' => 'success']);
+
+        $this->assertSame(1, CourierData::query()->where('order_id', $order->id)->count());
+        $this->assertSame(1, OrderStatusHistory::query()->where('order_id', $order->id)->where('note', 'Arrived at sorting center')->count());
+    }
+
+    #[Test]
+    public function distinct_idempotency_keys_are_processed_separately(): void
+    {
+        $order = $this->order();
+
+        $first = [
+            'notification_type' => 'tracking_update',
+            'invoice' => $order->order_number,
+            'tracking_message' => 'Left origin hub',
+        ];
+        $second = [
+            'notification_type' => 'tracking_update',
+            'invoice' => $order->order_number,
+            'tracking_message' => 'Arrived destination hub',
+        ];
+
+        $this->postWebhook($first, ['Idempotency-Key' => 'evt-a'])->assertOk();
+        $this->postWebhook($second, ['Idempotency-Key' => 'evt-b'])->assertOk();
+
+        $this->assertSame(2, CourierData::query()->where('order_id', $order->id)->count());
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function sign(array $payload): string
+    {
+        return hash_hmac('sha256', json_encode($payload), 'secret-token');
+    }
 }

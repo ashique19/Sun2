@@ -32,6 +32,17 @@ class SteadfastApiClient
         return $this->request('get', '/status_by_cid/'.urlencode((string) $consignmentId), timeout: $this->statusTimeout());
     }
 
+    /**
+     * Tracking steps for an invoice. Each step's created_at is when it happened,
+     * not when we asked.
+     *
+     * @return array<string, mixed>
+     */
+    public function getTrackingsByInvoice(string $invoice): array
+    {
+        return $this->request('get', '/trackings_by_invoice/'.urlencode($invoice), timeout: $this->statusTimeout());
+    }
+
     private function statusTimeout(): int
     {
         return max(1, (int) config('steadfast.status_timeout', 4));

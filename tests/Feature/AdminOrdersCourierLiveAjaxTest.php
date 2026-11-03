@@ -176,6 +176,10 @@ class AdminOrdersCourierLiveAjaxTest extends TestCase
             'portal.packzy.com/api/v1/status_by_invoice/*' => Http::response([
                 'delivery_status' => 'delivered',
             ], 200),
+            'portal.packzy.com/api/v1/trackings_by_invoice/*' => Http::response([
+                'status' => 200,
+                'tracking' => [],
+            ], 200),
         ]);
 
         $this->actingAs($this->adminUser());
@@ -312,6 +316,10 @@ class AdminOrdersCourierLiveAjaxTest extends TestCase
         Http::fake([
             'portal.packzy.com/api/v1/status_by_invoice/*' => Http::response([
                 'delivery_status' => 'cancelled',
+            ], 200),
+            'portal.packzy.com/api/v1/trackings_by_invoice/*' => Http::response([
+                'status' => 200,
+                'tracking' => [],
             ], 200),
         ]);
 

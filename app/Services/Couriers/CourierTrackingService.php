@@ -55,6 +55,10 @@ class CourierTrackingService
 
         $status = $this->fetchLiveStatus($order);
 
+        if (strtolower((string) ($order->courier?->slug ?? '')) === 'steadfast') {
+            $this->persistSteadfastTrackingHistory($order);
+        }
+
         if (filled($status)) {
             $this->recordStatusSnapshot($order, $status);
             $order->unsetRelation('courierLogs');
@@ -228,9 +232,15 @@ class CourierTrackingService
      */
     private function extractEvent(array $data, mixed $fallbackAt): ?array
     {
+        // Live status polls are stamped when we asked Packzy, not when the
+        // parcel moved. Keep them off the timeline.
+        if (($data['source'] ?? null) === 'status_poll') {
+            return null;
+        }
+
         $message = SteadfastWebhookPayload::trackingMessage($data);
         $status = $this->normalizeStatus($data['delivery_status'] ?? $data['status_type'] ?? $data['status'] ?? null);
-        $rawAt = $data['updated_at'] ?? $data['timestamp'] ?? $fallbackAt;
+        $rawAt = $this->payloadTimestamp($data) ?? $fallbackAt;
 
         // create_order / API booking payload
         if (isset($data['consignment']) && is_array($data['consignment'])) {
@@ -242,7 +252,7 @@ class CourierTrackingService
             if ($message === '' && $status !== null) {
                 $message = 'Consignment status: '.$status;
             }
-            $rawAt = $consignment['updated_at'] ?? $consignment['created_at'] ?? $rawAt;
+            $rawAt = $this->payloadTimestamp($consignment) ?? $rawAt;
         }
 
         if ($message === '' && $status !== null) {
@@ -282,7 +292,6 @@ class CourierTrackingService
                 'status' => $status,
                 'delivery_status' => $status,
                 'tracking_message' => 'Consignment status has been updated as '.$this->humanizeStatus($status),
-                'updated_at' => now(self::DHAKA_TZ)->format('Y-m-d H:i:s'),
             ],
             'created_at' => now(),
         ]);
@@ -375,6 +384,122 @@ class CourierTrackingService
     private function humanizeStatus(string $status): string
     {
         return ucwords(str_replace('_', ' ', $status));
+    }
+
+    /**
+     * Persist Packzy `/trackings_by_invoice` steps using each step's created_at
+     * (when it happened), never the time we fetched the list.
+     */
+    private function persistSteadfastTrackingHistory(Order $order): void
+    {
+        $invoice = trim((string) $order->order_number);
+        if ($invoice === '') {
+            return;
+        }
+
+        try {
+            $response = $this->steadfast->getTrackingsByInvoice($invoice);
+        } catch (Throwable) {
+            return;
+        }
+
+        $seen = [];
+        $order->loadMissing('courierLogs');
+        foreach ($order->courierLogs as $log) {
+            $extracted = $this->extractEvent($this->normalizeApiData($log->api_data), null);
+            if ($extracted === null) {
+                continue;
+            }
+            $seen[$extracted['at'].'|'.mb_strtolower($extracted['message'])] = true;
+        }
+
+        $inserted = false;
+        foreach ($this->trackingStepsFrom($response) as $step) {
+            if (! is_array($step)) {
+                continue;
+            }
+
+            $message = trim((string) ($step['text'] ?? $step['tracking_message'] ?? $step['message'] ?? ''));
+            $occurredAt = $this->payloadTimestamp($step);
+            if ($message === '' || $occurredAt === null) {
+                continue;
+            }
+
+            $payload = [
+                'notification_type' => SteadfastWebhookPayload::TYPE_TRACKING_UPDATE,
+                'source' => 'tracking_poll',
+                'consignment_id' => $step['consignment_id'] ?? $order->courier_consignment_id,
+                'invoice' => $invoice,
+                'tracking_message' => $message,
+                'updated_at' => $occurredAt,
+            ];
+
+            $extracted = $this->extractEvent($payload, null);
+            if ($extracted === null) {
+                continue;
+            }
+
+            $key = $extracted['at'].'|'.mb_strtolower($extracted['message']);
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            CourierData::query()->create([
+                'order_id' => $order->id,
+                'courier_id' => $order->courier_id,
+                'api_data' => $payload,
+                'created_at' => $this->parseTimestamp($occurredAt) ?? now(),
+            ]);
+
+            $seen[$key] = true;
+            $inserted = true;
+        }
+
+        if ($inserted) {
+            $order->unsetRelation('courierLogs');
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $response
+     * @return list<mixed>
+     */
+    private function trackingStepsFrom(array $response): array
+    {
+        foreach (['tracking', 'trackings', 'data'] as $key) {
+            $inner = $response[$key] ?? null;
+            if (! is_array($inner) || $inner === []) {
+                continue;
+            }
+            if (array_is_list($inner)) {
+                return $inner;
+            }
+            foreach (['tracking', 'trackings'] as $nested) {
+                $steps = $inner[$nested] ?? null;
+                if (is_array($steps) && array_is_list($steps)) {
+                    return $steps;
+                }
+            }
+        }
+
+        return array_is_list($response) ? $response : [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function payloadTimestamp(array $data): mixed
+    {
+        foreach (['updated_at', 'timestamp', 'event_time', 'occurred_at', 'created_at'] as $key) {
+            if (! array_key_exists($key, $data)) {
+                continue;
+            }
+            if ($this->parseTimestamp($data[$key]) !== null) {
+                return $data[$key];
+            }
+        }
+
+        return null;
     }
 
     /**

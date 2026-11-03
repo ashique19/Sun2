@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Services\Couriers\CourierTrackingService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -112,5 +113,149 @@ class CourierTrackingServiceTest extends TestCase
         $this->assertSame('Pathao delivered', $events[0]['message']);
         $this->assertSame('01-Nov 14:30', $events[1]['at']);
         $this->assertSame('Parcel picked up', $events[1]['message']);
+    }
+
+    #[Test]
+    public function status_poll_snapshots_are_omitted_from_the_timeline(): void
+    {
+        $order = $this->trackedOrder();
+
+        CourierData::query()->create([
+            'order_id' => $order->id,
+            'courier_id' => $order->courier_id,
+            'api_data' => [
+                'notification_type' => 'delivery_status',
+                'source' => 'status_poll',
+                'tracking_message' => 'Consignment status has been updated as Delivered',
+                'status' => 'delivered',
+                'delivery_status' => 'delivered',
+                'updated_at' => '2026-11-04 01:00:00',
+            ],
+            'created_at' => Carbon::parse('2026-11-04 01:00:00', 'UTC'),
+        ]);
+
+        CourierData::query()->create([
+            'order_id' => $order->id,
+            'courier_id' => $order->courier_id,
+            'api_data' => [
+                'notification_type' => 'tracking_update',
+                'tracking_message' => 'Parcel received at Bogura hub',
+                'updated_at' => '2026-11-03 13:15:00',
+            ],
+            'created_at' => Carbon::parse('2026-11-04 01:00:00', 'UTC'),
+        ]);
+
+        $events = $this->service()->eventsFromLoadedLogs($order->load('courierLogs'));
+
+        $this->assertCount(1, $events);
+        $this->assertSame('03-Nov 13:15', $events[0]['at']);
+        $this->assertSame('Parcel received at Bogura hub', $events[0]['message']);
+    }
+
+    #[Test]
+    public function payload_created_at_is_used_when_updated_at_is_missing(): void
+    {
+        $order = $this->trackedOrder();
+
+        CourierData::query()->create([
+            'order_id' => $order->id,
+            'courier_id' => $order->courier_id,
+            'api_data' => [
+                'notification_type' => 'tracking_update',
+                'tracking_message' => 'Out for delivery',
+                'created_at' => '2026-11-03 16:05:00',
+            ],
+            'created_at' => Carbon::parse('2026-11-04 01:00:00', 'UTC'),
+        ]);
+
+        $events = $this->service()->eventsFromLoadedLogs($order->load('courierLogs'));
+
+        $this->assertCount(1, $events);
+        $this->assertSame('03-Nov 16:05', $events[0]['at']);
+        $this->assertSame('Out for delivery', $events[0]['message']);
+    }
+
+    #[Test]
+    public function live_fetch_stores_tracking_step_time_not_poll_time(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-04 01:00:00', 'UTC'));
+
+        config([
+            'steadfast.api_key' => 'test-key',
+            'steadfast.secret_key' => 'test-secret',
+            'steadfast.base_url' => 'https://portal.packzy.com/api/v1',
+        ]);
+
+        Http::fake([
+            'portal.packzy.com/api/v1/status_by_invoice/*' => Http::response([
+                'delivery_status' => 'in_review',
+            ], 200),
+            'portal.packzy.com/api/v1/trackings_by_invoice/*' => Http::response([
+                'status' => 200,
+                'tracking' => [
+                    [
+                        'consignment_id' => 277193413,
+                        'tracking_type' => 2,
+                        'text' => 'Parcel received at Bogura hub.',
+                        'created_at' => '2026-11-03 13:15:00',
+                    ],
+                    [
+                        'consignment_id' => 277193413,
+                        'tracking_type' => 3,
+                        'text' => 'Out for delivery.',
+                        'created_at' => '2026-11-03 16:05:00',
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $order = $this->trackedOrder();
+
+        $status = $this->service()->fetchAndRecordLiveStatus($order->load('courier'), backfillLegacy: false);
+
+        $this->assertSame('in_review', $status);
+
+        $events = $this->service()->eventsFromLoadedLogs($order->fresh()->load('courierLogs'));
+        $messages = array_column($events, 'message');
+
+        $this->assertSame('03-Nov 16:05', $events[0]['at']);
+        $this->assertSame('Out for delivery.', $events[0]['message']);
+        $this->assertSame('03-Nov 13:15', $events[1]['at']);
+        $this->assertSame('Parcel received at Bogura hub.', $events[1]['message']);
+        $this->assertFalse(in_array('Consignment status has been updated as In Review', $messages, true));
+        $this->assertFalse(collect($events)->contains(fn (array $event): bool => str_contains($event['at'], '04-Nov')));
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/trackings_by_invoice/'.$order->order_number));
+
+        Carbon::setTestNow();
+    }
+
+    private function trackedOrder(): Order
+    {
+        $courier = Courier::query()->firstOrCreate(
+            ['slug' => 'steadfast'],
+            [
+                'name' => 'Steadfast',
+                'charge' => 60,
+                'osd_charge' => 110,
+                'cod_percentage' => 1,
+                'is_active' => true,
+            ],
+        );
+
+        return Order::query()->create([
+            'order_number' => 'TRK-TIME-'.uniqid(),
+            'name' => 'Tracked Customer',
+            'phone' => '01710000099',
+            'address' => 'Dhaka',
+            'status' => 'dispatched',
+            'subtotal' => 1000,
+            'total' => 1080,
+            'courier_id' => $courier->id,
+            'courier_tracker' => 'SF998877',
+            'courier_consignment_id' => '277193413',
+            'dispatch_date' => now(),
+            'placed_at' => now()->subDay(),
+        ]);
     }
 }

@@ -3,13 +3,22 @@
 namespace App\Services\Channels;
 
 use App\Models\ChannelConversation;
+use App\Models\ChannelMessage;
 use App\Models\Order;
+use App\Services\Admin\InboxRecentOrders;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class ChannelOrderDraftCatcher
 {
+    /**
+     * Admin "New" (new + confirmed) and "Dispatched" — do not auto-draft another order.
+     *
+     * @var list<string>
+     */
+    public const BLOCKING_STATUSES = ['new', 'confirmed', 'dispatched'];
+
     /**
      * Conversation ids already queued this HTTP request.
      *
@@ -20,6 +29,7 @@ class ChannelOrderDraftCatcher
     public function __construct(
         private ChannelOrderIntentGate $gate,
         private ChannelOrderDraftService $drafts,
+        private InboxRecentOrders $recentOrders,
     ) {}
 
     /**
@@ -78,7 +88,19 @@ class ChannelOrderDraftCatcher
             return null;
         }
 
-        $conversation->load('messages');
+        $conversation->loadMissing(['messages', 'draftOrder', 'user']);
+        $blocking = $this->recentOrders->blockingOpenOrders(
+            $conversation,
+            $this->inboundPhones($conversation),
+        );
+        if ($blocking->isNotEmpty()) {
+            $this->rememberBlock($conversation, $blocking->first());
+
+            return null;
+        }
+
+        $this->clearBlock($conversation);
+
         $order = $this->drafts->syncDraftFromConversation($conversation);
         if (! $order || ! $order->isAiDraft()) {
             return $order;
@@ -150,6 +172,85 @@ class ChannelOrderDraftCatcher
             'can_confirm' => filled($draft->city) && filled($draft->area),
             'edit_url' => route('admin.orders.edit', $draft),
             'show_url' => route('admin.orders.show', $draft),
+        ];
+    }
+
+    /**
+     * Header chip when auto-draft was skipped because a New or Dispatched order exists.
+     *
+     * @return array{order_id: int, order_number: string, status: string, label: string, show_url: string}|null
+     */
+    public function blockedSummary(?ChannelConversation $conversation): ?array
+    {
+        $stored = $conversation?->draftCatchBlock();
+        if ($stored === null) {
+            return null;
+        }
+
+        $order = Order::query()->find((int) $stored['order_id']);
+        if (! $order || ! in_array((string) $order->status, self::BLOCKING_STATUSES, true)) {
+            if ($conversation) {
+                $this->clearBlock($conversation);
+            }
+
+            return null;
+        }
+
+        return $this->blockPayload($order);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function inboundPhones(ChannelConversation $conversation): array
+    {
+        $chunks = [];
+        foreach ($this->gate->recentInbound($conversation) as $message) {
+            if (! $message instanceof ChannelMessage) {
+                continue;
+            }
+            $body = trim((string) ($message->body ?? ''));
+            if ($body !== '') {
+                $chunks[] = $body;
+            }
+        }
+
+        $extracted = PhoneNumber::extractFirstBangladeshMobile(implode("\n", $chunks));
+
+        return $extracted ? [$extracted] : [];
+    }
+
+    private function rememberBlock(ChannelConversation $conversation, Order $order): void
+    {
+        $meta = is_array($conversation->meta) ? $conversation->meta : [];
+        $meta[ChannelConversation::META_DRAFT_CATCH_BLOCKED] = $this->blockPayload($order);
+        $conversation->forceFill(['meta' => $meta])->save();
+    }
+
+    private function clearBlock(ChannelConversation $conversation): void
+    {
+        $meta = is_array($conversation->meta) ? $conversation->meta : [];
+        if (! array_key_exists(ChannelConversation::META_DRAFT_CATCH_BLOCKED, $meta)) {
+            return;
+        }
+
+        unset($meta[ChannelConversation::META_DRAFT_CATCH_BLOCKED]);
+        $conversation->forceFill(['meta' => $meta === [] ? null : $meta])->save();
+    }
+
+    /**
+     * @return array{order_id: int, order_number: string, status: string, label: string, show_url: string}
+     */
+    private function blockPayload(Order $order): array
+    {
+        $status = (string) $order->status;
+
+        return [
+            'order_id' => (int) $order->id,
+            'order_number' => (string) $order->order_number,
+            'status' => $status,
+            'label' => $status === 'dispatched' ? 'Dispatched' : 'New',
+            'show_url' => route('admin.orders.show', $order),
         ];
     }
 }

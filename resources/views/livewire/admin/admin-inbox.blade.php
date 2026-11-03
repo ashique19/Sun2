@@ -567,6 +567,10 @@
                                     <span class="shrink-0 truncate text-[10px] font-semibold text-[#315AA9]">
                                         {{ $conversation->draftOrder->order_number }}
                                     </span>
+                                @elseif ($block = $conversation->draftCatchBlock())
+                                    <span class="shrink-0 truncate text-[10px] font-semibold text-amber-800" data-inbox-draft-blocked-list>
+                                        {{ $block['label'] }} {{ $block['order_number'] }}
+                                    </span>
                                 @endif
                                 @if ($latest)
                                     @if ($latest->isImageAttachment())
@@ -694,6 +698,18 @@
                         <x-admin.inbox-sync-button variant="thread-label" />
                         </div>
                     </div>
+                    @if ($inboxDraftBlocked)
+                        <div class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]" data-inbox-draft-blocked>
+                            <span class="font-semibold text-amber-900">Already has a {{ $inboxDraftBlocked['label'] }} order</span>
+                            <a href="{{ $inboxDraftBlocked['show_url'] }}"
+                                target="_blank"
+                                rel="noopener"
+                                class="inline-flex h-6 items-center rounded-full border border-amber-700 bg-amber-50 px-2 font-semibold text-amber-900 hover:bg-amber-100">
+                                {{ $inboxDraftBlocked['order_number'] }}
+                            </a>
+                            <span class="text-[#6B6459]">Not drafting another</span>
+                        </div>
+                    @endif
                     @if ($inboxDraftReady)
                         <div class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]" data-inbox-draft-ready>
                             <span class="font-semibold text-[#1E1E1E]">Draft ready</span>

@@ -14,6 +14,8 @@ class ChannelConversation extends Model
 
     public const CHANNEL_WHATSAPP = 'whatsapp';
 
+    public const META_DRAFT_CATCH_BLOCKED = 'draft_catch_blocked';
+
     protected $guarded = [];
 
     protected function casts(): array
@@ -90,6 +92,21 @@ class ChannelConversation extends Model
 
         return $this->messenger_seen_at === null
             || $this->last_inbound_at->greaterThan($this->messenger_seen_at);
+    }
+
+    /**
+     * Auto-draft was skipped because a New or Dispatched order already exists.
+     *
+     * @return array{order_id: int, order_number: string, status: string, label: string, show_url?: string}|null
+     */
+    public function draftCatchBlock(): ?array
+    {
+        $block = is_array($this->meta) ? ($this->meta[self::META_DRAFT_CATCH_BLOCKED] ?? null) : null;
+        if (! is_array($block) || (int) ($block['order_id'] ?? 0) <= 0) {
+            return null;
+        }
+
+        return $block;
     }
 
     public function markRead(?int $userId = null): void

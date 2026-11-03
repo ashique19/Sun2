@@ -7,6 +7,7 @@ use App\Models\Area;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Models\City;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\Channels\ChannelOrderDraftCatcher;
@@ -78,6 +79,65 @@ class AdminInboxDraftReadyTest extends TestCase
         $this->assertSame('new', $draft->fresh()->status);
         $this->assertNull($conversation->fresh()->draft_order_id);
         $this->assertSame(9, $product->fresh()->stock_quantity);
+    }
+
+    #[Test]
+    public function blocked_auto_draft_notifies_in_the_thread_header_and_list(): void
+    {
+        $this->actingAs($this->adminUser());
+        config(['gemini.api_key' => null]);
+
+        $product = $this->product();
+        $this->seedDhakaMirpur();
+        $conversation = $this->conversation();
+
+        $existing = Order::query()->create([
+            'order_number' => '88011',
+            'name' => 'Nila',
+            'phone' => '01627237432',
+            'address' => 'Mirpur',
+            'city' => 'Dhaka',
+            'area' => 'Mirpur',
+            'subtotal' => 1200,
+            'delivery_charge' => 80,
+            'discount' => 0,
+            'total' => 1280,
+            'cod_amount' => 1280,
+            'due_amount' => 1280,
+            'payment_status' => 'unpaid',
+            'payment_method' => 'cod',
+            'status' => Order::STATUS_NEW,
+            'placed_at' => now()->subDay(),
+            'placed_via' => Order::PLACED_VIA_MESSENGER,
+            'channel_conversation_id' => $conversation->id,
+        ]);
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.test/selected.jpg',
+            'media_mime' => 'image/jpeg',
+            'matched_product_id' => $product->id,
+            'sent_at' => now()->subMinutes(2),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => "Nila\n01627237432\nMirpur, Dhaka",
+            'sent_at' => now(),
+        ]);
+
+        $this->assertNull(app(ChannelOrderDraftCatcher::class)->catch($conversation->fresh()));
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSeeHtml('data-inbox-draft-blocked')
+            ->assertSeeHtml('data-inbox-draft-blocked-list')
+            ->assertSee('Already has a New order')
+            ->assertSee('88011')
+            ->assertSee('Not drafting another')
+            ->assertSeeHtml('href="'.e(route('admin.orders.show', $existing)).'"')
+            ->assertDontSeeHtml('data-inbox-draft-ready');
     }
 
     #[Test]

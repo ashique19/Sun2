@@ -5,16 +5,19 @@ namespace App\Http\Controllers;
 use App\Models\ChannelMessage;
 use App\Services\Facebook\FacebookPageTokenService;
 use App\Support\AdminAccess;
+use App\Support\ChannelMessageMediaType;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Http;
+use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
 class ChannelMessageMediaController extends Controller
 {
     /**
      * Stream a channel attachment for staff preview.
-     * Facebook CDN/Graph URLs often require a token, which browsers cannot send on <img>.
+     * Facebook CDN/Graph URLs often require a token, which browsers cannot send on <img>/<audio>.
+     * Audio/video players also send Range requests; a 200 dump without ranges or with the
+     * wrong MIME (Messenger labels AAC/MP4 voice as audio/mpeg) will not play.
      */
     public function __invoke(Request $request, ChannelMessage $message, FacebookPageTokenService $tokens): Response
     {
@@ -24,12 +27,12 @@ class ChannelMessageMediaController extends Controller
             $poster = $message->videoPosterUrl();
             abort_if(! is_string($poster) || $poster === '', 404);
 
-            return $this->remoteFileResponse($poster, 'image/jpeg', $tokens->token());
+            return $this->remoteFileResponse($poster, 'image/jpeg', $tokens->token(), audioAttachment: false);
         }
 
         $localPath = $message->localMediaPath();
         if ($localPath !== null) {
-            $local = $this->localFileResponse($localPath, $message->media_mime);
+            $local = $this->localFileResponse($localPath, $message->media_mime, $message->isAudioAttachment());
             if ($local) {
                 return $local;
             }
@@ -39,7 +42,7 @@ class ChannelMessageMediaController extends Controller
         abort_if($url === '', 404);
 
         try {
-            if ($local = $this->localFileResponse($url, $message->media_mime)) {
+            if ($local = $this->localFileResponse($url, $message->media_mime, $message->isAudioAttachment())) {
                 return $local;
             }
 
@@ -47,13 +50,14 @@ class ChannelMessageMediaController extends Controller
                 $url,
                 $message->media_mime,
                 $tokens->token(),
+                $message->isAudioAttachment(),
             );
         } catch (Throwable) {
             abort(404, 'Attachment could not be fetched.');
         }
     }
 
-    private function remoteFileResponse(string $url, ?string $preferredMime, string $token): Response
+    private function remoteFileResponse(string $url, ?string $preferredMime, string $token, bool $audioAttachment): Response
     {
         $response = $this->fetchMedia($url, $token);
 
@@ -61,21 +65,19 @@ class ChannelMessageMediaController extends Controller
             abort(404, 'Attachment could not be fetched.');
         }
 
-        $contentType = (string) (
-            $preferredMime
-            ?: $response->header('Content-Type')
-            ?: 'application/octet-stream'
-        );
-        $contentType = explode(';', $contentType)[0];
+        $bytes = $response->body();
+        abort_if($bytes === '', 404, 'Attachment could not be fetched.');
 
-        return response($response->body(), 200, [
-            'Content-Type' => $contentType,
-            'Cache-Control' => 'private, max-age=300',
-            'X-Content-Type-Options' => 'nosniff',
-        ]);
+        $contentType = ChannelMessageMediaType::detect(
+            $bytes,
+            $preferredMime ?: $response->header('Content-Type'),
+            $audioAttachment,
+        );
+
+        return $this->bytesResponse($bytes, $contentType);
     }
 
-    private function localFileResponse(string $url, ?string $mime): ?Response
+    private function localFileResponse(string $url, ?string $mime, bool $audioAttachment): ?Response
     {
         if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
             return null;
@@ -91,14 +93,44 @@ class ChannelMessageMediaController extends Controller
             return null;
         }
 
-        $contentType = $mime ?: (mime_content_type($absolute) ?: 'application/octet-stream');
-        $contentType = explode(';', (string) $contentType)[0];
+        $bytes = file_get_contents($absolute);
+        if ($bytes === false || $bytes === '') {
+            return null;
+        }
 
-        return response(file_get_contents($absolute), 200, [
+        $contentType = ChannelMessageMediaType::detect(
+            $bytes,
+            $mime ?: (mime_content_type($absolute) ?: null),
+            $audioAttachment,
+        );
+
+        return $this->bytesResponse($bytes, $contentType);
+    }
+
+    private function bytesResponse(string $bytes, string $contentType): Response
+    {
+        if (! str_starts_with($contentType, 'audio/') && ! str_starts_with($contentType, 'video/')) {
+            return response($bytes, 200, [
+                'Content-Type' => $contentType,
+                'Cache-Control' => 'private, max-age=300',
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        }
+
+        $tmp = tempnam(sys_get_temp_dir(), 'inbox-media-');
+        if ($tmp === false) {
+            abort(404, 'Attachment could not be fetched.');
+        }
+
+        file_put_contents($tmp, $bytes);
+
+        return response()->file($tmp, [
             'Content-Type' => $contentType,
+            'Content-Disposition' => 'inline',
             'Cache-Control' => 'private, max-age=300',
             'X-Content-Type-Options' => 'nosniff',
-        ]);
+            'Accept-Ranges' => 'bytes',
+        ])->deleteFileAfterSend();
     }
 
     /**

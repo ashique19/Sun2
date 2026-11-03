@@ -84,6 +84,7 @@ class InboxThreadMediaTest extends TestCase
             ->assertSeeHtml('data-inbox-quote-target="'.$photo->id.'"')
             ->assertSeeHtml('href="#inbox-msg-'.$photo->id.'"')
             ->assertSeeHtml('<audio')
+            ->assertSeeHtml('wire:key="inbox-audio-'.$audio->id.'"')
             ->assertSeeHtml('src="'.e($audio->staffMediaUrl()).'"')
             ->assertSeeHtml('<video')
             ->assertSeeHtml('src="'.e($video->staffMediaUrl()).'"')

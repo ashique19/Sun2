@@ -269,7 +269,7 @@ class MessengerInboundService
             if (! is_string($mime) || $mime === '') {
                 $mime = match ($type) {
                     'image', 'sticker' => 'image/jpeg',
-                    'audio' => 'audio/mpeg',
+                    'audio' => 'audio/mp4',
                     'video' => 'video/mp4',
                     default => null,
                 };

@@ -1300,6 +1300,8 @@
                                     @endif
                                 @elseif ($messageRow->isAudioAttachment())
                                     <audio
+                                        wire:ignore
+                                        wire:key="inbox-audio-{{ $messageRow->id }}"
                                         class="mt-2 w-full max-w-xs"
                                         controls
                                         preload="metadata"
@@ -1307,7 +1309,7 @@
                                         Your browser cannot play this audio.
                                     </audio>
                                 @elseif ($messageRow->isVideoAttachment())
-                                    <div class="relative mt-2 overflow-hidden rounded-xl bg-black">
+                                    <div class="relative mt-2 overflow-hidden rounded-xl bg-black" wire:ignore wire:key="inbox-video-{{ $messageRow->id }}">
                                         <video
                                             class="max-h-72 w-full"
                                             controls

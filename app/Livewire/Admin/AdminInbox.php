@@ -1224,6 +1224,80 @@ class AdminInbox extends Component
     }
 
     /**
+     * One-tap send of priced catalog images for every unreplied inbound photo
+     * whose match is strictly above 84%.
+     */
+    public function sendUnrepliedPricedImages(
+        InboxPricedImageSender $sender,
+        ChannelMessageImageMatchService $matches,
+    ): void {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
+
+        if (! $this->selectedConversationId) {
+            $this->error = 'Conversation not found.';
+
+            return;
+        }
+
+        $conversation = ChannelConversation::query()
+            ->with('messages')
+            ->find($this->selectedConversationId);
+
+        if (! $conversation) {
+            $this->error = 'Conversation not found.';
+
+            return;
+        }
+
+        $this->ensureConversationSelected((int) $conversation->id);
+
+        $targets = app(InboxQuickReplyMatcher::class)->bulkPricedImageTargets($conversation, $matches);
+        if ($targets === []) {
+            $this->error = 'No high-confidence product photos to send.';
+
+            return;
+        }
+
+        $sent = 0;
+        $failed = 0;
+        $lastError = null;
+        foreach ($targets as $target) {
+            $message = $conversation->messages->firstWhere('id', $target['message_id']);
+            $product = Product::query()->whereKey($target['product_id'])->first();
+            if (! $message instanceof ChannelMessage || ! $product) {
+                $failed++;
+
+                continue;
+            }
+
+            $result = $sender->send($conversation, $product, $message, auth()->id());
+            if ($result['ok'] ?? false) {
+                $sent++;
+            } else {
+                $failed++;
+                $lastError = $result['error'] ?? 'Failed to send priced image.';
+            }
+        }
+
+        if ($sent === 0) {
+            $this->error = $lastError ?? 'Failed to send priced images.';
+
+            return;
+        }
+
+        $this->statusMessage = $sent === 1
+            ? 'Priced image sent.'
+            : $sent.' priced images sent.';
+
+        if ($failed > 0 && $lastError !== null) {
+            $this->error = $lastError;
+        }
+    }
+
+    /**
      * Reply to the inbound photo with the tagged product's selling price as text.
      */
     public function sendMatchedProductPriceReply(int $messageId, ChannelReplyService $replies, InboxProductReplyService $productReplies): void
@@ -2505,6 +2579,8 @@ class AdminInbox extends Component
             ? $quickReplyMatcher->matchThread($selectedConversation, $quickReplies)
             : [];
         $pricedImageHints = [];
+        $priceQueryMessageIds = [];
+        $bulkPricedImageTargets = [];
         if ($selectedConversation) {
             foreach ($selectedConversation->messages as $threadMessage) {
                 if ($quickReplyMatcher->shouldHighlightPricedImage(
@@ -2514,6 +2590,18 @@ class AdminInbox extends Component
                 )) {
                     $pricedImageHints[(int) $threadMessage->id] = true;
                 }
+                if (
+                    $threadMessage->direction === ChannelMessage::DIRECTION_INBOUND
+                    && $quickReplyMatcher->looksLikePriceQuery((string) ($threadMessage->body ?? ''))
+                ) {
+                    $priceQueryMessageIds[(int) $threadMessage->id] = true;
+                }
+            }
+            if ($priceQueryMessageIds !== []) {
+                $bulkPricedImageTargets = $quickReplyMatcher->bulkPricedImageTargets(
+                    $selectedConversation,
+                    app(ChannelMessageImageMatchService::class),
+                );
             }
         }
         $mappingMessage = $this->findMessageInThread($selectedConversation, $this->mappingMessageId);
@@ -2555,6 +2643,8 @@ class AdminInbox extends Component
             'quickReplies' => $quickReplies,
             'quickReplyMatches' => $quickReplyMatches,
             'pricedImageHints' => $pricedImageHints,
+            'priceQueryMessageIds' => $priceQueryMessageIds,
+            'bulkPricedImageTargets' => $bulkPricedImageTargets,
             'hasOlderMessages' => $hasOlderMessages,
             'threadLookbackHours' => $lookbackHours,
             'realtimeEnabled' => $this->realtimeEnabled(),

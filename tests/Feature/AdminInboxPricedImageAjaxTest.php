@@ -260,6 +260,8 @@ class AdminInboxPricedImageAjaxTest extends TestCase
 
         $this->assertIsString($source);
         $this->assertStringContainsString('data-inbox-priced-image-send', $source);
+        $this->assertStringContainsString('data-inbox-priced-image-send-all', $source);
+        $this->assertStringContainsString('enqueueAllFromButton', $source);
         $this->assertStringContainsString('inflightKeys', $source);
         $this->assertStringContainsString('stopImmediatePropagation', $source);
         $this->assertStringContainsString("addEventListener('click', onClick, true)", $source);

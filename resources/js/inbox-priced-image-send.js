@@ -166,6 +166,8 @@ const drain = async () => {
         draining = false;
         if (queue.length > 0) {
             drain();
+        } else {
+            setSendAllBusy(false);
         }
     }
 };
@@ -230,7 +232,87 @@ const enqueueFromButton = (button) => {
     drain();
 };
 
+const parseSendAllTargets = (button) => {
+    try {
+        const parsed = JSON.parse(button.getAttribute('data-inbox-priced-image-targets') || '[]');
+
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
+
+const sendAllButtons = () => document.querySelectorAll('[data-inbox-priced-image-send-all]');
+
+const setSendAllBusy = (busy) => {
+    sendAllButtons().forEach((button) => {
+        const label = button.querySelector('[data-inbox-priced-image-send-all-label]');
+        button.disabled = busy;
+        button.setAttribute('aria-busy', busy ? 'true' : 'false');
+        if (label) {
+            label.textContent = busy ? 'Sending priced images' : 'Send priced images';
+        }
+    });
+};
+
+const enqueueAllFromButton = (button) => {
+    const conversationId = Number(
+        button.getAttribute('data-conversation-id')
+        || closestDataset(button, 'data-inbox-priced-image-conversation')
+        || '0',
+    );
+    const url = button.getAttribute('data-send-url')
+        || closestDataset(button, 'data-inbox-priced-image-url');
+    const wireId = closestDataset(button, 'data-inbox-priced-image-wire')
+        || button.closest('[wire\\:id]')?.getAttribute('wire:id')
+        || '';
+
+    if (! Number.isInteger(conversationId) || conversationId <= 0 || ! url) {
+        return;
+    }
+
+    let queued = 0;
+    parseSendAllTargets(button).forEach((target) => {
+        const productId = Number(target?.product_id || 0);
+        const replyTo = Number(target?.message_id || 0);
+        if (! Number.isInteger(productId) || productId <= 0) {
+            return;
+        }
+
+        const key = jobKey(productId, conversationId, Number.isInteger(replyTo) && replyTo > 0 ? replyTo : 0);
+        if (inflightKeys.has(key)) {
+            return;
+        }
+
+        inflightKeys.add(key);
+        queue.push({
+            key,
+            productId,
+            conversationId,
+            replyTo: Number.isInteger(replyTo) && replyTo > 0 ? replyTo : 0,
+            url,
+            wireId: wireId || null,
+        });
+        setState(key, 'queued');
+        queued += 1;
+    });
+
+    if (queued > 0) {
+        setSendAllBusy(true);
+        drain();
+    }
+};
+
 const onClick = (event) => {
+    const sendAll = event.target?.closest?.('[data-inbox-priced-image-send-all]');
+    if (sendAll && ! sendAll.disabled) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        enqueueAllFromButton(sendAll);
+
+        return;
+    }
+
     const button = event.target?.closest?.('[data-inbox-priced-image-send]');
     if (! button || button.disabled) {
         return;

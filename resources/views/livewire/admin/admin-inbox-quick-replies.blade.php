@@ -3,7 +3,7 @@
         <div>
             <h1 class="font-serif text-3xl font-semibold text-[#1E1E1E]">Quick replies</h1>
             <p class="mt-1 text-sm text-[#8C8474]">
-                Composer chips in Inbox — tap a chip to insert the body into the reply box.
+                Composer chips in Inbox, plus reply tags used to track customer messages and suggest these replies.
             </p>
         </div>
         <a href="{{ route('admin.inbox') }}" wire:navigate
@@ -60,6 +60,52 @@
                             placeholder="Text inserted into the reply composer"
                             class="w-full rounded-xl border border-[#E0D6C2] bg-white px-3 py-2 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]"></textarea>
                     </div>
+                </div>
+                @php $replyId = trim((string) ($reply['id'] ?? '')); @endphp
+                <div class="mt-3 rounded-xl border border-dashed border-[#E0D6C2] bg-white/70 p-3" data-inbox-quick-reply-tags>
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Reply tags</p>
+                    <p class="mt-0.5 text-[11px] text-[#8C8474]">Customer wording that tracks and suggests this reply.</p>
+                    @if ($replyId === '')
+                        <p class="mt-2 text-xs text-[#8C8474]">Save this reply first to add tags.</p>
+                    @else
+                        @php $tags = $examplesByReply[$replyId] ?? collect(); @endphp
+                        <div class="mt-2 space-y-2" data-inbox-quick-reply-tag-list>
+                            @forelse ($tags as $tag)
+                                <div wire:key="quick-reply-tag-{{ $tag->id }}" class="flex flex-wrap items-center gap-2" data-inbox-quick-reply-tag="{{ $tag->id }}">
+                                    <input type="text"
+                                        wire:model="tagEdits.{{ $tag->id }}"
+                                        maxlength="2000"
+                                        class="min-w-0 flex-1 rounded-xl border border-[#E0D6C2] bg-white px-3 py-1.5 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                                    <button type="button"
+                                        wire:click="updateTag({{ $tag->id }})"
+                                        class="rounded-full border border-[#E0D6C2] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6B6459] hover:border-[#C9A227]">
+                                        Save
+                                    </button>
+                                    <button type="button"
+                                        wire:click="deleteTag({{ $tag->id }})"
+                                        wire:confirm="Remove this reply tag?"
+                                        class="rounded-full border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50">
+                                        Delete
+                                    </button>
+                                </div>
+                            @empty
+                                <p class="text-xs text-[#8C8474]">No tags yet. Add wording staff have seen, like “দাম কত”.</p>
+                            @endforelse
+                        </div>
+                        <div class="mt-2 flex flex-wrap items-center gap-2">
+                            <input type="text"
+                                wire:model="newTags.{{ $replyId }}"
+                                wire:keydown.enter.prevent="addTag('{{ $replyId }}')"
+                                maxlength="2000"
+                                placeholder="e.g. দাম কত"
+                                class="min-w-0 flex-1 rounded-xl border border-[#E0D6C2] bg-white px-3 py-1.5 text-sm focus:border-[#C9A227] focus:outline-none focus:ring-1 focus:ring-[#C9A227]">
+                            <button type="button"
+                                wire:click="addTag('{{ $replyId }}')"
+                                class="rounded-full border border-[#C9A227] bg-[#FAF6EF] px-3 py-1.5 text-[11px] font-semibold text-[#C9A227] hover:bg-[#C9A227] hover:text-white">
+                                Add tag
+                            </button>
+                        </div>
+                    @endif
                 </div>
             </div>
         @endforeach

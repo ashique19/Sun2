@@ -5,8 +5,11 @@ namespace Tests\Feature;
 use App\Livewire\Admin\AdminInbox;
 use App\Livewire\Admin\AdminInboxQuickReplies;
 use App\Models\ChannelConversation;
+use App\Models\ChannelMessage;
+use App\Models\InboxQuickReplyExample;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\Channels\InboxQuickReplyMatcher;
 use App\Services\Channels\InboxQuickReplyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -115,5 +118,117 @@ class AdminInboxQuickRepliesTest extends TestCase
             ->call('resetDefaults')
             ->assertSet('replies.0.label', 'Default')
             ->assertSet('replies.0.body', 'Default body');
+    }
+
+    #[Test]
+    public function staff_can_crud_reply_tags_used_for_suggestions(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $replies = app(InboxQuickReplyService::class)->save([
+            ['label' => 'কোন প্রডাক্ট?', 'body' => 'কোন প্রডাক্টটা দেখতে চান?'],
+        ]);
+        $replyId = $replies[0]['id'];
+
+        Livewire::test(AdminInboxQuickReplies::class)
+            ->assertSeeHtml('data-inbox-quick-reply-tags')
+            ->assertSee('Reply tags')
+            ->assertSee('No tags yet')
+            ->set('newTags.'.$replyId, 'দাম কত')
+            ->call('addTag', $replyId)
+            ->assertSet('statusMessage', 'Reply tag saved.')
+            ->assertSeeHtml('data-inbox-quick-reply-tag="')
+            ->assertDontSee('No tags yet');
+
+        $example = InboxQuickReplyExample::query()->first();
+        $this->assertNotNull($example);
+        $this->assertSame($replyId, $example->quick_reply_id);
+        $this->assertSame('দাম কত', $example->example_text);
+
+        Livewire::test(AdminInboxQuickReplies::class)
+            ->set('tagEdits.'.$example->id, 'এটা কত')
+            ->call('updateTag', $example->id)
+            ->assertSet('statusMessage', 'Reply tag updated.');
+
+        $this->assertSame('এটা কত', $example->fresh()->example_text);
+
+        $conversation = ChannelConversation::query()->create([
+            'channel' => ChannelConversation::CHANNEL_MESSENGER,
+            'external_user_id' => 'psid-qr-tag-crud',
+            'customer_name' => 'Karim',
+            'last_inbound_at' => now(),
+        ]);
+        $later = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'এটা কত',
+            'sent_at' => now(),
+        ]);
+        $matches = app(InboxQuickReplyMatcher::class)->matchThread(
+            $conversation->fresh()->load('messages'),
+            $replies,
+        );
+        $this->assertSame($replyId, $matches[$later->id]['id'] ?? null);
+        $this->assertSame(InboxQuickReplyMatcher::VIA_EXAMPLE, $matches[$later->id]['via'] ?? null);
+
+        Livewire::test(AdminInboxQuickReplies::class)
+            ->call('deleteTag', $example->id)
+            ->assertSet('statusMessage', 'Reply tag removed.')
+            ->assertSee('No tags yet');
+
+        $this->assertSame(0, InboxQuickReplyExample::query()->count());
+    }
+
+    #[Test]
+    public function saving_replies_removes_tags_for_deleted_replies(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $replies = app(InboxQuickReplyService::class)->save([
+            ['label' => 'Keep', 'body' => 'Keep body'],
+            ['label' => 'Drop', 'body' => 'Drop body'],
+        ]);
+        app(InboxQuickReplyMatcher::class)->addExample($replies[1]['id'], 'shippy when');
+
+        $this->assertSame(1, InboxQuickReplyExample::query()->count());
+
+        Livewire::test(AdminInboxQuickReplies::class)
+            ->set('replies', [$replies[0]])
+            ->call('save')
+            ->assertSet('statusMessage', 'Quick replies saved.');
+
+        $this->assertSame(0, InboxQuickReplyExample::query()->count());
+    }
+
+    #[Test]
+    public function deleting_a_message_linked_tag_clears_the_message_tracking(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $replies = app(InboxQuickReplyService::class)->save([
+            ['label' => 'Price', 'body' => 'দাম ১২০০ টাকা'],
+        ]);
+        $conversation = ChannelConversation::query()->create([
+            'channel' => ChannelConversation::CHANNEL_MESSENGER,
+            'external_user_id' => 'psid-qr-tag-clear',
+            'customer_name' => 'Karim',
+            'last_inbound_at' => now(),
+        ]);
+        $message = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'dam koto?',
+            'sent_at' => now(),
+        ]);
+        app(InboxQuickReplyMatcher::class)->tag($message, $replies[0]['id'], null);
+        $example = InboxQuickReplyExample::query()->first();
+        $this->assertSame($replies[0]['id'], $message->fresh()->quick_reply_id);
+
+        Livewire::test(AdminInboxQuickReplies::class)
+            ->call('deleteTag', $example->id)
+            ->assertSet('statusMessage', 'Reply tag removed.');
+
+        $this->assertNull($message->fresh()->quick_reply_id);
+        $this->assertSame(0, InboxQuickReplyExample::query()->count());
     }
 }

@@ -188,6 +188,103 @@ class InboxQuickReplyMatcher
             ->delete();
     }
 
+    /**
+     * Staff-authored training phrase, not tied to a chat message.
+     */
+    public function addExample(string $quickReplyId, string $text, ?int $userId = null): ?InboxQuickReplyExample
+    {
+        $quickReplyId = trim($quickReplyId);
+        $text = trim($text);
+        if ($quickReplyId === '' || $text === '') {
+            return null;
+        }
+
+        $normalized = mb_substr($this->normalize($text), 0, 191);
+        if ($normalized === '') {
+            return null;
+        }
+
+        $existing = InboxQuickReplyExample::query()
+            ->where('quick_reply_id', $quickReplyId)
+            ->where('example_normalized', $normalized)
+            ->first();
+        if ($existing) {
+            return $existing;
+        }
+
+        return InboxQuickReplyExample::query()->create([
+            'quick_reply_id' => $quickReplyId,
+            'example_text' => mb_substr($text, 0, 2000),
+            'example_normalized' => $normalized,
+            'channel_message_id' => null,
+            'tagged_by' => $userId,
+        ]);
+    }
+
+    public function updateExample(InboxQuickReplyExample $example, string $text): bool
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return false;
+        }
+
+        $normalized = mb_substr($this->normalize($text), 0, 191);
+        if ($normalized === '') {
+            return false;
+        }
+
+        $duplicate = InboxQuickReplyExample::query()
+            ->where('quick_reply_id', $example->quick_reply_id)
+            ->where('example_normalized', $normalized)
+            ->whereKeyNot($example->id)
+            ->exists();
+        if ($duplicate) {
+            return false;
+        }
+
+        $example->forceFill([
+            'example_text' => mb_substr($text, 0, 2000),
+            'example_normalized' => $normalized,
+        ])->save();
+
+        return true;
+    }
+
+    public function deleteExample(InboxQuickReplyExample $example): void
+    {
+        $messageId = (int) ($example->channel_message_id ?? 0);
+        $example->delete();
+
+        if ($messageId <= 0) {
+            return;
+        }
+
+        $message = ChannelMessage::query()->find($messageId);
+        if ($message instanceof ChannelMessage) {
+            $message->quick_reply_id = null;
+            $message->save();
+        }
+    }
+
+    /**
+     * Drop training phrases whose quick reply was removed.
+     *
+     * @param  list<string>  $validReplyIds
+     */
+    public function pruneExamples(array $validReplyIds): void
+    {
+        $valid = array_values(array_filter($validReplyIds, fn (mixed $id): bool => is_string($id) && $id !== ''));
+
+        $query = InboxQuickReplyExample::query();
+        if ($valid === []) {
+            $query->delete();
+
+            return;
+        }
+
+        $query->whereNotIn('quick_reply_id', $valid)->delete();
+    }
+
     public function detectIntent(string $text): ?string
     {
         $compact = $this->compact($text);

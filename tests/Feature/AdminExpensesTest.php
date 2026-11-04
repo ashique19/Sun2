@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Livewire\Admin\AdminExpenses;
 use App\Models\Courier;
 use App\Models\Expense;
+use App\Models\ExpenseRecurringReminder;
 use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\User;
@@ -144,5 +145,26 @@ class AdminExpensesTest extends TestCase
         $this->get(route('admin.expenses'))
             ->assertOk()
             ->assertSee('Expenses');
+    }
+
+    #[Test]
+    public function clicking_edit_fills_the_reminder_form(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $salary = ExpenseRecurringReminder::query()->where('title', 'Salary')->firstOrFail();
+
+        Livewire::test(AdminExpenses::class)
+            ->assertSee('Add reminder')
+            ->assertSeeHtml('wire:click.prevent="editReminder('.$salary->id.')"')
+            ->call('editReminder', $salary->id)
+            ->assertDispatched('expense-reminder-edit-started')
+            ->assertSee('Edit reminder')
+            ->assertSet('editingReminderId', $salary->id)
+            ->assertSet('reminderTitle', 'Salary')
+            ->assertSet('reminderDueDay', '5')
+            ->assertSeeHtml('data-reminder-title')
+            ->assertSee('Update reminder')
+            ->assertSee('Cancel');
     }
 }

@@ -127,6 +127,7 @@ class AdminExpenses extends Component
 
         $reminder = ExpenseRecurringReminder::query()->findOrFail($reminderId);
 
+        $this->resetValidation();
         $this->editingReminderId = $reminder->id;
         $this->reminderTitle = $reminder->title;
         $this->reminderCategory = $reminder->category;
@@ -137,6 +138,8 @@ class AdminExpenses extends Component
         $this->reminderPromptType = $reminder->prompt_type;
         $this->reminderNotes = (string) ($reminder->notes ?? '');
         $this->reminderIsActive = (bool) $reminder->is_active;
+
+        $this->dispatch('expense-reminder-edit-started');
     }
 
     public function cancelReminderEdit(): void

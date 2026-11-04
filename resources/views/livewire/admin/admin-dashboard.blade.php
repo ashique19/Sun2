@@ -116,7 +116,7 @@
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#EFE7D6] px-4 py-3">
                 <div class="min-w-0">
                     <h2 class="text-sm font-semibold text-[#1E1E1E]">Expense assistant</h2>
-                    <p class="text-xs text-[#8C8474]">Asks from 2 days before each due date (short window) so the dashboard stays clear.</p>
+                    <p class="text-xs text-[#8C8474]">Asks from 2 days before each due date. Unpaid items stay visible and turn red after the due date.</p>
                 </div>
                 <a href="{{ route('admin.expenses') }}" wire:navigate
                     class="shrink-0 text-xs font-medium text-[#C9A227] hover:text-[#B8921F]">
@@ -127,21 +127,42 @@
             @if (($dueExpenseReminders ?? collect())->isNotEmpty())
                 <div class="divide-y divide-[#EFE7D6]">
                     @foreach ($dueExpenseReminders as $reminder)
-                        <div class="px-4 py-3" wire:key="expense-reminder-{{ $reminder->id }}">
+                        <div @class([
+                            'px-4 py-3',
+                            'bg-rose-50' => $reminder->isOverdue(),
+                        ]) wire:key="expense-reminder-{{ $reminder->id }}"
+                            @if ($reminder->isOverdue()) data-expense-reminder-overdue="1" @endif>
                             <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div class="min-w-0">
                                     <div class="flex flex-wrap items-center gap-2">
-                                        <h3 class="text-sm font-medium text-[#1E1E1E]">
+                                        <h3 @class([
+                                            'text-sm font-medium',
+                                            'text-rose-700' => $reminder->isOverdue(),
+                                            'text-[#1E1E1E]' => ! $reminder->isOverdue(),
+                                        ])>
                                             @if ($reminder->prompt_type === 'check')
                                                 {{ $reminder->title }} checked?
                                             @else
                                                 {{ $reminder->title }} paid?
                                             @endif
                                         </h3>
-                                        <span class="rounded bg-[#FAF6EF] px-1.5 py-0.5 text-[10px] font-medium text-[#6B6459]">
+                                        @if ($reminder->isOverdue())
+                                            <span class="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-700">
+                                                Overdue
+                                            </span>
+                                        @endif
+                                        <span @class([
+                                            'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                                            'bg-rose-100 text-rose-700' => $reminder->isOverdue(),
+                                            'bg-[#FAF6EF] text-[#6B6459]' => ! $reminder->isOverdue(),
+                                        ])>
                                             Due day {{ $reminder->due_day }}
                                         </span>
-                                        <span class="rounded bg-[#FAF6EF] px-1.5 py-0.5 text-[10px] font-medium text-[#6B6459]">
+                                        <span @class([
+                                            'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                                            'bg-rose-100 text-rose-700' => $reminder->isOverdue(),
+                                            'bg-[#FAF6EF] text-[#6B6459]' => ! $reminder->isOverdue(),
+                                        ])>
                                             {{ $reminder->categoryLabel() }}
                                         </span>
                                     </div>

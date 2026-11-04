@@ -50,4 +50,12 @@ class ExpenseRecurringReminder extends Model
 
         return min(max(1, (int) $this->due_day), $lastDay);
     }
+
+    public function isOverdue(?Carbon $at = null): bool
+    {
+        $at = $at ?? now('Asia/Dhaka');
+        $dueDay = $this->dueDayForMonth((int) $at->year, (int) $at->month);
+
+        return (int) $at->day > $dueDay;
+    }
 }

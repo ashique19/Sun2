@@ -147,5 +147,10 @@ class AdminInboxSnapshotCacheTest extends TestCase
         $this->assertStringContainsString('cancelStaleInboxNavigation', $history);
         $this->assertStringContainsString('shouldBlockClosingInboxNavigate', $history);
         $this->assertStringContainsString('event?.detail?.history', $history);
+        $this->assertStringContainsString('isInboxPageActive', $history);
+        $this->assertStringContainsString('clearInboxPageChrome', $history);
+        $this->assertStringContainsString('leaveInboxIfInactive', $history);
+        $this->assertStringContainsString('data-inbox-snapshot-root', $history);
+        $this->assertStringContainsString('admin/inbox/quick-replies', $history);
     }
 }

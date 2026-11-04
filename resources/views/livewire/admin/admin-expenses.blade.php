@@ -1,4 +1,12 @@
-<div>
+<div
+    x-on:expense-reminder-edit-started.window="
+        $nextTick(() => {
+            const form = document.getElementById('expense-reminder-form');
+            form?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            form?.querySelector('[data-reminder-title]')?.focus();
+        })
+    "
+>
     <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="font-serif text-3xl font-semibold">Expenses</h1>
@@ -126,12 +134,18 @@
                             <td class="py-2 pr-3 text-right tabular-nums">
                                 {{ $reminder->default_amount !== null ? '৳ '.number_format((float) $reminder->default_amount, 0) : '—' }}
                             </td>
-                            <td class="py-2 text-right whitespace-nowrap">
-                                <button type="button" wire:click="editReminder({{ $reminder->id }})"
-                                    class="text-xs font-medium text-[#C9A227] hover:underline">Edit</button>
-                                <button type="button" wire:click="deleteReminder({{ $reminder->id }})"
+                            <td class="sticky right-0 bg-white py-2 pl-3 text-right whitespace-nowrap shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.12)]">
+                                <button type="button"
+                                    wire:click.prevent="editReminder({{ $reminder->id }})"
+                                    class="inline-flex min-h-9 items-center rounded-full px-2.5 text-xs font-semibold text-[#C9A227] hover:bg-[#FAF6EF]">
+                                    Edit
+                                </button>
+                                <button type="button"
+                                    wire:click.prevent="deleteReminder({{ $reminder->id }})"
                                     wire:confirm="Delete reminder “{{ $reminder->title }}”?"
-                                    class="ml-2 text-xs text-rose-600 hover:underline">Delete</button>
+                                    class="inline-flex min-h-9 items-center rounded-full px-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-50">
+                                    Delete
+                                </button>
                             </td>
                         </tr>
                     @empty
@@ -143,15 +157,20 @@
             </table>
         </div>
 
-        <form wire:submit="saveReminder" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 border-t border-[#EFE7D6] pt-4">
+        <form id="expense-reminder-form" wire:submit="saveReminder"
+            wire:key="expense-reminder-form-{{ $editingReminderId ?? 'new' }}"
+            @class([
+                'grid gap-3 sm:grid-cols-2 lg:grid-cols-3 border-t border-[#EFE7D6] pt-4',
+                'rounded-xl bg-[#FAF6EF] p-3 sm:p-4' => $editingReminderId,
+            ])>
             <div class="sm:col-span-2 lg:col-span-3">
-                <h3 class="text-xs font-semibold uppercase tracking-wide text-[#8C8474]">
+                <h3 class="text-xs font-semibold uppercase tracking-wide {{ $editingReminderId ? 'text-[#C9A227]' : 'text-[#8C8474]' }}">
                     {{ $editingReminderId ? 'Edit reminder' : 'Add reminder' }}
                 </h3>
             </div>
             <div>
                 <label class="mb-1 block text-xs font-medium text-[#6B6459]">Title</label>
-                <input type="text" wire:model="reminderTitle" placeholder="e.g. Salary"
+                <input type="text" wire:model="reminderTitle" data-reminder-title placeholder="e.g. Salary"
                     class="w-full rounded-lg border border-[#E0D6C2] px-3 py-2 text-sm">
                 @error('reminderTitle') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
             </div>

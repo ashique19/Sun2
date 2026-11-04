@@ -151,6 +151,12 @@
                     }
                 });
                 document.addEventListener('alpine:navigate', function (event) {
+                    if (typeof window.__inboxOnAlpineNavigate === 'function') {
+                        window.__inboxOnAlpineNavigate(event);
+
+                        return;
+                    }
+
                     const dest = event.detail && event.detail.url;
                     if (! dest) {
                         return;
@@ -158,12 +164,16 @@
 
                     try {
                         const inboxPath = function (path) {
-                            const trimmed = path.replace(/\/+$/, '');
+                            const trimmed = (path || '').replace(/\/+$/, '');
 
-                            return trimmed.endsWith('/admin/inbox') || /\/admin\/inbox\/c\/\d+$/.test(trimmed);
+                            return /\/admin\/inbox$/.test(trimmed) || /\/admin\/inbox\/c\/\d+$/.test(trimmed);
                         };
                         const destPath = (dest.pathname ? dest.pathname : new URL(String(dest), window.location.href).pathname);
                         const here = window.location.pathname;
+                        const inboxOpen = Boolean(document.querySelector('[data-inbox-snapshot-root]'));
+                        if (! inboxOpen) {
+                            return;
+                        }
                         if (inboxPath(here) && inboxPath(destPath)) {
                             event.preventDefault();
                         }

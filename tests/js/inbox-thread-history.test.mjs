@@ -2,12 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
     cancelStaleInboxNavigation,
+    clearInboxPageChrome,
     conversationIdFromHref,
     createInboxThreadHistory,
     inboxDesiredConversationId,
     inboxListUrl,
     inboxThreadUrl,
+    isInboxLocation,
+    isInboxPageActive,
     isSameInboxDocument,
+    leaveInboxIfInactive,
     liveThreadMatchesDesired,
     preventSameDocumentInboxNavigate,
     setInboxDesiredList,
@@ -346,6 +350,133 @@ test('returning to the list drops the closing lock once the thread is closed', (
         assert.equal(globalThis.document.body.dataset.inboxMobileThread, '0');
         syncInboxDesiredPane(false);
         assert.equal(globalThis.document.body.dataset.inboxClosingThread, undefined);
+    } finally {
+        if (previous === undefined) {
+            delete globalThis.document;
+        } else {
+            globalThis.document = previous;
+        }
+    }
+});
+
+test('quick replies and other inbox subpages are not the inbox document', () => {
+    assert.equal(isInboxLocation('https://example.test/admin/inbox'), true);
+    assert.equal(isInboxLocation('https://example.test/admin/inbox/c/9'), true);
+    assert.equal(isInboxLocation('https://example.test/admin/inbox/quick-replies'), false);
+    assert.equal(isInboxLocation('https://example.test/admin/inbox/snapshot'), false);
+    assert.equal(isInboxLocation('https://example.test/admin/orders/new'), false);
+    assert.equal(
+        isSameInboxDocument('https://example.test/admin/inbox', 'https://example.test/admin/inbox/quick-replies'),
+        false,
+    );
+    assert.equal(
+        isSameInboxDocument('https://example.test/admin/inbox/quick-replies', 'https://example.test/admin/inbox'),
+        false,
+    );
+});
+
+test('quick replies wire:navigate is not treated as a same-document inbox restore', () => {
+    let prevented = false;
+    const event = {
+        detail: { url: 'https://example.test/admin/inbox/quick-replies', history: false },
+        preventDefault() {
+            prevented = true;
+        },
+    };
+
+    assert.equal(
+        preventSameDocumentInboxNavigate(event, 'https://example.test/admin/inbox'),
+        false,
+    );
+    assert.equal(prevented, false);
+
+    prevented = false;
+    assert.equal(
+        preventSameDocumentInboxNavigate(
+            { detail: { url: 'https://example.test/admin/inbox', history: false }, preventDefault() { prevented = true; } },
+            'https://example.test/admin/inbox/quick-replies',
+        ),
+        false,
+    );
+    assert.equal(prevented, false);
+
+    prevented = false;
+    assert.equal(
+        preventSameDocumentInboxNavigate(
+            { detail: { url: 'https://example.test/admin/orders/new', history: false }, preventDefault() { prevented = true; } },
+            'https://example.test/admin/inbox/quick-replies',
+        ),
+        false,
+    );
+    assert.equal(prevented, false);
+});
+
+test('without the inbox root, leftover interceptors do not block top-nav clicks', () => {
+    const previous = globalThis.document;
+    globalThis.document = {
+        body: { dataset: { inboxClosingThread: '1', inboxMobileThread: '1' } },
+        querySelector() {
+            return null;
+        },
+    };
+
+    try {
+        assert.equal(isInboxPageActive(), false);
+        assert.equal(
+            preventSameDocumentInboxNavigate(
+                { detail: { url: 'https://example.test/admin/inbox' }, preventDefault() {} },
+                'https://example.test/admin/inbox/c/2',
+            ),
+            false,
+        );
+        assert.equal(
+            shouldBlockClosingInboxNavigate({
+                detail: { url: 'https://example.test/admin/orders/new', history: true },
+            }),
+            false,
+        );
+    } finally {
+        if (previous === undefined) {
+            delete globalThis.document;
+        } else {
+            globalThis.document = previous;
+        }
+    }
+});
+
+test('leaving inbox drops leftover body locks and orphaned sheets', () => {
+    const previous = globalThis.document;
+    const removed = [];
+    const sheet = { remove() { removed.push('sheet'); } };
+    globalThis.document = {
+        body: {
+            dataset: {
+                inboxClosingThread: '1',
+                inboxMobileThread: '1',
+                inboxDesiredPane: 'thread',
+                inboxDesiredId: '9',
+            },
+            classList: {
+                remove(...names) {
+                    removed.push(...names);
+                },
+            },
+        },
+        querySelector() {
+            return null;
+        },
+        querySelectorAll() {
+            return [sheet];
+        },
+    };
+
+    try {
+        leaveInboxIfInactive();
+        assert.equal(globalThis.document.body.dataset.inboxClosingThread, undefined);
+        assert.equal(globalThis.document.body.dataset.inboxMobileThread, undefined);
+        assert.equal(globalThis.document.body.dataset.inboxDesiredPane, undefined);
+        assert.deepEqual(removed, ['h-dvh', 'overflow-hidden', 'sheet']);
+        clearInboxPageChrome();
     } finally {
         if (previous === undefined) {
             delete globalThis.document;

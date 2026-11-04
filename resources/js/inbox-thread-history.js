@@ -20,7 +20,16 @@ export function inboxPathname(href) {
 export function isInboxLocation(href) {
     const path = inboxPathname(href);
 
-    return path.endsWith('/admin/inbox') || THREAD_PATH.test(path);
+    // /admin/inbox/quick-replies and other inbox subpages are not the inbox document.
+    return /\/admin\/inbox$/.test(path) || /\/admin\/inbox\/c\/\d+$/.test(path);
+}
+
+export function isInboxPageActive() {
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') {
+        return true;
+    }
+
+    return Boolean(document.querySelector('[data-inbox-snapshot-root]'));
 }
 
 export function inboxListUrl(href) {
@@ -75,6 +84,10 @@ export function isSameInboxDocument(currentHref, destination) {
 }
 
 export function preventSameDocumentInboxNavigate(event, currentHref) {
+    if (! isInboxPageActive()) {
+        return false;
+    }
+
     const dest = event?.detail?.url;
     if (! isSameInboxDocument(currentHref, dest)) {
         return false;
@@ -90,6 +103,10 @@ export function preventSameDocumentInboxNavigate(event, currentHref) {
  * Inbox. Do not block user clicks (wire:navigate) — those have history: false.
  */
 export function shouldBlockClosingInboxNavigate(event) {
+    if (! isInboxPageActive()) {
+        return false;
+    }
+
     if (! event?.detail?.history) {
         return false;
     }
@@ -222,6 +239,44 @@ export function showInboxListPane() {
         cache.classList.remove('is-hiding');
         cache.setAttribute('aria-hidden', 'true');
     }
+}
+
+const INBOX_ORPHAN_SELECTORS = [
+    '[data-inbox-mobile-thread-sheet]',
+    '[data-inbox-product-map-modal]',
+    '[data-inbox-image-edit-modal]',
+    '[data-inbox-product-picker-modal]',
+];
+
+export function clearInboxPageChrome() {
+    desiredPane = null;
+    desiredConversationId = null;
+
+    if (typeof document === 'undefined' || ! document.body) {
+        return;
+    }
+
+    delete document.body.dataset.inboxClosingThread;
+    delete document.body.dataset.inboxMobileThread;
+    delete document.body.dataset.inboxDesiredPane;
+    delete document.body.dataset.inboxDesiredId;
+    document.body.classList?.remove?.('h-dvh', 'overflow-hidden');
+
+    if (typeof document.querySelectorAll !== 'function') {
+        return;
+    }
+
+    document.querySelectorAll(INBOX_ORPHAN_SELECTORS.join(',')).forEach((el) => {
+        el.remove();
+    });
+}
+
+export function leaveInboxIfInactive() {
+    if (isInboxPageActive()) {
+        return;
+    }
+
+    clearInboxPageChrome();
 }
 
 export function showInboxThreadPane(conversationId) {
@@ -499,23 +554,44 @@ export function installInboxThreadHistory(wire) {
     installNavInterceptor();
     document.addEventListener('livewire:init', installNavInterceptor);
 
+    window.__inboxOnAlpineNavigate = (event) => {
+        const dest = event?.detail?.url;
+        if (dest && ! isInboxLocation(dest)) {
+            clearInboxPageChrome();
+        }
+
+        if (preventSameDocumentInboxNavigate(event, window.location.href)) {
+            return;
+        }
+
+        if (shouldBlockClosingInboxNavigate(event)) {
+            event.preventDefault();
+        }
+    };
+
     if (! window.__inboxThreadHistoryListener) {
         window.__inboxThreadHistoryListener = true;
         window.addEventListener('popstate', () => {
             window.__inboxThreadHistoryApi?.onPopState();
         });
         document.addEventListener('alpine:navigate', (event) => {
-            if (preventSameDocumentInboxNavigate(event, window.location.href)) {
-                return;
-            }
-
-            if (shouldBlockClosingInboxNavigate(event)) {
-                event.preventDefault();
-            }
+            window.__inboxOnAlpineNavigate?.(event);
         });
+    }
+
+    if (! window.__inboxLeaveListener) {
+        window.__inboxLeaveListener = true;
+        document.addEventListener('livewire:navigated', leaveInboxIfInactive);
+        document.addEventListener('alpine:navigated', leaveInboxIfInactive);
     }
 
     api.boot();
 
     return api;
+}
+
+if (typeof document !== 'undefined' && ! globalThis.__inboxLeaveListener) {
+    globalThis.__inboxLeaveListener = true;
+    document.addEventListener('livewire:navigated', leaveInboxIfInactive);
+    document.addEventListener('alpine:navigated', leaveInboxIfInactive);
 }

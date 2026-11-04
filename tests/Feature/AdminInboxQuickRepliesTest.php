@@ -31,6 +31,43 @@ class AdminInboxQuickRepliesTest extends TestCase
     }
 
     #[Test]
+    public function quick_replies_page_keeps_working_admin_top_nav(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $html = $this->get(route('admin.inbox.quick-replies'))
+            ->assertOk()
+            ->assertSee('Quick replies')
+            ->assertSee('Back to Inbox')
+            ->assertSeeHtml('id="admin-mobile-top-bar"')
+            ->assertSeeHtml('data-admin-shortcut="products"')
+            ->assertSeeHtml('data-admin-shortcut="orders"')
+            ->assertSeeHtml('data-admin-shortcut="inbox"')
+            ->assertDontSeeHtml('data-inbox-snapshot-root')
+            ->assertDontSeeHtml('data-inbox-mobile-thread="1"')
+            ->getContent();
+
+        $this->assertMatchesRegularExpression(
+            '/href="[^"]*\/admin\/inbox"[^>]*wire:navigate/',
+            $html,
+        );
+        $this->assertMatchesRegularExpression(
+            '/href="[^"]*\/admin\/inbox"[^>]*data-admin-shortcut="inbox"/',
+            $html,
+        );
+        $this->assertMatchesRegularExpression(
+            '/href="[^"]*\/admin\/orders\/new"[^>]*data-admin-shortcut="orders"/',
+            $html,
+        );
+        $this->assertMatchesRegularExpression(
+            '/href="[^"]*\/admin\/products"[^>]*data-admin-shortcut="products"/',
+            $html,
+        );
+        $this->assertStringContainsString('min-h-screen', $html);
+        $this->assertStringContainsString('id="admin-mobile-nav-toggle"', $html);
+    }
+
+    #[Test]
     public function staff_can_manage_quick_replies_from_admin_page(): void
     {
         $this->actingAs($this->adminUser());

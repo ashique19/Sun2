@@ -136,12 +136,16 @@ return [
 
         'graph_poll_messages_per_thread' => (int) env('CHANNEL_INBOX_GRAPH_POLL_MESSAGES', 8),
 
+        // Auto-ask for a product photo when a price query has no inbound catalog photos.
+        'auto_photo_request' => filter_var(env('CHANNEL_INBOX_AUTO_PHOTO_REQUEST', true), FILTER_VALIDATE_BOOL),
+
         // Composer chips — label shown in UI, body inserted into the reply box.
         'quick_replies' => [
             ['label' => 'Salaam', 'body' => 'আসসালামু আলাইকুম'],
             ['label' => 'Address?', 'body' => 'আপনার সম্পূর্ণ ঠিকানাটা একটু দিবেন?'],
             ['label' => 'Phone?', 'body' => 'ডেলিভারির জন্য মোবাইল নাম্বারটা একটু কনফার্ম করবেন?'],
             ['label' => 'Thanks', 'body' => 'ধন্যবাদ, অর্ডার কনফার্ম করা হয়েছে।'],
+            ['label' => 'কোন প্রডাক্ট?', 'body' => 'কোন প্রডাক্টের দাম জানতে চান? প্রোডাক্টের ছবিটা একটু পাঠাবেন।'],
         ],
     ],
 

@@ -14,9 +14,6 @@ class ExpenseAssistantService
     /** How many days before due day prompting begins. */
     public const PROMPT_LEAD_DAYS = 2;
 
-    /** How many days after due day prompting continues if still unpaid. */
-    public const PROMPT_GRACE_DAYS = 2;
-
     public function now(): Carbon
     {
         return now('Asia/Dhaka');
@@ -26,14 +23,14 @@ class ExpenseAssistantService
     {
         $at = $at ?? $this->now();
         $dueDay = $reminder->dueDayForMonth((int) $at->year, (int) $at->month);
-        $day = (int) $at->day;
         $windowStart = max(1, $dueDay - self::PROMPT_LEAD_DAYS);
-        $windowEnd = min(
-            (int) $at->copy()->endOfMonth()->day,
-            $dueDay + self::PROMPT_GRACE_DAYS,
-        );
 
-        return $day >= $windowStart && $day <= $windowEnd;
+        return (int) $at->day >= $windowStart;
+    }
+
+    public function isOverdue(ExpenseRecurringReminder $reminder, ?Carbon $at = null): bool
+    {
+        return $reminder->isOverdue($at ?? $this->now());
     }
 
     public function isEveningWindow(?Carbon $at = null): bool
@@ -63,7 +60,7 @@ class ExpenseAssistantService
     }
 
     /**
-     * Active reminders in the short prompt window (2 days before due through 2 days after).
+     * Active reminders from 2 days before due through month-end until recorded.
      *
      * @return Collection<int, ExpenseRecurringReminder>
      */

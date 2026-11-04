@@ -53,7 +53,7 @@ class ExpenseAssistantTest extends TestCase
     }
 
     #[Test]
-    public function due_reminders_appear_from_two_days_before_due_through_short_grace(): void
+    public function due_reminders_appear_from_two_days_before_due_and_stay_until_recorded(): void
     {
         $admin = $this->adminUser();
         $assistant = app(ExpenseAssistantService::class);
@@ -66,26 +66,56 @@ class ExpenseAssistantTest extends TestCase
         $due = $assistant->dueReminders($admin);
         $this->assertFalse($due->contains('id', $salary->id));
         $this->assertFalse($due->contains('id', $internet->id));
+        $this->assertFalse($salary->isOverdue());
 
         // Two days before salary due
         Carbon::setTestNow(Carbon::parse('2026-07-03 10:00:00', 'Asia/Dhaka'));
         $due = $assistant->dueReminders($admin);
         $this->assertTrue($due->contains('id', $salary->id));
         $this->assertFalse($due->contains('id', $internet->id));
+        $this->assertFalse($assistant->isOverdue($salary));
 
         $assistant->recordPayment($salary, 40000, $admin);
         $due = $assistant->dueReminders($admin);
         $this->assertFalse($due->contains('id', $salary->id));
 
-        // Internet due 9 → window 7–11; still in window on day 9
+        // Internet due 9 — still due, not overdue
         Carbon::setTestNow(Carbon::parse('2026-07-09 10:00:00', 'Asia/Dhaka'));
         $due = $assistant->dueReminders($admin);
         $this->assertTrue($due->contains('id', $internet->id));
+        $this->assertFalse($assistant->isOverdue($internet));
 
-        // Past grace (due 9 + 2 = 11) — stop nagging so the dashboard stays clear
+        // After due day, unpaid reminder stays and is overdue
         Carbon::setTestNow(Carbon::parse('2026-07-12 10:00:00', 'Asia/Dhaka'));
         $due = $assistant->dueReminders($admin);
+        $this->assertTrue($due->contains('id', $internet->id));
+        $this->assertTrue($assistant->isOverdue($internet));
+
+        $assistant->recordPayment($internet, 2000, $admin);
+        $due = $assistant->dueReminders($admin);
         $this->assertFalse($due->contains('id', $internet->id));
+
+        Carbon::setTestNow();
+    }
+
+    #[Test]
+    public function dashboard_marks_unpaid_reminders_overdue_after_the_due_date(): void
+    {
+        $this->actingAs($this->adminUser());
+        $internet = ExpenseRecurringReminder::query()->where('title', 'Internet')->firstOrFail();
+
+        Carbon::setTestNow(Carbon::parse('2026-07-12 10:00:00', 'Asia/Dhaka'));
+
+        Livewire::test(AdminDashboard::class)
+            ->assertSee('Expense assistant')
+            ->assertSee('Internet paid?')
+            ->assertSee('Overdue')
+            ->assertSeeHtml('data-expense-reminder-overdue="1"')
+            ->assertSeeHtml('text-rose-700')
+            ->set('expenseReminderAmounts.'.$internet->id, '2000')
+            ->call('recordExpenseReminder', $internet->id)
+            ->assertSee('Internet recorded.')
+            ->assertDontSee('Internet paid?');
 
         Carbon::setTestNow();
     }

@@ -92,7 +92,7 @@ class AdminInboxRecentOrdersTest extends TestCase
             ->call('fillOrderConfirmMessage', $order->id)
             ->assertSet(
                 'replyText',
-                "অর্ডার কনফার্ম করার জন্য ধন্যবাদ।\n৩ দিনের মাঝে পাবেন\nবিল: ৫০০ + ৮০ টাকা ডেলিভারি চার্জ = ৫৮০ টাকা",
+                "ধন্যবাদ।\n৩ দিনের মাঝে পাবেন\nবিল: ৫০০ + ৮০ টাকা ডেলিভারি চার্জ = ৫৮০ টাকা",
             );
     }
 

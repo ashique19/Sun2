@@ -81,7 +81,7 @@ class InboxRecentOrdersTest extends TestCase
         $body = app(InboxRecentOrders::class)->confirmMessage($order->fresh('items'));
 
         $this->assertSame(
-            "অর্ডার কনফার্ম করার জন্য ধন্যবাদ।\n৩ দিনের মাঝে পাবেন\nবিল: ৫০০ + ৩০০ + ৮০ টাকা ডেলিভারি চার্জ = ৮৮০ টাকা",
+            "ধন্যবাদ।\n৩ দিনের মাঝে পাবেন\nবিল: ৫০০ + ৩০০ + ৮০ টাকা ডেলিভারি চার্জ = ৮৮০ টাকা",
             $body,
         );
     }
@@ -110,7 +110,7 @@ class InboxRecentOrdersTest extends TestCase
         $body = app(InboxRecentOrders::class)->confirmMessage($order->fresh('items'));
 
         $this->assertSame(
-            "অর্ডার কনফার্ম করার জন্য ধন্যবাদ।\n৩-৫ দিনের মাঝে পাবেন\nবিল: ২৫০ + ২৫০ + ১২০ টাকা ডেলিভারি চার্জ = ৬২০ টাকা",
+            "ধন্যবাদ।\n৩-৫ দিনের মাঝে পাবেন\nবিল: ২৫০ + ২৫০ + ১২০ টাকা ডেলিভারি চার্জ = ৬২০ টাকা",
             $body,
         );
     }

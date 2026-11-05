@@ -127,7 +127,7 @@ class InboxRecentOrders
 
         $bill = 'বিল: '.implode(' + ', $billParts).' = '.Bangla::money($due).' টাকা';
 
-        return "অর্ডার কনফার্ম করার জন্য ধন্যবাদ।\n{$eta}\n{$bill}";
+        return "ধন্যবাদ।\n{$eta}\n{$bill}";
     }
 
     /**

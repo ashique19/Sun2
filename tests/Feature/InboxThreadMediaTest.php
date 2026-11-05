@@ -85,7 +85,10 @@ class InboxThreadMediaTest extends TestCase
             ->assertSeeHtml('href="#inbox-msg-'.$photo->id.'"')
             ->assertSeeHtml('<audio')
             ->assertSeeHtml('wire:key="inbox-audio-'.$audio->id.'"')
+            ->assertSeeHtml('preload="none"')
+            ->assertSeeHtml('type="audio/mp4"')
             ->assertSeeHtml('src="'.e($audio->staffMediaUrl()).'"')
+            ->assertSeeHtml('/file/voice.m4a')
             ->assertSeeHtml('<video')
             ->assertSeeHtml('src="'.e($video->staffMediaUrl()).'"')
             ->assertSeeHtml('poster="'.e($video->staffMediaUrl(poster: true)).'"')
@@ -138,6 +141,8 @@ class InboxThreadMediaTest extends TestCase
         $this->assertTrue($payload['messages'][2]['is_audio']);
         $this->assertFalse($payload['messages'][2]['is_image']);
         $this->assertNotNull($payload['messages'][2]['media_url']);
+        $this->assertSame('audio/mp4', $payload['messages'][2]['media_type']);
+        $this->assertStringEndsWith('/file/voice.m4a', (string) $payload['messages'][2]['media_url']);
     }
 
     private function adminUser(): User

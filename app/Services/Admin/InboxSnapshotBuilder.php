@@ -14,7 +14,7 @@ class InboxSnapshotBuilder
      *     id: int,
      *     name: string,
      *     window: bool,
-     *     messages: list<array{id: int, direction: string, body: string, is_image: bool, is_audio: bool, is_video: bool, media_url: ?string, poster_url: ?string, sent_at_label: string, reply_to_id: ?int, reply_preview: ?string, reply_is_image: bool, reply_media_url: ?string}>
+     *     messages: list<array{id: int, direction: string, body: string, is_image: bool, is_audio: bool, is_video: bool, media_url: ?string, media_type: ?string, poster_url: ?string, sent_at_label: string, reply_to_id: ?int, reply_preview: ?string, reply_is_image: bool, reply_media_url: ?string}>
      * }
      */
     public function thread(ChannelConversation $conversation, ?int $lookbackHours = null): array
@@ -55,7 +55,7 @@ class InboxSnapshotBuilder
     }
 
     /**
-     * @return array{id: int, direction: string, body: string, is_image: bool, is_audio: bool, is_video: bool, media_url: ?string, poster_url: ?string, sent_at_label: string, reply_to_id: ?int, reply_preview: ?string, reply_is_image: bool, reply_media_url: ?string}
+     * @return array{id: int, direction: string, body: string, is_image: bool, is_audio: bool, is_video: bool, media_url: ?string, media_type: ?string, poster_url: ?string, sent_at_label: string, reply_to_id: ?int, reply_preview: ?string, reply_is_image: bool, reply_media_url: ?string}
      */
     public function message(ChannelMessage $message): array
     {
@@ -79,6 +79,9 @@ class InboxSnapshotBuilder
             'is_audio' => $isAudio,
             'is_video' => $isVideo,
             'media_url' => $hasPlayableMedia ? $message->staffMediaUrl() : null,
+            'media_type' => $isAudio
+                ? $message->staffAudioHtmlType()
+                : ($isVideo ? 'video/mp4' : null),
             'poster_url' => $isVideo && $message->videoPosterUrl()
                 ? $message->staffMediaUrl(poster: true)
                 : null,

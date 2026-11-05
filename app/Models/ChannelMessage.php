@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ChannelMessageMediaType;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
@@ -225,9 +226,23 @@ class ChannelMessage extends Model
 
     public function staffMediaUrl(bool $poster = false): string
     {
-        return route('admin.inbox.media', $poster
-            ? ['message' => $this, 'poster' => 1]
-            : $this);
+        if ($poster) {
+            return route('admin.inbox.media', ['message' => $this, 'poster' => 1]);
+        }
+
+        if ($this->isAudioAttachment()) {
+            return route('admin.inbox.media.file', [
+                'message' => $this,
+                'file' => 'voice.m4a',
+            ]);
+        }
+
+        return route('admin.inbox.media', $this);
+    }
+
+    public function staffAudioHtmlType(): string
+    {
+        return ChannelMessageMediaType::htmlAudioType($this->media_mime);
     }
 
     public function videoPosterUrl(): ?string

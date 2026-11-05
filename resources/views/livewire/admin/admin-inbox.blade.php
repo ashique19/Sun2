@@ -1309,15 +1309,19 @@
                                         @endif
                                     @endif
                                 @elseif ($messageRow->isAudioAttachment())
-                                    <audio
+                                    <div
                                         wire:ignore
                                         wire:key="inbox-audio-{{ $messageRow->id }}"
                                         class="mt-2 w-full max-w-xs"
-                                        controls
-                                        preload="metadata"
-                                        src="{{ $messageRow->staffMediaUrl() }}">
-                                        Your browser cannot play this audio.
-                                    </audio>
+                                        @click.stop
+                                        @contextmenu.stop
+                                        @mousedown.stop
+                                        @touchstart.stop.passive>
+                                        <audio class="w-full" controls preload="none" playsinline>
+                                            <source src="{{ $messageRow->staffMediaUrl() }}" type="{{ $messageRow->staffAudioHtmlType() }}">
+                                            Your browser cannot play this audio.
+                                        </audio>
+                                    </div>
                                 @elseif ($messageRow->isVideoAttachment())
                                     <div class="relative mt-2 overflow-hidden rounded-xl bg-black" wire:ignore wire:key="inbox-video-{{ $messageRow->id }}">
                                         <video

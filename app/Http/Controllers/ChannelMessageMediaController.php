@@ -3,11 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\ChannelMessage;
+use App\Services\Channels\ChannelInboundMediaService;
 use App\Services\Facebook\FacebookPageTokenService;
 use App\Support\AdminAccess;
 use App\Support\ChannelMessageMediaType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
@@ -18,8 +20,15 @@ class ChannelMessageMediaController extends Controller
      * Facebook CDN/Graph URLs often require a token, which browsers cannot send on <img>/<audio>.
      * Audio/video players also send Range requests; a 200 dump without ranges or with the
      * wrong MIME (Messenger labels AAC/MP4 voice as audio/mpeg) will not play.
+     * Messenger lookaside URLs also expire / can be one-shot, so persist voice locally
+     * after the first successful fetch.
      */
-    public function __invoke(Request $request, ChannelMessage $message, FacebookPageTokenService $tokens): Response
+    public function __construct(
+        private ChannelInboundMediaService $inboundMedia,
+        private FacebookPageTokenService $tokens,
+    ) {}
+
+    public function __invoke(Request $request, ChannelMessage $message): Response
     {
         AdminAccess::ensureStaffAdmin();
 
@@ -27,7 +36,7 @@ class ChannelMessageMediaController extends Controller
             $poster = $message->videoPosterUrl();
             abort_if(! is_string($poster) || $poster === '', 404);
 
-            return $this->remoteFileResponse($poster, 'image/jpeg', $tokens->token(), audioAttachment: false);
+            return $this->remoteFileResponse($poster, 'image/jpeg', audioAttachment: false);
         }
 
         $localPath = $message->localMediaPath();
@@ -49,30 +58,50 @@ class ChannelMessageMediaController extends Controller
             return $this->remoteFileResponse(
                 $url,
                 $message->media_mime,
-                $tokens->token(),
                 $message->isAudioAttachment(),
+                $message,
             );
         } catch (Throwable) {
             abort(404, 'Attachment could not be fetched.');
         }
     }
 
-    private function remoteFileResponse(string $url, ?string $preferredMime, string $token, bool $audioAttachment): Response
-    {
+    private function remoteFileResponse(
+        string $url,
+        ?string $preferredMime,
+        bool $audioAttachment,
+        ?ChannelMessage $persistTo = null,
+    ): Response {
+        $token = $this->tokens->token();
         $response = $this->fetchMedia($url, $token);
 
-        if ($response === null || ! $response->successful()) {
+        if (! $this->usableHttpMedia($response) && $persistTo !== null) {
+            $refreshed = $this->refreshFacebookUrl($persistTo, $token);
+            if (is_string($refreshed) && $refreshed !== '' && $refreshed !== $url) {
+                $response = $this->fetchMedia($refreshed, $token);
+            }
+        }
+
+        if (! $this->usableHttpMedia($response)) {
             abort(404, 'Attachment could not be fetched.');
         }
 
         $bytes = $response->body();
-        abort_if($bytes === '', 404, 'Attachment could not be fetched.');
-
         $contentType = ChannelMessageMediaType::detect(
             $bytes,
             $preferredMime ?: $response->header('Content-Type'),
             $audioAttachment,
         );
+
+        if ($persistTo !== null && (str_starts_with($contentType, 'audio/') || str_starts_with($contentType, 'video/'))) {
+            $path = $this->inboundMedia->persistPlayable($persistTo, $bytes, $contentType);
+            if ($path) {
+                $local = $this->localFileResponse($path, $contentType, $audioAttachment);
+                if ($local) {
+                    return $local;
+                }
+            }
+        }
 
         return $this->bytesResponse($bytes, $contentType);
     }
@@ -94,7 +123,7 @@ class ChannelMessageMediaController extends Controller
         }
 
         $bytes = file_get_contents($absolute);
-        if ($bytes === false || $bytes === '') {
+        if ($bytes === false || $bytes === '' || ! ChannelMessageMediaType::isUsableMedia($bytes)) {
             return null;
         }
 
@@ -104,7 +133,7 @@ class ChannelMessageMediaController extends Controller
             $audioAttachment,
         );
 
-        return $this->bytesResponse($bytes, $contentType);
+        return $this->fileResponse($absolute, $contentType, deleteAfterSend: false);
     }
 
     private function bytesResponse(string $bytes, string $contentType): Response
@@ -122,15 +151,48 @@ class ChannelMessageMediaController extends Controller
             abort(404, 'Attachment could not be fetched.');
         }
 
+        $named = $tmp.'.'.ChannelMessageMediaType::extension($contentType);
+        if (@rename($tmp, $named)) {
+            $tmp = $named;
+        }
+
         file_put_contents($tmp, $bytes);
 
-        return response()->file($tmp, [
+        return $this->fileResponse($tmp, $contentType, deleteAfterSend: true);
+    }
+
+    private function fileResponse(string $path, string $contentType, bool $deleteAfterSend): Response
+    {
+        if (! str_starts_with($contentType, 'audio/') && ! str_starts_with($contentType, 'video/')) {
+            $bytes = file_get_contents($path);
+            abort_if($bytes === false || $bytes === '', 404, 'Attachment could not be fetched.');
+
+            return response($bytes, 200, [
+                'Content-Type' => $contentType,
+                'Cache-Control' => 'private, max-age=300',
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        }
+
+        $response = new BinaryFileResponse($path, 200, [
             'Content-Type' => $contentType,
-            'Content-Disposition' => 'inline',
-            'Cache-Control' => 'private, max-age=300',
+            'Cache-Control' => 'private, no-store, no-transform',
             'X-Content-Type-Options' => 'nosniff',
             'Accept-Ranges' => 'bytes',
-        ])->deleteFileAfterSend();
+            'X-Accel-Buffering' => 'no',
+        ], false);
+
+        $response->setContentDisposition(
+            'inline',
+            ChannelMessageMediaType::filename($contentType),
+        );
+        $response->headers->set('Content-Type', $contentType);
+
+        if ($deleteAfterSend) {
+            $response->deleteFileAfterSend();
+        }
+
+        return $response;
     }
 
     /**
@@ -138,21 +200,24 @@ class ChannelMessageMediaController extends Controller
      */
     private function fetchMedia(string $url, string $token)
     {
-        $pending = Http::timeout(20)->withOptions(['allow_redirects' => true]);
+        $pending = Http::timeout(20)
+            ->withHeaders(['User-Agent' => 'InboxMedia/1.0'])
+            ->withOptions(['allow_redirects' => true]);
 
         if ($token === '' || ! $this->urlNeedsToken($url)) {
             $response = $pending->get($url);
 
-            return $response->successful() ? $response : null;
+            return $this->usableHttpMedia($response) ? $response : null;
         }
 
         // Prefer Bearer (Graph / Messenger media)
         $response = Http::timeout(20)
+            ->withHeaders(['User-Agent' => 'InboxMedia/1.0'])
             ->withOptions(['allow_redirects' => true])
             ->withToken($token)
             ->get($url);
 
-        if ($response->successful()) {
+        if ($this->usableHttpMedia($response)) {
             return $response;
         }
 
@@ -160,15 +225,92 @@ class ChannelMessageMediaController extends Controller
         $withQuery = $this->withAccessTokenQuery($url, $token);
         if ($withQuery !== $url) {
             $response = Http::timeout(20)
+                ->withHeaders(['User-Agent' => 'InboxMedia/1.0'])
                 ->withOptions(['allow_redirects' => true])
                 ->get($withQuery);
 
-            if ($response->successful()) {
+            if ($this->usableHttpMedia($response)) {
                 return $response;
             }
         }
 
         return null;
+    }
+
+    private function refreshFacebookUrl(ChannelMessage $message, string $token): ?string
+    {
+        if ($token === '') {
+            return null;
+        }
+
+        $mid = trim((string) ($message->external_message_id ?? ''));
+        if ($mid === '') {
+            return null;
+        }
+
+        $mid = explode('#', $mid, 2)[0];
+        $version = $this->tokens->graphVersion();
+
+        try {
+            $response = Http::timeout(15)
+                ->withHeaders(['User-Agent' => 'InboxMedia/1.0'])
+                ->withToken($token)
+                ->acceptJson()
+                ->get('https://graph.facebook.com/'.$version.'/'.$mid, [
+                    'fields' => 'attachments{mime_type,file_url,image_data{url},video_data{url}}',
+                ]);
+        } catch (Throwable) {
+            return null;
+        }
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $attachments = $response->json('attachments.data');
+        if (! is_array($attachments)) {
+            return null;
+        }
+
+        foreach ($attachments as $attachment) {
+            if (! is_array($attachment)) {
+                continue;
+            }
+
+            $url = data_get($attachment, 'file_url')
+                ?? data_get($attachment, 'image_data.url')
+                ?? data_get($attachment, 'video_data.url');
+
+            if (! is_string($url) || $url === '') {
+                continue;
+            }
+
+            $updates = ['media_url' => $url];
+            $mime = data_get($attachment, 'mime_type');
+            if (is_string($mime) && $mime !== '') {
+                $updates['media_mime'] = $mime;
+            }
+
+            $message->forceFill($updates)->save();
+
+            return $url;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  \Illuminate\Http\Client\Response|null  $response
+     */
+    private function usableHttpMedia($response): bool
+    {
+        if ($response === null || ! $response->successful()) {
+            return false;
+        }
+
+        $bytes = $response->body();
+
+        return $bytes !== '' && ChannelMessageMediaType::isUsableMedia($bytes);
     }
 
     private function urlNeedsToken(string $url): bool

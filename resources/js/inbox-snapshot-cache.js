@@ -123,7 +123,9 @@ const messageHtml = (message) => {
         inner += `<div class="relative mt-2 overflow-hidden rounded-xl ${outbound ? 'bg-black/10' : 'bg-[#FAF6EF]'}">`
             + `<img src="${escapeHtml(message.media_url)}" alt="Photo" class="max-h-72 w-full object-contain" loading="lazy"></div>`;
     } else if (message.is_audio && message.media_url) {
-        inner += `<audio class="mt-2 w-full max-w-xs" controls preload="metadata" src="${escapeHtml(message.media_url)}"></audio>`;
+        inner += `<div class="mt-2 w-full max-w-xs"><audio class="w-full" controls preload="none" playsinline>`
+            + `<source src="${escapeHtml(message.media_url)}" type="${escapeHtml(message.media_type || 'audio/mp4')}">`
+            + `</audio></div>`;
     } else if (message.is_video && message.media_url) {
         const poster = message.poster_url
             ? ` poster="${escapeHtml(message.poster_url)}"`

@@ -51,4 +51,14 @@ class ChannelMessageMediaTypeTest extends TestCase
             ChannelMessageMediaType::detect($bytes, 'video/mp4', audioAttachment: false),
         );
     }
+
+    #[Test]
+    public function messenger_mpeg_label_uses_m4a_player_hint(): void
+    {
+        $this->assertSame('audio/mp4', ChannelMessageMediaType::htmlAudioType('audio/mpeg'));
+        $this->assertSame('voice.m4a', ChannelMessageMediaType::filename('audio/mp4'));
+        $this->assertFalse(ChannelMessageMediaType::isUsableMedia('<!DOCTYPE html>'));
+        $this->assertFalse(ChannelMessageMediaType::isUsableMedia('{"error":"expired"}'));
+        $this->assertTrue(ChannelMessageMediaType::isUsableMedia("\x00\x00\x00\x18ftypM4A "));
+    }
 }

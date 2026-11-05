@@ -5,6 +5,7 @@ namespace App\Services\Channels;
 use App\Models\ChannelMessage;
 use App\Services\Admin\ProductImageHashService;
 use App\Services\Facebook\FacebookPageTokenService;
+use App\Support\ChannelMessageMediaType;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -143,18 +144,37 @@ class ChannelInboundMediaService
         ];
     }
 
+    /**
+     * Keep a durable local copy of voice/video so a later Range play request
+     * does not re-hit an expired or one-shot Facebook CDN URL.
+     */
+    public function persistPlayable(ChannelMessage $message, string $bytes, string $mime): ?string
+    {
+        if ($bytes === '' || ! ChannelMessageMediaType::isUsableMedia($bytes)) {
+            return null;
+        }
+
+        $existing = $message->localMediaPath();
+        if ($existing !== null) {
+            return $existing;
+        }
+
+        $path = $this->persistBytes($message, $bytes, $mime);
+        $message->forceFill([
+            'media_path' => $path,
+            'media_mime' => $mime ?: $message->media_mime,
+        ])->save();
+
+        return $path;
+    }
+
     private function persistBytes(ChannelMessage $message, string $bytes, string $mime): string
     {
         $conversationId = (int) $message->channel_conversation_id;
         $directory = public_path('img/channel-inbound/'.$conversationId);
         File::ensureDirectoryExists($directory);
 
-        $extension = match (true) {
-            str_contains($mime, 'png') => 'png',
-            str_contains($mime, 'webp') => 'webp',
-            str_contains($mime, 'gif') => 'gif',
-            default => 'jpg',
-        };
+        $extension = ChannelMessageMediaType::extension($mime);
 
         $filename = $message->id.'_'.substr(sha1($bytes), 0, 10).'.'.$extension;
         $absolute = $directory.DIRECTORY_SEPARATOR.$filename;

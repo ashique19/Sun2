@@ -264,6 +264,10 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
         Route::get('/inbox/media/{message}', ChannelMessageMediaController::class)
             ->whereNumber('message')
             ->name('inbox.media');
+        Route::get('/inbox/media/{message}/file/{file}', ChannelMessageMediaController::class)
+            ->whereNumber('message')
+            ->where('file', '[A-Za-z0-9._-]+')
+            ->name('inbox.media.file');
         Route::get('/inbox/media/{message}/crop-suggestion', ChannelMessageCropSuggestionController::class)
             ->whereNumber('message')
             ->name('inbox.crop-suggestion');

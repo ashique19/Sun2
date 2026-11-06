@@ -65,9 +65,11 @@ class AdminProductImageEditTest extends TestCase
             ->assertSeeHtml('x-if="savedEditorOpen"')
             ->assertSeeHtml('rotateSaved(-90)')
             ->assertSeeHtml('rotateSaved(90)')
+            ->assertSeeHtml('data-saved-editor-header')
             ->assertSeeHtml('data-saved-rotate')
             ->assertSeeHtml('data-saved-rotate-left')
             ->assertSeeHtml('data-saved-rotate-right')
+            ->assertSeeHtml('shrink-0 space-y-2 border-b')
             ->assertSeeHtml('Rotate left 90°')
             ->assertSeeHtml('Rotate right 90°')
             ->assertSeeHtml('savedRotation')
@@ -196,5 +198,26 @@ class AdminProductImageEditTest extends TestCase
         $this->assertStringContainsString('rotateTo(next)', $source);
         $this->assertStringNotContainsString('this.$wire.message', $source);
         $this->assertStringNotContainsString("\$wire.upload(\n                        'editedImage'", $source);
+    }
+
+    #[Test]
+    public function saved_editor_header_stacks_copy_above_rotate_controls(): void
+    {
+        $this->actingAs($this->adminUser());
+        [$product] = $this->productWithImage();
+
+        $html = Livewire::test(AdminProductEdit::class, ['product' => $product])->html();
+
+        $this->assertMatchesRegularExpression(
+            '/data-saved-editor-header[^>]*>[\s\S]*Rotate, crop, then drag\/resize[\s\S]*data-saved-rotate/',
+            $html,
+        );
+        $this->assertDoesNotMatchRegularExpression(
+            '/data-saved-editor-header[^>]*>[\s\S]{0,80}flex items-center justify-between gap-3[\s\S]{0,120}min-w-0/',
+            $html,
+        );
+        $this->assertStringContainsString('sm:items-center sm:p-4', $html);
+        $this->assertStringContainsString('max-h-[100dvh]', $html);
+        $this->assertStringContainsString('flex-wrap items-center gap-2" data-saved-rotate', $html);
     }
 }

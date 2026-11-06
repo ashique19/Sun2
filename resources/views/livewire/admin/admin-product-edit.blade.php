@@ -637,19 +637,20 @@
                 <template x-teleport="body">
                     <template x-if="savedEditorOpen">
                         <div
-                            class="fixed inset-0 z-[85] flex items-center justify-center bg-black/60 p-4"
+                            class="fixed inset-0 z-[85] flex items-stretch justify-center bg-black/60 sm:items-center sm:p-4"
                             @keydown.escape.window="if (! savedSaving) closeSavedEditor()"
                             @click.self="onSavedEditorOutside()"
                             role="dialog"
                             aria-modal="true"
                             aria-label="Edit saved image">
-                            <div class="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-xl" @click.stop>
-                                <div class="flex items-center justify-between gap-3 border-b border-[#EFE7D6] px-4 py-3">
-                                    <div class="min-w-0">
-                                        <h3 class="font-semibold">Edit image</h3>
-                                        <p class="text-xs text-[#8C8474]">Rotate, crop, then drag/resize text, logo, or image overlay on the live preview.</p>
+                            <div class="flex h-full max-h-[100dvh] w-full max-w-6xl flex-col overflow-hidden bg-white shadow-xl sm:h-auto sm:max-h-[94vh] sm:rounded-xl" @click.stop>
+                                <div class="shrink-0 space-y-2 border-b border-[#EFE7D6] px-4 py-3" data-saved-editor-header>
+                                    <div class="flex items-center justify-between gap-3">
+                                        <h3 class="text-base font-semibold leading-tight">Edit image</h3>
+                                        <button type="button" @click="closeSavedEditor()" :disabled="savedSaving" class="shrink-0 text-sm text-[#6B6459] hover:text-[#1E1E1E] disabled:opacity-60">Close</button>
                                     </div>
-                                    <div class="flex shrink-0 items-center gap-2" data-saved-rotate>
+                                    <p class="text-xs leading-relaxed text-[#8C8474]">Rotate, crop, then drag/resize text, logo, or image overlay on the live preview.</p>
+                                    <div class="flex flex-wrap items-center gap-2" data-saved-rotate>
                                         <button type="button" @click="rotateSaved(-90)" :disabled="savedSaving"
                                             data-saved-rotate-left
                                             class="rounded-full border border-[#E0D6C2] bg-white px-3 py-1.5 text-xs font-semibold text-[#1E1E1E] hover:bg-[#FAF6EF] disabled:opacity-60"
@@ -665,16 +666,15 @@
                                             title="Rotate right 90°">
                                             Rotate right ↻
                                         </button>
-                                        <button type="button" @click="closeSavedEditor()" :disabled="savedSaving" class="text-sm text-[#6B6459] hover:text-[#1E1E1E] disabled:opacity-60">Close</button>
                                     </div>
                                 </div>
 
                                 <div class="min-h-0 flex-1 overflow-y-auto">
                                     <div class="grid gap-0 lg:grid-cols-2">
                                         <div class="border-b border-[#EFE7D6] lg:border-b-0 lg:border-r">
-                                            <div class="flex items-center justify-between gap-2 border-b border-[#EFE7D6] bg-[#FAF6EF] px-4 py-2">
+                                            <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-[#EFE7D6] bg-[#FAF6EF] px-4 py-2">
                                                 <p class="text-xs font-medium text-[#6B6459]">Crop</p>
-                                                <p class="text-[11px] text-[#8C8474]">Drag corners to crop · scroll to zoom</p>
+                                                <p class="text-[11px] leading-relaxed text-[#8C8474]">Drag corners to crop · scroll to zoom</p>
                                             </div>
                                             <div class="saved-cropper-wrap relative min-h-[280px] bg-[#2A2A2A]" data-saved-editor>
                                                 <img data-saved-crop-image :src="savedEditorSrc" alt=""

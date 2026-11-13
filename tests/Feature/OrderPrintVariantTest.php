@@ -200,7 +200,8 @@ class OrderPrintVariantTest extends TestCase
         $component
             ->assertSee('Dispatch')
             ->assertSeeHtml('data-order-actions')
-            ->assertSeeHtml('flex-nowrap')
+            ->assertSeeHtml('data-order-icon-actions')
+            ->assertSeeHtml('flex-wrap')
             ->assertSeeHtml('data-order-print-menu')
             ->assertSeeHtml('data-order-action="print"')
             ->assertSeeHtml('data-order-action="repeat"')
@@ -240,5 +241,24 @@ class OrderPrintVariantTest extends TestCase
                 ->assertSee($variant->label())
                 ->assertSeeHtml('data-order-print-variant="'.$variant->value.'"');
         }
+    }
+
+    public function test_dispatched_orders_keep_status_buttons_and_group_icon_actions(): void
+    {
+        $this->actingAs($this->adminUser());
+        $this->order(['status' => 'dispatched']);
+
+        Livewire::test(AdminOrders::class, ['segment' => 'dispatched'])
+            ->assertSee('Delivered')
+            ->assertSee('Partial')
+            ->assertSee('Cancel/Return')
+            ->assertSeeHtml('data-order-status-actions')
+            ->assertSeeHtml('data-order-icon-actions')
+            ->assertSeeHtml('data-order-action="print"')
+            ->assertSeeHtml('data-order-action="repeat"')
+            ->assertSeeHtml('data-order-action="delete"')
+            ->assertDontSeeHtml('>Print</')
+            ->assertDontSeeHtml('>Repeat</')
+            ->assertDontSeeHtml('>Delete</');
     }
 }

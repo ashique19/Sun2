@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AdminCustomerExportController;
 use App\Http\Controllers\Admin\AdminInboxPricedImageController;
 use App\Http\Controllers\Admin\AdminInboxSnapshotController;
 use App\Http\Controllers\Admin\AdminOrderCourierStatusController;
+use App\Http\Controllers\Admin\AdminOrderPrintController;
 use App\Http\Controllers\Admin\AdminOrderSteadfastStatsController;
 use App\Http\Controllers\Admin\AdminProductImageFileController;
 use App\Http\Controllers\ChannelMessageCropSuggestionController;
@@ -235,26 +236,9 @@ Route::middleware(['auth', 'role:admin|dev|moderator'])->prefix('admin')->name('
             ])
             ->header('Cache-Control', 'no-store');
     })->name('orders.print-selected');
-    Route::get('/orders/{order}/print', function (Order $order) {
-        AdminAccess::ensureCanViewOrder($order);
-
-        $slip = OrderPrintSlip::thermalFromOrder($order);
-
-        $slipsUrl = URL::temporarySignedRoute(
-            'print-slips',
-            now()->addMinutes(30),
-            ['ids' => (string) $order->id],
-        );
-        $otgDeepLink = 'sundoritoma://print?slips_url='.rawurlencode($slipsUrl);
-
-        return response()
-            ->view('admin.order-print-label', [
-                'order' => $order,
-                'parcelId' => $slip['parcel_id'],
-                'otgDeepLink' => $otgDeepLink,
-            ])
-            ->header('Cache-Control', 'no-store');
-    })->whereNumber('order')->name('orders.print');
+    Route::get('/orders/{order}/print', AdminOrderPrintController::class)
+        ->whereNumber('order')
+        ->name('orders.print');
     Route::get('/orders/{order}', AdminOrderShow::class)->whereNumber('order')->name('orders.show');
 
     Route::middleware('role:admin|dev')->group(function () {

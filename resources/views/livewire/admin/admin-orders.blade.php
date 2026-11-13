@@ -469,11 +469,7 @@
                                         H/R
                                     </button>
                                 @endif
-                                <a href="{{ route('admin.orders.print', $order) }}" target="_blank"
-                                    title="Print label"
-                                    class="inline-flex h-8 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white px-2.5 text-xs font-semibold text-[#6B6459] hover:bg-[#FAF6EF]">
-                                    Print
-                                </a>
+                                <x-admin.order-print-menu :order="$order" />
                                 <a href="{{ route('admin.orders.create', ['repeat' => $order->id]) }}"
                                     title="Repeat order"
                                     class="inline-flex h-8 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white px-2.5 text-xs font-semibold text-[#6B6459] hover:bg-[#FAF6EF]">

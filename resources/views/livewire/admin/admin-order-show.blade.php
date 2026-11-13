@@ -19,14 +19,7 @@
             </div>
         </div>
         <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-            <a href="{{ route('admin.orders.print', $order) }}" target="_blank"
-                title="Print label"
-                aria-label="Print label"
-                class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white opacity-80 hover:bg-[#FAF6EF] hover:opacity-100">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                    <path fill="#6B6459" d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/>
-                </svg>
-            </a>
+            <x-admin.order-print-menu :order="$order" compact />
             @if ($steadfastUrl = $order->steadfastConsignmentUrl())
                 <a href="{{ $steadfastUrl }}"
                     target="_blank"

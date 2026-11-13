@@ -9,6 +9,25 @@ class OrderPrintSlip
 {
     public const BRAND = 'SUNDORITOMA.COM';
 
+    public static function shippingAddress(Order $order): string
+    {
+        return collect([
+            $order->address,
+            $order->area,
+            $order->city,
+            $order->state,
+        ])->filter(fn ($part) => filled($part))
+            ->unique()
+            ->implode(', ');
+    }
+
+    public static function helpline(): string
+    {
+        $display = trim((string) config('seo.whatsapp_display'));
+
+        return $display !== '' ? 'WhatsApp: '.$display : 'WhatsApp';
+    }
+
     /**
      * Minimal thermal / OTG / browser-print payload.
      *

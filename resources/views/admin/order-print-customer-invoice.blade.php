@@ -121,6 +121,16 @@
             font-weight: 800;
             font-size: 14px;
         }
+        .total-bill {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: 8px;
+            padding-top: 12px;
+            border-top: 2px solid #111;
+            font-size: 18px;
+            font-weight: 800;
+        }
         .footer {
             margin-top: 28px;
             font-size: 12px;
@@ -166,69 +176,70 @@
             @endif
         </div>
 
-        <table class="items">
-            <thead>
-                <tr>
-                    @if ($showPhotos)
-                        <th class="photo-cell"></th>
-                    @endif
-                    <th>Product</th>
-                    <th class="num">Qty</th>
-                    <th class="num">Unit</th>
-                    <th class="num">Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse ($order->items as $item)
-                    @php($photoUrl = $showPhotos ? $item->previewImageUrl() : null)
+        @if ($showPhotos)
+            <table class="items">
+                <thead>
                     <tr>
-                        @if ($showPhotos)
+                        <th class="photo-cell"></th>
+                        <th>Product</th>
+                        <th class="num">Qty</th>
+                        <th class="num">Unit</th>
+                        <th class="num">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($order->items as $item)
+                        @php($photoUrl = $item->previewImageUrl())
+                        <tr>
                             <td class="photo-cell">
                                 @if ($photoUrl)
                                     <img class="photo" data-product-photo src="{{ $photoUrl }}" alt="{{ $item->displayName() }}">
                                 @endif
                             </td>
-                        @endif
-                        <td>{{ $item->displayName() }}</td>
-                        <td class="num">{{ (int) $item->quantity }}</td>
-                        <td class="num">{{ number_format((float) $item->price, 0) }} Tk</td>
-                        <td class="num">{{ number_format((float) $item->line_total, 0) }} Tk</td>
-                    </tr>
-                @empty
-                    <tr>
-                        @if ($showPhotos)
+                            <td>{{ $item->displayName() }}</td>
+                            <td class="num">{{ (int) $item->quantity }}</td>
+                            <td class="num">{{ number_format((float) $item->price, 0) }} Tk</td>
+                            <td class="num">{{ number_format((float) $item->line_total, 0) }} Tk</td>
+                        </tr>
+                    @empty
+                        <tr>
                             <td></td>
-                        @endif
-                        <td colspan="4">No items</td>
-                    </tr>
-                @endforelse
-            </tbody>
-        </table>
+                            <td colspan="4">No items</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
 
-        <div class="totals">
-            <div class="row"><span>Product price</span><span>{{ number_format($totals->subtotal, 0) }} Tk</span></div>
-            @if ($totals->deliveryCharge > 0)
-                <div class="row"><span>+ Delivery</span><span>{{ number_format($totals->deliveryCharge, 0) }} Tk</span></div>
-            @endif
-            @foreach ($order->adjustments->where('type', 'charge') as $adj)
-                <div class="row"><span>+ {{ $adj->label }}</span><span>{{ number_format((float) $adj->amount, 0) }} Tk</span></div>
-            @endforeach
-            @if ($order->adjustments->isEmpty() && (float) $order->charge > 0)
-                <div class="row"><span>+ Other charges</span><span>{{ number_format((float) $order->charge, 0) }} Tk</span></div>
-            @endif
-            @foreach ($order->adjustments->whereIn('type', ['discount', 'coupon']) as $adj)
-                <div class="row"><span>− {{ $adj->label }}</span><span>{{ number_format((float) $adj->amount, 0) }} Tk</span></div>
-            @endforeach
-            @if ($order->adjustments->isEmpty() && (float) $order->discount > 0)
-                <div class="row"><span>− Discounts</span><span>{{ number_format((float) $order->discount, 0) }} Tk</span></div>
-            @endif
-            <div class="row"><span>Bill to customer</span><span>{{ number_format($totals->billToCustomer, 0) }} Tk</span></div>
-            @php($recognizedPaid = $order->trustedPaidAmount())
-            @if ($recognizedPaid > 0)
-                <div class="row"><span>Paid</span><span>{{ number_format($recognizedPaid, 0) }} Tk</span></div>
-            @endif
-            <div class="row grand"><span>Amount to collect</span><span>{{ number_format($order->collectableAmount(), 0) }} Tk</span></div>
-        </div>
+            <div class="totals">
+                <div class="row"><span>Product price</span><span>{{ number_format($totals->subtotal, 0) }} Tk</span></div>
+                @if ($totals->deliveryCharge > 0)
+                    <div class="row"><span>+ Delivery</span><span>{{ number_format($totals->deliveryCharge, 0) }} Tk</span></div>
+                @endif
+                @foreach ($order->adjustments->where('type', 'charge') as $adj)
+                    <div class="row"><span>+ {{ $adj->label }}</span><span>{{ number_format((float) $adj->amount, 0) }} Tk</span></div>
+                @endforeach
+                @if ($order->adjustments->isEmpty() && (float) $order->charge > 0)
+                    <div class="row"><span>+ Other charges</span><span>{{ number_format((float) $order->charge, 0) }} Tk</span></div>
+                @endif
+                @foreach ($order->adjustments->whereIn('type', ['discount', 'coupon']) as $adj)
+                    <div class="row"><span>− {{ $adj->label }}</span><span>{{ number_format((float) $adj->amount, 0) }} Tk</span></div>
+                @endforeach
+                @if ($order->adjustments->isEmpty() && (float) $order->discount > 0)
+                    <div class="row"><span>− Discounts</span><span>{{ number_format((float) $order->discount, 0) }} Tk</span></div>
+                @endif
+                <div class="row"><span>Bill to customer</span><span>{{ number_format($totals->billToCustomer, 0) }} Tk</span></div>
+                @php($recognizedPaid = $order->trustedPaidAmount())
+                @if ($recognizedPaid > 0)
+                    <div class="row"><span>Paid</span><span>{{ number_format($recognizedPaid, 0) }} Tk</span></div>
+                @endif
+                <div class="row grand"><span>Amount to collect</span><span>{{ number_format($order->collectableAmount(), 0) }} Tk</span></div>
+            </div>
+        @else
+            <div class="total-bill" data-total-bill>
+                <span>Total Bill</span>
+                <span>{{ number_format($order->collectableAmount(), 0) }} Tk</span>
+            </div>
+        @endif
 
         <div class="footer">{{ $helpline }}</div>
     </div>

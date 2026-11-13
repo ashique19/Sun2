@@ -161,7 +161,7 @@ class OrderPrintVariantTest extends TestCase
             ->assertDontSee('TOTAL DUE', false);
     }
 
-    public function test_customer_minimal_invoice_omits_product_photos(): void
+    public function test_customer_minimal_invoice_shows_only_total_bill(): void
     {
         $this->actingAs($this->adminUser());
         $order = $this->orderWithPrimaryPhoto();
@@ -172,8 +172,16 @@ class OrderPrintVariantTest extends TestCase
         ]))
             ->assertOk()
             ->assertSee('Invoice', false)
-            ->assertSee('Gold Necklace', false)
+            ->assertSee('data-total-bill', false)
+            ->assertSee('Total Bill', false)
             ->assertSee('3,200 Tk', false)
+            ->assertSee('Alyssa Russo', false)
+            ->assertDontSee('Gold Necklace', false)
+            ->assertDontSee('Product price', false)
+            ->assertDontSee('+ Delivery', false)
+            ->assertDontSee('Bill to customer', false)
+            ->assertDontSee('Amount to collect', false)
+            ->assertDontSee('Qty', false)
             ->assertDontSee('data-product-photo', false)
             ->assertDontSee('gold-necklace.jpg', false)
             ->assertDontSee('old-snap.jpg', false)

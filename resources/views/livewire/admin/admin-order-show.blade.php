@@ -19,7 +19,7 @@
             </div>
         </div>
         <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-            <x-admin.order-print-menu :order="$order" compact />
+            <x-admin.order-print-menu :order="$order" />
             @if ($steadfastUrl = $order->steadfastConsignmentUrl())
                 <a href="{{ $steadfastUrl }}"
                     target="_blank"

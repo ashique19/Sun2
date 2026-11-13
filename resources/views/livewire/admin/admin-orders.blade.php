@@ -368,7 +368,7 @@
                                 />
                             @endif
 
-                            <div class="flex flex-wrap items-center gap-2 border-t border-[#EFE7D6] pt-3">
+                            <div class="flex flex-nowrap items-center gap-1.5 overflow-visible border-t border-[#EFE7D6] pt-3" data-order-actions>
                                 @if ($segment === 'draft-ai')
                                     <button type="button"
                                         wire:click="confirmDraft({{ $order->id }})"
@@ -403,7 +403,7 @@
                                         wire:loading.attr="disabled"
                                         wire:target="quickDispatch({{ $order->id }})"
                                         title="Dispatch via default courier"
-                                        class="inline-flex h-8 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white px-2.5 text-xs font-semibold text-[#1E1E1E] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60">
+                                        class="inline-flex h-8 shrink-0 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white px-2.5 text-xs font-semibold text-[#1E1E1E] hover:border-[#C9A227] hover:text-[#C9A227] disabled:opacity-60">
                                         <span wire:loading.remove wire:target="quickDispatch({{ $order->id }})">Dispatch</span>
                                         <span wire:loading wire:target="quickDispatch({{ $order->id }})">…</span>
                                     </button>
@@ -469,18 +469,26 @@
                                         H/R
                                     </button>
                                 @endif
-                                <x-admin.order-print-menu :order="$order" />
+                                <x-admin.order-print-menu :order="$order" compact />
                                 <a href="{{ route('admin.orders.create', ['repeat' => $order->id]) }}"
                                     title="Repeat order"
-                                    class="inline-flex h-8 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white px-2.5 text-xs font-semibold text-[#6B6459] hover:bg-[#FAF6EF]">
-                                    Repeat
+                                    aria-label="Repeat order"
+                                    data-order-action="repeat"
+                                    class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#E0D6C2] bg-white text-[#6B6459] hover:bg-[#FAF6EF]">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                                        <path fill="currentColor" d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                                    </svg>
                                 </a>
                                 <button type="button"
                                     wire:click="deleteOrder({{ $order->id }})"
                                     wire:confirm="Delete order #{{ $order->order_number }} and restore product stock?"
                                     title="Delete order"
-                                    class="inline-flex h-8 items-center justify-center rounded-lg border border-rose-200 bg-white px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
-                                    Delete
+                                    aria-label="Delete order"
+                                    data-order-action="delete"
+                                    class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-700 hover:bg-rose-50">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                    </svg>
                                 </button>
                                 @endif
                             </div>

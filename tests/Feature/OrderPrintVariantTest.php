@@ -197,7 +197,21 @@ class OrderPrintVariantTest extends TestCase
 
         $component = Livewire::test(AdminOrders::class, ['segment' => 'new']);
 
-        $component->assertSeeHtml('data-order-print-menu');
+        $component
+            ->assertSee('Dispatch')
+            ->assertSeeHtml('data-order-actions')
+            ->assertSeeHtml('flex-nowrap')
+            ->assertSeeHtml('data-order-print-menu')
+            ->assertSeeHtml('data-order-action="print"')
+            ->assertSeeHtml('data-order-action="repeat"')
+            ->assertSeeHtml('data-order-action="delete"')
+            ->assertSeeHtml('aria-label="Print"')
+            ->assertSeeHtml('aria-label="Repeat order"')
+            ->assertSeeHtml('aria-label="Delete order"')
+            ->assertSeeHtml('position:fixed')
+            ->assertDontSeeHtml('>Print</')
+            ->assertDontSeeHtml('>Repeat</')
+            ->assertDontSeeHtml('>Delete</');
 
         foreach (OrderPrintVariant::cases() as $variant) {
             $component

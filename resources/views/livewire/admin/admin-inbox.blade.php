@@ -658,7 +658,6 @@
                     class="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div
                     data-inbox-thread-header
-                    x-on:pointerdown="document.querySelector('[data-inbox-reply-text]')?.blur()"
                     class="shrink-0 border-b border-[#E7DFCF] bg-white px-3 pb-2.5 pt-[env(safe-area-inset-top,0px)] backdrop-blur max-xl:pt-[max(0.375rem,env(safe-area-inset-top,0px))] max-xl:pr-[max(0.75rem,env(safe-area-inset-right))] xl:bg-white/95 xl:px-4 xl:py-3">
                     <div class="flex min-w-0 max-w-full items-center gap-1 xl:gap-2">
                         <button type="button"
@@ -882,7 +881,6 @@
                     data-inbox-thread-scroller
                     wire:loading.class="opacity-70"
                     wire:target="selectConversation,loadOlderThreadHistory"
-                    x-on:pointerdown="document.querySelector('[data-inbox-reply-text]')?.blur()"
                     x-data="{
                         stick: true,
                         threshold: 96,
@@ -1500,6 +1498,20 @@
                                 </span>
                             </div>
                         </div>
+                        <div
+                            data-inbox-failed-send
+                            hidden
+                            aria-hidden="true"
+                            class="flex w-full justify-end"
+                        >
+                            <div class="inbox-failed-send-bubble">
+                                <p data-inbox-failed-send-message class="text-left text-sm leading-relaxed">Couldn't send</p>
+                                <div class="mt-1.5 flex items-center gap-3 text-[11px] font-semibold">
+                                    <button type="button" data-inbox-failed-send-retry class="underline decoration-white/50 underline-offset-2">Retry</button>
+                                    <button type="button" data-inbox-failed-send-dismiss class="text-white/80">Remove</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     @if ($this->isSendingInOpenThread())
@@ -1516,6 +1528,31 @@
                                     </div>
                                 @endif
                                 <p class="mt-1 text-[10px] font-medium text-white/80">Sending…</p>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if ($this->isFailedInOpenThread())
+                        <div class="flex w-full justify-end" wire:key="failed-outbound" data-inbox-failed-outbound>
+                            <div class="max-w-[82%] rounded-2xl rounded-br-md bg-[#C9A227]/70 px-3 py-2 text-sm text-white shadow-sm sm:max-w-[70%]">
+                                @if (filled($failedReplyText))
+                                    <p class="whitespace-pre-wrap break-words leading-relaxed">{{ $failedReplyText }}</p>
+                                @endif
+                                @if ($failedReplyImages !== [])
+                                    <div class="mt-2 flex flex-wrap gap-1.5">
+                                        @foreach ($failedReplyImages as $failedImage)
+                                            <img src="{{ $failedImage->temporaryUrl() }}" alt="" class="max-h-32 max-w-[7.5rem] rounded-xl object-cover">
+                                        @endforeach
+                                    </div>
+                                @endif
+                                <p class="mt-1 text-[10px] font-medium text-white/90">Couldn't send</p>
+                                @if (filled($failedOutboundError))
+                                    <p class="mt-0.5 text-[10px] text-white/70">{{ $failedOutboundError }}</p>
+                                @endif
+                                <div class="mt-1.5 flex items-center gap-3 text-[11px] font-semibold">
+                                    <button type="button" wire:click="retryFailedOutbound" class="underline decoration-white/50 underline-offset-2">Retry</button>
+                                    <button type="button" wire:click="dismissFailedOutbound" class="text-white/80">Remove</button>
+                                </div>
                             </div>
                         </div>
                     @endif

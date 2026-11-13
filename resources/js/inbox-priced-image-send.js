@@ -1,5 +1,5 @@
 import { csrfToken, livewireFor } from './inbox-dom.js';
-import { beginInboxPendingSend, endInboxPendingSend } from './inbox-pending-send.js';
+import { beginInboxPendingSend, endInboxPendingSend, failInboxPendingSend } from './inbox-pending-send.js';
 
 /**
  * Inbox P.img clicks are queued here, outside Livewire.
@@ -148,6 +148,7 @@ const drain = async () => {
             try {
                 await postSend(job);
                 setState(job.key, 'sent');
+                endInboxPendingSend(job.conversationId);
                 scheduleRefresh(wireFor(job.wireId), job.conversationId);
                 setTimeout(() => {
                     if (states.get(job.key)?.status === 'sent') {
@@ -159,9 +160,15 @@ const drain = async () => {
                     ? 'Timed out sending priced image.'
                     : (error?.message || 'Failed to send priced image.');
                 setState(job.key, 'error', message);
+                failInboxPendingSend(job.conversationId, message, () => {
+                    inflightKeys.add(job.key);
+                    queue.unshift(job);
+                    setState(job.key, 'queued');
+                    beginInboxPendingSend(job.conversationId);
+                    drain();
+                });
             } finally {
                 inflightKeys.delete(job.key);
-                endInboxPendingSend(job.conversationId);
             }
         }
     } finally {

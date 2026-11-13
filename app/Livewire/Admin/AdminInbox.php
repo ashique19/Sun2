@@ -96,6 +96,24 @@ class AdminInbox extends Component
     /** Conversation the in-flight composer send belongs to. */
     public ?int $pendingOutboundConversationId = null;
 
+    /**
+     * Last composer Graph send that failed, kept in-thread until Retry or Remove.
+     */
+    public string $failedReplyText = '';
+
+    /**
+     * @var array<int, TemporaryUploadedFile>
+     */
+    public array $failedReplyImages = [];
+
+    public ?int $failedReplyToMessageId = null;
+
+    public bool $outboundFailed = false;
+
+    public ?int $failedOutboundConversationId = null;
+
+    public ?string $failedOutboundError = null;
+
     public ?string $error = null;
 
     public ?string $statusMessage = null;
@@ -1399,7 +1417,6 @@ class AdminInbox extends Component
             $conversation,
             $replies,
             $this->albumSentStatus((int) ($result['sent'] ?? 0)),
-            closePicker: true,
         );
     }
 
@@ -1424,7 +1441,7 @@ class AdminInbox extends Component
 
         [$conversation, $product, $replyTo] = $context;
         $result = $productReplies->sendPrice($conversation, $product, $replyTo);
-        $this->finishProductReply($result, $conversation, $replies, 'Price reply sent.', closePicker: true);
+        $this->finishProductReply($result, $conversation, $replies, 'Price reply sent.');
     }
 
     public function sendReply(): void
@@ -1603,15 +1620,49 @@ class AdminInbox extends Component
 
     private function failPendingOutbound(string $error): void
     {
-        if ($this->isSendingInOpenThread()) {
-            $this->replyText = $this->pendingReplyText;
-            $this->replyImages = array_values($this->pendingReplyImages);
-            $this->replyToMessageId = $this->pendingReplyToMessageId;
-        }
+        $this->failedReplyText = $this->pendingReplyText;
+        $this->failedReplyImages = array_values($this->pendingReplyImages);
+        $this->failedReplyToMessageId = $this->pendingReplyToMessageId;
+        $this->failedOutboundConversationId = $this->pendingOutboundConversationId;
+        $this->failedOutboundError = $error;
+        $this->outboundFailed = true;
         $this->clearPendingOutbound();
-        $this->error = $error;
+        $this->error = null;
         $this->statusMessage = null;
-        $this->keepComposerFocused();
+    }
+
+    public function retryFailedOutbound(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->outboundFailed || $this->failedOutboundConversationId === null) {
+            return;
+        }
+
+        if ($this->outboundSending) {
+            $this->error = 'Still sending a reply in another conversation.';
+
+            return;
+        }
+
+        $this->pendingReplyText = $this->failedReplyText;
+        $this->pendingReplyImages = array_values($this->failedReplyImages);
+        $this->pendingReplyToMessageId = $this->failedReplyToMessageId;
+        $this->pendingOutboundConversationId = $this->failedOutboundConversationId;
+        $this->outboundSending = true;
+        $this->clearFailedOutbound();
+        $this->dispatchPendingOutboundFlush();
+    }
+
+    public function dismissFailedOutbound(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->isFailedInOpenThread()) {
+            return;
+        }
+
+        $this->clearFailedOutbound();
     }
 
     private function keepComposerFocused(): void
@@ -1635,11 +1686,28 @@ class AdminInbox extends Component
         $this->outboundSending = false;
     }
 
+    private function clearFailedOutbound(): void
+    {
+        $this->failedReplyText = '';
+        $this->failedReplyImages = [];
+        $this->failedReplyToMessageId = null;
+        $this->failedOutboundConversationId = null;
+        $this->failedOutboundError = null;
+        $this->outboundFailed = false;
+    }
+
     public function isSendingInOpenThread(): bool
     {
         return $this->outboundSending
             && $this->pendingOutboundConversationId !== null
             && (int) $this->pendingOutboundConversationId === (int) $this->selectedConversationId;
+    }
+
+    public function isFailedInOpenThread(): bool
+    {
+        return $this->outboundFailed
+            && $this->failedOutboundConversationId !== null
+            && (int) $this->failedOutboundConversationId === (int) $this->selectedConversationId;
     }
 
     public function syncFromFacebook(MessengerConversationSyncService $sync): void

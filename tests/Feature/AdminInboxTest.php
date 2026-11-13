@@ -131,12 +131,15 @@ class AdminInboxTest extends TestCase
             ->call('selectConversation', $conversation->id)
             ->assertSeeHtml('data-inbox-pending-dots-host')
             ->assertSeeHtml('data-inbox-pending-dots')
+            ->assertSeeHtml('data-inbox-failed-send')
+            ->assertSeeHtml('data-inbox-failed-send-retry')
             ->assertSeeHtml('aria-label="Sending"')
             ->assertSeeHtml('inbox-pending-dots-bubble');
 
         $css = file_get_contents(resource_path('css/app.css'));
         $this->assertIsString($css);
         $this->assertStringContainsString('[data-inbox-pending-dots]', $css);
+        $this->assertStringContainsString('[data-inbox-failed-send]', $css);
         $this->assertStringContainsString('@keyframes inbox-pending-dot', $css);
 
         $pending = file_get_contents(resource_path('js/inbox-pending-send.js'));
@@ -150,6 +153,7 @@ class AdminInboxTest extends TestCase
         $priced = file_get_contents(resource_path('js/inbox-priced-image-send.js'));
         $this->assertStringContainsString('beginInboxPendingSend', $priced);
         $this->assertStringContainsString('endInboxPendingSend', $priced);
+        $this->assertStringContainsString('failInboxPendingSend', $priced);
 
         $boot = file_get_contents(resource_path('js/inbox-image-match.js'));
         $this->assertStringContainsString("import './inbox-pending-send.js'", $boot);
@@ -275,7 +279,7 @@ class AdminInboxTest extends TestCase
         $replies->shouldReceive('lastMarkSeenError')->zeroOrMoreTimes()->andReturn(null);
         $this->app->instance(ChannelReplyService::class, $replies);
 
-        Livewire::test(AdminInbox::class)
+        $component = Livewire::test(AdminInbox::class)
             ->call('selectConversation', $first->id)
             ->set('pendingReplyText', 'On the way')
             ->set('pendingOutboundConversationId', $first->id)
@@ -287,7 +291,18 @@ class AdminInboxTest extends TestCase
             ->assertSet('outboundSending', false)
             ->assertSet('pendingOutboundConversationId', null)
             ->assertDontSeeHtml('data-inbox-pending-outbound')
-            ->assertDontSee('On the way');
+            ->assertDontSeeHtml('data-inbox-failed-outbound')
+            ->assertDontSee('On the way')
+            ->assertSet('outboundFailed', true)
+            ->assertSet('failedOutboundConversationId', $first->id)
+            ->assertSet('failedReplyText', 'On the way');
+
+        $component
+            ->call('selectConversation', $first->id)
+            ->assertSeeHtml('data-inbox-failed-outbound')
+            ->assertSee('On the way')
+            ->assertSeeHtml('wire:click="retryFailedOutbound"')
+            ->assertSeeHtml('wire:click="dismissFailedOutbound"');
     }
 
     #[Test]
@@ -605,7 +620,7 @@ class AdminInboxTest extends TestCase
         $this->assertSame(1, substr_count($html, 'Reply sent.'));
         $this->assertDoesNotMatchRegularExpression('/data-inbox-reply-text[^>]*\sdisabled/', $html);
         $this->assertStringContainsString('x-on:pointerdown.prevent', $html);
-        $this->assertStringContainsString("document.querySelector('[data-inbox-reply-text]')?.blur()", $html);
+        $this->assertStringNotContainsString("document.querySelector('[data-inbox-reply-text]')?.blur()", $html);
 
         $component
             ->call('dismissStatusMessage')
@@ -1026,7 +1041,7 @@ class AdminInboxTest extends TestCase
     }
 
     #[Test]
-    public function failed_background_send_restores_composer(): void
+    public function failed_background_send_stays_in_the_thread(): void
     {
         $this->actingAs($this->adminUser());
         $conversation = $this->conversation();
@@ -1055,10 +1070,106 @@ class AdminInboxTest extends TestCase
             ->set('selectedConversationId', $conversation->id)
             ->set('replyText', 'Should come back')
             ->call('sendReply')
-            ->assertSet('replyText', 'Should come back')
+            ->assertSet('replyText', '')
             ->assertSet('outboundSending', false)
+            ->assertSet('outboundFailed', true)
+            ->assertSet('failedReplyText', 'Should come back')
+            ->assertSet('failedOutboundConversationId', $conversation->id)
+            ->assertSet('failedOutboundError', 'Messenger Send API error (400): boom')
             ->assertSet('statusMessage', null)
-            ->assertSet('error', 'Messenger Send API error (400): boom');
+            ->assertSet('error', null)
+            ->assertSeeHtml('data-inbox-failed-outbound')
+            ->assertSeeHtml('wire:click="retryFailedOutbound"')
+            ->assertSeeHtml('wire:click="dismissFailedOutbound"')
+            ->assertSee('Should come back');
+    }
+
+    #[Test]
+    public function retrying_a_failed_send_resends_the_original_reply(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Hello',
+            'sent_at' => now(),
+        ]);
+
+        $replies = Mockery::mock(ChannelReplyService::class);
+        $replies->shouldReceive('sendText')
+            ->twice()
+            ->withArgs(fn ($convo, $text) => (int) $convo->id === (int) $conversation->id && $text === 'Please retry')
+            ->andReturn(
+                [
+                    'ok' => false,
+                    'message' => null,
+                    'error' => 'Messenger Send API error (400): boom',
+                    'outside_window' => false,
+                ],
+                [
+                    'ok' => true,
+                    'message' => null,
+                    'error' => null,
+                    'outside_window' => false,
+                ],
+            );
+        $replies->shouldReceive('markSeen')->zeroOrMoreTimes();
+        $replies->shouldReceive('lastMarkSeenError')->zeroOrMoreTimes()->andReturn(null);
+        $this->app->instance(ChannelReplyService::class, $replies);
+
+        Livewire::test(AdminInbox::class)
+            ->set('selectedConversationId', $conversation->id)
+            ->set('replyText', 'Please retry')
+            ->call('sendReply')
+            ->assertSet('outboundFailed', true)
+            ->assertSeeHtml('data-inbox-failed-outbound')
+            ->call('retryFailedOutbound')
+            ->assertSet('outboundFailed', false)
+            ->assertSet('outboundSending', false)
+            ->assertSet('failedReplyText', '')
+            ->assertSet('statusMessage', 'Reply sent.')
+            ->assertDontSeeHtml('data-inbox-failed-outbound');
+    }
+
+    #[Test]
+    public function dismissing_a_failed_send_removes_the_thread_bubble(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Hello',
+            'sent_at' => now(),
+        ]);
+
+        $replies = Mockery::mock(ChannelReplyService::class);
+        $replies->shouldReceive('sendText')
+            ->once()
+            ->andReturn([
+                'ok' => false,
+                'message' => null,
+                'error' => 'Messenger Send API error (400): boom',
+                'outside_window' => false,
+            ]);
+        $replies->shouldReceive('markSeen')->zeroOrMoreTimes();
+        $replies->shouldReceive('lastMarkSeenError')->zeroOrMoreTimes()->andReturn(null);
+        $this->app->instance(ChannelReplyService::class, $replies);
+
+        Livewire::test(AdminInbox::class)
+            ->set('selectedConversationId', $conversation->id)
+            ->set('replyText', 'Drop this')
+            ->call('sendReply')
+            ->assertSet('outboundFailed', true)
+            ->call('dismissFailedOutbound')
+            ->assertSet('outboundFailed', false)
+            ->assertSet('failedReplyText', '')
+            ->assertSet('failedOutboundConversationId', null)
+            ->assertDontSeeHtml('data-inbox-failed-outbound')
+            ->assertDontSee('Drop this');
     }
 
     #[Test]

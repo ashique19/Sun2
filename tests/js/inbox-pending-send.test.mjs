@@ -61,3 +61,88 @@ test('dots for another conversation do not paint on the open thread', () => {
     pending.begin(2);
     assert.equal(host.hidden, false);
 });
+
+test('failed send stays visible until retry or dismiss', () => {
+    const host = fakeHost();
+    const failed = fakeHost();
+    const message = { textContent: '' };
+    const pending = createInboxPendingSend({
+        conversationId: () => 4,
+        host: () => host,
+        failedHost: () => failed,
+        failedMessage: () => message,
+        scroller: () => ({ scrollTop: 0, scrollHeight: 80 }),
+    });
+
+    pending.begin(4);
+    assert.equal(host.hidden, false);
+    assert.equal(failed.hidden, true);
+
+    let retried = 0;
+    pending.fail(4, 'Graph boom', () => {
+        retried += 1;
+        pending.begin(4);
+    });
+
+    assert.equal(host.hidden, true);
+    assert.equal(failed.hidden, false);
+    assert.equal(failed.attrs['aria-hidden'], 'false');
+    assert.equal(message.textContent, 'Graph boom');
+    assert.equal(pending.failedFor(4)?.error, 'Graph boom');
+
+    pending.retry(4);
+    assert.equal(retried, 1);
+    assert.equal(host.hidden, false);
+    assert.equal(failed.hidden, true);
+    assert.equal(pending.failedFor(4), null);
+
+    pending.fail(4, 'boom again');
+    pending.dismiss(4);
+    assert.equal(failed.hidden, true);
+    assert.equal(pending.failedFor(4), null);
+});
+
+test('failed send retry and dismiss buttons fire from the host', () => {
+    const listeners = {};
+    const host = fakeHost();
+    const failed = fakeHost();
+    const message = { textContent: '' };
+    const root = {
+        addEventListener(type, fn, capture) {
+            listeners[type] = { fn, capture };
+        },
+    };
+    const pending = createInboxPendingSend({
+        conversationId: () => 3,
+        host: () => host,
+        failedHost: () => failed,
+        failedMessage: () => message,
+        scroller: () => ({ scrollTop: 0, scrollHeight: 10 }),
+    });
+
+    pending.install(root);
+    pending.begin(3);
+    let retried = 0;
+    pending.fail(3, 'nope', () => {
+        retried += 1;
+    });
+
+    listeners.click.fn({
+        preventDefault() {},
+        target: {
+            closest: (sel) => (sel === '[data-inbox-failed-send-retry]' ? failed : null),
+        },
+    });
+    assert.equal(retried, 1);
+    assert.equal(failed.hidden, true);
+
+    pending.fail(3, 'nope again');
+    listeners.click.fn({
+        preventDefault() {},
+        target: {
+            closest: (sel) => (sel === '[data-inbox-failed-send-dismiss]' ? failed : null),
+        },
+    });
+    assert.equal(pending.failedFor(3), null);
+    assert.equal(failed.hidden, true);
+});

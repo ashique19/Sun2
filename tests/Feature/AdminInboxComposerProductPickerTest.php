@@ -200,6 +200,7 @@ class AdminInboxComposerProductPickerTest extends TestCase
             ->call('openComposerProductPicker')
             ->call('sendProductPickerPrice', $product->id)
             ->assertHasNoErrors()
+            ->assertSet('composerProductPickerOpen', true)
             ->assertSet('statusMessage', 'Price reply sent.');
 
         $outbound = ChannelMessage::query()
@@ -250,6 +251,7 @@ class AdminInboxComposerProductPickerTest extends TestCase
             ->call('openComposerProductPicker')
             ->call('sendProductPickerAlbumImages', $product->id)
             ->assertHasNoErrors()
+            ->assertSet('composerProductPickerOpen', true)
             ->assertSet('statusMessage', 'Sent 2 product images.');
 
         $this->assertSame(2, ChannelMessage::query()

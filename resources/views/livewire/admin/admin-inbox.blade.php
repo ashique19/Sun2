@@ -268,15 +268,17 @@
     >
         <div class="flex items-center justify-between gap-3 xl:items-end">
             <div class="min-w-0">
-                <h1 class="font-serif text-2xl font-semibold xl:text-3xl">Inbox</h1>
-                <p class="mt-0.5 hidden text-sm text-[#8C8474] xl:block">
-                    Messenger conversations in one place.
-                    @if ($realtimeEnabled)
-                        Live updates when Reverb is running; Graph backfill every {{ $graphPollSeconds }}s.
-                    @else
-                        Syncs from Facebook every {{ $graphPollSeconds }}s while this page is open.
-                    @endif
-                </p>
+                <div data-inbox-title-row class="min-w-0 xl:flex xl:items-baseline xl:gap-3 xl:text-3xl">
+                    <h1 class="font-serif text-2xl font-semibold xl:text-[1em] xl:leading-none">Inbox</h1>
+                    <p class="mt-0.5 hidden min-w-0 text-sm text-[#8C8474] xl:mt-0 xl:block xl:truncate xl:font-sans xl:text-[0.5em] xl:font-normal xl:leading-none">
+                        Messenger conversations in one place.
+                        @if ($realtimeEnabled)
+                            Live updates when Reverb is running; Graph backfill every {{ $graphPollSeconds }}s.
+                        @else
+                            Syncs from Facebook every {{ $graphPollSeconds }}s while this page is open.
+                        @endif
+                    </p>
+                </div>
                 <p
                     class="mt-0.5 text-[11px] tabular-nums text-[#8C8474] xl:mt-1"
                     wire:key="auto-sync-countdown-{{ $graphPollSeconds }}"

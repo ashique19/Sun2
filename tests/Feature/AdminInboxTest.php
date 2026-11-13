@@ -432,12 +432,17 @@ class AdminInboxTest extends TestCase
         $this->assertNotFalse($listPos);
         $this->assertLessThan($listPos, $headerPos, 'Inbox / Auto sync header must render before the conversation list.');
         $this->assertStringContainsString('Auto sync in', $html);
+        $this->assertStringContainsString('data-inbox-title-row', $html);
+        $this->assertStringContainsString('xl:flex xl:items-baseline', $html);
+        $this->assertStringContainsString('xl:text-[0.5em]', $html);
+        $this->assertStringContainsString('Messenger conversations in one place.', $html);
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->assertSet('mobileThreadOpen', true)
             ->assertSeeHtml('data-inbox-page-header')
-            ->assertSeeHtml('hidden xl:flex');
+            ->assertSeeHtml('hidden xl:flex')
+            ->assertSeeHtml('data-inbox-title-row');
 
         $css = file_get_contents(resource_path('css/app.css'));
         $this->assertIsString($css);

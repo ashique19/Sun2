@@ -782,27 +782,15 @@ body:has(.mobile-nav-toggle:checked) {
 }
 
 @media (width >= 80rem) {
-    .inbox-mobile-filters,
-    .inbox-mobile-filters.is-open {
+    .inbox-mobile-filters {
         display: flex;
-        position: static;
         left: auto;
-        right: auto;
-        top: auto;
-        z-index: auto;
-        width: auto;
+        right: 0;
+        width: max-content;
+        max-width: 100%;
         flex-wrap: wrap;
         align-items: center;
         justify-content: flex-end;
         gap: 0.5rem;
-        border-radius: 0;
-        border: 0;
-        background: transparent;
-        padding: 0;
-        box-shadow: none;
-        opacity: 1;
-        pointer-events: auto;
-        transform: none;
-        transition: none;
     }
 }

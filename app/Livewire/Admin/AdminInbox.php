@@ -125,8 +125,7 @@ class AdminInbox extends Component
     public bool $mobileThreadOpen = false;
 
     /**
-     * Filter selects stay collapsed behind a toggle on small screens.
-     * Desktop (xl+) always shows them inline.
+     * Filter selects stay collapsed behind a toggle until opened.
      */
     public bool $mobileFiltersOpen = false;
 

@@ -268,17 +268,7 @@
     >
         <div class="flex items-center justify-between gap-3 xl:items-end">
             <div class="min-w-0">
-                <div data-inbox-title-row class="min-w-0 xl:flex xl:items-baseline xl:gap-3 xl:text-3xl">
-                    <h1 class="font-serif text-2xl font-semibold xl:text-[1em] xl:leading-none">Inbox</h1>
-                    <p class="mt-0.5 hidden min-w-0 text-sm text-[#8C8474] xl:mt-0 xl:block xl:truncate xl:font-sans xl:text-[0.5em] xl:font-normal xl:leading-none">
-                        Messenger conversations in one place.
-                        @if ($realtimeEnabled)
-                            Live updates when Reverb is running; Graph backfill every {{ $graphPollSeconds }}s.
-                        @else
-                            Syncs from Facebook every {{ $graphPollSeconds }}s while this page is open.
-                        @endif
-                    </p>
-                </div>
+                <h1 class="font-serif text-2xl font-semibold xl:text-3xl">Inbox</h1>
                 <p
                     class="mt-0.5 text-[11px] tabular-nums text-[#8C8474] xl:mt-1"
                     wire:key="auto-sync-countdown-{{ $graphPollSeconds }}"
@@ -342,19 +332,21 @@
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5 xl:hidden" aria-hidden="true">
                             <path fill-rule="evenodd" d="M10 3c-4.31 0-8 3.033-8 7 0 2.024.978 3.825 2.499 5.085a3.478 3.478 0 0 1-.522 1.756.75.75 0 0 0 .584 1.143 5.976 5.976 0 0 0 3.936-1.108c.542.142 1.112.22 1.703.22 4.31 0 8-3.033 8-7s-3.69-7-8-7Zm0 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm-2-1a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm5 1a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" />
                         </svg>
-                        <span class="hidden xl:inline">Quick replies</span>
+                        <span class="hidden xl:inline">Q-Reply</span>
                     </a>
 
                     {{-- Valid token: icon beside Filters. Invalid: teleports to #inbox-fb-token-banner. --}}
                     <livewire:admin.admin-facebook-token-gate />
 
                     <button type="button"
+                        data-inbox-filter-toggle
                         x-on:click="filtersOpen = ! filtersOpen; $wire.set('mobileFiltersOpen', filtersOpen)"
                         aria-expanded="{{ $mobileFiltersOpen ? 'true' : 'false' }}"
                         x-bind:aria-expanded="filtersOpen.toString()"
                         aria-label="Filters"
                         title="Filters"
-                        class="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] xl:hidden">
+                        class="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E0D6C2] bg-white text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227]"
+                        x-bind:class="{ 'border-[#C9A227] text-[#C9A227]': filtersOpen }">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
                             <path fill-rule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 0 1 .628.74v2.288a2.25 2.25 0 0 1-.659 1.59l-4.682 4.683a2.25 2.25 0 0 0-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 0 1 8 18.25v-5.757a2.25 2.25 0 0 0-.659-1.591L2.659 6.22A2.25 2.25 0 0 1 2 4.629V2.34a.75.75 0 0 1 .628-.74Z" clip-rule="evenodd" />
                         </svg>
@@ -391,7 +383,7 @@
             </select>
             @if ($activeFilterCount > 0)
                 <button type="button" wire:click="clearFilters"
-                    class="col-span-2 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-3 py-2 text-xs font-semibold text-[#6B6459] xl:hidden">
+                    class="col-span-2 rounded-full border border-[#E0D6C2] bg-[#FAF6EF] px-3 py-2 text-xs font-semibold text-[#6B6459] xl:col-span-1">
                     Clear filters
                 </button>
             @endif

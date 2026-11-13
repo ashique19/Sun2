@@ -131,7 +131,7 @@ class InboxBroadcastAuthTest extends TestCase
         Livewire::test(AdminInbox::class)
             ->assertSeeHtml('wire:poll.60s.visible="pollSyncFromFacebook"')
             ->assertSeeHtml('data-inbox-realtime="1"')
-            ->assertSee('Live updates when Reverb is running');
+            ->assertDontSee('Live updates when Reverb is running');
     }
 
     #[Test]
@@ -147,6 +147,6 @@ class InboxBroadcastAuthTest extends TestCase
         Livewire::test(AdminInbox::class)
             ->assertSeeHtml('wire:poll.10s.visible="pollSyncFromFacebook"')
             ->assertSeeHtml('data-inbox-realtime="0"')
-            ->assertSee('Syncs from Facebook every 10s');
+            ->assertDontSee('Syncs from Facebook every 10s');
     }
 }

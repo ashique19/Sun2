@@ -77,8 +77,13 @@ class AdminInboxTest extends TestCase
         $html = Livewire::test(AdminInbox::class)
             ->assertSet('mobileThreadOpen', false)
             ->assertSeeHtml('aria-label="Filters"')
-            ->assertSeeHtml('aria-label="Sync Messenger"')
+            ->assertSeeHtml('aria-label="Sync"')
+            ->assertSeeHtml('>Sync</span>')
+            ->assertDontSeeHtml('>Sync Messenger</span>')
             ->assertSeeHtml('aria-label="Quick replies"')
+            ->assertSeeHtml('>Q-Reply</span>')
+            ->assertDontSeeHtml('>Quick replies</span>')
+            ->assertSeeHtml('data-inbox-filter-toggle')
             ->assertSeeHtml('id="inbox-fb-token-banner"')
             ->assertSeeHtml('aria-label="Facebook token"')
             ->html();
@@ -432,17 +437,14 @@ class AdminInboxTest extends TestCase
         $this->assertNotFalse($listPos);
         $this->assertLessThan($listPos, $headerPos, 'Inbox / Auto sync header must render before the conversation list.');
         $this->assertStringContainsString('Auto sync in', $html);
-        $this->assertStringContainsString('data-inbox-title-row', $html);
-        $this->assertStringContainsString('xl:flex xl:items-baseline', $html);
-        $this->assertStringContainsString('xl:text-[0.5em]', $html);
-        $this->assertStringContainsString('Messenger conversations in one place.', $html);
+        $this->assertStringNotContainsString('Messenger conversations in one place.', $html);
+        $this->assertStringNotContainsString('Syncs from Facebook every', $html);
 
         Livewire::test(AdminInbox::class)
             ->call('selectConversation', $conversation->id)
             ->assertSet('mobileThreadOpen', true)
             ->assertSeeHtml('data-inbox-page-header')
-            ->assertSeeHtml('hidden xl:flex')
-            ->assertSeeHtml('data-inbox-title-row');
+            ->assertSeeHtml('hidden xl:flex');
 
         $css = file_get_contents(resource_path('css/app.css'));
         $this->assertIsString($css);
@@ -545,9 +547,22 @@ class AdminInboxTest extends TestCase
             ->assertSet('mobileFiltersOpen', false)
             ->assertSeeHtml('data-inbox-filters')
             ->assertSeeHtml('inbox-mobile-filters')
+            ->assertSeeHtml('data-inbox-filter-toggle')
             ->assertSeeHtml('filtersOpen')
             ->assertSeeHtml('aria-expanded="false"')
             ->assertDontSeeHtml('class="inbox-mobile-filters is-open"');
+
+        $toggleHtml = $closed->html();
+        $togglePos = strpos($toggleHtml, 'data-inbox-filter-toggle');
+        $this->assertNotFalse($togglePos);
+        $toggleTag = substr($toggleHtml, $togglePos, 700);
+        $this->assertStringNotContainsString('xl:hidden', $toggleTag);
+
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertIsString($css);
+        $this->assertStringContainsString('.inbox-mobile-filters {', $css);
+        $this->assertStringContainsString('.inbox-mobile-filters.is-open {', $css);
+        $this->assertStringNotContainsString('.inbox-mobile-filters.is-open {', substr($css, (int) strpos($css, '@media (width >= 80rem)')));
 
         $closed->call('toggleMobileFilters')
             ->assertSet('mobileFiltersOpen', true)

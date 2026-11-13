@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Livewire\Admin\AdminOrders;
 use App\Livewire\Admin\AdminOrderShow;
+use App\Models\Courier;
 use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\Product;
@@ -90,6 +91,16 @@ class OrderPrintVariantTest extends TestCase
         return $order->fresh(['items.product.images', 'adjustments']);
     }
 
+    private function steadfast(): Courier
+    {
+        return Courier::query()->create([
+            'name' => 'Steadfast',
+            'slug' => 'steadfast',
+            'is_active' => true,
+            'is_default' => true,
+        ]);
+    }
+
     public function test_courier_detailed_shows_address_helpline_and_collectable_due(): void
     {
         $this->actingAs($this->adminUser());
@@ -158,7 +169,10 @@ class OrderPrintVariantTest extends TestCase
             ->assertSee('Qty', false)
             ->assertSee('WhatsApp: 01880001255', false)
             ->assertDontSee('print-otg-app', false)
-            ->assertDontSee('TOTAL DUE', false);
+            ->assertDontSee('TOTAL DUE', false)
+            ->assertDontSee('data-invoice-status', false)
+            ->assertDontSee('data-invoice-courier', false)
+            ->assertDontSee('https://steadfast.com.bd/t/', false);
     }
 
     public function test_customer_minimal_invoice_shows_only_total_bill(): void
@@ -185,7 +199,56 @@ class OrderPrintVariantTest extends TestCase
             ->assertDontSee('data-product-photo', false)
             ->assertDontSee('gold-necklace.jpg', false)
             ->assertDontSee('old-snap.jpg', false)
-            ->assertDontSee('<img', false);
+            ->assertDontSee('<img', false)
+            ->assertDontSee('data-invoice-status', false)
+            ->assertDontSee('data-invoice-courier', false)
+            ->assertDontSee('https://steadfast.com.bd/t/', false);
+    }
+
+    public function test_post_dispatch_customer_invoices_show_status_and_courier_tracking_link(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $order = $this->orderWithPrimaryPhoto();
+        $order->update([
+            'status' => 'dispatched',
+            'courier_id' => $this->steadfast()->id,
+            'courier_tracker' => 'SFR261111ST8309B7ABD',
+            'courier_consignment_id' => '270697676',
+            'dispatch_date' => now(),
+        ]);
+
+        foreach ([
+            OrderPrintVariant::CustomerDetailed,
+            OrderPrintVariant::CustomerMinimal,
+        ] as $variant) {
+            $this->get(route('admin.orders.print', [
+                'order' => $order,
+                'variant' => $variant->value,
+            ]))
+                ->assertOk()
+                ->assertSee('Order #26765', false)
+                ->assertSee('data-invoice-status', false)
+                ->assertSee('Dispatched', false)
+                ->assertSee('data-invoice-courier', false)
+                ->assertSee('Steadfast -', false)
+                ->assertSee('https://steadfast.com.bd/t/270697676', false)
+                ->assertSee('href="https://steadfast.com.bd/t/270697676"', false)
+                ->assertDontSee('steadfast.com.bd/user/consignment/', false);
+        }
+    }
+
+    public function test_customer_courier_tracking_url_uses_public_steadfast_page(): void
+    {
+        $order = $this->order([
+            'status' => 'dispatched',
+            'courier_id' => $this->steadfast()->id,
+            'courier_tracker' => 'SFR261111ST8309B7ABD',
+            'courier_consignment_id' => '270697676',
+        ]);
+
+        $this->assertTrue($order->isPostDispatch());
+        $this->assertSame('https://steadfast.com.bd/t/270697676', $order->customerCourierTrackingUrl());
     }
 
     public function test_unknown_print_variant_is_not_found(): void

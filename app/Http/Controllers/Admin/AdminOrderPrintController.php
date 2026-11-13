@@ -22,7 +22,7 @@ class AdminOrderPrintController extends Controller
 
         abort_if($variant === null, 404);
 
-        $order->loadMissing(['items.product.images', 'adjustments']);
+        $order->loadMissing(['items.product.images', 'adjustments', 'courier']);
 
         $data = [
             'order' => $order,

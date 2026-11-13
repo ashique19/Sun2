@@ -60,6 +60,8 @@
             line-height: 1.45;
         }
         .meta strong { font-weight: 700; }
+        .invoice-courier { word-break: break-all; }
+        .invoice-courier a { color: inherit; }
         h2 {
             font-size: 11px;
             font-weight: 700;
@@ -153,7 +155,26 @@
 
         <div class="meta">
             <div>
-                <div><strong>Order #{{ $order->order_number }}</strong></div>
+                <div>
+                    <strong>Order #{{ $order->order_number }}</strong>
+                    @if ($order->isPostDispatch())
+                        <span data-invoice-status>{{ ucfirst($order->status) }}</span>
+                    @endif
+                </div>
+                @if ($order->isPostDispatch())
+                    @php($trackUrl = $order->customerCourierTrackingUrl())
+                    @php($trackLabel = $trackUrl ?? $order->courier_tracker ?? $parcelId)
+                    @if (filled($order->courier?->name) && filled($trackLabel))
+                        <div class="invoice-courier" data-invoice-courier>
+                            {{ $order->courier->name }} -
+                            @if ($trackUrl)
+                                <a href="{{ $trackUrl }}">{{ $trackUrl }}</a>
+                            @else
+                                {{ $trackLabel }}
+                            @endif
+                        </div>
+                    @endif
+                @endif
                 @if (filled($parcelId))
                     <div>Parcel ID {{ $parcelId }}</div>
                 @endif

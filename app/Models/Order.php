@@ -35,6 +35,9 @@ class Order extends Model
     public const CUSTOMER_TRACKING_STATUSES = ['dispatched', 'delivered', 'returned'];
 
     /** @var list<string> */
+    public const POST_DISPATCH_STATUSES = ['dispatched', 'delivered', 'returned', 'cancelled'];
+
+    /** @var list<string> */
     public const PLACED_VIA_OPTIONS = [
         self::PLACED_VIA_STOREFRONT,
         self::PLACED_VIA_ADMIN,
@@ -558,6 +561,33 @@ class Order extends Model
         }
 
         return 'https://steadfast.com.bd/user/consignment/'.$parcelId;
+    }
+
+    public function isPostDispatch(): bool
+    {
+        return in_array($this->status, self::POST_DISPATCH_STATUSES, true);
+    }
+
+    /**
+     * Public courier tracking page for customer invoices (not the merchant panel).
+     */
+    public function customerCourierTrackingUrl(): ?string
+    {
+        $this->loadMissing('courier');
+
+        $tracker = filled($this->courier_tracker) ? (string) $this->courier_tracker : null;
+        $code = $this->printParcelId() ?: $tracker;
+
+        if ($code === null || $code === '') {
+            return null;
+        }
+
+        return match ($this->courier?->slug) {
+            'pathao' => 'https://merchant.pathao.com/tracking?consignment='.rawurlencode($tracker ?? $code),
+            'redx' => 'https://redx.com.bd/track/?trackingId='.rawurlencode($tracker ?? $code),
+            'carrybee' => null,
+            default => 'https://steadfast.com.bd/t/'.$code,
+        };
     }
 
     /**

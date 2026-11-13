@@ -133,6 +133,8 @@ class AdminInboxAutoPricedImageMatchTest extends TestCase
             ->assertSeeHtml('href="'.route('admin.products.show', $product).'"')
             ->assertSeeHtml('aria-label="Open product details for '.$product->name.'"')
             ->assertSeeHtml('wire:click="sendMatchedProductPriceReply('.$inbound->id.')"')
+            ->assertSeeHtml('data-inbox-instant-send="price"')
+            ->assertSeeHtml('data-inbox-instant-send="album"')
             ->assertSeeHtml('data-inbox-priced-image-send')
             ->assertSeeHtml('data-reply-to-message-id="'.$inbound->id.'"')
             ->assertSeeHtml('wire:click="sendMatchedProductAlbumImages('.$inbound->id.')"')

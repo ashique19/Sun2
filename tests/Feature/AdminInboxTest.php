@@ -122,6 +122,40 @@ class AdminInboxTest extends TestCase
     }
 
     #[Test]
+    public function conversation_has_an_instant_sending_dots_placeholder(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSeeHtml('data-inbox-pending-dots-host')
+            ->assertSeeHtml('data-inbox-pending-dots')
+            ->assertSeeHtml('aria-label="Sending"')
+            ->assertSeeHtml('inbox-pending-dots-bubble');
+
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertIsString($css);
+        $this->assertStringContainsString('[data-inbox-pending-dots]', $css);
+        $this->assertStringContainsString('@keyframes inbox-pending-dot', $css);
+
+        $pending = file_get_contents(resource_path('js/inbox-pending-send.js'));
+        $this->assertIsString($pending);
+        $this->assertStringContainsString('data-inbox-instant-send', $pending);
+        $this->assertStringContainsString('sendMatchedProductPriceReply', $pending);
+        $this->assertStringContainsString('sendMatchedProductAlbumImages', $pending);
+        $this->assertStringContainsString('sendProductPickerPrice', $pending);
+        $this->assertStringContainsString('sendProductPickerAlbumImages', $pending);
+
+        $priced = file_get_contents(resource_path('js/inbox-priced-image-send.js'));
+        $this->assertStringContainsString('beginInboxPendingSend', $priced);
+        $this->assertStringContainsString('endInboxPendingSend', $priced);
+
+        $boot = file_get_contents(resource_path('js/inbox-image-match.js'));
+        $this->assertStringContainsString("import './inbox-pending-send.js'", $boot);
+    }
+
+    #[Test]
     public function pending_outbound_stays_on_the_conversation_that_sent(): void
     {
         $this->actingAs($this->adminUser());
@@ -396,6 +430,7 @@ class AdminInboxTest extends TestCase
         $this->assertStringContainsString('transform: translate3d(100%, 0, 0)', $css);
         $this->assertStringContainsString('[data-inbox-cache-thread].is-hiding', $css);
         $this->assertStringContainsString('[data-inbox-pending-outbound]', $css);
+        $this->assertStringContainsString('[data-inbox-pending-dots]', $css);
         $this->assertStringContainsString('data-inbox-pending-id', $css);
         $headerRulePos = strpos($css, 'body:not([data-inbox-mobile-thread="1"]) [data-inbox-page-header]');
         $listRulePos = strpos($css, 'body:not([data-inbox-mobile-thread="1"]) [data-inbox-conversation-list]');

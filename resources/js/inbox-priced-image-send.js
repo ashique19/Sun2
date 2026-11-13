@@ -1,4 +1,5 @@
 import { csrfToken, livewireFor } from './inbox-dom.js';
+import { beginInboxPendingSend, endInboxPendingSend } from './inbox-pending-send.js';
 
 /**
  * Inbox P.img clicks are queued here, outside Livewire.
@@ -160,6 +161,7 @@ const drain = async () => {
                 setState(job.key, 'error', message);
             } finally {
                 inflightKeys.delete(job.key);
+                endInboxPendingSend(job.conversationId);
             }
         }
     } finally {
@@ -229,6 +231,7 @@ const enqueueFromButton = (button) => {
     inflightKeys.add(job.key);
     queue.push(job);
     setState(job.key, 'queued');
+    beginInboxPendingSend(job.conversationId);
     drain();
 };
 
@@ -294,6 +297,7 @@ const enqueueAllFromButton = (button) => {
             wireId: wireId || null,
         });
         setState(key, 'queued');
+        beginInboxPendingSend(conversationId);
         queued += 1;
     });
 

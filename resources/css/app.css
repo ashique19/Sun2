@@ -362,6 +362,59 @@ body:has(.mobile-nav-toggle:checked) {
     animation: inbox-pending-in 0.16s ease-out;
 }
 
+[data-inbox-pending-dots] {
+    animation: inbox-pending-in 0.12s ease-out;
+}
+
+.inbox-pending-dots-bubble {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.25rem;
+    border-radius: 1.25rem 1.25rem 0.35rem 1.25rem;
+    background: #c9a227;
+    color: #fff;
+    padding: 0.7rem 0.9rem;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+}
+
+.inbox-pending-dots {
+    display: flex;
+    align-items: center;
+    gap: 0.28rem;
+    height: 0.7rem;
+}
+
+.inbox-pending-dots span {
+    display: block;
+    width: 0.38rem;
+    height: 0.38rem;
+    border-radius: 9999px;
+    background: currentColor;
+    opacity: 0.35;
+    animation: inbox-pending-dot 1.05s infinite ease-in-out;
+}
+
+.inbox-pending-dots span:nth-child(2) {
+    animation-delay: 0.15s;
+}
+
+.inbox-pending-dots span:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+@keyframes inbox-pending-dot {
+    0%, 80%, 100% {
+        opacity: 0.3;
+        transform: translateY(0);
+    }
+
+    40% {
+        opacity: 1;
+        transform: translateY(-2px);
+    }
+}
+
 [data-inbox-quick-reply-match] {
     box-shadow: 0 0 0 2px #059669;
 }
@@ -403,8 +456,14 @@ body:has(.mobile-nav-toggle:checked) {
         transition: none;
     }
 
-    [data-inbox-pending-outbound] {
+    [data-inbox-pending-outbound],
+    [data-inbox-pending-dots] {
         animation: none;
+    }
+
+    .inbox-pending-dots span {
+        animation: none;
+        opacity: 0.7;
     }
 }
 

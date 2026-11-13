@@ -1190,6 +1190,7 @@
                                                     @endif
                                                 </a>
                                                 <button type="button"
+                                                    data-inbox-instant-send="price"
                                                     wire:click="sendMatchedProductPriceReply({{ $messageRow->id }})"
                                                     wire:loading.attr="disabled"
                                                     wire:target="sendMatchedProductPriceReply({{ $messageRow->id }})"
@@ -1213,6 +1214,7 @@
                                                     <span data-inbox-priced-image-label>P.img</span>
                                                 </button>
                                                 <button type="button"
+                                                    data-inbox-instant-send="album"
                                                     wire:click="sendMatchedProductAlbumImages({{ $messageRow->id }})"
                                                     wire:loading.attr="disabled"
                                                     wire:target="sendMatchedProductAlbumImages({{ $messageRow->id }})"
@@ -1474,6 +1476,23 @@
                             </div>
                         </div>
                     @endforeach
+
+                    <div wire:ignore data-inbox-pending-dots-host>
+                        <div
+                            data-inbox-pending-dots
+                            hidden
+                            aria-hidden="true"
+                            aria-live="polite"
+                            aria-label="Sending"
+                            class="flex w-full justify-end"
+                        >
+                            <div class="inbox-pending-dots-bubble">
+                                <span class="inbox-pending-dots" aria-hidden="true">
+                                    <span></span><span></span><span></span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
 
                     @if ($this->isSendingInOpenThread())
                         <div class="flex w-full justify-end" wire:key="pending-outbound" data-inbox-pending-outbound>
@@ -2113,6 +2132,7 @@
                                             </p>
                                             <div class="mt-1.5 flex flex-wrap gap-2">
                                                 <button type="button"
+                                                    data-inbox-instant-send="album"
                                                     wire:click="sendProductPickerAlbumImages({{ $row['id'] }})"
                                                     wire:loading.attr="disabled"
                                                     title="Send all catalog images"
@@ -2127,6 +2147,7 @@
                                                     Link
                                                 </button>
                                                 <button type="button"
+                                                    data-inbox-instant-send="price"
                                                     wire:click="sendProductPickerPrice({{ $row['id'] }})"
                                                     wire:loading.attr="disabled"
                                                     title="Send price as text"

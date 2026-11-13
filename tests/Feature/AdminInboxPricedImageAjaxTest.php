@@ -267,5 +267,8 @@ class AdminInboxPricedImageAjaxTest extends TestCase
         $this->assertStringContainsString("addEventListener('click', onClick, true)", $source);
         $this->assertStringContainsString('refreshFromRealtime', $source);
         $this->assertStringContainsString("import './inbox-priced-image-send.js'", $boot);
+        $this->assertStringContainsString("import './inbox-pending-send.js'", $boot);
+        $this->assertStringContainsString('beginInboxPendingSend', $source);
+        $this->assertStringContainsString('endInboxPendingSend', $source);
     }
 }

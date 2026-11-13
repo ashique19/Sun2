@@ -927,13 +927,21 @@
                             id="inbox-msg-{{ $messageRow->id }}"
                             data-inbox-msg
                             data-inbox-msg-id="{{ $messageRow->id }}"
+                            data-inbox-swipe-reply
+                            @if ($isOutbound) data-inbox-msg-outbound @endif
                             @class([
-                            'flex w-full target:[&>div]:ring-2 target:[&>div]:ring-[#C9A227] target:[&>div]:ring-offset-2',
+                            'relative flex w-full target:[&>div]:ring-2 target:[&>div]:ring-[#C9A227] target:[&>div]:ring-offset-2',
                             'justify-end' => $isOutbound,
                             'justify-start' => ! $isOutbound,
                         ])>
+                            <span data-inbox-swipe-reply-icon aria-hidden="true">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5">
+                                    <path fill-rule="evenodd" d="M7.793 2.232a.75.75 0 0 1-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 0 1 0 10.75H10.75a.75.75 0 0 1 0-1.5h2.875a3.875 3.875 0 0 0 0-7.75H3.622l4.146 3.957a.75.75 0 0 1-1.036 1.085l-5.5-5.25a.75.75 0 0 1 0-1.085l5.5-5.25a.75.75 0 0 1 1.06.025Z" clip-rule="evenodd" />
+                                </svg>
+                            </span>
                             <div
                                 wire:key="inbox-msg-bubble-{{ $messageRow->id }}"
+                                data-inbox-msg-bubble
                                 x-data="{
                                     menu: false,
                                     longPressTimer: null,

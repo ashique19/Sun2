@@ -1140,6 +1140,53 @@ class AdminInboxTest extends TestCase
     }
 
     #[Test]
+    public function conversation_messages_are_swipeable_to_reply(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        $inbound = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Can I swipe this?',
+            'sent_at' => now()->subMinutes(2),
+        ]);
+
+        $outbound = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_OUTBOUND,
+            'body' => 'Yes, like Messenger',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSeeHtml('data-inbox-swipe-reply')
+            ->assertSeeHtml('data-inbox-swipe-reply-icon')
+            ->assertSeeHtml('data-inbox-msg-bubble')
+            ->assertSeeHtml('data-inbox-msg-id="'.$inbound->id.'"')
+            ->assertSeeHtml('data-inbox-msg-id="'.$outbound->id.'"')
+            ->assertSeeHtml('data-inbox-msg-outbound')
+            ->call('setReplyTo', $inbound->id)
+            ->assertSet('replyToMessageId', $inbound->id)
+            ->assertSee('Replying to')
+            ->assertSee('Can I swipe this?')
+            ->call('clearReplyTo')
+            ->assertSet('replyToMessageId', null);
+
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertIsString($css);
+        $this->assertStringContainsString('[data-inbox-swipe-reply]', $css);
+        $this->assertStringContainsString('touch-action: pan-y', $css);
+
+        $swipe = file_get_contents(resource_path('js/inbox-swipe-reply.js'));
+        $this->assertIsString($swipe);
+        $this->assertStringContainsString("call('setReplyTo'", $swipe);
+        $this->assertStringContainsString('data-inbox-swipe-reply', $swipe);
+        $this->assertStringContainsString('[data-inbox-reply-text]', $swipe);
+    }
+
+    #[Test]
     public function it_can_reply_to_an_inbound_album_image_message_using_the_real_webhook_mid(): void
     {
         config([

@@ -3,6 +3,7 @@ import { installInboxThreadHistory } from './inbox-thread-history.js';
 import './inbox-pending-send.js';
 import './inbox-priced-image-send.js';
 import './inbox-snapshot-cache.js';
+import './inbox-swipe-reply.js';
 
 globalThis.installInboxThreadHistory = installInboxThreadHistory;
 globalThis.inboxScrollToMessage = inboxScrollToMessage;

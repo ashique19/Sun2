@@ -348,6 +348,23 @@ body:has(.mobile-nav-toggle:checked) {
     }
 }
 
+/* Desktop: the thread is the second grid column, not a viewport sheet.
+   Tailwind `fixed` + `xl:static` left the pane `position:static`, so the
+   cache / “Opening conversation…” overlays (`absolute inset-0`) escaped to
+   the viewport during a switch, then snapped back when they hid. */
+@media (min-width: 1280px) {
+    [data-inbox-mobile-thread-sheet] {
+        position: relative;
+        inset: auto;
+        width: auto;
+        max-height: none;
+        transform: none;
+        pointer-events: auto;
+        will-change: auto;
+        z-index: auto;
+    }
+}
+
 [data-inbox-cache-thread] {
     opacity: 1;
     transition: opacity 0.16s ease;

@@ -620,7 +620,7 @@
             data-inbox-mobile-thread-sheet
             @class([
             'flex min-h-0 flex-col overflow-hidden',
-            'fixed z-30 xl:static xl:inset-auto xl:z-auto xl:h-full xl:max-h-full xl:min-h-0 xl:rounded-2xl xl:border xl:border-[#EFE7D6] xl:bg-white',
+            'fixed z-30 xl:relative xl:inset-auto xl:z-auto xl:h-full xl:max-h-full xl:min-h-0 xl:rounded-2xl xl:border xl:border-[#EFE7D6] xl:bg-white',
             $mobileThreadOpen
                 ? 'inset-0 flex bg-white'
                 : 'inset-x-0 bottom-0 hidden bg-[#F7F3EA] xl:flex xl:bg-white',

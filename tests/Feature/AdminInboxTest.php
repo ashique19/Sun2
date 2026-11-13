@@ -98,6 +98,7 @@ class AdminInboxTest extends TestCase
             ->assertSeeHtml('data-inbox-live-thread-id="'.$conversation->id.'"')
             ->assertSeeHtml('data-inbox-thread-scroller')
             ->assertSeeHtml('fixed z-30')
+            ->assertSeeHtml('xl:relative')
             ->assertSeeHtml('inset-0 flex')
             ->assertSeeHtml('aria-label="Send"')
             ->call('closeMobileThread')
@@ -466,6 +467,8 @@ class AdminInboxTest extends TestCase
             ->assertSeeHtml('data-inbox-conversation-list')
             ->assertSeeHtml('data-inbox-mobile-thread-sheet')
             ->assertSeeHtml('fixed z-30')
+            ->assertSeeHtml('xl:relative')
+            ->assertDontSeeHtml('xl:static')
             ->assertDontSeeHtml('relative flex min-h-0 flex-col overflow-hidden')
             ->html();
 
@@ -473,6 +476,7 @@ class AdminInboxTest extends TestCase
         $this->assertNotFalse($sheetPos);
         $sheetTag = substr($html, $sheetPos, 500);
         $this->assertStringContainsString('fixed z-30', $sheetTag);
+        $this->assertStringContainsString('xl:relative', $sheetTag);
         $this->assertStringNotContainsString(' relative ', $sheetTag);
 
         $css = file_get_contents(resource_path('css/app.css'));
@@ -486,6 +490,19 @@ class AdminInboxTest extends TestCase
         $this->assertLessThan($sheetRulePos + 400, $fixedPos, 'Mobile sheet rule must pin position:fixed before later rules.');
         $this->assertStringContainsString('[data-inbox-panes]', $css);
         $this->assertStringContainsString('[data-inbox-panes] > [data-inbox-conversation-list]', $css);
+
+        $desktopMediaPos = strpos($css, '@media (min-width: 1280px)');
+        $this->assertNotFalse($desktopMediaPos);
+        $this->assertGreaterThan($mediaPos, $desktopMediaPos);
+        $desktopSheetPos = strpos($css, '[data-inbox-mobile-thread-sheet]', $desktopMediaPos);
+        $this->assertNotFalse($desktopSheetPos);
+        $relativePos = strpos($css, 'position: relative;', $desktopSheetPos);
+        $this->assertNotFalse($relativePos);
+        $this->assertLessThan($desktopSheetPos + 400, $relativePos, 'Desktop sheet must be a containing block so switch overlays stay in the thread column.');
+        $this->assertStringContainsString('data-inbox-opening-overlay', $html);
+        $this->assertStringContainsString('data-inbox-cache-thread', $html);
+        $this->assertStringContainsString('absolute inset-0 z-10', $html);
+        $this->assertStringContainsString('absolute inset-0 z-20', $html);
     }
 
     #[Test]

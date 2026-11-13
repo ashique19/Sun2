@@ -270,4 +270,43 @@ class AdminInboxOrderMappingTest extends TestCase
             ->call('insertQuickReply', 1)
             ->assertSet('replyText', 'Thanks, goodbye');
     }
+
+    #[Test]
+    public function order_map_menu_stacks_above_later_messages(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => '01716668456',
+            'sent_at' => now()->subMinutes(2),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Please check this',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        $html = Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSeeHtml('data-inbox-map-menu')
+            ->assertSeeHtml('is-inbox-map-open')
+            ->html();
+
+        $this->assertStringContainsString('mapMenuOpen()', $html);
+
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertIsString($css);
+        $this->assertStringContainsString('[data-inbox-msg]:has([data-inbox-msg-bubble].is-inbox-map-open)', $css);
+        $this->assertStringContainsString('[data-inbox-msg]:has([data-inbox-quick-reply-tag-menu])', $css);
+        $this->assertStringContainsString('[data-inbox-msg-bubble].is-inbox-map-open', $css);
+        $this->assertStringContainsString('[data-inbox-swipe-reply].is-swipe-reply [data-inbox-msg-bubble]', $css);
+        $this->assertDoesNotMatchRegularExpression(
+            '/^\s*\[data-inbox-msg-bubble\]\s*\{[^}]*will-change:\s*transform/m',
+            $css,
+        );
+    }
 }

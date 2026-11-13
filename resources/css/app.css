@@ -460,7 +460,19 @@ body:has(.mobile-nav-toggle:checked) {
 
 [data-inbox-msg-bubble] {
     touch-action: pan-y;
+}
+
+[data-inbox-swipe-reply].is-swipe-reply [data-inbox-msg-bubble] {
     will-change: transform;
+}
+
+[data-inbox-msg]:has([data-inbox-msg-bubble].is-inbox-map-open),
+[data-inbox-msg]:has([data-inbox-quick-reply-tag-menu]) {
+    z-index: 40;
+}
+
+[data-inbox-msg-bubble].is-inbox-map-open {
+    z-index: 40;
 }
 
 [data-inbox-swipe-reply-icon] {

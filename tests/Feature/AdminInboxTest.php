@@ -1289,6 +1289,8 @@ class AdminInboxTest extends TestCase
         $this->assertIsString($css);
         $this->assertStringContainsString('[data-inbox-swipe-reply]', $css);
         $this->assertStringContainsString('touch-action: pan-y', $css);
+        $this->assertStringContainsString('[data-inbox-swipe-reply].is-swipe-reply [data-inbox-msg-bubble]', $css);
+        $this->assertStringContainsString('[data-inbox-msg]:has([data-inbox-msg-bubble].is-inbox-map-open)', $css);
 
         $swipe = file_get_contents(resource_path('js/inbox-swipe-reply.js'));
         $this->assertIsString($swipe);

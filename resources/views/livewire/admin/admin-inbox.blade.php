@@ -1042,6 +1042,7 @@
                                     'ring-1 ring-[#EBE3D4]' => ! $isOutbound && ! $quickReplyMatch,
                                     'ring-2 ring-emerald-600' => ! $isOutbound && $quickReplyMatch,
                                 ])
+                                :class="{ 'is-inbox-map-open': mapMenuOpen() }"
                                 @if (! $isOutbound && $quickReplyMatch)
                                     data-inbox-quick-reply-match="{{ $quickReplyMatch['id'] }}"
                                     data-inbox-quick-reply-via="{{ $quickReplyMatch['via'] }}"
@@ -1431,10 +1432,11 @@
 
                                 @if ($isOutbound || ! $messageRow->isImageAttachment())
                                     <div
+                                        data-inbox-map-menu
                                         x-show="mapMenuOpen()"
                                         x-cloak
                                         @click.stop
-                                        class="absolute left-0 right-0 top-full z-20 mt-1 min-w-[11rem] rounded-xl border border-[#E7DFCF] bg-white p-1.5 text-left text-[#1E1E1E] shadow-lg"
+                                        class="absolute left-0 right-0 top-full z-30 mt-1 min-w-[11rem] rounded-xl border border-[#E7DFCF] bg-white p-1.5 text-left text-[#1E1E1E] shadow-lg"
                                     >
                                         <p class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#8C8474]">
                                             Add to order fields

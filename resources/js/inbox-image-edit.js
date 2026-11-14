@@ -2,12 +2,13 @@ import Cropper from 'cropperjs';
 import 'cropperjs/dist/cropper.css';
 
 const registerInboxImageEdit = () => {
-    Alpine.data('inboxImageEdit', (imageUrl, wireId = null) => ({
+    Alpine.data('inboxImageEdit', (imageUrl, wireId = null, mode = 'send') => ({
         cropper: null,
         busy: false,
         error: null,
         imageUrl,
         wireId,
+        mode,
         overlayText: '',
         overlayTextSize: 48,
         overlayTextPosition: 'bottom-left',
@@ -264,7 +265,8 @@ const registerInboxImageEdit = () => {
                     );
                 });
 
-                await component.call('sendEditedImageReply');
+                const action = this.mode === 'composer' ? 'applyEditedComposerImage' : 'sendEditedImageReply';
+                await component.call(action);
             } catch (e) {
                 this.error = e?.message || 'Could not send edited image.';
             } finally {

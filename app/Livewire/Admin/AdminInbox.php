@@ -202,6 +202,12 @@ class AdminInbox extends Component
     /** Inbound image message currently open in the edit-and-send modal. */
     public ?int $imageEditMessageId = null;
 
+    /** Composer attachment currently open in the edit-before-send modal. */
+    public ?int $composerImageEditIndex = null;
+
+    /** Skip auto-opening the composer editor after applying an edit. */
+    public bool $suppressComposerImageEditAutoOpen = false;
+
     /** Edited JPEG uploaded from the inbox image editor before send. */
     public $editedReplyImage = null;
 
@@ -210,6 +216,9 @@ class AdminInbox extends Component
 
     /** Composer "+P" product picker (search + send images/link/price/priced image). */
     public bool $composerProductPickerOpen = false;
+
+    /** Recent-order invoice open in the conversation-header preview modal. */
+    public ?int $customerInvoicePreviewOrderId = null;
 
     public string $pricedSendSearch = '';
 
@@ -875,6 +884,37 @@ class AdminInbox extends Component
         $this->error = null;
     }
 
+    public function openCustomerInvoicePreview(int $orderId): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
+
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+        if (! $conversation) {
+            return;
+        }
+
+        $order = app(InboxRecentOrders::class)->findForConversation($conversation, $orderId);
+        if (! $order) {
+            $this->error = 'That order is not in this conversation’s last 7 days.';
+
+            return;
+        }
+
+        $this->customerInvoicePreviewOrderId = $order->id;
+    }
+
+    public function closeCustomerInvoicePreview(): void
+    {
+        $this->customerInvoicePreviewOrderId = null;
+    }
+
     public function confirmConversationDraft(ChannelOrderDraftService $drafts): void
     {
         AdminAccess::ensureStaffAdmin();
@@ -1040,7 +1080,10 @@ class AdminInbox extends Component
 
     public function clearReplyImages(): void
     {
+        $this->suppressComposerImageEditAutoOpen = true;
         $this->replyImages = [];
+        $this->suppressComposerImageEditAutoOpen = false;
+        $this->closeComposerImageEdit();
     }
 
     public function removeReplyImage(int $index): void
@@ -1049,8 +1092,89 @@ class AdminInbox extends Component
             return;
         }
 
+        if ($this->composerImageEditIndex === $index) {
+            $this->closeComposerImageEdit();
+        } elseif ($this->composerImageEditIndex !== null && $this->composerImageEditIndex > $index) {
+            $this->composerImageEditIndex--;
+        }
+
         unset($this->replyImages[$index]);
+        $this->suppressComposerImageEditAutoOpen = true;
         $this->replyImages = array_values($this->replyImages);
+        $this->suppressComposerImageEditAutoOpen = false;
+    }
+
+    public function updatedReplyImages(): void
+    {
+        if ($this->suppressComposerImageEditAutoOpen) {
+            return;
+        }
+
+        if ($this->replyImages === []) {
+            $this->closeComposerImageEdit();
+
+            return;
+        }
+
+        if ($this->composerImageEditIndex !== null
+            && array_key_exists($this->composerImageEditIndex, $this->replyImages)) {
+            return;
+        }
+
+        for ($index = count($this->replyImages) - 1; $index >= 0; $index--) {
+            if ($this->isEditableComposerImage($this->replyImages[$index] ?? null)) {
+                $this->openComposerImageEdit($index);
+
+                return;
+            }
+        }
+    }
+
+    public function openComposerImageEdit(int $index): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->isEditableComposerImage($this->replyImages[$index] ?? null)) {
+            return;
+        }
+
+        $this->error = null;
+        $this->statusMessage = null;
+        $this->imageEditMessageId = null;
+        $this->editedReplyImage = null;
+        $this->composerImageEditIndex = $index;
+    }
+
+    public function closeComposerImageEdit(): void
+    {
+        $this->composerImageEditIndex = null;
+        $this->editedReplyImage = null;
+    }
+
+    public function applyEditedComposerImage(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
+
+        $index = $this->composerImageEditIndex;
+        if ($index === null || ! array_key_exists($index, $this->replyImages)) {
+            $this->closeComposerImageEdit();
+
+            return;
+        }
+
+        $this->validate([
+            'editedReplyImage' => ['required', 'image', 'max:5120'],
+        ]);
+
+        $images = $this->replyImages;
+        $images[$index] = $this->editedReplyImage;
+        $this->suppressComposerImageEditAutoOpen = true;
+        $this->replyImages = array_values($images);
+        $this->suppressComposerImageEditAutoOpen = false;
+        $this->closeComposerImageEdit();
     }
 
     public function reportReplyImageUploadError(?string $message = null): void
@@ -1075,6 +1199,7 @@ class AdminInbox extends Component
 
         $this->ensureConversationSelected((int) $message->channel_conversation_id);
         $this->closePricedImageSend();
+        $this->closeComposerImageEdit();
         $this->editedReplyImage = null;
         $this->imageEditMessageId = $message->id;
     }
@@ -1082,7 +1207,7 @@ class AdminInbox extends Component
     public function closeImageEdit(): void
     {
         $this->imageEditMessageId = null;
-        $this->editedReplyImage = null;
+        $this->closeComposerImageEdit();
     }
 
     public function sendEditedImageReply(ChannelReplyService $replies): void
@@ -1952,6 +2077,7 @@ class AdminInbox extends Component
         $this->resetOrderMapping();
         $this->resetImageTools();
         $this->resetThreadHistory();
+        $this->closeCustomerInvoicePreview();
         $this->error = null;
         $this->statusMessage = null;
     }
@@ -1960,7 +2086,10 @@ class AdminInbox extends Component
     {
         $this->replyText = '';
         $this->replyToMessageId = null;
+        $this->suppressComposerImageEditAutoOpen = true;
         $this->replyImages = [];
+        $this->suppressComposerImageEditAutoOpen = false;
+        $this->closeComposerImageEdit();
     }
 
     private function resetOrderMapping(): void
@@ -1988,6 +2117,30 @@ class AdminInbox extends Component
         $this->closeImageEdit();
         $this->closePricedImageSend();
         $this->inboundImageMatchState = [];
+    }
+
+    public function isEditableComposerImage(mixed $file): bool
+    {
+        if (! ($file instanceof TemporaryUploadedFile || $file instanceof UploadedFile)) {
+            return false;
+        }
+
+        $mime = strtolower((string) $file->getMimeType());
+
+        return str_starts_with($mime, 'image/') && ! str_contains($mime, 'gif');
+    }
+
+    public function composerImagePreviewUrl(mixed $image): ?string
+    {
+        if (! is_object($image) || ! method_exists($image, 'temporaryUrl')) {
+            return null;
+        }
+
+        try {
+            return $image->temporaryUrl();
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**

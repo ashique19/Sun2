@@ -7,6 +7,7 @@ use App\Models\ChannelConversation;
 use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\User;
+use App\Support\OrderPrintVariant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
@@ -89,6 +90,8 @@ class AdminInboxRecentOrdersTest extends TestCase
             ->assertSeeHtml('href="'.e(route('admin.orders.show', $second)).'"')
             ->assertSee('Order details')
             ->assertSee('Order confirm msg')
+            ->assertSee('Customer invoice')
+            ->assertSeeHtml('$wire.openCustomerInvoicePreview('.$order->id.')')
             ->call('fillOrderConfirmMessage', $order->id)
             ->assertSet(
                 'replyText',
@@ -132,6 +135,106 @@ class AdminInboxRecentOrdersTest extends TestCase
             ->assertDontSee('INB-FOREIGN')
             ->call('fillOrderConfirmMessage', $foreign->id)
             ->assertSet('replyText', '')
+            ->assertSet('error', 'That order is not in this conversation’s last 7 days.');
+    }
+
+    #[Test]
+    public function thread_header_previews_the_detailed_customer_invoice(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = ChannelConversation::query()->create([
+            'channel' => ChannelConversation::CHANNEL_MESSENGER,
+            'external_user_id' => 'psid-header-invoice',
+            'customer_name' => 'Invoice Customer',
+            'customer_phone' => '01755555555',
+            'last_inbound_at' => now(),
+        ]);
+
+        $order = Order::query()->create([
+            'order_number' => 'INB-8800',
+            'name' => 'Invoice Customer',
+            'phone' => '01755555555',
+            'address' => 'Dhanmondi',
+            'city' => 'Dhaka',
+            'area' => 'Dhanmondi',
+            'subtotal' => 900,
+            'delivery_charge' => 80,
+            'discount' => 0,
+            'total' => 980,
+            'cod_amount' => 980,
+            'due_amount' => 980,
+            'payment_status' => 'unpaid',
+            'payment_method' => 'cod',
+            'status' => 'confirmed',
+            'placed_at' => now()->subHour(),
+            'placed_via' => Order::PLACED_VIA_ADMIN,
+            'channel_conversation_id' => $conversation->id,
+        ]);
+
+        $previewUrl = route('admin.orders.print', [
+            'order' => $order,
+            'variant' => OrderPrintVariant::CustomerDetailed->value,
+            'embed' => 1,
+        ]);
+        $printUrl = route('admin.orders.print', [
+            'order' => $order,
+            'variant' => OrderPrintVariant::CustomerDetailed->value,
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('openCustomerInvoicePreview', $order->id)
+            ->assertHasNoErrors()
+            ->assertSet('customerInvoicePreviewOrderId', $order->id)
+            ->assertSeeHtml('data-inbox-customer-invoice-preview')
+            ->assertSeeHtml('src="'.e($previewUrl).'"')
+            ->assertSeeHtml('href="'.e($printUrl).'"')
+            ->assertSee('Detailed invoice for order INB-8800')
+            ->call('closeCustomerInvoicePreview')
+            ->assertSet('customerInvoicePreviewOrderId', null)
+            ->assertDontSeeHtml('data-inbox-customer-invoice-preview');
+
+        $history = file_get_contents(resource_path('js/inbox-thread-history.js'));
+        $this->assertIsString($history);
+        $this->assertStringContainsString('[data-inbox-customer-invoice-preview]', $history);
+    }
+
+    #[Test]
+    public function customer_invoice_preview_rejects_orders_outside_the_thread(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = ChannelConversation::query()->create([
+            'channel' => ChannelConversation::CHANNEL_MESSENGER,
+            'external_user_id' => 'psid-header-invoice-other',
+            'customer_name' => 'Other',
+            'customer_phone' => '01766666666',
+            'last_inbound_at' => now(),
+        ]);
+
+        $foreign = Order::query()->create([
+            'order_number' => 'INB-FOREIGN-INV',
+            'name' => 'Stranger',
+            'phone' => '01777777777',
+            'address' => 'Elsewhere',
+            'city' => 'Dhaka',
+            'subtotal' => 100,
+            'delivery_charge' => 80,
+            'discount' => 0,
+            'total' => 180,
+            'cod_amount' => 180,
+            'due_amount' => 180,
+            'payment_status' => 'unpaid',
+            'payment_method' => 'cod',
+            'status' => 'new',
+            'placed_at' => now(),
+            'placed_via' => Order::PLACED_VIA_ADMIN,
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('openCustomerInvoicePreview', $foreign->id)
+            ->assertSet('customerInvoicePreviewOrderId', null)
+            ->assertDontSeeHtml('data-inbox-customer-invoice-preview')
             ->assertSet('error', 'That order is not in this conversation’s last 7 days.');
     }
 

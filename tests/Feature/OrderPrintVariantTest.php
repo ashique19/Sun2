@@ -175,6 +175,24 @@ class OrderPrintVariantTest extends TestCase
             ->assertDontSee('https://steadfast.com.bd/t/', false);
     }
 
+    public function test_embedded_customer_detailed_invoice_hides_the_print_button(): void
+    {
+        $this->actingAs($this->adminUser());
+        $order = $this->orderWithPrimaryPhoto();
+
+        $this->get(route('admin.orders.print', [
+            'order' => $order,
+            'variant' => OrderPrintVariant::CustomerDetailed->value,
+            'embed' => 1,
+        ]))
+            ->assertOk()
+            ->assertSee('Invoice', false)
+            ->assertSee('Gold Necklace', false)
+            ->assertSee('data-product-photo', false)
+            ->assertDontSee('window.print()', false)
+            ->assertDontSee('class="screen-actions"', false);
+    }
+
     public function test_customer_minimal_invoice_shows_only_total_bill(): void
     {
         $this->actingAs($this->adminUser());

@@ -795,6 +795,15 @@
                                                 ">
                                                 Order confirm msg
                                             </button>
+                                            <button type="button"
+                                                role="menuitem"
+                                                class="block w-full rounded-lg px-2 py-1.5 text-left text-xs font-medium hover:bg-[#FAF6EF]"
+                                                @click="
+                                                    open = false;
+                                                    $wire.openCustomerInvoicePreview({{ $recentOrder->id }});
+                                                ">
+                                                Customer invoice
+                                            </button>
                                         </div>
                                     </template>
                                 </div>
@@ -1585,22 +1594,51 @@
                     @endif
 
                     @if ($replyImages !== [])
-                        <div class="mb-2 flex flex-wrap items-center gap-2 rounded-2xl border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2">
-                            @foreach ($replyImages as $index => $image)
-                                <div class="relative" wire:key="reply-image-{{ $index }}-{{ method_exists($image, 'getFilename') ? $image->getFilename() : $index }}">
-                                    <img src="{{ $image->temporaryUrl() }}" alt="" class="h-12 w-12 rounded-xl object-cover">
-                                    <button type="button"
-                                        wire:click="removeReplyImage({{ $index }})"
-                                        class="absolute -right-1.5 -top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#1E1E1E] text-[10px] font-bold text-white hover:bg-rose-600"
-                                        title="Remove image"
-                                        aria-label="Remove image">
-                                        ×
-                                    </button>
-                                </div>
-                            @endforeach
-                            <button type="button" wire:click="clearReplyImages" class="ml-auto text-xs text-[#8C8474] hover:text-[#1E1E1E]">
-                                Clear
-                            </button>
+                        <div class="mb-2 rounded-2xl border border-[#E7DFCF] bg-[#FAF6EF] px-3 py-2">
+                            <div class="mb-1.5 flex items-center justify-between gap-2">
+                                <p class="text-[11px] font-semibold text-[#6B6459]">Tap a photo to edit before sending</p>
+                                <button type="button" wire:click="clearReplyImages" class="text-xs text-[#8C8474] hover:text-[#1E1E1E]">
+                                    Clear
+                                </button>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                @foreach ($replyImages as $index => $image)
+                                    @php
+                                        $composerPreviewUrl = $this->composerImagePreviewUrl($image);
+                                        $composerImageEditable = $this->isEditableComposerImage($image);
+                                    @endphp
+                                    <div class="relative" wire:key="reply-image-{{ $index }}-{{ method_exists($image, 'getFilename') ? $image->getFilename() : $index }}">
+                                        @if ($composerImageEditable)
+                                            <button type="button"
+                                                wire:click="openComposerImageEdit({{ $index }})"
+                                                title="Edit photo"
+                                                aria-label="Edit photo"
+                                                class="group relative block overflow-hidden rounded-xl">
+                                                @if ($composerPreviewUrl)
+                                                    <img src="{{ $composerPreviewUrl }}" alt="" class="h-20 w-20 object-cover">
+                                                @else
+                                                    <span class="flex h-20 w-20 items-center justify-center bg-[#E7DFCF] text-[10px] font-semibold text-[#6B6459]">Photo</span>
+                                                @endif
+                                                <span class="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/50 py-0.5 text-[10px] font-semibold text-white">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3" aria-hidden="true">
+                                                        <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z"/>
+                                                    </svg>
+                                                    Edit
+                                                </span>
+                                            </button>
+                                        @elseif ($composerPreviewUrl)
+                                            <img src="{{ $composerPreviewUrl }}" alt="" class="h-20 w-20 rounded-xl object-cover">
+                                        @endif
+                                        <button type="button"
+                                            wire:click="removeReplyImage({{ $index }})"
+                                            class="absolute -right-1.5 -top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#1E1E1E] text-[10px] font-bold text-white hover:bg-rose-600"
+                                            title="Remove image"
+                                            aria-label="Remove image">
+                                            ×
+                                        </button>
+                                    </div>
+                                @endforeach
+                            </div>
                         </div>
                     @endif
                     @error('replyImages')
@@ -1942,13 +1980,34 @@
         </div>
     @endif
 
-    @if ($imageEditMessage && $imageEditMessage->isImageAttachment())
-        <div x-data="{}" wire:key="image-edit-teleport-{{ $imageEditMessage->id }}">
+    @php
+        $composerEditImage = $composerImageEditIndex !== null
+            ? ($replyImages[$composerImageEditIndex] ?? null)
+            : null;
+        $composerEditUrl = $composerEditImage ? $this->composerImagePreviewUrl($composerEditImage) : null;
+        $imageEditMode = ($imageEditMessage && $imageEditMessage->isImageAttachment())
+            ? 'send'
+            : ($composerEditUrl ? 'composer' : null);
+        $imageEditSrc = $imageEditMode === 'send'
+            ? route('admin.inbox.media', $imageEditMessage)
+            : $composerEditUrl;
+        $closeImageEditAction = $imageEditMode === 'composer' ? 'closeComposerImageEdit' : 'closeImageEdit';
+        $imageEditKey = $imageEditMode === 'send'
+            ? 'send-'.$imageEditMessage->id
+            : 'composer-'.$composerImageEditIndex.'-'.(
+                is_object($composerEditImage) && method_exists($composerEditImage, 'getFilename')
+                    ? $composerEditImage->getFilename()
+                    : 'file'
+            );
+    @endphp
+    @if ($imageEditSrc)
+        <div x-data="{}" wire:key="image-edit-teleport-{{ $imageEditKey }}">
             @teleport('body')
                 <div
                     data-inbox-image-edit-modal
-                    wire:key="image-edit-modal-{{ $imageEditMessage->id }}"
-                    wire:click.self="closeImageEdit"
+                    data-inbox-image-edit-mode="{{ $imageEditMode }}"
+                    wire:key="image-edit-modal-{{ $imageEditKey }}"
+                    wire:click.self="{{ $closeImageEditAction }}"
                     class="fixed inset-0 flex items-end justify-center overflow-y-auto overscroll-contain bg-black/50 p-0 sm:items-center sm:p-4"
                     style="z-index: 100000;"
                     role="dialog"
@@ -1960,14 +2019,20 @@
                         style="max-height: calc(100vh - 1rem); max-height: calc(100dvh - 1rem); max-height: calc(100svh - 1rem); min-height: 0;"
                         @click.stop
                         wire:ignore.self
-                        x-data="inboxImageEdit(@js(route('admin.inbox.media', $imageEditMessage)), @js($this->getId()))"
+                        x-data="inboxImageEdit(@js($imageEditSrc), @js($this->getId()), @js($imageEditMode))"
                     >
                         <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#E7DFCF] px-4 py-3">
                             <div class="min-w-0">
-                                <h3 id="inbox-image-edit-title" class="text-base font-semibold text-[#1E1E1E]">Edit &amp; send image</h3>
-                                <p class="mt-0.5 text-xs text-[#8C8474]">Crop, add text, then send back to the customer.</p>
+                                <h3 id="inbox-image-edit-title" class="text-base font-semibold text-[#1E1E1E]">
+                                    {{ $imageEditMode === 'composer' ? 'Edit photo' : 'Edit & send image' }}
+                                </h3>
+                                <p class="mt-0.5 text-xs text-[#8C8474]">
+                                    {{ $imageEditMode === 'composer'
+                                        ? 'Crop, rotate, or add text, then save. Send from the composer when you are ready.'
+                                        : 'Crop, add text, then send back to the customer.' }}
+                                </p>
                             </div>
-                            <button type="button" wire:click="closeImageEdit" class="text-2xl leading-none text-[#8C8474] hover:text-[#1E1E1E]" aria-label="Close">&times;</button>
+                            <button type="button" wire:click="{{ $closeImageEditAction }}" class="text-2xl leading-none text-[#8C8474] hover:text-[#1E1E1E]" aria-label="Close">&times;</button>
                         </div>
 
                         <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4" style="-webkit-overflow-scrolling: touch;">
@@ -1978,8 +2043,8 @@
                             >
                                 <img
                                     x-ref="editImage"
-                                    src="{{ route('admin.inbox.media', $imageEditMessage) }}"
-                                    alt="Customer image"
+                                    src="{{ $imageEditSrc }}"
+                                    alt="{{ $imageEditMode === 'composer' ? 'Photo to send' : 'Customer image' }}"
                                     class="block max-w-full"
                                     draggable="false"
                                 >
@@ -2056,14 +2121,82 @@
                         </div>
 
                         <div class="flex shrink-0 items-center justify-end gap-2 border-t border-[#E7DFCF] px-4 py-3">
-                            <button type="button" wire:click="closeImageEdit" class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm font-semibold text-[#6B6459]">Cancel</button>
+                            <button type="button" wire:click="{{ $closeImageEditAction }}" class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm font-semibold text-[#6B6459]">Cancel</button>
                             <button type="button"
                                 @click="sendEdited()"
                                 :disabled="busy"
                                 class="rounded-full bg-[#C9A227] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b89220] disabled:opacity-60">
-                                <span x-show="!busy">Send to customer</span>
-                                <span x-show="busy" x-cloak>Sending…</span>
+                                @if ($imageEditMode === 'composer')
+                                    <span x-show="!busy">Save</span>
+                                    <span x-show="busy" x-cloak>Saving…</span>
+                                @else
+                                    <span x-show="!busy">Send to customer</span>
+                                    <span x-show="busy" x-cloak>Sending…</span>
+                                @endif
                             </button>
+                        </div>
+                    </div>
+                </div>
+            @endteleport
+        </div>
+    @endif
+
+    @php
+        $customerInvoicePreviewOrder = $customerInvoicePreviewOrderId
+            ? $recentConversationOrders->firstWhere('id', $customerInvoicePreviewOrderId)
+            : null;
+        $customerInvoicePreviewUrl = $customerInvoicePreviewOrder
+            ? route('admin.orders.print', [
+                'order' => $customerInvoicePreviewOrder,
+                'variant' => \App\Support\OrderPrintVariant::CustomerDetailed->value,
+                'embed' => 1,
+            ])
+            : null;
+    @endphp
+    @if ($customerInvoicePreviewUrl)
+        <div x-data="{}" wire:key="customer-invoice-preview-teleport-{{ $customerInvoicePreviewOrder->id }}">
+            @teleport('body')
+                <div
+                    data-inbox-customer-invoice-preview
+                    wire:key="customer-invoice-preview-modal-{{ $customerInvoicePreviewOrder->id }}"
+                    wire:click.self="closeCustomerInvoicePreview"
+                    class="fixed inset-0 flex items-end justify-center overflow-y-auto overscroll-contain bg-black/50 p-0 sm:items-center sm:p-4"
+                    style="z-index: 100000;"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="inbox-customer-invoice-title"
+                >
+                    <div
+                        class="relative flex w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-[#E7DFCF] bg-white shadow-2xl sm:rounded-2xl"
+                        style="max-height: calc(100vh - 1rem); max-height: calc(100dvh - 1rem); max-height: calc(100svh - 1rem); min-height: 0;"
+                        @click.stop
+                    >
+                        <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[#E7DFCF] px-4 py-3">
+                            <div class="min-w-0">
+                                <h3 id="inbox-customer-invoice-title" class="text-base font-semibold text-[#1E1E1E]">Customer invoice</h3>
+                                <p class="mt-0.5 text-xs text-[#8C8474]">Detailed invoice for order {{ $customerInvoicePreviewOrder->order_number }}.</p>
+                            </div>
+                            <div class="flex shrink-0 items-center gap-2">
+                                <a href="{{ route('admin.orders.print', [
+                                        'order' => $customerInvoicePreviewOrder,
+                                        'variant' => \App\Support\OrderPrintVariant::CustomerDetailed->value,
+                                    ]) }}"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="rounded-full border border-[#E0D6C2] px-3 py-1 text-xs font-semibold text-[#6B6459] hover:bg-[#FAF6EF]">
+                                    <span class="sm:hidden">Print</span>
+                                    <span class="hidden sm:inline">Open print page</span>
+                                </a>
+                                <button type="button" wire:click="closeCustomerInvoicePreview" class="text-2xl leading-none text-[#8C8474] hover:text-[#1E1E1E]" aria-label="Close">&times;</button>
+                            </div>
+                        </div>
+                        <div class="min-h-0 flex-1 overflow-y-auto bg-[#EDE8DC] p-3" style="-webkit-overflow-scrolling: touch;">
+                            <iframe
+                                title="Customer invoice {{ $customerInvoicePreviewOrder->order_number }}"
+                                src="{{ $customerInvoicePreviewUrl }}"
+                                class="block w-full rounded-lg border border-[#E7DFCF] bg-white shadow-sm"
+                                style="height: min(70vh, 46rem); min-height: 24rem;"
+                            ></iframe>
                         </div>
                     </div>
                 </div>

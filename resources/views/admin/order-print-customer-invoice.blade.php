@@ -145,9 +145,11 @@
     </style>
 </head>
 <body>
-    <div class="screen-actions">
-        <button type="button" onclick="window.print()">Print</button>
-    </div>
+    @if (empty($embed))
+        <div class="screen-actions">
+            <button type="button" onclick="window.print()">Print</button>
+        </div>
+    @endif
 
     <div class="invoice">
         <div class="brand">{{ \App\Support\OrderPrintSlip::BRAND }}</div>

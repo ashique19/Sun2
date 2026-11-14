@@ -246,6 +246,7 @@ const INBOX_ORPHAN_SELECTORS = [
     '[data-inbox-product-map-modal]',
     '[data-inbox-image-edit-modal]',
     '[data-inbox-product-picker-modal]',
+    '[data-inbox-customer-invoice-preview]',
 ];
 
 export function clearInboxPageChrome() {

@@ -33,6 +33,7 @@ class AdminOrderPrintController extends Controller
             'showPhotos' => $variant->includesProductPhotos(),
             'totals' => $order->moneyTotals(),
             'otgDeepLink' => null,
+            'embed' => $request->boolean('embed'),
         ];
 
         if ($variant->usesOtg()) {

@@ -357,6 +357,8 @@ class AdminInboxImageToolsTest extends TestCase
         $this->assertStringContainsString('sendEdited', $source);
         $this->assertStringContainsString('editedReplyImage', $source);
         $this->assertStringContainsString("key === 'center'", $source);
+        $this->assertStringContainsString("mode = 'send'", $source);
+        $this->assertStringContainsString('applyEditedComposerImage', $source);
     }
 
     #[Test]
@@ -375,5 +377,137 @@ class AdminInboxImageToolsTest extends TestCase
             ->assertSeeHtml('aria-label="Center"')
             ->assertSeeHtml('class="flex gap-1.5"')
             ->assertDontSeeHtml('rounded-full border px-2.5 py-1 text-[11px] font-semibold');
+    }
+
+    #[Test]
+    public function attaching_a_composer_image_opens_the_edit_before_send_modal(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+        $file = UploadedFile::fake()->image('reply.jpg', 80, 80);
+
+        $component = Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->set('replyImages', [$file])
+            ->assertSet('composerImageEditIndex', 0)
+            ->assertSet('imageEditMessageId', null)
+            ->assertSeeHtml('data-inbox-image-edit-modal')
+            ->assertSeeHtml('data-inbox-image-edit-mode="composer"')
+            ->assertSee('Edit photo')
+            ->assertSee('Tap a photo to edit before sending')
+            ->assertSeeHtml('wire:click="openComposerImageEdit(0)"')
+            ->assertSeeHtml('aria-label="Edit photo"')
+            ->assertSee('Save')
+            ->assertDontSee('Send to customer')
+            ->call('closeComposerImageEdit')
+            ->assertSet('composerImageEditIndex', null)
+            ->assertDontSeeHtml('data-inbox-image-edit-mode="composer"');
+
+        $attached = $component->get('replyImages')[0] ?? null;
+        $this->assertIsObject($attached);
+        $this->assertSame('reply.jpg', $attached->getClientOriginalName());
+    }
+
+    #[Test]
+    public function gif_attachments_are_not_opened_in_the_composer_image_editor(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+        $gif = UploadedFile::fake()->create('loop.gif', 40, 'image/gif');
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->set('replyImages', [$gif])
+            ->assertSet('composerImageEditIndex', null)
+            ->assertDontSeeHtml('data-inbox-image-edit-mode="composer"')
+            ->call('openComposerImageEdit', 0)
+            ->assertSet('composerImageEditIndex', null);
+    }
+
+    #[Test]
+    public function edited_composer_image_replaces_the_attachment_without_sending(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.graph_version' => 'v25.0',
+            'app.url' => 'https://example.test',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/me/messages*' => Http::sequence()
+                ->push(['recipient_id' => 'psid-tools'], 200)
+                ->push(['message_id' => 'm_composer_edit_1'], 200)
+                ->push(['recipient_id' => 'psid-tools'], 200),
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_in_composer_edit',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Send photo',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        $original = UploadedFile::fake()->image('original.jpg', 80, 80);
+        $edited = UploadedFile::fake()->image('edited.jpg', 120, 120);
+
+        $component = Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->set('replyImages', [$original])
+            ->assertSet('composerImageEditIndex', 0)
+            ->set('editedReplyImage', $edited)
+            ->call('applyEditedComposerImage')
+            ->assertHasNoErrors()
+            ->assertSet('composerImageEditIndex', null)
+            ->assertSet('editedReplyImage', null);
+
+        $replaced = $component->get('replyImages')[0] ?? null;
+        $this->assertIsObject($replaced);
+        $this->assertSame('edited.jpg', $replaced->getClientOriginalName());
+
+        $component
+            ->call('openComposerImageEdit', 0)
+            ->assertSet('composerImageEditIndex', 0)
+            ->call('closeComposerImageEdit')
+            ->set('replyText', 'Edited for you')
+            ->call('sendReply')
+            ->assertHasNoErrors()
+            ->assertSet('statusMessage', 'Reply sent.')
+            ->assertSet('replyImages', [])
+            ->assertSet('composerImageEditIndex', null);
+
+        $outbound = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($outbound);
+        $this->assertNotNull($outbound->media_url);
+        $this->assertTrue(is_file(public_path($outbound->media_url)));
+        $this->assertSame('Edited for you', $outbound->body);
+    }
+
+    #[Test]
+    public function removing_the_open_composer_image_closes_the_editor(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+        $first = UploadedFile::fake()->image('first.jpg', 40, 40);
+        $second = UploadedFile::fake()->image('second.jpg', 40, 40);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->set('replyImages', [$first, $second])
+            ->assertSet('composerImageEditIndex', 1)
+            ->call('removeReplyImage', 1)
+            ->assertSet('composerImageEditIndex', null)
+            ->call('openComposerImageEdit', 0)
+            ->assertSet('composerImageEditIndex', 0)
+            ->call('removeReplyImage', 0)
+            ->assertSet('composerImageEditIndex', null)
+            ->assertSet('replyImages', []);
     }
 }

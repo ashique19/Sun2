@@ -2145,12 +2145,8 @@
         $customerInvoicePreviewOrder = $customerInvoicePreviewOrderId
             ? $recentConversationOrders->firstWhere('id', $customerInvoicePreviewOrderId)
             : null;
-        $customerInvoicePreviewUrl = $customerInvoicePreviewOrder
-            ? route('admin.orders.print', [
-                'order' => $customerInvoicePreviewOrder,
-                'variant' => \App\Support\OrderPrintVariant::CustomerDetailed->value,
-                'embed' => 1,
-            ])
+        $customerInvoicePreviewUrl = ($customerInvoicePreviewOrder && $customerInvoicePreviewPath)
+            ? app(\App\Services\Admin\InboxCustomerInvoiceImageService::class)->publicUrl($customerInvoicePreviewPath)
             : null;
     @endphp
     @if ($customerInvoicePreviewUrl)
@@ -2176,27 +2172,26 @@
                                 <h3 id="inbox-customer-invoice-title" class="text-base font-semibold text-[#1E1E1E]">Customer invoice</h3>
                                 <p class="mt-0.5 text-xs text-[#8C8474]">Detailed invoice for order {{ $customerInvoicePreviewOrder->order_number }}.</p>
                             </div>
-                            <div class="flex shrink-0 items-center gap-2">
-                                <a href="{{ route('admin.orders.print', [
-                                        'order' => $customerInvoicePreviewOrder,
-                                        'variant' => \App\Support\OrderPrintVariant::CustomerDetailed->value,
-                                    ]) }}"
-                                    target="_blank"
-                                    rel="noopener"
-                                    class="rounded-full border border-[#E0D6C2] px-3 py-1 text-xs font-semibold text-[#6B6459] hover:bg-[#FAF6EF]">
-                                    <span class="sm:hidden">Print</span>
-                                    <span class="hidden sm:inline">Open print page</span>
-                                </a>
-                                <button type="button" wire:click="closeCustomerInvoicePreview" class="text-2xl leading-none text-[#8C8474] hover:text-[#1E1E1E]" aria-label="Close">&times;</button>
-                            </div>
+                            <button type="button" wire:click="closeCustomerInvoicePreview" class="text-2xl leading-none text-[#8C8474] hover:text-[#1E1E1E]" aria-label="Close">&times;</button>
                         </div>
                         <div class="min-h-0 flex-1 overflow-y-auto bg-[#EDE8DC] p-3" style="-webkit-overflow-scrolling: touch;">
-                            <iframe
-                                title="Customer invoice {{ $customerInvoicePreviewOrder->order_number }}"
+                            <img
+                                data-inbox-customer-invoice-image
                                 src="{{ $customerInvoicePreviewUrl }}"
-                                class="block w-full rounded-lg border border-[#E7DFCF] bg-white shadow-sm"
-                                style="height: min(70vh, 46rem); min-height: 24rem;"
-                            ></iframe>
+                                alt="Customer invoice {{ $customerInvoicePreviewOrder->order_number }}"
+                                class="mx-auto block w-full max-w-2xl rounded-lg border border-[#E7DFCF] bg-white shadow-sm"
+                            >
+                        </div>
+                        <div class="flex shrink-0 items-center justify-end gap-2 border-t border-[#E7DFCF] px-4 py-3">
+                            <button type="button" wire:click="closeCustomerInvoicePreview" class="rounded-full border border-[#E0D6C2] px-4 py-2 text-sm font-semibold text-[#6B6459]">Cancel</button>
+                            <button type="button"
+                                wire:click="sendCustomerInvoiceImage"
+                                wire:loading.attr="disabled"
+                                wire:target="sendCustomerInvoiceImage"
+                                class="rounded-full bg-[#C9A227] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b89220] disabled:opacity-60">
+                                <span wire:loading.remove wire:target="sendCustomerInvoiceImage">Send</span>
+                                <span wire:loading wire:target="sendCustomerInvoiceImage">Sending…</span>
+                            </button>
                         </div>
                     </div>
                 </div>

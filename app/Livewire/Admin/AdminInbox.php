@@ -7,6 +7,7 @@ use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Models\Product;
 use App\Services\Admin\InboxCatalogSearch;
+use App\Services\Admin\InboxCustomerInvoiceImageService;
 use App\Services\Admin\InboxPricedImageSender;
 use App\Services\Admin\InboxProductReplyService;
 use App\Services\Admin\InboxRecentOrders;
@@ -24,6 +25,7 @@ use App\Services\Channels\MessengerConversationSyncService;
 use App\Services\Facebook\FacebookPageTokenService;
 use App\Support\AdminAccess;
 use App\Support\Fileinfo;
+use App\Support\PublicImageUpload;
 use App\Support\StorefrontAssets;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
@@ -219,6 +221,9 @@ class AdminInbox extends Component
 
     /** Recent-order invoice open in the conversation-header preview modal. */
     public ?int $customerInvoicePreviewOrderId = null;
+
+    /** Public relative path of the generated invoice JPEG. */
+    public ?string $customerInvoicePreviewPath = null;
 
     public string $pricedSendSearch = '';
 
@@ -907,12 +912,82 @@ class AdminInbox extends Component
             return;
         }
 
+        try {
+            $path = app(InboxCustomerInvoiceImageService::class)->render($order);
+        } catch (Throwable $e) {
+            Log::warning('Inbox customer invoice preview failed.', [
+                'order_id' => $order->id,
+                'message' => $e->getMessage(),
+            ]);
+            $this->error = 'Could not build the customer invoice image.';
+
+            return;
+        }
+
         $this->customerInvoicePreviewOrderId = $order->id;
+        $this->customerInvoicePreviewPath = $path;
     }
 
     public function closeCustomerInvoicePreview(): void
     {
         $this->customerInvoicePreviewOrderId = null;
+        $this->customerInvoicePreviewPath = null;
+    }
+
+    public function sendCustomerInvoiceImage(ChannelReplyService $replies): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
+
+        if (! $this->selectedConversationId || ! $this->customerInvoicePreviewOrderId) {
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+        if (! $conversation) {
+            $this->error = 'Conversation not found.';
+
+            return;
+        }
+
+        $order = app(InboxRecentOrders::class)->findForConversation(
+            $conversation,
+            $this->customerInvoicePreviewOrderId,
+        );
+        if (! $order) {
+            $this->error = 'That order is not in this conversation’s last 7 days.';
+            $this->closeCustomerInvoicePreview();
+
+            return;
+        }
+
+        try {
+            $path = $this->customerInvoicePreviewPath
+                ?: app(InboxCustomerInvoiceImageService::class)->render($order);
+            $upload = PublicImageUpload::fromRelativePath($path);
+        } catch (Throwable $e) {
+            Log::warning('Inbox customer invoice send failed to load image.', [
+                'order_id' => $order->id,
+                'message' => $e->getMessage(),
+            ]);
+            $this->error = 'Could not load the customer invoice image.';
+
+            return;
+        }
+
+        $result = $replies->sendImage($conversation, $upload, '');
+
+        if (! $result['ok']) {
+            $this->error = $result['error'] ?? 'Failed to send customer invoice.';
+
+            return;
+        }
+
+        $this->markConversationRead($conversation, $replies);
+        $this->closeCustomerInvoicePreview();
+        $this->statusMessage = 'Customer invoice sent.';
     }
 
     public function confirmConversationDraft(ChannelOrderDraftService $drafts): void

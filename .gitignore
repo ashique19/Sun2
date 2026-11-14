@@ -21,6 +21,7 @@
 /public/storage
 /public/img/products
 /public/img/products-priced
+/public/img/inbox-invoices
 /storage/*.key
 /storage/pail
 /vendor

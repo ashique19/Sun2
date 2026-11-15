@@ -185,6 +185,18 @@ class AdminDashboardSteadfastWebhooksTest extends TestCase
             'created_at' => now()->subHour(),
         ]);
 
+        $trackingPolled = $this->dispatchedOrder('TPOLL');
+        CourierData::query()->create([
+            'order_id' => $trackingPolled->id,
+            'courier_id' => $courier->id,
+            'api_data' => [
+                'notification_type' => 'tracking_update',
+                'source' => 'tracking_poll',
+                'tracking_message' => 'Pulled hop',
+            ],
+            'created_at' => now()->subHour(),
+        ]);
+
         $dispatchOnly = $this->dispatchedOrder('API');
         CourierData::query()->create([
             'order_id' => $dispatchOnly->id,
@@ -218,12 +230,14 @@ class AdminDashboardSteadfastWebhooksTest extends TestCase
         $this->assertTrue($entries->every(fn (CourierData $row) => filled(data_get($row->api_data, 'notification_type'))));
         $this->assertFalse($entries->contains(fn (CourierData $row) => $row->order_id === $stale->id));
         $this->assertFalse($entries->contains(fn (CourierData $row) => $row->order_id === $polled->id));
+        $this->assertFalse($entries->contains(fn (CourierData $row) => $row->order_id === $trackingPolled->id));
         $this->assertFalse($entries->contains(fn (CourierData $row) => $row->order_id === $dispatchOnly->id));
 
         Livewire::test(AdminDashboard::class)
             ->assertSee('Latest Steadfast webhooks')
             ->assertDontSee('Order #'.$stale->order_number)
             ->assertDontSee('Order #'.$polled->order_number)
+            ->assertDontSee('Order #'.$trackingPolled->order_number)
             ->assertSee('Order #'.$kept[21])
             ->assertDontSee('Order #'.$kept[0]);
     }

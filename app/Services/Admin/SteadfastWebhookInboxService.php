@@ -137,7 +137,7 @@ class SteadfastWebhookInboxService
             ->whereIn('api_data->notification_type', ['delivery_status', 'tracking_update'])
             ->where(function (Builder $inner) {
                 $inner->whereNull('api_data->source')
-                    ->orWhere('api_data->source', '!=', 'status_poll');
+                    ->orWhereNotIn('api_data->source', ['status_poll', 'tracking_poll']);
             });
     }
 }

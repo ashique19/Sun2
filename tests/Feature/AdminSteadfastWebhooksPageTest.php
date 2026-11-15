@@ -4,8 +4,8 @@ namespace Tests\Feature;
 
 use App\Livewire\Admin\AdminSteadfastWebhooks;
 use App\Models\Courier;
-use App\Models\CourierData;
 use App\Models\Order;
+use App\Models\SteadfastWebhookLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -28,7 +28,7 @@ class AdminSteadfastWebhooksPageTest extends TestCase
     }
 
     #[Test]
-    public function see_all_page_lists_webhooks_and_can_dismiss(): void
+    public function see_all_page_lists_raw_inbound_logs_including_unmatched(): void
     {
         $this->actingAs($this->adminUser());
 
@@ -59,15 +59,40 @@ class AdminSteadfastWebhooksPageTest extends TestCase
             'dispatch_date' => now()->subDay(),
         ]);
 
-        $entry = CourierData::query()->create([
+        $matchedPayload = [
+            'notification_type' => 'delivery_status',
+            'status' => 'in_transit',
+            'invoice' => $order->order_number,
+        ];
+
+        SteadfastWebhookLog::factory()->create([
             'order_id' => $order->id,
-            'courier_id' => $courier->id,
-            'api_data' => [
-                'notification_type' => 'delivery_status',
-                'status' => 'in_transit',
-                'invoice' => $order->order_number,
-            ],
+            'outcome' => SteadfastWebhookLog::OUTCOME_PROCESSED,
+            'http_status' => 200,
+            'notification_type' => 'delivery_status',
+            'invoice' => $order->order_number,
+            'consignment_id' => '270697699',
+            'payload' => $matchedPayload,
+            'raw_body' => json_encode($matchedPayload),
             'created_at' => now()->subHour(),
+        ]);
+
+        $unmatchedPayload = [
+            'notification_type' => 'tracking_update',
+            'invoice' => 'GHOST-99',
+            'tracking_message' => 'No order for this invoice',
+        ];
+
+        SteadfastWebhookLog::factory()->create([
+            'order_id' => null,
+            'outcome' => SteadfastWebhookLog::OUTCOME_UNMATCHED,
+            'http_status' => 200,
+            'notification_type' => 'tracking_update',
+            'invoice' => 'GHOST-99',
+            'consignment_id' => null,
+            'payload' => $unmatchedPayload,
+            'raw_body' => json_encode($unmatchedPayload),
+            'created_at' => now()->subMinutes(10),
         ]);
 
         $this->get(route('admin.couriers.webhooks'))
@@ -76,15 +101,24 @@ class AdminSteadfastWebhooksPageTest extends TestCase
 
         Livewire::test(AdminSteadfastWebhooks::class)
             ->assertSee('Steadfast webhooks')
+            ->assertSee('Every inbound POST after auth')
             ->assertSee('Order #'.$order->order_number)
-            ->assertSee('Parcel 270697699')
-            ->assertSee('https://steadfast.com.bd/user/consignment/270697699', false)
-            ->assertSeeHtml('wire:click="dismiss('.$entry->id.')"')
-            ->assertDontSeeHtml('>Parcel ↗</a>')
-            ->call('dismiss', $entry->id)
-            ->assertDontSee('Order #'.$order->order_number)
-            ->assertSee('No inbound Steadfast webhooks in the last 2 days.');
+            ->assertSee('Page Webhook Customer')
+            ->assertSee('processed')
+            ->assertSee('unmatched')
+            ->assertSee('invoice GHOST-99')
+            ->assertSee('Raw payload')
+            ->assertSee('in_transit')
+            ->assertSee('No order for this invoice')
+            ->assertDontSeeHtml('wire:click="dismiss');
+    }
 
-        $this->assertNotNull($entry->fresh()->inbox_dismissed_at);
+    #[Test]
+    public function empty_log_page_explains_there_are_no_saved_webhooks(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        Livewire::test(AdminSteadfastWebhooks::class)
+            ->assertSee('No inbound Steadfast webhooks saved yet.');
     }
 }

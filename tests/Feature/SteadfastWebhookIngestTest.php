@@ -344,6 +344,84 @@ class SteadfastWebhookIngestTest extends TestCase
     }
 
     #[Test]
+    public function finds_order_when_invoice_is_the_consignment_id(): void
+    {
+        $order = $this->order([
+            'order_number' => 'ORD-INV-CID',
+            'courier_consignment_id' => '555444333',
+        ]);
+
+        $this->postWebhook([
+            'notification_type' => 'tracking_update',
+            'invoice' => '555444333',
+            'tracking_message' => 'Reached destination city',
+        ])->assertOk();
+
+        $this->assertTrue(
+            OrderStatusHistory::query()
+                ->where('order_id', $order->id)
+                ->where('note', 'Reached destination city')
+                ->exists()
+        );
+    }
+
+    #[Test]
+    public function cancel_request_does_not_cancel_the_order(): void
+    {
+        $order = $this->order([
+            'order_number' => 'ORD-CANCEL-REQ',
+            'status' => 'dispatched',
+        ]);
+
+        $this->postWebhook([
+            'notification_type' => 'cancel_request',
+            'invoice' => $order->order_number,
+            'status' => 'cancelled',
+            'tracking_message' => 'Merchant asked to cancel',
+        ])->assertOk();
+
+        $this->assertSame('dispatched', $order->fresh()->status);
+        $this->assertTrue(
+            OrderStatusHistory::query()
+                ->where('order_id', $order->id)
+                ->where('note', 'Merchant asked to cancel')
+                ->exists()
+        );
+        $this->assertTrue(
+            CourierData::query()
+                ->where('order_id', $order->id)
+                ->get()
+                ->contains(fn (CourierData $row): bool => ($row->api_data['original_notification_type'] ?? null) === 'cancel_request')
+        );
+    }
+
+    #[Test]
+    public function unknown_notification_type_records_history_without_dispatching(): void
+    {
+        $order = $this->order([
+            'order_number' => 'ORD-NEW-NOTE',
+            'status' => 'new',
+            'dispatch_date' => null,
+        ]);
+
+        $this->postWebhook([
+            'notification_type' => 'consignment_update',
+            'invoice' => $order->order_number,
+            'tracking_message' => 'Address updated',
+        ])->assertOk();
+
+        $fresh = $order->fresh();
+        $this->assertSame('new', $fresh->status);
+        $this->assertNull($fresh->dispatch_date);
+        $this->assertTrue(
+            OrderStatusHistory::query()
+                ->where('order_id', $order->id)
+                ->where('note', 'Address updated')
+                ->exists()
+        );
+    }
+
+    #[Test]
     public function distinct_idempotency_keys_are_processed_separately(): void
     {
         $order = $this->order();

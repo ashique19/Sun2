@@ -34,7 +34,7 @@ class SteadfastWebhookProcessor
     /**
      * @param  array<string, mixed>  $payload
      */
-    public function handle(array $payload): void
+    public function handle(array $payload): ?Order
     {
         $payload = SteadfastWebhookPayload::normalize($payload);
         $notificationType = (string) ($payload['notification_type'] ?? SteadfastWebhookPayload::TYPE_TRACKING_UPDATE);
@@ -48,7 +48,7 @@ class SteadfastWebhookProcessor
                 'notification_type' => $notificationType,
             ]);
 
-            return;
+            return null;
         }
 
         $courierId = Courier::query()->where('slug', 'steadfast')->value('id');
@@ -64,24 +64,6 @@ class SteadfastWebhookProcessor
                 'created_at' => now(),
             ]);
 
-            $mappedPreview = $notificationType === 'delivery_status'
-                ? $this->mapDeliveryStatus(strtolower((string) ($payload['status'] ?? '')))
-                : null;
-            $chargePhase = match ($mappedPreview) {
-                'cancelled', 'returned' => 'cancelled',
-                'delivered' => 'delivered',
-                default => $notificationType === 'delivery_status' ? 'delivered' : 'tracking',
-            };
-
-            $this->courierChargeSync->sync(
-                order: $order,
-                fee: $this->courierChargeSync->parseFeeFromPayload($payload),
-                actor: null,
-                phase: $chargePhase,
-                meta: ['source' => 'steadfast_webhook'],
-                courierDataId: (int) $courierData->id,
-            );
-
             $tracker = $payload['tracking_id'] ?? $payload['tracking_code'] ?? null;
             if ($tracker && ! $order->courier_tracker) {
                 $order->update([
@@ -91,10 +73,37 @@ class SteadfastWebhookProcessor
                 $order->refresh();
             }
 
-            if ($notificationType === 'delivery_status') {
-                $this->handleDeliveryStatus($order, $payload);
-            } elseif ($notificationType === 'tracking_update') {
-                $this->handleTrackingUpdate($order, $payload);
+            if ($this->appliesStatusChange($payload)) {
+                $mappedPreview = $notificationType === 'delivery_status'
+                    ? $this->mapDeliveryStatus(strtolower((string) ($payload['status'] ?? '')))
+                    : null;
+                $chargePhase = match ($mappedPreview) {
+                    'cancelled', 'returned' => 'cancelled',
+                    'delivered' => 'delivered',
+                    default => $notificationType === 'delivery_status' ? 'delivered' : 'tracking',
+                };
+
+                $this->courierChargeSync->sync(
+                    order: $order,
+                    fee: $this->courierChargeSync->parseFeeFromPayload($payload),
+                    actor: null,
+                    phase: $chargePhase,
+                    meta: ['source' => 'steadfast_webhook'],
+                    courierDataId: (int) $courierData->id,
+                );
+
+                if ($notificationType === 'delivery_status') {
+                    $this->handleDeliveryStatus($order, $payload);
+                } elseif ($notificationType === 'tracking_update') {
+                    $this->handleTrackingUpdate($order, $payload);
+                }
+            } else {
+                $label = (string) ($payload['original_notification_type'] ?? $notificationType);
+                $message = SteadfastWebhookPayload::trackingMessage($payload);
+                if ($message === '') {
+                    $message = 'Steadfast '.$label;
+                }
+                $this->recordHistory($order, $order->status, $message);
             }
 
             $message = SteadfastWebhookPayload::trackingMessage($payload);
@@ -104,6 +113,8 @@ class SteadfastWebhookProcessor
                 $payload['updated_at'] ?? null,
             );
         });
+
+        return $order;
     }
 
     /**
@@ -304,31 +315,28 @@ class SteadfastWebhookProcessor
     }
 
     /**
+     * Unknown notification_type values are remapped for storage, but must not
+     * change order status. cancel_request in particular must never auto-cancel.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function appliesStatusChange(array $payload): bool
+    {
+        $original = strtolower(trim((string) ($payload['original_notification_type'] ?? '')));
+
+        return $original === '';
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      */
     private function findOrder(array $payload): ?Order
     {
-        $invoice = isset($payload['invoice']) ? trim((string) $payload['invoice']) : '';
-        if ($invoice !== '') {
-            $order = Order::query()->where('order_number', $invoice)->first();
-            if ($order) {
-                return $order;
-            }
-        }
-
-        $candidates = [];
-        foreach (['tracking_id', 'tracking_code', 'consignment_id'] as $key) {
-            if (! array_key_exists($key, $payload) || $payload[$key] === null || $payload[$key] === '') {
-                continue;
-            }
-            $candidates[] = (string) $payload[$key];
-        }
-        $candidates = array_values(array_unique($candidates));
-
-        foreach ($candidates as $candidate) {
+        foreach ($this->lookupCandidates($payload) as $candidate) {
             $order = Order::query()
                 ->where(function ($query) use ($candidate) {
-                    $query->where('courier_tracker', $candidate)
+                    $query->where('order_number', $candidate)
+                        ->orWhere('courier_tracker', $candidate)
                         ->orWhere('courier_consignment_id', $candidate);
                 })
                 ->first();
@@ -338,6 +346,30 @@ class SteadfastWebhookProcessor
         }
 
         return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return list<string>
+     */
+    private function lookupCandidates(array $payload): array
+    {
+        $candidates = [];
+
+        foreach (['invoice', 'tracking_id', 'tracking_code', 'consignment_id'] as $key) {
+            if (! array_key_exists($key, $payload) || $payload[$key] === null || $payload[$key] === '') {
+                continue;
+            }
+
+            $candidate = trim((string) $payload[$key]);
+            if ($candidate === '') {
+                continue;
+            }
+
+            $candidates[] = $candidate;
+        }
+
+        return array_values(array_unique($candidates));
     }
 
     private function mapDeliveryStatus(string $steadfastStatus): ?string

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\SteadfastWebhookLog;
+use App\Services\Couriers\SteadfastWebhookLogService;
 use App\Services\Couriers\SteadfastWebhookPayload;
 use App\Services\Couriers\SteadfastWebhookProcessor;
 use Illuminate\Http\JsonResponse;
@@ -17,8 +19,11 @@ class SteadfastWebhookController extends Controller
      */
     private const IDEMPOTENCY_TTL_DAYS = 7;
 
-    public function __invoke(Request $request, SteadfastWebhookProcessor $processor): JsonResponse
-    {
+    public function __invoke(
+        Request $request,
+        SteadfastWebhookProcessor $processor,
+        SteadfastWebhookLogService $logs,
+    ): JsonResponse {
         if (! config('steadfast.webhook.enabled', true)) {
             return response()->json(['status' => 'disabled'], 503);
         }
@@ -31,38 +36,64 @@ class SteadfastWebhookController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        $idempotencyCacheKey = $this->idempotencyCacheKey($request);
-        if ($idempotencyCacheKey !== null && Cache::has($idempotencyCacheKey)) {
-            return response()->json(['status' => 'success']);
-        }
+        $log = $logs->capture($request);
+        $outcome = SteadfastWebhookLog::OUTCOME_EMPTY;
+        $httpStatus = 200;
+        $orderId = null;
+        $error = null;
 
-        $events = SteadfastWebhookPayload::eventsFrom($this->requestPayload($request));
+        try {
+            $idempotencyCacheKey = $this->idempotencyCacheKey($request);
+            if ($idempotencyCacheKey !== null && Cache::has($idempotencyCacheKey)) {
+                $outcome = SteadfastWebhookLog::OUTCOME_DUPLICATE;
 
-        if ($events === []) {
-            Log::warning('Steadfast webhook: empty or unusable payload.');
+                return response()->json(['status' => 'success']);
+            }
 
-            // Steadfast never retries 4xx. Ack empty bodies so a parser miss is not fatal.
+            $events = SteadfastWebhookPayload::eventsFrom($this->requestPayload($request));
+
+            if ($events === []) {
+                Log::warning('Steadfast webhook: empty or unusable payload.');
+
+                // Steadfast never retries 4xx. Ack empty bodies so a parser miss is not fatal.
+                $this->rememberIdempotencyKey($idempotencyCacheKey);
+
+                return response()->json(['status' => 'success']);
+            }
+
+            $matched = null;
+            foreach ($events as $event) {
+                $order = $processor->handle($event);
+                $matched ??= $order;
+            }
+
+            $outcome = $matched
+                ? SteadfastWebhookLog::OUTCOME_PROCESSED
+                : SteadfastWebhookLog::OUTCOME_UNMATCHED;
+            $orderId = $matched?->id;
+
             $this->rememberIdempotencyKey($idempotencyCacheKey);
 
             return response()->json(['status' => 'success']);
-        }
-
-        try {
-            foreach ($events as $event) {
-                $processor->handle($event);
-            }
         } catch (\Throwable $e) {
             Log::error('Steadfast webhook processing failed.', [
                 'message' => $e->getMessage(),
-                'invoice' => $events[0]['invoice'] ?? null,
+                'invoice' => $log->invoice,
             ]);
 
+            $outcome = SteadfastWebhookLog::OUTCOME_FAILED;
+            $httpStatus = 500;
+            $error = $e->getMessage();
+
             return response()->json(['error' => 'Processing failed'], 500);
+        } finally {
+            $logs->finalize($log, [
+                'outcome' => $outcome,
+                'http_status' => $httpStatus,
+                'order_id' => $orderId,
+                'error' => $error,
+            ]);
         }
-
-        $this->rememberIdempotencyKey($idempotencyCacheKey);
-
-        return response()->json(['status' => 'success']);
     }
 
     /**

@@ -58,6 +58,8 @@ class AdminCouriersMobileLayoutTest extends TestCase
             ->assertSee('How receivable, pending, and API relate')
             ->assertSee('Create Courier')
             ->assertSee('Refresh API')
+            ->assertSee('Steadfast webhook log')
+            ->assertSee(route('admin.couriers.webhooks'), false)
             ->assertSeeHtml('grid grid-cols-2 gap-2 sm:flex')
             ->assertSeeHtml('min-h-11')
             ->assertSee('Steadfast')

@@ -2,6 +2,10 @@
     <div class="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between">
         <div class="min-w-0">
             <h1 class="font-serif text-2xl font-semibold sm:text-3xl">Couriers</h1>
+            <a href="{{ route('admin.couriers.webhooks') }}" wire:navigate
+                class="mt-1 inline-flex items-center text-sm font-medium text-[#C9A227] hover:text-[#B8921F]">
+                Steadfast webhook log &rarr;
+            </a>
         </div>
         <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
             <button type="button"

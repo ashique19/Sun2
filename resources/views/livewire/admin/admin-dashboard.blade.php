@@ -381,7 +381,21 @@
         </div>
     @endif
 
-    @if (($steadfastWebhookInbox ?? collect())->isNotEmpty())
+    @if (($steadfastWebhookInbox ?? collect())->isEmpty())
+        <div class="mb-6 rounded-xl border border-[#E0D6C2] bg-white px-4 py-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="min-w-0">
+                    <h2 class="text-sm font-semibold text-[#1E1E1E]">Steadfast webhook log</h2>
+                    <p class="text-xs text-[#8C8474]">Every inbound POST after auth, including unmatched</p>
+                </div>
+                <a href="{{ route('admin.couriers.webhooks') }}"
+                    wire:navigate
+                    class="shrink-0 text-xs font-medium text-[#C9A227] hover:text-[#B8921F]">
+                    Open log &rarr;
+                </a>
+            </div>
+        </div>
+    @else
         <div class="mb-6 rounded-xl border border-[#E0D6C2] bg-white overflow-hidden">
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#EFE7D6] px-4 py-3">
                 <div class="min-w-0">

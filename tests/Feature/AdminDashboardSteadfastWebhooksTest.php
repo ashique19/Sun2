@@ -243,14 +243,17 @@ class AdminDashboardSteadfastWebhooksTest extends TestCase
     }
 
     #[Test]
-    public function empty_inbox_hides_the_dashboard_section(): void
+    public function empty_inbox_still_links_to_the_inbound_log(): void
     {
         $this->actingAs($this->adminUser());
 
         Livewire::test(AdminDashboard::class)
             ->assertDontSee('Latest Steadfast webhooks')
             ->assertDontSee('Dismiss all')
-            ->assertDontSeeHtml('wire:click="dismissAllSteadfastWebhooks"');
+            ->assertDontSeeHtml('wire:click="dismissAllSteadfastWebhooks"')
+            ->assertSee('Steadfast webhook log')
+            ->assertSee('Open log')
+            ->assertSee(route('admin.couriers.webhooks'), false);
     }
 
     #[Test]

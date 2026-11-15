@@ -102,6 +102,34 @@ test('failed send stays visible until retry or dismiss', () => {
     assert.equal(pending.failedFor(4), null);
 });
 
+test('pending send does not yank the thread when scrolled up', () => {
+    const host = fakeHost();
+    const thread = { scrollTop: 80, scrollHeight: 1000, clientHeight: 200 };
+    const pending = createInboxPendingSend({
+        conversationId: () => 4,
+        host: () => host,
+        scroller: () => thread,
+    });
+
+    pending.begin(4);
+    assert.equal(host.hidden, false);
+    assert.equal(thread.scrollTop, 80);
+});
+
+test('pending send still follows the thread when already near the bottom', () => {
+    const host = fakeHost();
+    const thread = { scrollTop: 720, scrollHeight: 1000, clientHeight: 200 };
+    const pending = createInboxPendingSend({
+        conversationId: () => 4,
+        host: () => host,
+        scroller: () => thread,
+    });
+
+    pending.begin(4);
+    assert.equal(host.hidden, false);
+    assert.equal(thread.scrollTop, 1000);
+});
+
 test('failed send retry and dismiss buttons fire from the host', () => {
     const listeners = {};
     const host = fakeHost();

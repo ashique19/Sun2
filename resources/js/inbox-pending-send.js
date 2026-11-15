@@ -26,6 +26,9 @@ export function conversationIdFromButton(button) {
     return Number.isInteger(id) && id > 0 ? id : 0;
 }
 
+/** Match the thread Alpine stick threshold so pending dots follow only at the bottom. */
+const STICK_THRESHOLD = 96;
+
 export function createInboxPendingSend(options = {}) {
     const counts = new Map();
     const failures = new Map();
@@ -101,6 +104,19 @@ export function createInboxPendingSend(options = {}) {
         return typeof error === 'string' && error.trim() !== '' ? error.trim() : '';
     };
 
+    const followIfNearBottom = () => {
+        const thread = scroller();
+        if (! thread) {
+            return;
+        }
+
+        const clientHeight = Number(thread.clientHeight) || 0;
+        const distance = thread.scrollHeight - thread.scrollTop - clientHeight;
+        if (distance < STICK_THRESHOLD) {
+            thread.scrollTop = thread.scrollHeight;
+        }
+    };
+
     const paint = () => {
         const dots = host();
         const failedEl = failedHost();
@@ -125,10 +141,7 @@ export function createInboxPendingSend(options = {}) {
         }
 
         if (showDots || showFailed) {
-            const thread = scroller();
-            if (thread) {
-                thread.scrollTop = thread.scrollHeight;
-            }
+            followIfNearBottom();
         }
     };
 

@@ -155,6 +155,8 @@ class AdminInboxTest extends TestCase
         $this->assertStringContainsString('sendMatchedProductAlbumImages', $pending);
         $this->assertStringContainsString('sendProductPickerPrice', $pending);
         $this->assertStringContainsString('sendProductPickerAlbumImages', $pending);
+        $this->assertStringContainsString('followIfNearBottom', $pending);
+        $this->assertStringContainsString('STICK_THRESHOLD', $pending);
 
         $priced = file_get_contents(resource_path('js/inbox-priced-image-send.js'));
         $this->assertStringContainsString('beginInboxPendingSend', $priced);

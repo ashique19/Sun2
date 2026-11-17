@@ -2,6 +2,7 @@
 
 namespace App\Services\Admin;
 
+use App\Models\Category;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Models\Product;
@@ -44,6 +45,22 @@ class InboxProductReplyService
             route('product.show', $product),
             $replyTo,
             'Failed to send product link.',
+        );
+    }
+
+    /**
+     * @return array{ok: bool, error: ?string}
+     */
+    public function sendCategoryLink(
+        ChannelConversation $conversation,
+        Category $category,
+        ?ChannelMessage $replyTo = null,
+    ): array {
+        return $this->sendText(
+            $conversation,
+            route('category.show', $category),
+            $replyTo,
+            'Failed to send category link.',
         );
     }
 

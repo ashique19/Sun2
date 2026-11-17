@@ -238,6 +238,8 @@ class AdminInbox extends Component
      */
     public array $pricedSendResults = [];
 
+    public bool $pricedSendHasMore = false;
+
     /**
      * Product matches for inbound customer photos in the open thread, read from the
      * persisted per-photo result. "pending" photos are matched by the browser queue
@@ -1643,6 +1645,50 @@ class AdminInbox extends Component
         $this->finishProductReply($result, $conversation, $replies, 'Price reply sent.');
     }
 
+    public function sendProductPickerCategoryLink(int $categoryId, ChannelReplyService $replies, InboxProductReplyService $productReplies): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        $this->error = null;
+        $this->statusMessage = null;
+
+        if (! $this->isProductPickerOpen()) {
+            return;
+        }
+
+        $context = $this->resolveProductPickerContext();
+        if ($context === null) {
+            return;
+        }
+
+        [$conversation, $replyTo] = $context;
+
+        $category = Category::query()
+            ->whereKey($categoryId)
+            ->where('is_active', true)
+            ->first();
+
+        if (! $category) {
+            $this->error = 'Category not found.';
+
+            return;
+        }
+
+        $result = $productReplies->sendCategoryLink($conversation, $category, $replyTo);
+        $this->finishProductReply($result, $conversation, $replies, 'Category link sent.');
+    }
+
+    public function loadMorePricedSendResults(): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->pricedSendHasMore) {
+            return;
+        }
+
+        $this->refreshPricedSendResults(append: true);
+    }
+
     public function sendReply(): void
     {
         AdminAccess::ensureStaffAdmin();
@@ -2544,6 +2590,7 @@ class AdminInbox extends Component
         $this->pricedSendCategory = '';
         $this->pricedSendPriceMin = '';
         $this->pricedSendPriceMax = '';
+        $this->pricedSendHasMore = false;
 
         if ($refresh) {
             $this->refreshPricedSendResults();
@@ -2661,20 +2708,28 @@ class AdminInbox extends Component
             : 'Sent '.$sent.' product images.';
     }
 
-    private function refreshPricedSendResults(): void
+    private function refreshPricedSendResults(bool $append = false): void
     {
         if (! $this->isProductPickerOpen()) {
             $this->pricedSendResults = [];
+            $this->pricedSendHasMore = false;
 
             return;
         }
 
-        $this->pricedSendResults = app(InboxCatalogSearch::class)->pickerResults(
+        $page = app(InboxCatalogSearch::class)->pickerPage(
             $this->pricedSendSearch,
             $this->pricedSendCategory,
             $this->pricedSendPriceMin,
             $this->pricedSendPriceMax,
+            InboxCatalogSearch::PICKER_PAGE_SIZE,
+            $append ? count($this->pricedSendResults) : 0,
         );
+
+        $this->pricedSendResults = $append
+            ? array_values(array_merge($this->pricedSendResults, $page['rows']))
+            : $page['rows'];
+        $this->pricedSendHasMore = $page['hasMore'];
     }
 
     private function isProductPickerOpen(): bool
@@ -2911,9 +2966,15 @@ class AdminInbox extends Component
             }
         }
 
-        $inboxProductCategories = ($this->mappingField === ChannelMessageOrderMapper::FIELD_PRODUCT
-            || $this->isProductPickerOpen())
+        $mappingProductCategories = $this->mappingField === ChannelMessageOrderMapper::FIELD_PRODUCT
             ? Category::query()->orderBy('name')->get(['id', 'name'])
+            : collect();
+        $pricedSendCategories = $this->isProductPickerOpen()
+            ? Category::query()
+                ->where('is_active', true)
+                ->orderBy('display_order')
+                ->orderBy('name')
+                ->get(['id', 'name', 'slug', 'thumb_image'])
             : collect();
 
         return view('livewire.admin.admin-inbox', [
@@ -2935,8 +2996,8 @@ class AdminInbox extends Component
             'mappingMessage' => $mappingMessage,
             'imageEditMessage' => $imageEditMessage,
             'pricedSendMessage' => $pricedSendMessage,
-            'mappingProductCategories' => $inboxProductCategories,
-            'pricedSendCategories' => $inboxProductCategories,
+            'mappingProductCategories' => $mappingProductCategories,
+            'pricedSendCategories' => $pricedSendCategories,
             'composerProductPickerOpen' => $this->composerProductPickerOpen,
             'quickReplies' => $quickReplies,
             'quickReplyMatches' => $quickReplyMatches,

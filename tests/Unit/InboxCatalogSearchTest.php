@@ -101,6 +101,57 @@ class InboxCatalogSearchTest extends TestCase
         $this->assertSame('Rings', $rows[0]['category']);
     }
 
+    #[Test]
+    public function picker_page_returns_the_next_offset_and_has_more(): void
+    {
+        $category = $this->category('Rings');
+        for ($i = 1; $i <= 5; $i++) {
+            $this->product('Pager Ring '.$i, [
+                'category_id' => $category->id,
+                'display_order' => $i,
+            ]);
+        }
+
+        $first = $this->search->pickerPage(
+            term: '',
+            categoryId: '',
+            priceMin: '',
+            priceMax: '',
+            limit: 2,
+            offset: 0,
+        );
+
+        $this->assertTrue($first['hasMore']);
+        $this->assertCount(2, $first['rows']);
+        $this->assertSame('Pager Ring 1', $first['rows'][0]['name']);
+        $this->assertSame('Pager Ring 2', $first['rows'][1]['name']);
+
+        $second = $this->search->pickerPage(
+            term: '',
+            categoryId: '',
+            priceMin: '',
+            priceMax: '',
+            limit: 2,
+            offset: 2,
+        );
+
+        $this->assertTrue($second['hasMore']);
+        $this->assertSame('Pager Ring 3', $second['rows'][0]['name']);
+
+        $last = $this->search->pickerPage(
+            term: '',
+            categoryId: '',
+            priceMin: '',
+            priceMax: '',
+            limit: 2,
+            offset: 4,
+        );
+
+        $this->assertFalse($last['hasMore']);
+        $this->assertCount(1, $last['rows']);
+        $this->assertSame('Pager Ring 5', $last['rows'][0]['name']);
+    }
+
     private function category(string $name): Category
     {
         return Category::query()->create([

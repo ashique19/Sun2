@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Models\Category;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Models\Product;
@@ -50,6 +51,28 @@ class InboxProductReplyServiceTest extends TestCase
             ->andReturn(['ok' => true]);
 
         $result = (new InboxProductReplyService($replies))->sendLink($conversation, $product);
+
+        $this->assertTrue($result['ok']);
+    }
+
+    #[Test]
+    public function send_category_link_posts_the_storefront_collection_url(): void
+    {
+        $conversation = new ChannelConversation(['id' => 11]);
+        $category = new Category(['id' => 4, 'slug' => 'rings', 'name' => 'Rings', 'is_active' => true]);
+
+        $replies = Mockery::mock(ChannelReplyService::class);
+        $replies->shouldReceive('sendText')
+            ->once()
+            ->withArgs(function ($sentConversation, $body, $force, $replyTo) use ($conversation, $category) {
+                return $sentConversation === $conversation
+                    && $force === false
+                    && $replyTo === null
+                    && $body === route('category.show', $category);
+            })
+            ->andReturn(['ok' => true]);
+
+        $result = (new InboxProductReplyService($replies))->sendCategoryLink($conversation, $category);
 
         $this->assertTrue($result['ok']);
     }

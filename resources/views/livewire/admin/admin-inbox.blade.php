@@ -2236,11 +2236,41 @@
                             <div class="min-w-0">
                                 <h3 id="inbox-product-picker-title" class="text-base font-semibold text-[#1E1E1E]">{{ $productPickerTitle }}</h3>
                                 <p class="mt-0.5 text-xs text-[#8C8474]">{{ $productPickerSubtitle }}</p>
+                                @if ($statusMessage)
+                                    <p class="mt-1 text-xs text-emerald-700">{{ $statusMessage }}</p>
+                                @endif
+                                @if ($error)
+                                    <p class="mt-1 text-xs text-rose-700">{{ $error }}</p>
+                                @endif
                             </div>
                             <button type="button" wire:click="closePricedImageSend" class="text-2xl leading-none text-[#8C8474] hover:text-[#1E1E1E]" aria-label="Close">&times;</button>
                         </div>
 
                         <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4" style="-webkit-overflow-scrolling: touch;">
+                            @if ($pricedSendCategories->isNotEmpty())
+                                <div class="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" data-inbox-category-links>
+                                    @foreach ($pricedSendCategories as $category)
+                                        @php
+                                            $categoryThumb = \App\Support\StorefrontAssets::url($category->thumb_image);
+                                        @endphp
+                                        <button type="button"
+                                            wire:click="sendProductPickerCategoryLink({{ $category->id }})"
+                                            wire:loading.attr="disabled"
+                                            wire:target="sendProductPickerCategoryLink({{ $category->id }})"
+                                            title="Send {{ $category->name }} collection link"
+                                            aria-label="Send {{ $category->name }} collection link"
+                                            class="flex w-16 shrink-0 flex-col items-center gap-1 disabled:opacity-60">
+                                            @if ($categoryThumb)
+                                                <img src="{{ $categoryThumb }}" alt="" class="h-12 w-12 rounded-full border border-[#E7DFCF] object-cover bg-[#FAF6EF]">
+                                            @else
+                                                <span class="flex h-12 w-12 items-center justify-center rounded-full border border-[#E7DFCF] bg-[#FAF6EF] text-lg text-[#C9A227]">&#9670;</span>
+                                            @endif
+                                            <span class="w-full truncate text-center text-[10px] leading-tight text-[#6B6459]">{{ $category->name }}</span>
+                                        </button>
+                                    @endforeach
+                                </div>
+                            @endif
+
                             <div>
                                 <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#8C8474]">Search</label>
                                 <input type="search"
@@ -2337,6 +2367,19 @@
                                 @empty
                                     <p class="text-xs text-[#8C8474]">No products match these filters.</p>
                                 @endforelse
+
+                                @if ($pricedSendHasMore)
+                                    <div class="pt-1" wire:intersect="loadMorePricedSendResults">
+                                        <button type="button"
+                                            wire:click="loadMorePricedSendResults"
+                                            wire:loading.attr="disabled"
+                                            wire:target="loadMorePricedSendResults"
+                                            class="w-full rounded-xl border border-[#E0D6C2] px-3 py-2 text-sm font-medium text-[#6B6459] hover:border-[#C9A227] hover:text-[#1E1E1E] disabled:opacity-60">
+                                            <span wire:loading.remove wire:target="loadMorePricedSendResults">Load more</span>
+                                            <span wire:loading wire:target="loadMorePricedSendResults">Loading…</span>
+                                        </button>
+                                    </div>
+                                @endif
                             </div>
                         </div>
                     </div>

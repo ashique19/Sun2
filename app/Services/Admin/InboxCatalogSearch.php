@@ -44,6 +44,8 @@ class InboxCatalogSearch
             ->all();
     }
 
+    public const PICKER_PAGE_SIZE = 24;
+
     /**
      * @return list<array{id: int, name: string, price: float, sku: ?string, category: ?string, image_url: ?string, priced_image_url: ?string, has_priced_image: bool}>
      */
@@ -52,12 +54,29 @@ class InboxCatalogSearch
         string $categoryId,
         string $priceMin,
         string $priceMax,
-        int $limit = 24,
+        int $limit = self::PICKER_PAGE_SIZE,
+        int $offset = 0,
     ): array {
+        return $this->pickerPage($term, $categoryId, $priceMin, $priceMax, $limit, $offset)['rows'];
+    }
+
+    /**
+     * @return array{rows: list<array{id: int, name: string, price: float, sku: ?string, category: ?string, image_url: ?string, priced_image_url: ?string, has_priced_image: bool}>, hasMore: bool}
+     */
+    public function pickerPage(
+        string $term,
+        string $categoryId,
+        string $priceMin,
+        string $priceMax,
+        int $limit = self::PICKER_PAGE_SIZE,
+        int $offset = 0,
+    ): array {
+        $limit = max(1, min($limit, 48));
+        $offset = max(0, $offset);
         [$min, $max] = $this->normalizedPriceRange($priceMin, $priceMax);
         $term = trim($term);
 
-        return Product::query()
+        $mapped = Product::query()
             ->with([
                 'category:id,name',
                 'images' => fn ($q) => $q->orderBy('sort_order')->limit(1),
@@ -68,7 +87,8 @@ class InboxCatalogSearch
             ->when($categoryId !== '', fn ($q) => $q->where('category_id', (int) $categoryId))
             ->orderBy('display_order')
             ->orderByDesc('id')
-            ->limit($limit)
+            ->offset($offset)
+            ->limit($limit + 1)
             ->get()
             ->map(function (Product $product) {
                 $pricedPath = is_string($product->priced_image_path) ? trim($product->priced_image_path) : '';
@@ -87,6 +107,16 @@ class InboxCatalogSearch
                 ];
             })
             ->all();
+
+        $hasMore = count($mapped) > $limit;
+        if ($hasMore) {
+            array_pop($mapped);
+        }
+
+        return [
+            'rows' => $mapped,
+            'hasMore' => $hasMore,
+        ];
     }
 
     /**

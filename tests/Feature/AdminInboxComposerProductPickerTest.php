@@ -9,6 +9,7 @@ use App\Models\ChannelMessage;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\User;
+use App\Services\Admin\InboxCatalogSearch;
 use App\Services\Admin\ProductPricedImageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -118,7 +119,113 @@ class AdminInboxComposerProductPickerTest extends TestCase
             ->assertSee('A.Img')
             ->assertSee('Link')
             ->assertSee('Price')
-            ->assertSee('P.img');
+            ->assertSee('P.img')
+            ->assertSeeHtml('data-inbox-category-links')
+            ->assertSeeHtml('aria-label="Send Rings collection link"');
+    }
+
+    #[Test]
+    public function composer_picker_loads_further_products(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation(['external_user_id' => 'psid-picker-more']);
+        $category = $this->makeCategory('Sets');
+        $pageSize = InboxCatalogSearch::PICKER_PAGE_SIZE;
+
+        for ($i = 1; $i <= $pageSize + 1; $i++) {
+            Product::query()->create([
+                'category_id' => $category->id,
+                'name' => 'Pager Piece '.$i,
+                'slug' => 'pager-piece-'.$i.'-'.uniqid(),
+                'price' => 1000 + $i,
+                'purchase_price' => 400,
+                'stock_quantity' => 3,
+                'is_published' => true,
+                'display_order' => $i,
+            ]);
+        }
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_in_pager',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'More options',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('openComposerProductPicker')
+            ->assertSee('Pager Piece 1')
+            ->assertSee('Pager Piece '.$pageSize)
+            ->assertDontSee('Pager Piece '.($pageSize + 1))
+            ->assertSee('Load more')
+            ->assertSet('pricedSendHasMore', true)
+            ->call('loadMorePricedSendResults')
+            ->assertSee('Pager Piece '.($pageSize + 1))
+            ->assertSet('pricedSendHasMore', false);
+    }
+
+    #[Test]
+    public function composer_picker_sends_category_collection_link(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.graph_version' => 'v25.0',
+            'app.url' => 'https://example.test',
+        ]);
+
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_cat_1',
+                'recipient_id' => 'psid-picker',
+            ], 200),
+        ]);
+
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation(['external_user_id' => 'psid-picker-cat']);
+        $rings = $this->makeCategory('Rings');
+        $hidden = Category::query()->create([
+            'name' => 'Archived',
+            'slug' => 'archived-hidden',
+            'display_order' => 9,
+            'is_homepage' => false,
+            'is_active' => false,
+        ]);
+        $this->productWithPrimaryImage($rings, 'Gold Ring', 2500);
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_in_cat',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Show rings',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('openComposerProductPicker')
+            ->assertSeeHtml('aria-label="Send Rings collection link"')
+            ->assertDontSee('Archived')
+            ->call('sendProductPickerCategoryLink', $rings->id)
+            ->assertHasNoErrors()
+            ->assertSet('composerProductPickerOpen', true)
+            ->assertSet('statusMessage', 'Category link sent.')
+            ->call('sendProductPickerCategoryLink', $hidden->id)
+            ->assertSet('error', 'Category not found.');
+
+        $outbound = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($outbound);
+        $this->assertSame(route('category.show', $rings), $outbound->body);
+        $this->assertSame(1, ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->count());
     }
 
     #[Test]

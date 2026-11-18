@@ -17,7 +17,7 @@ class InboxPriceQueryAutomationService
 
     public const LOW_MATCH_WAIT_BODY = 'এই প্রডাক্টের দাম জানানোর জন্য কিছুক্ষন সময় দিবেন কাইন্ডলি';
 
-    public const MATCH_MIN_PERCENT = 80.0;
+    public const MATCH_MIN_PERCENT = 90.0;
 
     public const SESSION_MINUTES = 60;
 

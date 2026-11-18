@@ -7,6 +7,7 @@ use App\Models\ChannelMessage;
 use App\Models\Product;
 use App\Services\Admin\InboxPricedImageSender;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -309,6 +310,24 @@ class InboxPriceQueryAutomationService
         return $this->isInSession($photo, $this->sessionCutoff());
     }
 
+    /**
+     * @template T
+     *
+     * @param  callable(): T  $then
+     * @return T
+     */
+    public static function withConversationLock(int $conversationId, callable $then): mixed
+    {
+        return DB::transaction(function () use ($conversationId, $then): mixed {
+            $locked = ChannelConversation::query()->whereKey($conversationId)->lockForUpdate()->first();
+            if (! $locked) {
+                return null;
+            }
+
+            return $then();
+        });
+    }
+
     private function sendPricedImage(ChannelConversation $conversation, ChannelMessage $photo, int $productId): ?ChannelMessage
     {
         $product = Product::query()->published()->whereKey($productId)->first();
@@ -316,36 +335,44 @@ class InboxPriceQueryAutomationService
             return null;
         }
 
-        if ($this->alreadySentAutoPricedImage($conversation, $productId)) {
-            return null;
-        }
+        return self::withConversationLock((int) $conversation->id, function () use ($conversation, $photo, $product, $productId): ?ChannelMessage {
+            if ($this->alreadySentAutoPricedImage($conversation, $productId)) {
+                return null;
+            }
 
-        $result = $this->pricedImages->send($conversation, $product, $photo);
-        $stored = $result['message'] ?? null;
-        if (! ($result['ok'] ?? false) || ! $stored instanceof ChannelMessage) {
-            return null;
-        }
+            $result = $this->pricedImages->send($conversation, $product, $photo);
+            $stored = $result['message'] ?? null;
+            if (! ($result['ok'] ?? false) || ! $stored instanceof ChannelMessage) {
+                return null;
+            }
 
-        return $this->flagOutbound($stored, self::RAW_PRICED_IMAGE, [
-            self::RAW_PRICED_PRODUCT_ID => $productId,
-        ]);
+            return $this->flagOutbound($stored, self::RAW_PRICED_IMAGE, [
+                self::RAW_PRICED_PRODUCT_ID => $productId,
+            ]);
+        });
     }
 
     private function sendWaitText(ChannelConversation $conversation, ChannelMessage $photo): ?ChannelMessage
     {
-        $result = $this->replies->sendText(
-            $conversation,
-            self::LOW_MATCH_WAIT_BODY,
-            false,
-            $photo,
-        );
+        return self::withConversationLock((int) $conversation->id, function () use ($conversation, $photo): ?ChannelMessage {
+            if ($this->alreadySentWaitText($conversation)) {
+                return null;
+            }
 
-        $stored = $result['message'] ?? null;
-        if (! ($result['ok'] ?? false) || ! $stored instanceof ChannelMessage) {
-            return null;
-        }
+            $result = $this->replies->sendText(
+                $conversation,
+                self::LOW_MATCH_WAIT_BODY,
+                false,
+                $photo,
+            );
 
-        return $this->flagOutbound($stored, self::RAW_LOW_MATCH_WAIT);
+            $stored = $result['message'] ?? null;
+            if (! ($result['ok'] ?? false) || ! $stored instanceof ChannelMessage) {
+                return null;
+            }
+
+            return $this->flagOutbound($stored, self::RAW_LOW_MATCH_WAIT);
+        });
     }
 
     /**

@@ -116,6 +116,34 @@ class InboxPricePhotoRequestTest extends TestCase
     }
 
     #[Test]
+    public function tapping_price_query_again_does_not_resend_the_photo_request(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_photo_tap_'.uniqid('', true),
+                'recipient_id' => 'psid-photo-tap',
+            ], 200);
+        });
+
+        $conversation = $this->conversation('psid-photo-tap');
+        $first = $this->inbound($conversation, 'dam koto?', now()->subSeconds(5));
+        $stale = $conversation->fresh('messages');
+        $service = app(InboxPricePhotoRequestService::class);
+
+        $this->assertNotNull($service->requestProductPhoto($stale, $first));
+
+        $second = $this->inbound($conversation, 'দাম কত');
+        $this->assertNull($service->requestProductPhoto($stale, $second));
+        $this->assertNull($service->requestProductPhoto($conversation->fresh('messages'), $second));
+
+        $this->assertSame(1, ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->count());
+        $this->assertSame(1, $this->graphSendCount());
+    }
+
+    #[Test]
     public function inbound_product_photo_skips_the_photo_request(): void
     {
         Http::fake();

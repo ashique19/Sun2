@@ -11,8 +11,6 @@ class InboxPricePhotoRequestService
 {
     public const RAW_FLAG = 'auto_photo_request';
 
-    public const DEDUPE_HOURS = 12;
-
     public const FALLBACK_BODY = InboxPriceQueryAutomationService::PHOTO_REQUEST_BODY;
 
     /**
@@ -90,29 +88,32 @@ class InboxPricePhotoRequestService
 
     public function requestProductPhoto(ChannelConversation $conversation, ChannelMessage $message): ?ChannelMessage
     {
-        $conversation->loadMissing('messages');
+        return InboxPriceQueryAutomationService::withConversationLock(
+            (int) $conversation->id,
+            function () use ($conversation, $message): ?ChannelMessage {
+                if (! $this->shouldRequestProductPhoto($conversation, $message)) {
+                    return null;
+                }
 
-        if (! $this->shouldRequestProductPhoto($conversation, $message)) {
-            return null;
-        }
+                $result = $this->replies->sendText(
+                    $conversation,
+                    $this->photoRequestBody(),
+                    false,
+                    $message,
+                );
 
-        $result = $this->replies->sendText(
-            $conversation,
-            $this->photoRequestBody(),
-            false,
-            $message,
+                $stored = $result['message'] ?? null;
+                if (! ($result['ok'] ?? false) || ! $stored instanceof ChannelMessage) {
+                    return null;
+                }
+
+                $payload = is_array($stored->raw_payload) ? $stored->raw_payload : [];
+                $payload[self::RAW_FLAG] = true;
+                $stored->forceFill(['raw_payload' => $payload])->save();
+
+                return $stored->fresh();
+            },
         );
-
-        $stored = $result['message'] ?? null;
-        if (! ($result['ok'] ?? false) || ! $stored instanceof ChannelMessage) {
-            return null;
-        }
-
-        $payload = is_array($stored->raw_payload) ? $stored->raw_payload : [];
-        $payload[self::RAW_FLAG] = true;
-        $stored->forceFill(['raw_payload' => $payload])->save();
-
-        return $stored->fresh();
     }
 
     public function shouldRequestProductPhoto(ChannelConversation $conversation, ChannelMessage $message): bool
@@ -132,8 +133,6 @@ class InboxPricePhotoRequestService
         if (! $this->matcher->isWhichProductPriceAsk($message)) {
             return false;
         }
-
-        $conversation->loadMissing('messages');
 
         if ($this->hasSessionProductImages($conversation)) {
             return false;
@@ -160,11 +159,7 @@ class InboxPricePhotoRequestService
         $inboundId = (int) $inbound->id;
         $inboundAt = $inbound->sent_at;
 
-        foreach ($conversation->messages as $row) {
-            if ($row->direction !== ChannelMessage::DIRECTION_OUTBOUND) {
-                continue;
-            }
-
+        foreach ($this->outboundMessages($conversation) as $row) {
             if ((int) ($row->reply_to_message_id ?? 0) === $inboundId) {
                 return true;
             }
@@ -191,15 +186,15 @@ class InboxPricePhotoRequestService
 
     private function recentlyRequestedPhoto(ChannelConversation $conversation): bool
     {
-        $cutoff = now()->subHours(self::DEDUPE_HOURS);
+        $cutoff = InboxPriceQueryAutomationService::sessionCutoff();
+        $body = $this->photoRequestBody();
 
-        foreach ($conversation->messages as $row) {
-            if ($row->direction !== ChannelMessage::DIRECTION_OUTBOUND) {
-                continue;
-            }
-
+        foreach ($this->outboundMessages($conversation) as $row) {
             $payload = is_array($row->raw_payload) ? $row->raw_payload : [];
-            if (($payload[self::RAW_FLAG] ?? false) !== true) {
+            $isAuto = ($payload[self::RAW_FLAG] ?? false) === true
+                || (string) $row->body === $body;
+
+            if (! $isAuto) {
                 continue;
             }
 
@@ -215,7 +210,10 @@ class InboxPricePhotoRequestService
     {
         $cutoff = InboxPriceQueryAutomationService::sessionCutoff();
 
-        foreach ($conversation->messages as $message) {
+        foreach (ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_INBOUND)
+            ->get() as $message) {
             if (! $this->matcher->isInboundProductImage($message)) {
                 continue;
             }
@@ -226,5 +224,17 @@ class InboxPricePhotoRequestService
         }
 
         return false;
+    }
+
+    /**
+     * @return list<ChannelMessage>
+     */
+    private function outboundMessages(ChannelConversation $conversation): array
+    {
+        return ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->get()
+            ->all();
     }
 }

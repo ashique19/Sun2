@@ -83,6 +83,37 @@ class InboxPriceQueryAutomationTest extends TestCase
     }
 
     #[Test]
+    public function repeated_price_asks_without_photos_send_the_photo_request_once(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_repeat_'.uniqid('', true),
+                'recipient_id' => 'psid-auto',
+            ], 200);
+        });
+
+        $conversation = $this->conversation('psid-auto-repeat-ask');
+        $first = $this->inbound($conversation, 'dam koto?', now()->subSeconds(8));
+        $stale = $conversation->fresh('messages');
+        $service = app(InboxPriceQueryAutomationService::class);
+        $service->handlePriceAsk($stale, $first);
+
+        $second = $this->inbound($conversation, 'দাম কত');
+        $service->handlePriceAsk($stale, $second);
+        $service->handlePriceAsk($conversation->fresh('messages'), $second);
+
+        $this->assertSame(1, $this->outboundCount($conversation));
+        $this->assertSame(1, Http::recorded()->count());
+        $this->assertSame(
+            InboxPriceQueryAutomationService::PHOTO_REQUEST_BODY,
+            ChannelMessage::query()
+                ->where('channel_conversation_id', $conversation->id)
+                ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+                ->value('body')
+        );
+    }
+
+    #[Test]
     public function high_match_sends_priced_image_when_enabled(): void
     {
         Http::fake([

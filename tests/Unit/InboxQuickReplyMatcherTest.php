@@ -159,6 +159,23 @@ class InboxQuickReplyMatcherTest extends TestCase
     }
 
     #[Test]
+    public function detects_the_hi_saved_reply_and_short_greetings(): void
+    {
+        $this->assertTrue($this->matcher()->isHiReply([
+            'label' => 'Hi',
+            'body' => 'Hello there',
+        ]));
+        $this->assertFalse($this->matcher()->isHiReply([
+            'label' => 'Salaam',
+            'body' => 'আসসালামু আলাইকুম',
+        ]));
+        $this->assertTrue($this->matcher()->looksLikeHi('Hi'));
+        $this->assertTrue($this->matcher()->looksLikeHi('hello'));
+        $this->assertFalse($this->matcher()->looksLikeHi('আসসালামু আলাইকুম'));
+        $this->assertFalse($this->matcher()->looksLikeHi('dam koto?'));
+    }
+
+    #[Test]
     public function price_query_matches_which_product_only_when_no_customer_photos(): void
     {
         $replies = $this->whichProductReplies();

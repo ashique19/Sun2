@@ -35,6 +35,17 @@ class InboxQuickReplyMatcher
     ];
 
     /**
+     * Compacted inbound greetings that map to the “Hi” saved reply.
+     *
+     * @var list<string>
+     */
+    private const HI_CUES = [
+        'hi', 'hii', 'hiii', 'hiiii',
+        'hello', 'helo', 'hellow', 'hey',
+        'hlw', 'hlo', 'hy',
+    ];
+
+    /**
      * Bootstrap cues for the three query types staff see most.
      * Compacted (lowercase, no spaces/punct) so typos like "eta koto" / "etakoto" still hit.
      *
@@ -369,6 +380,73 @@ class InboxQuickReplyMatcher
      *
      * @param  array{label?: string, body?: string}  $reply
      */
+    /**
+     * True when this inbound is a “Hi” greeting: tagged against the Hi saved
+     * reply, a Hi example tag, or short hi/hello wording while that chip exists.
+     */
+    public function isHiAsk(ChannelMessage $message): bool
+    {
+        if ($message->direction !== ChannelMessage::DIRECTION_INBOUND) {
+            return false;
+        }
+
+        $replies = $this->quickReplies->all();
+        $hiReplies = [];
+        foreach ($replies as $reply) {
+            if ($this->isHiReply($reply)) {
+                $hiReplies[] = $reply;
+            }
+        }
+
+        if ($hiReplies === []) {
+            return false;
+        }
+
+        $taggedId = trim((string) ($message->quick_reply_id ?? ''));
+        if ($taggedId !== '') {
+            foreach ($hiReplies as $reply) {
+                if ($reply['id'] === $taggedId) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        $text = trim((string) ($message->body ?? ''));
+        if ($text !== '' && $this->looksLikeHi($text)) {
+            return true;
+        }
+
+        if ($text === '') {
+            return false;
+        }
+
+        $examples = InboxQuickReplyExample::query()
+            ->whereIn('quick_reply_id', array_column($hiReplies, 'id'))
+            ->get();
+        $match = $this->matchMessage($message, $hiReplies, $examples, hasInboundProductImages: false);
+
+        return is_array($match) && $this->isHiReply($match);
+    }
+
+    public function looksLikeHi(string $text): bool
+    {
+        $compact = $this->compact($text);
+
+        return $compact !== '' && in_array($compact, self::HI_CUES, true);
+    }
+
+    /**
+     * True when this saved reply is the Hi greeting chip (label “Hi”).
+     *
+     * @param  array{label?: string, body?: string}  $reply
+     */
+    public function isHiReply(array $reply): bool
+    {
+        return $this->compact((string) ($reply['label'] ?? '')) === 'hi';
+    }
+
     public function isWhichProductReply(array $reply): bool
     {
         $compact = $this->compact(($reply['label'] ?? '').' '.($reply['body'] ?? ''));

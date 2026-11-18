@@ -102,6 +102,7 @@ class ChannelConversationService
 
                 ChannelOrderDraftCatcher::scheduleAfterInbound($conversation);
                 InboxPriceQueryAutomationService::scheduleAfterInbound($conversation, $message);
+                InboxHiReplyAutomationService::scheduleAfterInbound($conversation, $message);
             } elseif ($conversation->last_outbound_at === null || $sentAt->greaterThan($conversation->last_outbound_at)) {
                 $conversation->forceFill(['last_outbound_at' => $sentAt])->save();
             }

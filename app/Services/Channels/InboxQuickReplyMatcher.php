@@ -62,6 +62,8 @@ class InboxQuickReplyMatcher
 
     public const PAHARI_ALCHORA_CATEGORY = 'পাহাড়ি আলছড়া';
 
+    public const DELIVERY_CHARGE_LABEL = 'ডেলিভারি চার্জ ও সময়';
+
     /**
      * Bootstrap cues for the three query types staff see most.
      * Compacted (lowercase, no spaces/punct) so typos like "eta koto" / "etakoto" still hit.
@@ -470,6 +472,140 @@ class InboxQuickReplyMatcher
     public function isHiReply(array $reply): bool
     {
         return $this->compact((string) ($reply['label'] ?? '')) === 'hi';
+    }
+
+    public function isDeliveryChargeAsk(ChannelMessage $message): bool
+    {
+        if ($message->direction !== ChannelMessage::DIRECTION_INBOUND) {
+            return false;
+        }
+
+        $replies = $this->quickReplies->all();
+        $deliveryReplies = [];
+        foreach ($replies as $reply) {
+            if ($this->isDeliveryChargeReply($reply)) {
+                $deliveryReplies[] = $reply;
+            }
+        }
+
+        if ($deliveryReplies === []) {
+            return false;
+        }
+
+        $taggedId = trim((string) ($message->quick_reply_id ?? ''));
+        if ($taggedId !== '') {
+            foreach ($deliveryReplies as $reply) {
+                if ($reply['id'] === $taggedId) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        $text = trim((string) ($message->body ?? ''));
+        if ($text !== '' && $this->looksLikeDeliveryCharge($text)) {
+            return true;
+        }
+
+        if ($text === '') {
+            return false;
+        }
+
+        $examples = InboxQuickReplyExample::query()
+            ->whereIn('quick_reply_id', array_column($deliveryReplies, 'id'))
+            ->get();
+        $repliesById = [];
+        foreach ($deliveryReplies as $reply) {
+            $repliesById[$reply['id']] = $reply;
+        }
+        $exampleHit = $this->matchExamples($text, $examples, $repliesById);
+
+        return is_array($exampleHit) && $this->isDeliveryChargeReply($exampleHit);
+    }
+
+    public function looksLikeDeliveryCharge(string $text): bool
+    {
+        $compact = $this->compactYa($text);
+        if ($compact === '') {
+            return false;
+        }
+
+        $labelNeedle = $this->compactYa(self::DELIVERY_CHARGE_LABEL);
+        if ($labelNeedle !== '' && str_contains($compact, $labelNeedle)) {
+            return true;
+        }
+
+        if (str_contains($compact, $this->compactYa('পার্সেল')) && str_contains($compact, $this->compactYa('পাঠা'))) {
+            return false;
+        }
+
+        foreach (['tracking', 'ট্রাকিং', 'ট্র্যাকিং'] as $tracking) {
+            $needle = $this->compactYa($tracking);
+            if ($needle !== '' && str_contains($compact, $needle)) {
+                return false;
+            }
+        }
+
+        $hasDelivery = str_contains($compact, $this->compactYa('ডেলিভারি'))
+            || str_contains($compact, $this->compactYa('ডেলিভারী'))
+            || str_contains($compact, $this->compactYa('ডেলিবারি'))
+            || str_contains($compact, 'delivery')
+            || str_contains($compact, 'delivary')
+            || str_contains($compact, 'dilevery');
+        $hasCharge = str_contains($compact, $this->compactYa('চার্জ'))
+            || str_contains($compact, 'charge')
+            || str_contains($compact, 'cost');
+        $hasTime = str_contains($compact, $this->compactYa('সময়'))
+            || str_contains($compact, $this->compactYa('সময়'))
+            || str_contains($compact, 'time')
+            || str_contains($compact, $this->compactYa('কতদিন'))
+            || str_contains($compact, 'kotodin');
+        $asksHowMuch = str_contains($compact, $this->compactYa('কত'))
+            || str_contains($compact, $this->compactYa('কতো'))
+            || str_contains($compact, 'koto');
+
+        if ($hasDelivery && ($hasCharge || $hasTime || $asksHowMuch)) {
+            return true;
+        }
+
+        return $hasTime && (str_contains($compact, $this->compactYa('কতদিন')) || str_contains($compact, 'kotodin'));
+    }
+
+    /**
+     * True when this saved reply is the delivery time/charge chip.
+     *
+     * @param  array{label?: string, body?: string}  $reply
+     */
+    public function isDeliveryChargeReply(array $reply): bool
+    {
+        $label = $this->compactYa((string) ($reply['label'] ?? ''));
+        if ($label === '') {
+            return false;
+        }
+
+        $canonical = $this->compactYa(self::DELIVERY_CHARGE_LABEL);
+        if ($canonical !== '' && str_contains($label, $canonical)) {
+            return true;
+        }
+
+        $hasDelivery = str_contains($label, $this->compactYa('ডেলিভারি'))
+            || str_contains($label, $this->compactYa('ডেলিভারী'))
+            || str_contains($label, 'delivery');
+        $hasChargeOrTime = str_contains($label, $this->compactYa('চার্জ'))
+            || str_contains($label, 'charge')
+            || str_contains($label, $this->compactYa('সময়'))
+            || str_contains($label, $this->compactYa('সময়'))
+            || str_contains($label, 'time');
+
+        return $hasDelivery && $hasChargeOrTime;
+    }
+
+    private function compactYa(string $text): string
+    {
+        return strtr($this->compact($text), [
+            "\u{09DF}" => "\u{09AF}",
+        ]);
     }
 
     public function isColorGuaranteeAsk(ChannelMessage $message): bool

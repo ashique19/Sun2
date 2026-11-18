@@ -19,6 +19,8 @@ class InboxAutomationSettings
 
     public const COLOR_GUARANTEE = 'color_guarantee';
 
+    public const DELIVERY_CHARGE = 'delivery_charge';
+
     /**
      * @var list<string>
      */
@@ -28,10 +30,11 @@ class InboxAutomationSettings
         self::LOW_MATCH_WAIT,
         self::HI_REPLY,
         self::COLOR_GUARANTEE,
+        self::DELIVERY_CHARGE,
     ];
 
     /**
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool}
      */
     public function all(): array
     {
@@ -68,7 +71,7 @@ class InboxAutomationSettings
 
     /**
      * @param  array<string, mixed>  $flags
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool}
      */
     public function save(array $flags): array
     {
@@ -89,7 +92,7 @@ class InboxAutomationSettings
     }
 
     /**
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool}
      */
     public function defaults(): array
     {
@@ -99,6 +102,7 @@ class InboxAutomationSettings
             self::LOW_MATCH_WAIT => (bool) config('channels.inbox.auto_low_match_wait', false),
             self::HI_REPLY => (bool) config('channels.inbox.auto_hi_reply', true),
             self::COLOR_GUARANTEE => (bool) config('channels.inbox.auto_color_guarantee', true),
+            self::DELIVERY_CHARGE => (bool) config('channels.inbox.auto_delivery_charge', true),
         ];
     }
 

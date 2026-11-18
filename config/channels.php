@@ -154,6 +154,9 @@ return [
         // Auto-send the কালার গ্যারান্টি chip when a session product is পাহাড়ি আলছড়া.
         'auto_color_guarantee' => filter_var(env('CHANNEL_INBOX_AUTO_COLOR_GUARANTEE', true), FILTER_VALIDATE_BOOL),
 
+        // Auto-send the ডেলিভারি চার্জ ও সময় chip when they ask delivery time/charge.
+        'auto_delivery_charge' => filter_var(env('CHANNEL_INBOX_AUTO_DELIVERY_CHARGE', true), FILTER_VALIDATE_BOOL),
+
         // Composer chips — label shown in UI, body inserted into the reply box.
         'quick_replies' => [
             ['label' => 'Salaam', 'body' => 'আসসালামু আলাইকুম'],

@@ -4,6 +4,7 @@ namespace App\Livewire\Admin;
 
 use App\Services\Channels\InboxAutomationSettings;
 use App\Services\Channels\InboxColorGuaranteeAutomationService;
+use App\Services\Channels\InboxDeliveryChargeAutomationService;
 use App\Services\Channels\InboxHiReplyAutomationService;
 use App\Services\Channels\InboxPriceQueryAutomationService;
 use App\Support\AdminAccess;
@@ -24,6 +25,8 @@ class AdminInboxAutomations extends Component
     public bool $hiReply = true;
 
     public bool $colorGuarantee = true;
+
+    public bool $deliveryCharge = true;
 
     public ?string $statusMessage = null;
 
@@ -58,6 +61,11 @@ class AdminInboxAutomations extends Component
         $this->persist($settings, InboxAutomationSettings::COLOR_GUARANTEE, ! $this->colorGuarantee);
     }
 
+    public function toggleDeliveryCharge(InboxAutomationSettings $settings): void
+    {
+        $this->persist($settings, InboxAutomationSettings::DELIVERY_CHARGE, ! $this->deliveryCharge);
+    }
+
     public function render()
     {
         return view('livewire.admin.admin-inbox-automations', [
@@ -68,6 +76,9 @@ class AdminInboxAutomations extends Component
                 ?? InboxColorGuaranteeAutomationService::REPLY_LABEL,
             'colorGuaranteeLabel' => InboxColorGuaranteeAutomationService::REPLY_LABEL,
             'colorGuaranteeCategory' => InboxColorGuaranteeAutomationService::CATEGORY_NAME,
+            'deliveryChargeBody' => app(InboxDeliveryChargeAutomationService::class)->replyBody()
+                ?? InboxDeliveryChargeAutomationService::REPLY_LABEL,
+            'deliveryChargeLabel' => InboxDeliveryChargeAutomationService::REPLY_LABEL,
             'matchMinPercent' => InboxPriceQueryAutomationService::MATCH_MIN_PERCENT,
             'sessionMinutes' => InboxPriceQueryAutomationService::sessionMinutes(),
         ]);
@@ -83,12 +94,14 @@ class AdminInboxAutomations extends Component
             InboxAutomationSettings::LOW_MATCH_WAIT => $key === InboxAutomationSettings::LOW_MATCH_WAIT ? $value : $this->lowMatchWait,
             InboxAutomationSettings::HI_REPLY => $key === InboxAutomationSettings::HI_REPLY ? $value : $this->hiReply,
             InboxAutomationSettings::COLOR_GUARANTEE => $key === InboxAutomationSettings::COLOR_GUARANTEE ? $value : $this->colorGuarantee,
+            InboxAutomationSettings::DELIVERY_CHARGE => $key === InboxAutomationSettings::DELIVERY_CHARGE ? $value : $this->deliveryCharge,
         ]);
         $this->photoRequest = $saved[InboxAutomationSettings::PHOTO_REQUEST];
         $this->pricedImage = $saved[InboxAutomationSettings::PRICED_IMAGE];
         $this->lowMatchWait = $saved[InboxAutomationSettings::LOW_MATCH_WAIT];
         $this->hiReply = $saved[InboxAutomationSettings::HI_REPLY];
         $this->colorGuarantee = $saved[InboxAutomationSettings::COLOR_GUARANTEE];
+        $this->deliveryCharge = $saved[InboxAutomationSettings::DELIVERY_CHARGE];
         $this->statusMessage = 'Automation saved.';
     }
 
@@ -100,5 +113,6 @@ class AdminInboxAutomations extends Component
         $this->lowMatchWait = $flags[InboxAutomationSettings::LOW_MATCH_WAIT];
         $this->hiReply = $flags[InboxAutomationSettings::HI_REPLY];
         $this->colorGuarantee = $flags[InboxAutomationSettings::COLOR_GUARANTEE];
+        $this->deliveryCharge = $flags[InboxAutomationSettings::DELIVERY_CHARGE];
     }
 }

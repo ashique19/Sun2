@@ -3,7 +3,7 @@
         <div>
             <h1 class="font-serif text-3xl font-semibold text-[#1E1E1E]">Automations</h1>
             <p class="mt-1 text-sm text-[#8C8474]">
-                Controlled auto-replies in the current session (past hour): price asks tagged against “কোন প্রডাক্ট?”, greetings tagged against “Hi”, and “{{ $colorGuaranteeLabel }}” only for “{{ $colorGuaranteeCategory }}”.
+                Controlled auto-replies in the current session (past hour): price asks tagged against “কোন প্রডাক্ট?”, greetings tagged against “Hi”, “{{ $colorGuaranteeLabel }}” only for “{{ $colorGuaranteeCategory }}”, and “{{ $deliveryChargeLabel }}”.
             </p>
         </div>
         <a href="{{ route('admin.inbox') }}" wire:navigate
@@ -59,6 +59,15 @@
                 <p class="mt-2 rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $colorGuaranteeBody }}</p>
             </div>
             <x-admin.switch :on="$colorGuarantee" wire:click="toggleColorGuarantee" aria-label="Match color guarantee" />
+        </div>
+
+        <div class="flex items-start justify-between gap-3 rounded-xl border border-[#E7DFCF] bg-[#FAF6EF]/60 p-4" data-inbox-automation="delivery_charge">
+            <div class="min-w-0">
+                <p class="text-sm font-semibold text-[#1E1E1E]">Match {{ $deliveryChargeLabel }}</p>
+                <p class="mt-1 text-sm text-[#6B6459]">Send the “{{ $deliveryChargeLabel }}” saved reply when they ask delivery time or charge. Edit that chip to change the copy.</p>
+                <p class="mt-2 rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $deliveryChargeBody }}</p>
+            </div>
+            <x-admin.switch :on="$deliveryCharge" wire:click="toggleDeliveryCharge" aria-label="Match delivery charge" />
         </div>
     </div>
 </div>

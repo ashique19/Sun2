@@ -178,6 +178,29 @@ class InboxQuickReplyMatcherTest extends TestCase
     }
 
     #[Test]
+    public function detects_the_delivery_charge_saved_reply_and_wording(): void
+    {
+        $this->assertTrue($this->matcher()->isDeliveryChargeReply([
+            'label' => 'ডেলিভারি চার্জ ও সময়',
+            'body' => 'ডেলিভারি চার্জ ১২০ টাকা, ৩-৫ দিনের মাঝে পাবেন।',
+        ]));
+        $this->assertTrue($this->matcher()->isDeliveryChargeReply([
+            'label' => 'Delivery Time & Charge',
+            'body' => 'Delivery charge 120 taka.',
+        ]));
+        $this->assertFalse($this->matcher()->isDeliveryChargeReply([
+            'label' => 'Salaam',
+            'body' => 'আসসালামু আলাইকুম',
+        ]));
+        $this->assertTrue($this->matcher()->looksLikeDeliveryCharge('ডেলিভারি চার্জ ও সময়'));
+        $this->assertTrue($this->matcher()->looksLikeDeliveryCharge('Delivery koto'));
+        $this->assertTrue($this->matcher()->looksLikeDeliveryCharge('কতদিন লাগবে'));
+        $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('দাম কত'));
+        $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('কবে পাবো'));
+        $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('আপু আমার পার্সেল টা কবে পাঠাবেন???'));
+    }
+
+    #[Test]
     public function detects_the_color_guarantee_saved_reply_and_wording(): void
     {
         $this->assertTrue($this->matcher()->isColorGuaranteeReply([

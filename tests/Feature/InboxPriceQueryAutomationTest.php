@@ -337,6 +337,156 @@ class InboxPriceQueryAutomationTest extends TestCase
     }
 
     #[Test]
+    public function second_price_ask_does_not_resend_the_same_priced_image(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_once_'.uniqid('', true),
+                'recipient_id' => 'psid-auto',
+            ], 200);
+        });
+
+        app(InboxAutomationSettings::class)->save([
+            InboxAutomationSettings::PHOTO_REQUEST => false,
+            InboxAutomationSettings::PRICED_IMAGE => true,
+            InboxAutomationSettings::LOW_MATCH_WAIT => false,
+        ]);
+
+        $conversation = $this->conversation('psid-auto-ask-twice');
+        $product = $this->productWithPricedImage();
+        $this->inbound($conversation, 'dam koto?', now()->subMinutes(4));
+        $photo = $this->inboundPhoto($conversation, $product, 92.0, sentAt: now()->subMinutes(2));
+
+        $service = app(InboxPriceQueryAutomationService::class);
+        $first = $service->handleMatchedPhoto($conversation->fresh('messages'), $photo);
+        $this->assertNotNull($first);
+
+        $askAgain = $this->inbound($conversation, 'দাম কত');
+        $service->handlePriceAsk($conversation->fresh('messages'), $askAgain);
+
+        $this->assertSame(1, $this->outboundCount($conversation));
+        $this->assertTrue($first->fresh()->raw_payload[InboxPriceQueryAutomationService::RAW_PRICED_IMAGE] ?? false);
+        $this->assertSame(
+            $product->id,
+            $first->fresh()->raw_payload[InboxPriceQueryAutomationService::RAW_PRICED_PRODUCT_ID] ?? null,
+        );
+        $this->assertSame(1, Http::recorded()->count());
+    }
+
+    #[Test]
+    public function two_session_photos_of_the_same_product_send_priced_image_once(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_same_'.uniqid('', true),
+                'recipient_id' => 'psid-auto',
+            ], 200);
+        });
+
+        app(InboxAutomationSettings::class)->save([
+            InboxAutomationSettings::PHOTO_REQUEST => false,
+            InboxAutomationSettings::PRICED_IMAGE => true,
+            InboxAutomationSettings::LOW_MATCH_WAIT => false,
+        ]);
+
+        $conversation = $this->conversation('psid-auto-two-photos');
+        $product = $this->productWithPricedImage();
+        $this->inbound($conversation, 'dam koto?', now()->subMinutes(3));
+        $this->inboundPhoto($conversation, $product, 86.0, sentAt: now()->subMinutes(2));
+        $this->inboundPhoto($conversation, $product, 93.0, sentAt: now()->subMinute());
+        $askAgain = $this->inbound($conversation, 'দাম কত');
+
+        app(InboxPriceQueryAutomationService::class)
+            ->handlePriceAsk($conversation->fresh('messages'), $askAgain);
+
+        $outbound = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->get();
+
+        $this->assertCount(1, $outbound);
+        $this->assertTrue($outbound->first()->raw_payload[InboxPriceQueryAutomationService::RAW_PRICED_IMAGE] ?? false);
+        $this->assertSame(
+            $product->id,
+            $outbound->first()->raw_payload[InboxPriceQueryAutomationService::RAW_PRICED_PRODUCT_ID] ?? null,
+        );
+        $this->assertSame(1, Http::recorded()->count());
+    }
+
+    #[Test]
+    public function two_session_products_each_get_one_priced_image(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_two_prod_'.uniqid('', true),
+                'recipient_id' => 'psid-auto',
+            ], 200);
+        });
+
+        app(InboxAutomationSettings::class)->save([
+            InboxAutomationSettings::PHOTO_REQUEST => false,
+            InboxAutomationSettings::PRICED_IMAGE => true,
+            InboxAutomationSettings::LOW_MATCH_WAIT => false,
+        ]);
+
+        $conversation = $this->conversation('psid-auto-two-products');
+        $first = $this->productWithPricedImage();
+        $second = $this->productWithPricedImage();
+        $this->inbound($conversation, 'dam koto?', now()->subMinutes(3));
+        $this->inboundPhoto($conversation, $first, 91.0, sentAt: now()->subMinutes(2));
+        $this->inboundPhoto($conversation, $second, 88.0, sentAt: now()->subMinute());
+        $ask = $this->inbound($conversation, 'দাম কত');
+
+        app(InboxPriceQueryAutomationService::class)
+            ->handlePriceAsk($conversation->fresh('messages'), $ask);
+
+        $outbound = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->get();
+
+        $this->assertCount(2, $outbound);
+        $this->assertEqualsCanonicalizing(
+            [$first->id, $second->id],
+            $outbound->pluck('raw_payload.'.InboxPriceQueryAutomationService::RAW_PRICED_PRODUCT_ID)->all(),
+        );
+    }
+
+    #[Test]
+    public function two_weak_photos_send_the_wait_text_once(): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_wait_once',
+                'recipient_id' => 'psid-auto',
+            ], 200),
+        ]);
+
+        app(InboxAutomationSettings::class)->save([
+            InboxAutomationSettings::PHOTO_REQUEST => false,
+            InboxAutomationSettings::PRICED_IMAGE => true,
+            InboxAutomationSettings::LOW_MATCH_WAIT => true,
+        ]);
+
+        $conversation = $this->conversation('psid-auto-wait-once');
+        $product = $this->productWithPricedImage();
+        $this->inbound($conversation, 'dam koto?', now()->subMinutes(3));
+        $this->inboundPhoto($conversation, $product, 61.0, attached: false, sentAt: now()->subMinutes(2));
+        $this->inboundPhoto($conversation, $product, 54.0, attached: false, sentAt: now()->subMinute());
+        $ask = $this->inbound($conversation, 'দাম কত');
+
+        app(InboxPriceQueryAutomationService::class)
+            ->handlePriceAsk($conversation->fresh('messages'), $ask);
+
+        $this->assertSame(1, ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->where('body', InboxPriceQueryAutomationService::LOW_MATCH_WAIT_BODY)
+            ->count());
+        $this->assertSame(1, Http::recorded()->count());
+    }
+
+    #[Test]
     public function inbound_store_sends_priced_image_after_a_matched_photo_and_price_ask(): void
     {
         Http::fake([

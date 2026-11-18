@@ -24,6 +24,8 @@ class InboxPriceQueryAutomationService
 
     public const RAW_PRICED_IMAGE = 'auto_priced_image';
 
+    public const RAW_PRICED_PRODUCT_ID = 'auto_priced_product_id';
+
     public const RAW_LOW_MATCH_WAIT = 'auto_low_match_wait';
 
     /**
@@ -189,6 +191,10 @@ class InboxPriceQueryAutomationService
             return;
         }
 
+        usort($photos, function (ChannelMessage $a, ChannelMessage $b): int {
+            return $this->matches->topMatchPercent($b) <=> $this->matches->topMatchPercent($a);
+        });
+
         foreach ($photos as $photo) {
             $this->handleMatchedPhoto($conversation, $photo);
         }
@@ -227,10 +233,18 @@ class InboxPriceQueryAutomationService
                 return null;
             }
 
+            if ($this->alreadySentAutoPricedImage($conversation, $productId)) {
+                return null;
+            }
+
             return $this->sendPricedImage($conversation, $photo, $productId);
         }
 
         if (! $this->settings->enabled(InboxAutomationSettings::LOW_MATCH_WAIT)) {
+            return null;
+        }
+
+        if ($this->alreadySentWaitText($conversation)) {
             return null;
         }
 
@@ -302,13 +316,19 @@ class InboxPriceQueryAutomationService
             return null;
         }
 
+        if ($this->alreadySentAutoPricedImage($conversation, $productId)) {
+            return null;
+        }
+
         $result = $this->pricedImages->send($conversation, $product, $photo);
         $stored = $result['message'] ?? null;
         if (! ($result['ok'] ?? false) || ! $stored instanceof ChannelMessage) {
             return null;
         }
 
-        return $this->flagOutbound($stored, self::RAW_PRICED_IMAGE);
+        return $this->flagOutbound($stored, self::RAW_PRICED_IMAGE, [
+            self::RAW_PRICED_PRODUCT_ID => $productId,
+        ]);
     }
 
     private function sendWaitText(ChannelConversation $conversation, ChannelMessage $photo): ?ChannelMessage
@@ -328,10 +348,16 @@ class InboxPriceQueryAutomationService
         return $this->flagOutbound($stored, self::RAW_LOW_MATCH_WAIT);
     }
 
-    private function flagOutbound(ChannelMessage $stored, string $flag): ChannelMessage
+    /**
+     * @param  array<string, mixed>  $extra
+     */
+    private function flagOutbound(ChannelMessage $stored, string $flag, array $extra = []): ChannelMessage
     {
         $payload = is_array($stored->raw_payload) ? $stored->raw_payload : [];
         $payload[$flag] = true;
+        foreach ($extra as $key => $value) {
+            $payload[$key] = $value;
+        }
         $stored->forceFill(['raw_payload' => $payload])->save();
 
         return $stored->fresh() ?? $stored;
@@ -339,28 +365,79 @@ class InboxPriceQueryAutomationService
 
     private function alreadyAutoRepliedTo(ChannelConversation $conversation, ChannelMessage $inbound): bool
     {
-        $inboundId = (int) $inbound->id;
+        return ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->where('reply_to_message_id', (int) $inbound->id)
+            ->exists();
+    }
 
-        foreach ($conversation->messages as $row) {
-            if ($row->direction !== ChannelMessage::DIRECTION_OUTBOUND) {
-                continue;
-            }
+    private function alreadySentAutoPricedImage(ChannelConversation $conversation, int $productId): bool
+    {
+        if ($productId <= 0) {
+            return false;
+        }
 
-            if ((int) ($row->reply_to_message_id ?? 0) !== $inboundId) {
-                continue;
-            }
-
+        foreach ($this->sessionOutbounds($conversation) as $row) {
             $payload = is_array($row->raw_payload) ? $row->raw_payload : [];
-            if (($payload[self::RAW_PRICED_IMAGE] ?? false) === true
-                || ($payload[self::RAW_LOW_MATCH_WAIT] ?? false) === true
-                || ($payload[self::RAW_PHOTO_REQUEST] ?? false) === true) {
+            if (($payload[self::RAW_PRICED_IMAGE] ?? false) !== true) {
+                continue;
+            }
+
+            $flaggedId = (int) ($payload[self::RAW_PRICED_PRODUCT_ID] ?? 0);
+            if ($flaggedId === $productId) {
                 return true;
             }
 
-            return true;
+            if ($flaggedId > 0) {
+                continue;
+            }
+
+            $replyToId = (int) ($row->reply_to_message_id ?? 0);
+            if ($replyToId <= 0) {
+                continue;
+            }
+
+            $photo = $conversation->messages->firstWhere('id', $replyToId)
+                ?? ChannelMessage::query()->find($replyToId);
+            if ($photo && $this->matches->topMatchProductId($photo) === $productId) {
+                return true;
+            }
         }
 
         return false;
+    }
+
+    private function alreadySentWaitText(ChannelConversation $conversation): bool
+    {
+        foreach ($this->sessionOutbounds($conversation) as $row) {
+            $payload = is_array($row->raw_payload) ? $row->raw_payload : [];
+            if (($payload[self::RAW_LOW_MATCH_WAIT] ?? false) === true) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return list<ChannelMessage>
+     */
+    private function sessionOutbounds(ChannelConversation $conversation): array
+    {
+        $cutoff = $this->sessionCutoff();
+        $out = [];
+
+        foreach (ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->get() as $row) {
+            if ($this->isInSession($row, $cutoff)) {
+                $out[] = $row;
+            }
+        }
+
+        return $out;
     }
 
     public static function sessionMinutes(): int

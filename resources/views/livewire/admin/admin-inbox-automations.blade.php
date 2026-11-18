@@ -3,7 +3,7 @@
         <div>
             <h1 class="font-serif text-3xl font-semibold text-[#1E1E1E]">Automations</h1>
             <p class="mt-1 text-sm text-[#8C8474]">
-                Controlled auto-replies when a customer asks for a price (messages tagged against “কোন প্রডাক্ট?”) in the current session.
+                Controlled auto-replies when a customer asks for a price (messages tagged against “কোন প্রডাক্ট?”) in the current session (past hour).
             </p>
         </div>
         <a href="{{ route('admin.inbox') }}" wire:navigate

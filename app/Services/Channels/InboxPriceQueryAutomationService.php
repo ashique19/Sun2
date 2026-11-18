@@ -18,6 +18,8 @@ class InboxPriceQueryAutomationService
 
     public const MATCH_MIN_PERCENT = 80.0;
 
+    public const SESSION_MINUTES = 60;
+
     public const RAW_PHOTO_REQUEST = InboxPricePhotoRequestService::RAW_FLAG;
 
     public const RAW_PRICED_IMAGE = 'auto_priced_image';
@@ -361,11 +363,14 @@ class InboxPriceQueryAutomationService
         return false;
     }
 
-    private function sessionCutoff(): Carbon
+    public static function sessionMinutes(): int
     {
-        $hours = max(1, (int) config('channels.inbox.thread_lookback_hours', 24));
+        return max(1, (int) config('channels.inbox.auto_session_minutes', self::SESSION_MINUTES));
+    }
 
-        return now()->subHours($hours);
+    public static function sessionCutoff(): Carbon
+    {
+        return now()->subMinutes(self::sessionMinutes());
     }
 
     private function isInSession(ChannelMessage $message, Carbon $cutoff): bool

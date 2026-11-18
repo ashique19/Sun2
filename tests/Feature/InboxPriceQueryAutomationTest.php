@@ -237,6 +237,95 @@ class InboxPriceQueryAutomationTest extends TestCase
     }
 
     #[Test]
+    public function photo_older_than_an_hour_does_not_count_as_session_image(): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_old_photo',
+                'recipient_id' => 'psid-auto',
+            ], 200),
+        ]);
+
+        app(InboxAutomationSettings::class)->save([
+            InboxAutomationSettings::PHOTO_REQUEST => true,
+            InboxAutomationSettings::PRICED_IMAGE => true,
+            InboxAutomationSettings::LOW_MATCH_WAIT => true,
+        ]);
+
+        $conversation = $this->conversation('psid-auto-old-photo');
+        $product = $this->productWithPricedImage();
+        $this->inboundPhoto($conversation, $product, 92.0, sentAt: now()->subHours(2));
+        $inbound = $this->inbound($conversation, 'dam koto?');
+
+        app(InboxPriceQueryAutomationService::class)
+            ->handlePriceAsk($conversation->fresh('messages'), $inbound);
+
+        $outbound = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->get();
+
+        $this->assertCount(1, $outbound);
+        $this->assertSame(InboxPriceQueryAutomationService::PHOTO_REQUEST_BODY, $outbound->first()->body);
+        $this->assertTrue($outbound->first()->raw_payload[InboxPricePhotoRequestService::RAW_FLAG] ?? false);
+    }
+
+    #[Test]
+    public function price_ask_older_than_an_hour_does_not_auto_send_priced_image(): void
+    {
+        Http::fake();
+        app(InboxAutomationSettings::class)->save([
+            InboxAutomationSettings::PHOTO_REQUEST => false,
+            InboxAutomationSettings::PRICED_IMAGE => true,
+            InboxAutomationSettings::LOW_MATCH_WAIT => true,
+        ]);
+
+        $conversation = $this->conversation('psid-auto-old-ask');
+        $product = $this->productWithPricedImage();
+        $this->inbound($conversation, 'dam koto?', now()->subHours(2));
+        $photo = $this->inboundPhoto($conversation, $product, 92.0);
+
+        $this->assertNull(
+            app(InboxPriceQueryAutomationService::class)
+                ->handleMatchedPhoto($conversation->fresh('messages'), $photo)
+        );
+        Http::assertNothingSent();
+    }
+
+    #[Test]
+    public function photo_from_fifty_minutes_ago_still_pairs_with_a_price_ask(): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_fifty',
+                'recipient_id' => 'psid-auto',
+            ], 200),
+        ]);
+
+        app(InboxAutomationSettings::class)->save([
+            InboxAutomationSettings::PHOTO_REQUEST => false,
+            InboxAutomationSettings::PRICED_IMAGE => true,
+            InboxAutomationSettings::LOW_MATCH_WAIT => false,
+        ]);
+
+        $conversation = $this->conversation('psid-auto-fifty');
+        $product = $this->productWithPricedImage();
+        $this->inboundPhoto($conversation, $product, 92.0, sentAt: now()->subMinutes(50));
+        $inbound = $this->inbound($conversation, 'dam koto?');
+
+        app(InboxPriceQueryAutomationService::class)
+            ->handlePriceAsk($conversation->fresh('messages'), $inbound);
+
+        $outbound = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->first();
+
+        $this->assertNotNull($outbound);
+        $this->assertTrue($outbound->raw_payload[InboxPriceQueryAutomationService::RAW_PRICED_IMAGE] ?? false);
+    }
+
+    #[Test]
     public function greeting_is_not_a_price_ask(): void
     {
         $conversation = $this->conversation('psid-auto-hi');

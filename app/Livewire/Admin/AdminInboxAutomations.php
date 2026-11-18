@@ -48,6 +48,7 @@ class AdminInboxAutomations extends Component
             'photoRequestBody' => InboxPriceQueryAutomationService::PHOTO_REQUEST_BODY,
             'lowMatchWaitBody' => InboxPriceQueryAutomationService::LOW_MATCH_WAIT_BODY,
             'matchMinPercent' => InboxPriceQueryAutomationService::MATCH_MIN_PERCENT,
+            'sessionMinutes' => InboxPriceQueryAutomationService::sessionMinutes(),
         ]);
     }
 

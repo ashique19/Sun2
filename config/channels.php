@@ -136,6 +136,9 @@ return [
 
         'graph_poll_messages_per_thread' => (int) env('CHANNEL_INBOX_GRAPH_POLL_MESSAGES', 8),
 
+        // Pair a price ask with photos only inside this many minutes (current session).
+        'auto_session_minutes' => max(1, (int) env('CHANNEL_INBOX_AUTO_SESSION_MINUTES', 60)),
+
         // Auto-ask for a product photo when a price query has no inbound catalog photos.
         'auto_photo_request' => filter_var(env('CHANNEL_INBOX_AUTO_PHOTO_REQUEST', true), FILTER_VALIDATE_BOOL),
 

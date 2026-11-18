@@ -33,6 +33,7 @@ class AdminInboxAutomationsTest extends TestCase
         $this->get(route('admin.inbox.automations'))
             ->assertOk()
             ->assertSee('Automations')
+            ->assertSee('past hour')
             ->assertSee('Back to Inbox')
             ->assertSee('Ask for a product photo')
             ->assertSee('Send priced image')

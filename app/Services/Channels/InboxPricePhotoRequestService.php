@@ -213,8 +213,7 @@ class InboxPricePhotoRequestService
 
     private function hasSessionProductImages(ChannelConversation $conversation): bool
     {
-        $hours = max(1, (int) config('channels.inbox.thread_lookback_hours', 24));
-        $cutoff = now()->subHours($hours);
+        $cutoff = InboxPriceQueryAutomationService::sessionCutoff();
 
         foreach ($conversation->messages as $message) {
             if (! $this->matcher->isInboundProductImage($message)) {

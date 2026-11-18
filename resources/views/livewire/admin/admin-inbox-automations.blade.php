@@ -3,7 +3,7 @@
         <div>
             <h1 class="font-serif text-3xl font-semibold text-[#1E1E1E]">Automations</h1>
             <p class="mt-1 text-sm text-[#8C8474]">
-                Controlled auto-replies in the current session (past hour): price asks tagged against “কোন প্রডাক্ট?”, and greetings tagged against “Hi”.
+                Controlled auto-replies in the current session (past hour): price asks tagged against “কোন প্রডাক্ট?”, greetings tagged against “Hi”, and “{{ $colorGuaranteeLabel }}” only for “{{ $colorGuaranteeCategory }}”.
             </p>
         </div>
         <a href="{{ route('admin.inbox') }}" wire:navigate
@@ -50,6 +50,15 @@
                 <p class="mt-2 rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $hiReplyBody }}</p>
             </div>
             <x-admin.switch :on="$hiReply" wire:click="toggleHiReply" aria-label="Reply Hi apu" />
+        </div>
+
+        <div class="flex items-start justify-between gap-3 rounded-xl border border-[#E7DFCF] bg-[#FAF6EF]/60 p-4" data-inbox-automation="color_guarantee">
+            <div class="min-w-0">
+                <p class="text-sm font-semibold text-[#1E1E1E]">Match {{ $colorGuaranteeLabel }}</p>
+                <p class="mt-1 text-sm text-[#6B6459]">Send the “{{ $colorGuaranteeLabel }}” saved reply only when a product in the current session is in “{{ $colorGuaranteeCategory }}”.</p>
+                <p class="mt-2 rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $colorGuaranteeBody }}</p>
+            </div>
+            <x-admin.switch :on="$colorGuarantee" wire:click="toggleColorGuarantee" aria-label="Match color guarantee" />
         </div>
     </div>
 </div>

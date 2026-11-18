@@ -19,6 +19,7 @@ use App\Services\Channels\ChannelMessageOrderMapper;
 use App\Services\Channels\ChannelOrderDraftCatcher;
 use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
+use App\Services\Channels\InboxColorGuaranteeAutomationService;
 use App\Services\Channels\InboxHiReplyAutomationService;
 use App\Services\Channels\InboxPriceQueryAutomationService;
 use App\Services\Channels\InboxQuickReplyMatcher;
@@ -1105,6 +1106,7 @@ class AdminInbox extends Component
             $fresh = $message->fresh() ?? $message;
             InboxPriceQueryAutomationService::scheduleAfterInbound($conversation, $fresh);
             InboxHiReplyAutomationService::scheduleAfterInbound($conversation, $fresh);
+            InboxColorGuaranteeAutomationService::scheduleAfterInbound($conversation, $fresh);
         }
     }
 

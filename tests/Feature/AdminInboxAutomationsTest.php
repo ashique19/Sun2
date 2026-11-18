@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Livewire\Admin\AdminInboxAutomations;
 use App\Models\User;
 use App\Services\Channels\InboxAutomationSettings;
+use App\Services\Channels\InboxColorGuaranteeAutomationService;
 use App\Services\Channels\InboxHiReplyAutomationService;
 use App\Services\Channels\InboxPriceQueryAutomationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -51,14 +52,18 @@ class AdminInboxAutomationsTest extends TestCase
             ->assertSee('Send priced image')
             ->assertSee('Ask for a moment on a weak match')
             ->assertSee('Reply Hi apu')
+            ->assertSee('Match '.InboxColorGuaranteeAutomationService::REPLY_LABEL)
             ->assertSee(InboxPriceQueryAutomationService::PHOTO_REQUEST_BODY)
             ->assertSee(InboxPriceQueryAutomationService::LOW_MATCH_WAIT_BODY)
             ->assertSee(InboxHiReplyAutomationService::BODY)
+            ->assertSee(InboxColorGuaranteeAutomationService::REPLY_LABEL)
+            ->assertSee(InboxColorGuaranteeAutomationService::CATEGORY_NAME)
             ->assertSeeHtml('data-inbox-automations')
             ->assertSeeHtml('data-inbox-automation="photo_request"')
             ->assertSeeHtml('data-inbox-automation="priced_image"')
             ->assertSeeHtml('data-inbox-automation="low_match_wait"')
             ->assertSeeHtml('data-inbox-automation="hi_reply"')
+            ->assertSeeHtml('data-inbox-automation="color_guarantee"')
             ->assertSeeHtml('class="admin-switch"')
             ->assertSeeHtml('class="admin-switch__knob"')
             ->assertSeeHtml('dir="ltr"');
@@ -73,6 +78,7 @@ class AdminInboxAutomationsTest extends TestCase
 
         $this->assertSame('true', $this->switchChecked($html, 'Ask for a product photo'));
         $this->assertSame('true', $this->switchChecked($html, 'Reply Hi apu'));
+        $this->assertSame('true', $this->switchChecked($html, 'Match color guarantee'));
         $this->assertSame('false', $this->switchChecked($html, 'Send priced image'));
         $this->assertSame('false', $this->switchChecked($html, 'Ask for a moment on a weak match'));
         $this->assertStringNotContainsString('ml-6', $html);
@@ -94,12 +100,14 @@ class AdminInboxAutomationsTest extends TestCase
 
         $this->assertTrue($settings->enabled(InboxAutomationSettings::PHOTO_REQUEST));
         $this->assertTrue($settings->enabled(InboxAutomationSettings::HI_REPLY));
+        $this->assertTrue($settings->enabled(InboxAutomationSettings::COLOR_GUARANTEE));
         $this->assertFalse($settings->enabled(InboxAutomationSettings::PRICED_IMAGE));
         $this->assertFalse($settings->enabled(InboxAutomationSettings::LOW_MATCH_WAIT));
 
         Livewire::test(AdminInboxAutomations::class)
             ->assertSet('photoRequest', true)
             ->assertSet('hiReply', true)
+            ->assertSet('colorGuarantee', true)
             ->assertSet('pricedImage', false)
             ->assertSet('lowMatchWait', false)
             ->call('togglePricedImage')
@@ -110,11 +118,14 @@ class AdminInboxAutomationsTest extends TestCase
             ->call('togglePhotoRequest')
             ->assertSet('photoRequest', false)
             ->call('toggleHiReply')
-            ->assertSet('hiReply', false);
+            ->assertSet('hiReply', false)
+            ->call('toggleColorGuarantee')
+            ->assertSet('colorGuarantee', false);
 
         $saved = $settings->all();
         $this->assertFalse($saved[InboxAutomationSettings::PHOTO_REQUEST]);
         $this->assertFalse($saved[InboxAutomationSettings::HI_REPLY]);
+        $this->assertFalse($saved[InboxAutomationSettings::COLOR_GUARANTEE]);
         $this->assertTrue($saved[InboxAutomationSettings::PRICED_IMAGE]);
         $this->assertTrue($saved[InboxAutomationSettings::LOW_MATCH_WAIT]);
     }

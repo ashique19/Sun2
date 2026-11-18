@@ -151,6 +151,9 @@ return [
         // Auto-reply “Hi apu” when a message matches the Hi saved quick reply.
         'auto_hi_reply' => filter_var(env('CHANNEL_INBOX_AUTO_HI_REPLY', true), FILTER_VALIDATE_BOOL),
 
+        // Auto-send the কালার গ্যারান্টি chip when a session product is পাহাড়ি আলছড়া.
+        'auto_color_guarantee' => filter_var(env('CHANNEL_INBOX_AUTO_COLOR_GUARANTEE', true), FILTER_VALIDATE_BOOL),
+
         // Composer chips — label shown in UI, body inserted into the reply box.
         'quick_replies' => [
             ['label' => 'Salaam', 'body' => 'আসসালামু আলাইকুম'],

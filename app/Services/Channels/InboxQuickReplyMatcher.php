@@ -5,6 +5,7 @@ namespace App\Services\Channels;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Models\InboxQuickReplyExample;
+use App\Models\Product;
 use Illuminate\Support\Collection;
 
 class InboxQuickReplyMatcher
@@ -44,6 +45,22 @@ class InboxQuickReplyMatcher
         'hello', 'helo', 'hellow', 'hey',
         'hlw', 'hlo', 'hy',
     ];
+
+    /**
+     * Compacted cues that map to the “কালার গ্যারান্টি” saved reply.
+     *
+     * @var list<string>
+     */
+    private const COLOR_GUARANTEE_CUES = [
+        'কালারগ্যারান্টি', 'কালারগ্যারেন্টি',
+        'colorguarantee', 'colourguarantee',
+        'colorgaranty', 'colourgaranty',
+        'kalarguarantee', 'kalargarranty',
+    ];
+
+    public const COLOR_GUARANTEE_LABEL = 'কালার গ্যারান্টি';
+
+    public const PAHARI_ALCHORA_CATEGORY = 'পাহাড়ি আলছড়া';
 
     /**
      * Bootstrap cues for the three query types staff see most.
@@ -103,6 +120,9 @@ class InboxQuickReplyMatcher
         $out = [];
         foreach ($messages as $message) {
             $match = $this->matchMessage($message, $replies, $examples, $hasInboundProductImages);
+            if ($match !== null && $this->shouldSuppressColorGuaranteeMatch($conversation, $match)) {
+                continue;
+            }
             if ($match !== null) {
                 $out[(int) $message->id] = $match;
             }
@@ -149,6 +169,11 @@ class InboxQuickReplyMatcher
             && ! $this->shouldSuppressWhichProductMatch($message, $exampleHit, $hasInboundProductImages)
         ) {
             return $exampleHit;
+        }
+
+        $colorHit = $this->matchColorGuarantee($haystack, $replies);
+        if ($colorHit !== null) {
+            return $colorHit;
         }
 
         return $this->matchIntent($haystack, $replies, $message, $hasInboundProductImages);
@@ -447,6 +472,148 @@ class InboxQuickReplyMatcher
         return $this->compact((string) ($reply['label'] ?? '')) === 'hi';
     }
 
+    public function isColorGuaranteeAsk(ChannelMessage $message): bool
+    {
+        if ($message->direction !== ChannelMessage::DIRECTION_INBOUND) {
+            return false;
+        }
+
+        $replies = $this->quickReplies->all();
+        $colorReplies = [];
+        foreach ($replies as $reply) {
+            if ($this->isColorGuaranteeReply($reply)) {
+                $colorReplies[] = $reply;
+            }
+        }
+
+        if ($colorReplies === []) {
+            return false;
+        }
+
+        $taggedId = trim((string) ($message->quick_reply_id ?? ''));
+        if ($taggedId !== '') {
+            foreach ($colorReplies as $reply) {
+                if ($reply['id'] === $taggedId) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        $text = trim((string) ($message->body ?? ''));
+        if ($text !== '' && $this->looksLikeColorGuarantee($text)) {
+            return true;
+        }
+
+        if ($text === '') {
+            return false;
+        }
+
+        $examples = InboxQuickReplyExample::query()
+            ->whereIn('quick_reply_id', array_column($colorReplies, 'id'))
+            ->get();
+        $match = $this->matchMessage($message, $colorReplies, $examples, hasInboundProductImages: false);
+
+        return is_array($match) && $this->isColorGuaranteeReply($match);
+    }
+
+    public function looksLikeColorGuarantee(string $text): bool
+    {
+        $compact = $this->compact($text);
+        if ($compact === '') {
+            return false;
+        }
+
+        foreach (self::COLOR_GUARANTEE_CUES as $cue) {
+            $needle = $this->compact($cue);
+            if ($needle !== '' && str_contains($compact, $needle)) {
+                return true;
+            }
+        }
+
+        $labelNeedle = $this->compact(self::COLOR_GUARANTEE_LABEL);
+
+        return $labelNeedle !== '' && str_contains($compact, $labelNeedle);
+    }
+
+    /**
+     * True when this saved reply is the কালার গ্যারান্টি chip.
+     *
+     * @param  array{label?: string, body?: string}  $reply
+     */
+    public function isColorGuaranteeReply(array $reply): bool
+    {
+        $label = $this->compact((string) ($reply['label'] ?? ''));
+        $needle = $this->compact(self::COLOR_GUARANTEE_LABEL);
+
+        return $label !== '' && $needle !== '' && str_contains($label, $needle);
+    }
+
+    public function isPahariAlchoraCategoryName(string $name): bool
+    {
+        $compact = $this->foldBanglaRra($this->compact($name));
+        if ($compact === '') {
+            return false;
+        }
+
+        foreach ([self::PAHARI_ALCHORA_CATEGORY, 'পাহাড়ি আলছড়া', 'pahari alchora'] as $alias) {
+            if ($compact === $this->foldBanglaRra($this->compact($alias))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function sessionHasPahariAlchoraProduct(ChannelConversation $conversation): bool
+    {
+        $productIds = $this->sessionMatchedProductIds($conversation);
+        if ($productIds === []) {
+            return false;
+        }
+
+        return Product::query()
+            ->with('category')
+            ->whereIn('id', $productIds)
+            ->get()
+            ->contains(function (Product $product): bool {
+                $categoryName = trim((string) ($product->category?->name ?? ''));
+
+                return $categoryName !== '' && $this->isPahariAlchoraCategoryName($categoryName);
+            });
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function sessionMatchedProductIds(ChannelConversation $conversation): array
+    {
+        $cutoff = InboxPriceQueryAutomationService::sessionCutoff();
+        $messages = ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_INBOUND)
+            ->where(function ($query) use ($cutoff): void {
+                $query->whereNull('sent_at')->orWhere('sent_at', '>=', $cutoff);
+            })
+            ->get();
+
+        $ids = [];
+        $imageMatch = app(ChannelMessageImageMatchService::class);
+        foreach ($messages as $message) {
+            if (! $this->isInboundProductImage($message)) {
+                continue;
+            }
+
+            $productId = $imageMatch->topMatchProductId($message);
+            if ($productId > 0) {
+                $ids[$productId] = true;
+            }
+        }
+
+        return array_map('intval', array_keys($ids));
+    }
+
     public function isWhichProductReply(array $reply): bool
     {
         $compact = $this->compact(($reply['label'] ?? '').' '.($reply['body'] ?? ''));
@@ -715,6 +882,34 @@ class InboxQuickReplyMatcher
      * @param  list<array{id: string, label: string, body: string}>  $replies
      * @return array{id: string, label: string, body: string, via: string, intent: ?string, tagged: bool}|null
      */
+    private function matchColorGuarantee(string $text, array $replies): ?array
+    {
+        if (! $this->looksLikeColorGuarantee($text)) {
+            return null;
+        }
+
+        foreach ($replies as $reply) {
+            if (! $this->isColorGuaranteeReply($reply)) {
+                continue;
+            }
+
+            return [
+                'id' => $reply['id'],
+                'label' => $reply['label'],
+                'body' => $reply['body'],
+                'via' => self::VIA_INTENT,
+                'intent' => null,
+                'tagged' => false,
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<array{id: string, label: string, body: string}>  $replies
+     * @return array{id: string, label: string, body: string, via: string, intent: ?string, tagged: bool}|null
+     */
     private function matchIntent(
         string $text,
         array $replies,
@@ -755,6 +950,34 @@ class InboxQuickReplyMatcher
      *
      * @param  array{id: string, label: string, body: string, via: string, intent: ?string, tagged: bool}  $match
      */
+    /**
+     * Suggest the কালার গ্যারান্টি chip only when a session product is পাহাড়ি আলছড়া.
+     * Staff tags are left as-is.
+     *
+     * @param  array{id?: string, label?: string, body?: string, via?: string, tagged?: bool}  $match
+     */
+    private function shouldSuppressColorGuaranteeMatch(ChannelConversation $conversation, array $match): bool
+    {
+        if (($match['via'] ?? '') === self::VIA_TAGGED || ($match['tagged'] ?? false)) {
+            return false;
+        }
+
+        if (! $this->isColorGuaranteeReply($match)) {
+            return false;
+        }
+
+        return ! $this->sessionHasPahariAlchoraProduct($conversation);
+    }
+
+    private function foldBanglaRra(string $text): string
+    {
+        return strtr($text, [
+            "\u{09DC}" => "\u{09A1}",
+            "\u{09DD}" => "\u{09A2}",
+            "\u{09BC}" => '',
+        ]);
+    }
+
     private function shouldSuppressWhichProductMatch(
         ChannelMessage $message,
         array $match,

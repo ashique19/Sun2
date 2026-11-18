@@ -17,6 +17,8 @@ class InboxAutomationSettings
 
     public const HI_REPLY = 'hi_reply';
 
+    public const COLOR_GUARANTEE = 'color_guarantee';
+
     /**
      * @var list<string>
      */
@@ -25,10 +27,11 @@ class InboxAutomationSettings
         self::PRICED_IMAGE,
         self::LOW_MATCH_WAIT,
         self::HI_REPLY,
+        self::COLOR_GUARANTEE,
     ];
 
     /**
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool}
      */
     public function all(): array
     {
@@ -65,7 +68,7 @@ class InboxAutomationSettings
 
     /**
      * @param  array<string, mixed>  $flags
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool}
      */
     public function save(array $flags): array
     {
@@ -86,7 +89,7 @@ class InboxAutomationSettings
     }
 
     /**
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool}
      */
     public function defaults(): array
     {
@@ -95,6 +98,7 @@ class InboxAutomationSettings
             self::PRICED_IMAGE => (bool) config('channels.inbox.auto_priced_image', false),
             self::LOW_MATCH_WAIT => (bool) config('channels.inbox.auto_low_match_wait', false),
             self::HI_REPLY => (bool) config('channels.inbox.auto_hi_reply', true),
+            self::COLOR_GUARANTEE => (bool) config('channels.inbox.auto_color_guarantee', true),
         ];
     }
 

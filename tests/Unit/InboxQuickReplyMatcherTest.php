@@ -2,11 +2,13 @@
 
 namespace Tests\Unit;
 
+use App\Models\Category;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Models\InboxQuickReplyExample;
 use App\Models\Product;
 use App\Services\Channels\ChannelMessageImageMatchService;
+use App\Services\Channels\InboxColorGuaranteeAutomationService;
 use App\Services\Channels\InboxQuickReplyMatcher;
 use App\Services\Channels\InboxQuickReplyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -173,6 +175,62 @@ class InboxQuickReplyMatcherTest extends TestCase
         $this->assertTrue($this->matcher()->looksLikeHi('hello'));
         $this->assertFalse($this->matcher()->looksLikeHi('আসসালামু আলাইকুম'));
         $this->assertFalse($this->matcher()->looksLikeHi('dam koto?'));
+    }
+
+    #[Test]
+    public function detects_the_color_guarantee_saved_reply_and_wording(): void
+    {
+        $this->assertTrue($this->matcher()->isColorGuaranteeReply([
+            'label' => InboxColorGuaranteeAutomationService::REPLY_LABEL,
+            'body' => 'হ্যাঁ, কালার গ্যারান্টি আছে।',
+        ]));
+        $this->assertFalse($this->matcher()->isColorGuaranteeReply([
+            'label' => 'Salaam',
+            'body' => 'আসসালামু আলাইকুম',
+        ]));
+        $this->assertTrue($this->matcher()->looksLikeColorGuarantee('কালার গ্যারান্টি আছে?'));
+        $this->assertTrue($this->matcher()->looksLikeColorGuarantee('color guarantee?'));
+        $this->assertFalse($this->matcher()->looksLikeColorGuarantee('dam koto?'));
+        $this->assertTrue($this->matcher()->isPahariAlchoraCategoryName(InboxColorGuaranteeAutomationService::CATEGORY_NAME));
+        $this->assertTrue($this->matcher()->isPahariAlchoraCategoryName('পাহাড়ি আলছড়া'));
+        $this->assertFalse($this->matcher()->isPahariAlchoraCategoryName('Rings'));
+    }
+
+    #[Test]
+    public function color_guarantee_matches_only_when_the_session_product_is_pahari_alchora(): void
+    {
+        $replies = app(InboxQuickReplyService::class)->normalize([
+            ['label' => InboxColorGuaranteeAutomationService::REPLY_LABEL, 'body' => 'হ্যাঁ, কালার গ্যারান্টি আছে।'],
+        ]);
+
+        $withoutProduct = $this->conversation('psid-qr-color-none');
+        $plain = $this->inbound($withoutProduct, 'কালার গ্যারান্টি আছে?');
+        $plainMatches = $this->matcher()->matchThread($withoutProduct->fresh()->load('messages'), $replies);
+        $this->assertArrayNotHasKey($plain->id, $plainMatches);
+
+        $other = $this->conversation('psid-qr-color-other');
+        $this->inboundMatchedPhoto($other, $this->productInCategory('Rings'), 0.91, now()->subMinute());
+        $otherAsk = $this->inbound($other, 'কালার গ্যারান্টি আছে?');
+        $otherMatches = $this->matcher()->matchThread($other->fresh()->load('messages'), $replies);
+        $this->assertArrayNotHasKey($otherAsk->id, $otherMatches);
+
+        $pahari = $this->conversation('psid-qr-color-pahari');
+        $this->inboundMatchedPhoto(
+            $pahari,
+            $this->productInCategory(InboxColorGuaranteeAutomationService::CATEGORY_NAME),
+            0.91,
+            now()->subMinute(),
+        );
+        $pahariAsk = $this->inbound($pahari, 'কালার গ্যারান্টি আছে?');
+        $pahariMatches = $this->matcher()->matchThread($pahari->fresh()->load('messages'), $replies);
+        $this->assertSame($replies[0]['id'], $pahariMatches[$pahariAsk->id]['id']);
+
+        $tagged = $this->conversation('psid-qr-color-tagged');
+        $taggedAsk = $this->inbound($tagged, 'এটার রং থাকবে?');
+        $taggedAsk->forceFill(['quick_reply_id' => $replies[0]['id']])->save();
+        $taggedMatches = $this->matcher()->matchThread($tagged->fresh()->load('messages'), $replies);
+        $this->assertSame($replies[0]['id'], $taggedMatches[$taggedAsk->id]['id']);
+        $this->assertTrue($taggedMatches[$taggedAsk->id]['tagged']);
     }
 
     #[Test]
@@ -448,6 +506,27 @@ class InboxQuickReplyMatcherTest extends TestCase
                 ],
             ],
             'sent_at' => $sentAt ?? now(),
+        ]);
+    }
+
+    private function productInCategory(string $name): Product
+    {
+        $category = Category::query()->create([
+            'name' => $name,
+            'slug' => 'cat-qr-'.uniqid(),
+            'display_order' => 0,
+            'is_homepage' => true,
+            'is_active' => true,
+        ]);
+
+        return Product::query()->create([
+            'category_id' => $category->id,
+            'name' => 'QR '.$name,
+            'slug' => 'qr-prod-'.uniqid(),
+            'price' => 1200,
+            'purchase_price' => 400,
+            'stock_quantity' => 2,
+            'is_published' => true,
         ]);
     }
 

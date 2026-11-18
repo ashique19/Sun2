@@ -344,6 +344,7 @@ class ChannelMessageImageMatchService
 
         if ($didMatch) {
             InboxPriceQueryAutomationService::scheduleAfterMatch($message->fresh() ?? $message);
+            InboxColorGuaranteeAutomationService::scheduleAfterMatch($message->fresh() ?? $message);
         }
 
         return $message;

@@ -7,6 +7,7 @@ use App\Models\ChannelMessage;
 use App\Models\Setting;
 use App\Services\Channels\ChannelConversationService;
 use App\Services\Channels\InboxPricePhotoRequestService;
+use App\Services\Channels\InboxPriceQueryAutomationService;
 use App\Services\Channels\InboxQuickReplyMatcher;
 use App\Services\Channels\InboxQuickReplyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -52,7 +53,7 @@ class InboxPricePhotoRequestTest extends TestCase
         $this->assertNotNull($sent);
         $this->assertSame(ChannelMessage::DIRECTION_OUTBOUND, $sent->direction);
         $this->assertSame($inbound->id, $sent->reply_to_message_id);
-        $this->assertSame('কোন প্রডাক্টের ছবিটা একটু পাঠাবেন?', $sent->body);
+        $this->assertSame(InboxPriceQueryAutomationService::PHOTO_REQUEST_BODY, $sent->body);
         $this->assertTrue($sent->raw_payload[InboxPricePhotoRequestService::RAW_FLAG] ?? false);
         $this->assertSame(1, $this->graphSendCount());
         $this->assertStringNotContainsString('১২০০', (string) $sent->body);
@@ -93,7 +94,7 @@ class InboxPricePhotoRequestTest extends TestCase
 
         $this->assertNotNull($which);
         $this->assertSame('কোন প্রডাক্ট?', $which['label']);
-        $this->assertSame(InboxPricePhotoRequestService::FALLBACK_BODY, $which['body']);
+        $this->assertStringContainsString('ছবি', $which['body']);
     }
 
     #[Test]

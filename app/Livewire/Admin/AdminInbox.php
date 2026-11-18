@@ -19,6 +19,7 @@ use App\Services\Channels\ChannelMessageOrderMapper;
 use App\Services\Channels\ChannelOrderDraftCatcher;
 use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
+use App\Services\Channels\InboxPriceQueryAutomationService;
 use App\Services\Channels\InboxQuickReplyMatcher;
 use App\Services\Channels\InboxQuickReplyService;
 use App\Services\Channels\MessengerConversationSyncService;
@@ -1097,6 +1098,14 @@ class AdminInbox extends Component
         $matcher->tag($message, $quickReplyId, auth()->id());
         $this->taggingQuickReplyMessageId = null;
         $this->error = null;
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+        if ($conversation) {
+            InboxPriceQueryAutomationService::scheduleAfterInbound(
+                $conversation,
+                $message->fresh() ?? $message,
+            );
+        }
     }
 
     public function clearMessageQuickReply(int $messageId, InboxQuickReplyMatcher $matcher): void

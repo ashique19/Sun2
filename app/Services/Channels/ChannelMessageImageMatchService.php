@@ -328,16 +328,22 @@ class ChannelMessageImageMatchService
             return $message->refresh();
         }
 
+        $didMatch = false;
         try {
             $message->refresh();
             if ($force || $this->needsMatching($message, $this->index->stamp())) {
                 $this->runMatch($message);
+                $didMatch = true;
             }
         } finally {
             try {
                 $lock?->release();
             } catch (Throwable) {
             }
+        }
+
+        if ($didMatch) {
+            InboxPriceQueryAutomationService::scheduleAfterMatch($message->fresh() ?? $message);
         }
 
         return $message;
@@ -400,6 +406,44 @@ class ChannelMessageImageMatchService
         }
 
         return 100.0;
+    }
+
+    public function hasFinishedMatching(ChannelMessage $message): bool
+    {
+        $status = $this->meta($message)['status'] ?? null;
+
+        return in_array($status, [
+            self::STATUS_MATCHED,
+            self::STATUS_SUGGESTED,
+            self::STATUS_NONE,
+            self::STATUS_TAGGED,
+            self::STATUS_FAILED,
+            self::STATUS_SKIPPED,
+        ], true);
+    }
+
+    public function topMatchPercent(ChannelMessage $message): float
+    {
+        $candidates = $this->meta($message)['candidates'] ?? [];
+        $top = is_array($candidates[0] ?? null) ? $candidates[0] : null;
+        if ($top === null) {
+            return 0.0;
+        }
+
+        return round(((float) ($top['score'] ?? 0)) * 100, 1);
+    }
+
+    public function topMatchProductId(ChannelMessage $message): int
+    {
+        $attached = (int) ($message->matched_product_id ?? 0);
+        if ($attached > 0) {
+            return $attached;
+        }
+
+        $candidates = $this->meta($message)['candidates'] ?? [];
+        $top = is_array($candidates[0] ?? null) ? $candidates[0] : null;
+
+        return (int) ($top['product_id'] ?? 0);
     }
 
     /**

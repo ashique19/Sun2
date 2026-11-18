@@ -13,7 +13,7 @@ class InboxPricePhotoRequestService
 
     public const DEDUPE_HOURS = 12;
 
-    public const FALLBACK_BODY = 'কোন প্রডাক্টের দাম জানতে চান? প্রোডাক্টের ছবিটা একটু পাঠাবেন।';
+    public const FALLBACK_BODY = InboxPriceQueryAutomationService::PHOTO_REQUEST_BODY;
 
     /**
      * Conversation ids already queued this HTTP request.
@@ -24,7 +24,6 @@ class InboxPricePhotoRequestService
 
     public function __construct(
         private InboxQuickReplyMatcher $matcher,
-        private InboxQuickReplyService $quickReplies,
         private ChannelReplyService $replies,
     ) {}
 
@@ -34,7 +33,7 @@ class InboxPricePhotoRequestService
      */
     public static function scheduleAfterInbound(ChannelConversation $conversation, ChannelMessage $message): void
     {
-        if (! config('channels.inbox.auto_photo_request', true)) {
+        if (! app(InboxAutomationSettings::class)->enabled(InboxAutomationSettings::PHOTO_REQUEST)) {
             return;
         }
 
@@ -118,7 +117,7 @@ class InboxPricePhotoRequestService
 
     public function shouldRequestProductPhoto(ChannelConversation $conversation, ChannelMessage $message): bool
     {
-        if (! config('channels.inbox.auto_photo_request', true)) {
+        if (! app(InboxAutomationSettings::class)->enabled(InboxAutomationSettings::PHOTO_REQUEST)) {
             return false;
         }
 
@@ -130,14 +129,13 @@ class InboxPricePhotoRequestService
             return false;
         }
 
-        $text = trim((string) ($message->body ?? ''));
-        if ($text === '' || ! $this->matcher->looksLikePriceQuery($text)) {
+        if (! $this->matcher->isWhichProductPriceAsk($message)) {
             return false;
         }
 
         $conversation->loadMissing('messages');
 
-        if ($this->matcher->threadHasInboundProductImages($conversation)) {
+        if ($this->hasSessionProductImages($conversation)) {
             return false;
         }
 
@@ -154,17 +152,6 @@ class InboxPricePhotoRequestService
 
     public function photoRequestBody(): string
     {
-        foreach ($this->quickReplies->all() as $reply) {
-            if (! $this->matcher->isWhichProductReply($reply)) {
-                continue;
-            }
-
-            $body = trim((string) ($reply['body'] ?? ''));
-            if ($body !== '') {
-                return $body;
-            }
-        }
-
         return self::FALLBACK_BODY;
     }
 
@@ -217,6 +204,24 @@ class InboxPricePhotoRequestService
             }
 
             if ($row->sent_at === null || $row->sent_at->greaterThanOrEqualTo($cutoff)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function hasSessionProductImages(ChannelConversation $conversation): bool
+    {
+        $hours = max(1, (int) config('channels.inbox.thread_lookback_hours', 24));
+        $cutoff = now()->subHours($hours);
+
+        foreach ($conversation->messages as $message) {
+            if (! $this->matcher->isInboundProductImage($message)) {
+                continue;
+            }
+
+            if ($message->sent_at === null || $message->sent_at->greaterThanOrEqualTo($cutoff)) {
                 return true;
             }
         }

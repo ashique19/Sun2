@@ -320,6 +320,51 @@ class InboxQuickReplyMatcher
     }
 
     /**
+     * True when this inbound is a price / which-product ask: staff-tagged against
+     * the “কোন প্রডাক্ট?” reply, a saved reply tag, or price-shaped wording.
+     */
+    public function isWhichProductPriceAsk(ChannelMessage $message): bool
+    {
+        if ($message->direction !== ChannelMessage::DIRECTION_INBOUND) {
+            return false;
+        }
+
+        $replies = $this->quickReplies->all();
+        $taggedId = trim((string) ($message->quick_reply_id ?? ''));
+        if ($taggedId !== '') {
+            foreach ($replies as $reply) {
+                if ($reply['id'] === $taggedId && $this->isWhichProductReply($reply)) {
+                    return true;
+                }
+            }
+        }
+
+        $text = trim((string) ($message->body ?? ''));
+        if ($text !== '' && $this->looksLikePriceQuery($text)) {
+            return true;
+        }
+
+        if ($text === '' || $replies === []) {
+            return false;
+        }
+
+        $ids = [];
+        foreach ($replies as $reply) {
+            if ($this->isWhichProductReply($reply)) {
+                $ids[] = $reply['id'];
+            }
+        }
+
+        $examples = $ids === []
+            ? collect()
+            : InboxQuickReplyExample::query()->whereIn('quick_reply_id', $ids)->get();
+
+        $match = $this->matchMessage($message, $replies, $examples, hasInboundProductImages: false);
+
+        return is_array($match) && $this->isWhichProductReply($match);
+    }
+
+    /**
      * True when this saved reply asks which product, rather than quoting a price.
      *
      * @param  array{label?: string, body?: string}  $reply
@@ -663,7 +708,7 @@ class InboxQuickReplyMatcher
         return $out;
     }
 
-    private function isInboundProductImage(ChannelMessage $message): bool
+    public function isInboundProductImage(ChannelMessage $message): bool
     {
         return $message->direction === ChannelMessage::DIRECTION_INBOUND
             && $message->isImageAttachment()

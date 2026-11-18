@@ -139,6 +139,12 @@ return [
         // Auto-ask for a product photo when a price query has no inbound catalog photos.
         'auto_photo_request' => filter_var(env('CHANNEL_INBOX_AUTO_PHOTO_REQUEST', true), FILTER_VALIDATE_BOOL),
 
+        // Auto-send a priced catalog image when a session price query has a match ≥ 80%.
+        'auto_priced_image' => filter_var(env('CHANNEL_INBOX_AUTO_PRICED_IMAGE', false), FILTER_VALIDATE_BOOL),
+
+        // Auto-ask for a moment when a session price query's photo matches below 80%.
+        'auto_low_match_wait' => filter_var(env('CHANNEL_INBOX_AUTO_LOW_MATCH_WAIT', false), FILTER_VALIDATE_BOOL),
+
         // Composer chips — label shown in UI, body inserted into the reply box.
         'quick_replies' => [
             ['label' => 'Salaam', 'body' => 'আসসালামু আলাইকুম'],

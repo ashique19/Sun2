@@ -52,6 +52,7 @@
         $socialLinks = [
             'admin.inbox' => 'Inbox',
             'admin.inbox.quick-replies' => 'Quick replies',
+            'admin.inbox.automations' => 'Automations',
             'admin.social-posts' => 'Social Posts',
         ];
     @endphp
@@ -64,6 +65,7 @@
                     $isActive = match ($routeName) {
                         'admin.inbox' => request()->routeIs('admin.inbox', 'admin.inbox.thread'),
                         'admin.inbox.quick-replies' => request()->routeIs('admin.inbox.quick-replies'),
+                        'admin.inbox.automations' => request()->routeIs('admin.inbox.automations'),
                         'admin.social-posts' => request()->routeIs('admin.social-posts*'),
                         default => request()->routeIs($routeName),
                     };
@@ -83,6 +85,7 @@
                         $isActive = match ($routeName) {
                             'admin.inbox' => request()->routeIs('admin.inbox', 'admin.inbox.thread'),
                             'admin.inbox.quick-replies' => request()->routeIs('admin.inbox.quick-replies'),
+                            'admin.inbox.automations' => request()->routeIs('admin.inbox.automations'),
                             'admin.social-posts' => request()->routeIs('admin.social-posts*'),
                             default => request()->routeIs($routeName),
                         };

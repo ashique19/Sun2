@@ -25,6 +25,17 @@ class AdminInboxAutomationsTest extends TestCase
         return $user;
     }
 
+    private function switchChecked(string $html, string $label): string
+    {
+        $document = new \DOMDocument;
+        @$document->loadHTML($html);
+        $xpath = new \DOMXPath($document);
+        $switch = $xpath->query('//*[@role="switch"][@aria-label="'.$label.'"]')->item(0);
+        $this->assertNotNull($switch, 'Missing switch: '.$label);
+
+        return $switch->getAttribute('aria-checked');
+    }
+
     #[Test]
     public function automations_page_shows_the_three_toggles(): void
     {
@@ -43,7 +54,31 @@ class AdminInboxAutomationsTest extends TestCase
             ->assertSeeHtml('data-inbox-automations')
             ->assertSeeHtml('data-inbox-automation="photo_request"')
             ->assertSeeHtml('data-inbox-automation="priced_image"')
-            ->assertSeeHtml('data-inbox-automation="low_match_wait"');
+            ->assertSeeHtml('data-inbox-automation="low_match_wait"')
+            ->assertSeeHtml('class="admin-switch"')
+            ->assertSeeHtml('class="admin-switch__knob"')
+            ->assertSeeHtml('dir="ltr"');
+    }
+
+    #[Test]
+    public function on_switch_is_aria_checked_so_the_knob_sits_on_the_right(): void
+    {
+        $this->actingAs($this->adminUser());
+
+        $html = Livewire::test(AdminInboxAutomations::class)->html();
+
+        $this->assertSame('true', $this->switchChecked($html, 'Ask for a product photo'));
+        $this->assertSame('false', $this->switchChecked($html, 'Send priced image'));
+        $this->assertSame('false', $this->switchChecked($html, 'Ask for a moment on a weak match'));
+        $this->assertStringNotContainsString('ml-6', $html);
+
+        $toggled = Livewire::test(AdminInboxAutomations::class)
+            ->call('togglePhotoRequest')
+            ->call('togglePricedImage')
+            ->html();
+
+        $this->assertSame('false', $this->switchChecked($toggled, 'Ask for a product photo'));
+        $this->assertSame('true', $this->switchChecked($toggled, 'Send priced image'));
     }
 
     #[Test]

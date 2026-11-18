@@ -92,6 +92,51 @@
         color: #ffffff;
     }
 
+    /*
+     * iOS Safari ignores display:flex on <button> unless appearance is reset,
+     * so the old ml-6 knob never moved. Absolute + translateX is LTR-stable.
+     */
+    .admin-switch {
+        appearance: none;
+        -webkit-appearance: none;
+        position: relative;
+        display: inline-block;
+        width: 3rem;
+        height: 1.75rem;
+        flex-shrink: 0;
+        padding: 0;
+        border: 1px solid #e0d6c2;
+        border-radius: 9999px;
+        background: #e7dfcf;
+        vertical-align: middle;
+        direction: ltr;
+        cursor: pointer;
+        transition: background-color 150ms ease, border-color 150ms ease;
+    }
+
+    .admin-switch[aria-checked="true"] {
+        border-color: #c9a227;
+        background: #c9a227;
+    }
+
+    .admin-switch__knob {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 1.25rem;
+        height: 1.25rem;
+        border-radius: 9999px;
+        background: #ffffff;
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+        pointer-events: none;
+        transform: translateX(0);
+        transition: transform 150ms ease;
+    }
+
+    .admin-switch[aria-checked="true"] .admin-switch__knob {
+        transform: translateX(1.375rem);
+    }
+
     .admin-courier-box {
         margin-left: 2rem;
         margin-bottom: 0.75rem;

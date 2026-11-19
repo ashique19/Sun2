@@ -38,6 +38,8 @@
         The sheet is position:fixed (out of document flow), which can collapse in-flow
         layout and pause wire:poll.visible on the page root.
         When Echo realtime is on, Graph poll is slower (backfill only).
+        The open Messenger thread gets a separate fast poll so staff see new
+        messages without waiting on the list-wide interval.
     --}}
     <div
         wire:poll.{{ $graphPollSeconds }}s.visible="pollSyncFromFacebook"
@@ -46,6 +48,15 @@
         data-inbox-realtime="{{ $realtimeEnabled ? '1' : '0' }}"
         data-graph-poll-seconds="{{ $graphPollSeconds }}"
     ></div>
+    @if ($openThreadPollSeconds > 0)
+        <div
+            wire:poll.{{ $openThreadPollSeconds }}s.visible="pollOpenThreadFromFacebook"
+            wire:key="open-thread-graph-poll-{{ $selectedConversationId }}-{{ $openThreadPollSeconds }}"
+            class="pointer-events-none fixed bottom-0 left-px z-[60] h-px w-px opacity-0"
+            aria-hidden="true"
+            data-open-thread-poll-seconds="{{ $openThreadPollSeconds }}"
+        ></div>
+    @endif
 
     @script
     <script>

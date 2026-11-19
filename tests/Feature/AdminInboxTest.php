@@ -1795,6 +1795,7 @@ class AdminInboxTest extends TestCase
             ->assertSet('syncToast', null)
             ->assertSee('Polled hello')
             ->assertSeeHtml('wire:poll.45s.visible="pollSyncFromFacebook"')
+            ->assertDontSeeHtml('pollOpenThreadFromFacebook')
             ->assertSeeHtml('fixed bottom-0 left-0')
             ->assertSee('Auto sync in')
             ->assertDontSee('Last synced');
@@ -1934,6 +1935,7 @@ class AdminInboxTest extends TestCase
             ->assertSee('Earlier message')
             ->assertSeeHtml('aria-label="Sync from Facebook"')
             ->assertSeeHtml('wire:poll.45s.visible="pollSyncFromFacebook"')
+            ->assertSeeHtml('wire:poll.5s.visible="pollOpenThreadFromFacebook"')
             ->assertSeeHtml('fixed bottom-0 left-0')
             ->assertSeeHtml('wire:key="thread-'.$conversation->id.'"')
             ->call('pollSyncFromFacebook')
@@ -1944,6 +1946,99 @@ class AdminInboxTest extends TestCase
         $this->assertDatabaseHas('channel_messages', [
             'external_message_id' => 'm_open_new',
             'body' => 'New while thread open',
+        ]);
+    }
+
+    #[Test]
+    public function open_thread_poll_fetches_only_that_user_from_graph(): void
+    {
+        config([
+            'facebook.messenger.page_access_token' => 'page-token',
+            'facebook.messenger.page_id' => 'PAGE42',
+            'facebook.graph_version' => 'v25.0',
+            'gemini.api_key' => null,
+            'channels.inbox.graph_poll_open_thread_seconds' => 5,
+        ]);
+
+        $this->actingAs($this->adminUser());
+
+        $conversation = $this->conversation([
+            'external_user_id' => 'PSID_FAST_1',
+            'customer_name' => 'Fast Thread Customer',
+            'last_read_at' => now()->subHour(),
+        ]);
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'external_message_id' => 'm_fast_old',
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'Already on screen',
+            'sent_at' => now()->subHour(),
+        ]);
+
+        Http::fake(function (Request $request) {
+            $url = $request->url();
+
+            if (str_contains($url, 'take_thread_control')) {
+                return Http::response(['success' => true], 200);
+            }
+
+            if (str_contains($url, '/PAGE42/messages') || str_contains($url, '/me/messages')) {
+                return Http::response(['recipient_id' => 'PSID_FAST_1'], 200);
+            }
+
+            if (str_contains($url, '/conversations')) {
+                $this->assertStringContainsString('user_id=PSID_FAST_1', $url);
+                $this->assertStringContainsString('messages.limit', $url);
+                $this->assertStringNotContainsString('ids=', $url);
+
+                return Http::response([
+                    'data' => [[
+                        'id' => 't_fast_1',
+                        'updated_time' => now()->toIso8601String(),
+                        'participants' => [
+                            'data' => [
+                                ['id' => 'PAGE42', 'name' => 'Sun Page'],
+                                ['id' => 'PSID_FAST_1', 'name' => 'Fast Thread Customer'],
+                            ],
+                        ],
+                        'messages' => [
+                            'data' => [
+                                [
+                                    'id' => 'm_fast_new',
+                                    'message' => 'Arrived while reading',
+                                    'from' => ['id' => 'PSID_FAST_1', 'name' => 'Fast Thread Customer'],
+                                    'created_time' => now()->subSecond()->toIso8601String(),
+                                ],
+                                [
+                                    'id' => 'm_fast_old',
+                                    'message' => 'Already on screen',
+                                    'from' => ['id' => 'PSID_FAST_1', 'name' => 'Fast Thread Customer'],
+                                    'created_time' => now()->subHour()->toIso8601String(),
+                                ],
+                            ],
+                        ],
+                    ]],
+                ], 200);
+            }
+
+            return Http::response(['error' => ['message' => 'Unexpected '.$url]], 404);
+        });
+
+        Livewire::withQueryParams(['conversation' => $conversation->id])
+            ->test(AdminInbox::class)
+            ->assertSee('Already on screen')
+            ->assertSeeHtml('wire:poll.5s.visible="pollOpenThreadFromFacebook"')
+            ->assertSeeHtml('wire:poll.45s.visible="pollSyncFromFacebook"')
+            ->assertDontSee('Arrived while reading')
+            ->call('pollOpenThreadFromFacebook')
+            ->assertSee('Already on screen')
+            ->assertSee('Arrived while reading')
+            ->assertSet('syncToast', null);
+
+        $this->assertDatabaseHas('channel_messages', [
+            'external_message_id' => 'm_fast_new',
+            'body' => 'Arrived while reading',
         ]);
     }
 

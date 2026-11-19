@@ -144,6 +144,63 @@ class MessengerGraphPollTest extends TestCase
     }
 
     #[Test]
+    public function poll_user_fetches_one_thread_without_moving_list_watermark(): void
+    {
+        $watermark = now()->subMinutes(5)->toIso8601String();
+        Cache::put(MessengerConversationSyncService::LAST_SYNC_CACHE_KEY, $watermark);
+
+        Http::fake(function (Request $request) {
+            $url = $request->url();
+
+            if (str_contains($url, '/conversations')) {
+                $this->assertStringContainsString('user_id=PSID_OPEN', $url);
+                $this->assertStringContainsString('messages.limit%288%29', $url);
+                $this->assertStringNotContainsString('ids=', $url);
+
+                return Http::response([
+                    'data' => [$this->threadPayload(
+                        't_open',
+                        'PSID_OPEN',
+                        'Open Customer',
+                        'm_open',
+                        'While reading this thread',
+                    )],
+                ], 200);
+            }
+
+            $this->fail('Unexpected Graph URL: '.$url);
+        });
+
+        $result = app(MessengerConversationSyncService::class)->pollUser('PSID_OPEN');
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame(1, $result['conversations']);
+        $this->assertSame(1, $result['messages']);
+        $this->assertSame(1, $result['graph_threads']);
+        $this->assertSame($watermark, Cache::get(MessengerConversationSyncService::LAST_SYNC_CACHE_KEY));
+        $this->assertDatabaseHas('channel_messages', [
+            'external_message_id' => 'm_open',
+            'body' => 'While reading this thread',
+        ]);
+    }
+
+    #[Test]
+    public function poll_user_is_quiet_when_graph_has_no_thread(): void
+    {
+        Http::fake(function (Request $request) {
+            $this->assertStringContainsString('user_id=PSID_MISSING', $request->url());
+
+            return Http::response(['data' => []], 200);
+        });
+
+        $result = app(MessengerConversationSyncService::class)->pollUser('PSID_MISSING');
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame(0, $result['messages']);
+        $this->assertSame(0, ChannelConversation::query()->count());
+    }
+
+    #[Test]
     public function full_sync_still_pulls_nested_messages_in_one_conversations_call(): void
     {
         Http::fake(function (Request $request) {

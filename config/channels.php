@@ -136,6 +136,9 @@ return [
 
         'graph_poll_messages_per_thread' => (int) env('CHANNEL_INBOX_GRAPH_POLL_MESSAGES', 8),
 
+        // Fast Graph catch-up for the open Messenger thread only (list poll stays slow).
+        'graph_poll_open_thread_seconds' => (int) env('CHANNEL_INBOX_GRAPH_POLL_OPEN_THREAD_SECONDS', 5),
+
         // Pair a price ask with photos only inside this many minutes (current session).
         'auto_session_minutes' => max(1, (int) env('CHANNEL_INBOX_AUTO_SESSION_MINUTES', 60)),
 

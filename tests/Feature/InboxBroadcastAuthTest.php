@@ -130,8 +130,32 @@ class InboxBroadcastAuthTest extends TestCase
 
         Livewire::test(AdminInbox::class)
             ->assertSeeHtml('wire:poll.60s.visible="pollSyncFromFacebook"')
+            ->assertDontSeeHtml('pollOpenThreadFromFacebook')
             ->assertSeeHtml('data-inbox-realtime="1"')
             ->assertDontSee('Live updates when Reverb is running');
+    }
+
+    #[Test]
+    public function open_thread_keeps_fast_graph_poll_when_realtime_is_on(): void
+    {
+        config([
+            'channels.inbox.realtime_enabled' => true,
+            'channels.inbox.graph_poll_seconds_realtime' => 60,
+            'channels.inbox.graph_poll_open_thread_seconds' => 5,
+        ]);
+
+        $this->actingAs($this->userWithRole('admin'));
+        $conversation = ChannelConversation::query()->create([
+            'channel' => ChannelConversation::CHANNEL_MESSENGER,
+            'external_user_id' => 'psid-open-rt',
+            'customer_name' => 'Open Realtime',
+            'last_inbound_at' => now(),
+        ]);
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSeeHtml('wire:poll.60s.visible="pollSyncFromFacebook"')
+            ->assertSeeHtml('wire:poll.5s.visible="pollOpenThreadFromFacebook"');
     }
 
     #[Test]

@@ -2003,6 +2003,43 @@ class AdminInbox extends Component
         $this->touchOpenThreadAfterSync($result);
     }
 
+    /**
+     * Fast Graph catch-up for the open Messenger thread. List poll stays slow.
+     * Skip render when nothing new so typing in the composer is not interrupted.
+     */
+    public function pollOpenThreadFromFacebook(MessengerConversationSyncService $sync): void
+    {
+        AdminAccess::ensureStaffAdmin();
+
+        if (! $this->selectedConversationId) {
+            $this->skipRender();
+
+            return;
+        }
+
+        $conversation = ChannelConversation::query()->find($this->selectedConversationId);
+
+        if (
+            ! $conversation
+            || $conversation->channel !== ChannelConversation::CHANNEL_MESSENGER
+            || trim((string) $conversation->external_user_id) === ''
+        ) {
+            $this->skipRender();
+
+            return;
+        }
+
+        $result = $sync->pollUser((string) $conversation->external_user_id);
+
+        if (! $result['ok'] || (int) ($result['messages'] ?? 0) === 0) {
+            $this->skipRender();
+
+            return;
+        }
+
+        $this->touchOpenThreadAfterSync($result);
+    }
+
     public function dismissSyncToast(): void
     {
         $this->syncToast = null;
@@ -2043,6 +2080,11 @@ class AdminInbox extends Component
         }
 
         return max(5, (int) config('channels.inbox.graph_poll_seconds', 45));
+    }
+
+    public function openThreadPollSeconds(): int
+    {
+        return max(3, min(15, (int) config('channels.inbox.graph_poll_open_thread_seconds', 5)));
     }
 
     public function clearFilters(): void
@@ -3025,6 +3067,11 @@ class AdminInbox extends Component
             'threadLookbackHours' => $lookbackHours,
             'realtimeEnabled' => $this->realtimeEnabled(),
             'graphPollSeconds' => $this->graphPollSeconds(),
+            'openThreadPollSeconds' => $this->selectedConversationId
+                && $selectedConversation
+                && $selectedConversation->channel === ChannelConversation::CHANNEL_MESSENGER
+                ? $this->openThreadPollSeconds()
+                : 0,
             'messengerSeenPendingHint' => $messengerSeenPendingHint,
             'diagnostics' => $diagnostics->forInbox([
                 'channel' => $this->channel,

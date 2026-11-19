@@ -62,6 +62,38 @@ class MessengerConversationSyncService
     }
 
     /**
+     * Near-realtime catch-up for the thread staff currently have open.
+     * One Graph call (conversations?user_id=) — does not move the list-wide watermark.
+     *
+     * @return array{
+     *     ok: bool,
+     *     message: string,
+     *     conversations: int,
+     *     messages: int,
+     *     graph_threads: int
+     * }
+     */
+    public function pollUser(string $psid): array
+    {
+        $psid = trim($psid);
+        if ($psid === '') {
+            return $this->emptyPoll(true, 'No Messenger user id.');
+        }
+
+        $lock = Cache::lock('messenger-conversation-poll-user-'.$psid, 30);
+
+        if (! $lock->get()) {
+            return $this->emptyPoll(true, 'A Messenger thread poll is already running.');
+        }
+
+        try {
+            return $this->runPollUser($psid);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
      * @param  callable(): array{ok: bool, message: string, conversations: int, messages: int, graph_threads: int}  $callback
      * @return array{ok: bool, message: string, conversations: int, messages: int, graph_threads: int}
      */
@@ -173,6 +205,81 @@ class MessengerConversationSyncService
                 'messages' => 0,
                 'graph_threads' => 0,
             ];
+        }
+    }
+
+    /**
+     * @return array{ok: bool, message: string, conversations: int, messages: int, graph_threads: int}
+     */
+    private function emptyPoll(bool $ok, string $message): array
+    {
+        return [
+            'ok' => $ok,
+            'message' => $message,
+            'conversations' => 0,
+            'messages' => 0,
+            'graph_threads' => 0,
+        ];
+    }
+
+    /**
+     * @return array{ok: bool, message: string, conversations: int, messages: int, graph_threads: int}
+     */
+    private function runPollUser(string $psid): array
+    {
+        $token = $this->tokens->token();
+        $pageId = $this->tokens->pageId();
+        $version = $this->tokens->graphVersion();
+
+        if ($token === '' || $pageId === '') {
+            return $this->emptyPoll(false, 'Facebook Page access token or Page ID is not configured.');
+        }
+
+        $messagesPerThread = max(1, min(15, (int) config('channels.inbox.graph_poll_messages_per_thread', 8)));
+
+        try {
+            $response = Http::timeout(10)
+                ->withToken($token)
+                ->acceptJson()
+                ->get('https://graph.facebook.com/'.$version.'/'.$pageId.'/conversations', [
+                    'platform' => 'messenger',
+                    'user_id' => $psid,
+                    'limit' => 1,
+                    'fields' => $this->conversationFields($messagesPerThread),
+                ]);
+
+            if (! $response->successful()) {
+                $error = (string) data_get($response->json(), 'error.message', $response->body());
+
+                return $this->emptyPoll(false, 'Facebook Conversations API failed: '.$error);
+            }
+
+            $batch = $response->json('data');
+            if (! is_array($batch) || $batch === []) {
+                return $this->emptyPoll(true, 'No Messenger conversation for this user.');
+            }
+
+            $thread = $batch[0];
+            if (! is_array($thread)) {
+                return $this->emptyPoll(true, 'No Messenger conversation for this user.');
+            }
+
+            $result = $this->ingestThread($thread, $pageId);
+
+            return [
+                'ok' => true,
+                'message' => 'Synced open thread ('.$result['messages'].' message(s)).',
+                'conversations' => $result['conversation'] ? 1 : 0,
+                'messages' => $result['messages'],
+                'graph_threads' => 1,
+            ];
+        } catch (Throwable $e) {
+            Log::warning('Messenger open-thread poll failed.', [
+                'message' => $e->getMessage(),
+                'psid' => $psid,
+            ]);
+
+            return $this->emptyPoll(false, 'Sync failed: '.$e->getMessage());
         }
     }
 

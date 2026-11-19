@@ -57,7 +57,10 @@ class AdminInboxAutomationsTest extends TestCase
             ->assertSee('Match '.InboxDeliveryChargeAutomationService::REPLY_LABEL)
             ->assertSee(InboxDeliveryChargeAutomationService::BODY_DHAKA)
             ->assertSee(InboxDeliveryChargeAutomationService::BODY_OUTSIDE)
-            ->assertSee('Savar, Ashulia, Gazipur, Tongi, and Narayanganj')
+            ->assertSee(InboxDeliveryChargeAutomationService::personalizedBody(
+                'সাভার',
+                InboxDeliveryChargeAutomationService::ZONE_OUTSIDE,
+            ))
             ->assertSee(InboxPriceQueryAutomationService::PHOTO_REQUEST_BODY)
             ->assertSee(InboxPriceQueryAutomationService::LOW_MATCH_WAIT_BODY)
             ->assertSee(InboxHiReplyAutomationService::BODY)

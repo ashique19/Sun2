@@ -58,7 +58,7 @@ class InboxDeliveryChargeAutomationTest extends TestCase
 
     #[Test]
     #[DataProvider('outsideAreas')]
-    public function named_outside_area_sends_only_the_outside_line(string $text): void
+    public function named_outside_area_mentions_that_area_in_the_reply(string $text, string $area): void
     {
         Http::fake([
             'https://graph.facebook.com/*' => Http::response([
@@ -74,7 +74,13 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             ->reply($conversation, $inbound);
 
         $this->assertNotNull($sent, $text);
-        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_OUTSIDE, $sent->body);
+        $this->assertSame(
+            InboxDeliveryChargeAutomationService::personalizedBody(
+                $area,
+                InboxDeliveryChargeAutomationService::ZONE_OUTSIDE,
+            ),
+            $sent->body,
+        );
     }
 
     /**
@@ -83,18 +89,20 @@ class InboxDeliveryChargeAutomationTest extends TestCase
     public static function outsideAreas(): array
     {
         return [
-            ['Savar e delivery koto?'],
-            ['ashulia delivery charge?'],
-            ['Gazipur e ডেলিভারি চার্জ কত'],
-            ['tongi te koto din lagbe delivery'],
-            ['Narayanganj delivery time?'],
-            ['গাজীপুর এ ডেলিভারি চার্জ'],
+            ['Savar e delivery koto?', 'Savar'],
+            ['ashulia delivery charge?', 'ashulia'],
+            ['Gazipur e ডেলিভারি চার্জ কত', 'Gazipur'],
+            ['tongi te koto din lagbe delivery', 'tongi'],
+            ['Narayanganj delivery time?', 'Narayanganj'],
+            ['গাজীপুর এ ডেলিভারি চার্জ', 'গাজীপুর'],
+            ['সাভার ডেলিভারি কত', 'সাভার'],
+            ['তবলছড়ি ডেলিভারি কত', 'তবলছড়ি'],
         ];
     }
 
     #[Test]
     #[DataProvider('dhakaCityAreas')]
-    public function named_dhaka_city_area_sends_only_the_city_line(string $text): void
+    public function named_dhaka_city_area_mentions_that_area_in_the_reply(string $text, string $expected): void
     {
         Http::fake([
             'https://graph.facebook.com/*' => Http::response([
@@ -110,7 +118,7 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             ->reply($conversation, $inbound);
 
         $this->assertNotNull($sent, $text);
-        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_DHAKA, $sent->body);
+        $this->assertSame($expected, $sent->body);
     }
 
     /**
@@ -119,10 +127,28 @@ class InboxDeliveryChargeAutomationTest extends TestCase
     public static function dhakaCityAreas(): array
     {
         return [
-            ['Mirpur e delivery koto?'],
-            ['uttara delivery charge'],
-            ['ঢাকা শহর এ ডেলিভারি চার্জ কত'],
-            ['dhanmondi te koto din lagbe delivery'],
+            [
+                'Mirpur e delivery koto?',
+                InboxDeliveryChargeAutomationService::personalizedBody(
+                    'Mirpur',
+                    InboxDeliveryChargeAutomationService::ZONE_DHAKA,
+                ),
+            ],
+            [
+                'uttara delivery charge',
+                InboxDeliveryChargeAutomationService::personalizedBody(
+                    'uttara',
+                    InboxDeliveryChargeAutomationService::ZONE_DHAKA,
+                ),
+            ],
+            ['ঢাকা শহর এ ডেলিভারি চার্জ কত', InboxDeliveryChargeAutomationService::BODY_DHAKA],
+            [
+                'dhanmondi te koto din lagbe delivery',
+                InboxDeliveryChargeAutomationService::personalizedBody(
+                    'dhanmondi',
+                    InboxDeliveryChargeAutomationService::ZONE_DHAKA,
+                ),
+            ],
         ];
     }
 
@@ -143,7 +169,13 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             ->reply($conversation, $inbound);
 
         $this->assertNotNull($sent);
-        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_OUTSIDE, $sent->body);
+        $this->assertSame(
+            InboxDeliveryChargeAutomationService::personalizedBody(
+                'Savar',
+                InboxDeliveryChargeAutomationService::ZONE_OUTSIDE,
+            ),
+            $sent->body,
+        );
     }
 
     #[Test]
@@ -164,7 +196,13 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             ->reply($conversation, $inbound);
 
         $this->assertNotNull($sent);
-        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_OUTSIDE, $sent->body);
+        $this->assertSame(
+            InboxDeliveryChargeAutomationService::personalizedBody(
+                'Ashulia',
+                InboxDeliveryChargeAutomationService::ZONE_OUTSIDE,
+            ),
+            $sent->body,
+        );
     }
 
     #[Test]
@@ -200,7 +238,13 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             ->reply($conversation, $inbound);
 
         $this->assertNotNull($sent);
-        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_OUTSIDE, $sent->body);
+        $this->assertSame(
+            InboxDeliveryChargeAutomationService::personalizedBody(
+                'Keraniganj',
+                InboxDeliveryChargeAutomationService::ZONE_OUTSIDE,
+            ),
+            $sent->body,
+        );
     }
 
     #[Test]

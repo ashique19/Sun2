@@ -66,6 +66,17 @@ class InboxDeliveryChargeAutomationService
     ];
 
     /**
+     * Zone labels that should not be used as the customer’s area name.
+     *
+     * @var list<string>
+     */
+    private const GENERIC_MENTIONS = [
+        'dhaka', 'ঢাকা', 'dhakacity', 'ঢাকাশহর', 'insidedhaka', 'ঢাকারভিতরে',
+        'dhakarbaire', 'ঢাকারবাইরে', 'ঢাকারবাহিরে', 'outsidedhaka',
+        'olddhaka', 'পুরানঢাকা',
+    ];
+
+    /**
      * Conversation ids already queued this HTTP request.
      *
      * @var array<int, true>
@@ -186,10 +197,20 @@ class InboxDeliveryChargeAutomationService
         );
     }
 
+    public static function personalizedBody(string $area, string $zone): string
+    {
+        $area = trim($area);
+        if ($zone === self::ZONE_DHAKA) {
+            return $area.' ডেলিভারি চার্জ ৮০ টাকা, ২-৪ দিন সময় লাগতে পারে, সম্ভব হলে, হোম ডেলিভারি পাবেন।';
+        }
+
+        return $area.' ডেলিভারি চার্জ ১২০ টাকা, ৩-৫ দিন সময় লাগতে পারে, সম্ভব হলে, হোম ডেলিভারি পাবেন।';
+    }
+
     public function replyBody(?ChannelConversation $conversation = null, ?ChannelMessage $message = null): string
     {
         if ($conversation instanceof ChannelConversation && $message instanceof ChannelMessage) {
-            return $this->bodyForZone($this->zoneFor($conversation, $message));
+            return $this->bodyForLocation($this->locationFor($conversation, $message));
         }
 
         return self::BODY;
@@ -200,9 +221,17 @@ class InboxDeliveryChargeAutomationService
      */
     public function zoneFor(ChannelConversation $conversation, ChannelMessage $inbound): ?string
     {
-        $zone = $this->zoneFromHaystack($this->compactHaystack((string) ($inbound->body ?? '')));
-        if ($zone !== null) {
-            return $zone;
+        return $this->locationFor($conversation, $inbound)['zone'];
+    }
+
+    /**
+     * @return array{zone: self::ZONE_DHAKA|self::ZONE_OUTSIDE|null, area: ?string}
+     */
+    public function locationFor(ChannelConversation $conversation, ChannelMessage $inbound): array
+    {
+        $hit = $this->locationFromText((string) ($inbound->body ?? ''));
+        if ($hit['zone'] !== null || $hit['area'] !== null) {
+            return $hit;
         }
 
         $cutoff = InboxPriceQueryAutomationService::sessionCutoff();
@@ -219,13 +248,13 @@ class InboxDeliveryChargeAutomationService
                 continue;
             }
 
-            $zone = $this->zoneFromHaystack($this->compactHaystack((string) ($row->body ?? '')));
-            if ($zone !== null) {
-                return $zone;
+            $hit = $this->locationFromText((string) ($row->body ?? ''));
+            if ($hit['zone'] !== null || $hit['area'] !== null) {
+                return $hit;
             }
         }
 
-        return null;
+        return ['zone' => null, 'area' => null];
     }
 
     /**
@@ -243,10 +272,17 @@ class InboxDeliveryChargeAutomationService
     }
 
     /**
-     * @param  self::ZONE_DHAKA|self::ZONE_OUTSIDE|null  $zone
+     * @param  array{zone: self::ZONE_DHAKA|self::ZONE_OUTSIDE|null, area: ?string}  $location
      */
-    private function bodyForZone(?string $zone): string
+    private function bodyForLocation(array $location): string
     {
+        $area = $location['area'];
+        $zone = $location['zone'];
+
+        if (is_string($area) && $area !== '') {
+            return self::personalizedBody($area, $zone ?? self::ZONE_OUTSIDE);
+        }
+
         return match ($zone) {
             self::ZONE_DHAKA => self::BODY_DHAKA,
             self::ZONE_OUTSIDE => self::BODY_OUTSIDE,
@@ -255,66 +291,113 @@ class InboxDeliveryChargeAutomationService
     }
 
     /**
-     * @return self::ZONE_DHAKA|self::ZONE_OUTSIDE|null
+     * @return array{zone: self::ZONE_DHAKA|self::ZONE_OUTSIDE|null, area: ?string}
      */
-    private function zoneFromHaystack(string $compact): ?string
+    private function locationFromText(string $text): array
     {
-        if ($compact === '') {
+        $text = trim($text);
+        if ($text === '') {
+            return ['zone' => null, 'area' => null];
+        }
+
+        $compact = $this->compactHaystack($text);
+        $outside = $this->bestCue($text, $compact, self::OUTSIDE_CUES);
+        $dhaka = $this->bestCue($text, $compact, self::DHAKA_CITY_CUES);
+        $catalog = $this->bestCatalogHit($text, $compact);
+
+        $zone = null;
+        $outsideLen = $outside['len'] ?? 0;
+        $dhakaLen = $dhaka['len'] ?? 0;
+        $catalogLen = $catalog['len'] ?? 0;
+
+        if ($outsideLen > 0 && $outsideLen >= $dhakaLen && $outsideLen >= $catalogLen) {
+            $zone = self::ZONE_OUTSIDE;
+        } elseif ($dhakaLen > 0 && $dhakaLen >= $catalogLen) {
+            $zone = self::ZONE_DHAKA;
+        } elseif ($catalog !== null) {
+            $zone = $catalog['zone'];
+        } else {
+            $dhakaNeedle = $this->compactHaystack('dhaka');
+            $dhakaBn = $this->compactHaystack('ঢাকা');
+            if (($dhakaNeedle !== '' && str_contains($compact, $dhakaNeedle))
+                || ($dhakaBn !== '' && str_contains($compact, $dhakaBn))) {
+                $zone = self::ZONE_DHAKA;
+            }
+        }
+
+        $area = $this->bestMention($outside, $dhaka, $catalog);
+        if ($area === null) {
+            $area = $this->areaPrefixBeforeDelivery($text);
+        }
+
+        if ($area !== null && $zone === null) {
+            $zone = self::ZONE_OUTSIDE;
+        }
+
+        return ['zone' => $zone, 'area' => $area];
+    }
+
+    /**
+     * @param  array{cue: string, len: int, display: ?string}|null  $outside
+     * @param  array{cue: string, len: int, display: ?string}|null  $dhaka
+     * @param  array{zone: string, len: int, display: ?string}|null  $catalog
+     */
+    private function bestMention(?array $outside, ?array $dhaka, ?array $catalog): ?string
+    {
+        $candidates = [];
+        foreach ([$outside, $dhaka, $catalog] as $hit) {
+            if ($hit === null) {
+                continue;
+            }
+            $display = $this->usableMention($hit['display'] ?? null);
+            if ($display === null) {
+                continue;
+            }
+            $candidates[] = ['len' => $hit['len'], 'display' => $display];
+        }
+
+        if ($candidates === []) {
             return null;
         }
 
-        $outsideLen = $this->longestCueLength($compact, self::OUTSIDE_CUES);
-        $dhakaLen = $this->longestCueLength($compact, self::DHAKA_CITY_CUES);
+        usort($candidates, fn (array $a, array $b): int => $b['len'] <=> $a['len']);
 
-        if ($outsideLen > 0 && $outsideLen >= $dhakaLen) {
-            return self::ZONE_OUTSIDE;
-        }
-
-        if ($dhakaLen > 0) {
-            return self::ZONE_DHAKA;
-        }
-
-        $fromCatalog = $this->zoneFromCatalog($compact);
-        if ($fromCatalog !== null) {
-            return $fromCatalog;
-        }
-
-        $dhaka = $this->compactHaystack('dhaka');
-        $dhakaBn = $this->compactHaystack('ঢাকা');
-        if (($dhaka !== '' && str_contains($compact, $dhaka))
-            || ($dhakaBn !== '' && str_contains($compact, $dhakaBn))) {
-            return self::ZONE_DHAKA;
-        }
-
-        return null;
+        return $candidates[0]['display'];
     }
 
     /**
      * @param  list<string>  $cues
+     * @return array{cue: string, len: int, display: ?string}|null
      */
-    private function longestCueLength(string $compact, array $cues): int
+    private function bestCue(string $text, string $compact, array $cues): ?array
     {
-        $best = 0;
+        $best = null;
+        $bestLen = 0;
         foreach ($cues as $cue) {
             $needle = $this->compactHaystack($cue);
-            if ($needle === '' || mb_strlen($needle) < 4) {
+            if ($needle === '' || mb_strlen($needle) < 4 || ! str_contains($compact, $needle)) {
                 continue;
             }
-            if (! str_contains($compact, $needle)) {
-                continue;
+            $len = mb_strlen($needle);
+            if ($len > $bestLen) {
+                $bestLen = $len;
+                $best = [
+                    'cue' => $cue,
+                    'len' => $len,
+                    'display' => $this->displaySlice($text, $cue),
+                ];
             }
-            $best = max($best, mb_strlen($needle));
         }
 
         return $best;
     }
 
     /**
-     * @return self::ZONE_DHAKA|self::ZONE_OUTSIDE|null
+     * @return array{zone: self::ZONE_DHAKA|self::ZONE_OUTSIDE, len: int, display: ?string}|null
      */
-    private function zoneFromCatalog(string $compact): ?string
+    private function bestCatalogHit(string $text, string $compact): ?array
     {
-        $bestZone = null;
+        $best = null;
         $bestLen = 0;
 
         $areas = Area::query()
@@ -332,13 +415,17 @@ class InboxDeliveryChargeAutomationService
                 $len = mb_strlen($needle);
                 if ($len > $bestLen) {
                     $bestLen = $len;
-                    $bestZone = $this->zoneForArea($area);
+                    $best = [
+                        'zone' => $this->zoneForArea($area),
+                        'len' => $len,
+                        'display' => $this->displaySlice($text, (string) $phrase) ?? (string) $area->name,
+                    ];
                 }
             }
         }
 
-        if ($bestZone !== null) {
-            return $bestZone;
+        if ($best !== null) {
+            return $best;
         }
 
         foreach (City::query()->active()->get(['id', 'name', 'is_dhaka']) as $city) {
@@ -349,11 +436,82 @@ class InboxDeliveryChargeAutomationService
             $len = mb_strlen($needle);
             if ($len > $bestLen) {
                 $bestLen = $len;
-                $bestZone = $city->is_dhaka ? self::ZONE_DHAKA : self::ZONE_OUTSIDE;
+                $best = [
+                    'zone' => $city->is_dhaka ? self::ZONE_DHAKA : self::ZONE_OUTSIDE,
+                    'len' => $len,
+                    'display' => $this->displaySlice($text, (string) $city->name) ?? (string) $city->name,
+                ];
             }
         }
 
-        return $bestZone;
+        return $best;
+    }
+
+    private function areaPrefixBeforeDelivery(string $text): ?string
+    {
+        if (! preg_match('/(?:ডেলিভারি|ডেলিভারী|ডেলিবারি|delivery|delivary|dilevery)/iu', $text)) {
+            return null;
+        }
+
+        $parts = preg_split('/(?:ডেলিভারি|ডেলিভারী|ডেলিবারি|delivery|delivary|dilevery)/iu', $text, 2);
+        $prefix = $this->cleanPlaceName((string) ($parts[0] ?? ''));
+        if (str_contains($prefix, ',')) {
+            $prefix = $this->cleanPlaceName((string) (preg_split('/\s*,\s*/u', $prefix)[0] ?? ''));
+        }
+
+        return $this->usableMention($prefix);
+    }
+
+    private function usableMention(?string $name): ?string
+    {
+        $name = $this->cleanPlaceName((string) $name);
+        if ($name === '' || mb_strlen($name) < 2 || mb_strlen($name) > 40) {
+            return null;
+        }
+
+        $words = preg_split('/\s+/u', $name) ?: [];
+        if (count($words) > 4) {
+            return null;
+        }
+
+        $compact = $this->compactHaystack($name);
+        if ($compact === '') {
+            return null;
+        }
+
+        foreach (self::GENERIC_MENTIONS as $generic) {
+            $needle = $this->compactHaystack($generic);
+            if ($needle !== '' && $compact === $needle) {
+                return null;
+            }
+        }
+
+        return $name;
+    }
+
+    private function cleanPlaceName(string $name): string
+    {
+        $name = trim($name);
+        $name = preg_replace('/^[\p{P}\p{Z}]+|[\p{P}\p{Z}?؟]+$/u', '', $name) ?? $name;
+        $name = preg_replace('/\s+/u', ' ', $name) ?? $name;
+        $name = preg_replace('/\s+(e|te|ey|ye|a)\s*$/iu', '', $name) ?? $name;
+        $name = preg_replace('/\s*(এ|তে|য়ে|য়ে|য়)\s*$/u', '', $name) ?? $name;
+
+        return trim($name);
+    }
+
+    private function displaySlice(string $text, string $phrase): ?string
+    {
+        $phrase = trim($phrase);
+        if ($phrase === '') {
+            return null;
+        }
+
+        if (preg_match('/'.preg_quote($phrase, '/').'/iu', $text, $matches)) {
+            return $matches[0];
+        }
+
+        return null;
     }
 
     private function zoneForArea(Area $area): string

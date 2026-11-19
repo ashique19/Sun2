@@ -77,6 +77,10 @@ class AdminInboxAutomations extends Component
             'colorGuaranteeLabel' => InboxColorGuaranteeAutomationService::REPLY_LABEL,
             'colorGuaranteeCategory' => InboxColorGuaranteeAutomationService::CATEGORY_NAME,
             'deliveryChargeBody' => InboxDeliveryChargeAutomationService::BODY,
+            'deliveryChargeNamedExample' => InboxDeliveryChargeAutomationService::personalizedBody(
+                'সাভার',
+                InboxDeliveryChargeAutomationService::ZONE_OUTSIDE,
+            ),
             'deliveryChargeLabel' => InboxDeliveryChargeAutomationService::REPLY_LABEL,
             'matchMinPercent' => InboxPriceQueryAutomationService::MATCH_MIN_PERCENT,
             'sessionMinutes' => InboxPriceQueryAutomationService::sessionMinutes(),

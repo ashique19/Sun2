@@ -89,7 +89,7 @@ class AdminInboxProductImageMatchTest extends TestCase
             ->assertDontSee('Match product')
             ->assertDontSeeHtml('@click.stop="openMenu()"')
             ->assertSeeHtml('orderMapEnabled: false')
-            ->assertSeeHtml('wire:click="toggleOrderPanel"');
+            ->assertDontSeeHtml('aria-label="Order fields"');
     }
 
     #[Test]

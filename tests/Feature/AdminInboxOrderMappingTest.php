@@ -40,6 +40,18 @@ class AdminInboxOrderMappingTest extends TestCase
     }
 
     #[Test]
+    public function thread_header_does_not_show_plus_order_button(): void
+    {
+        $this->actingAs($this->adminUser());
+        $conversation = $this->conversation();
+
+        Livewire::test(AdminInbox::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertDontSeeHtml('aria-label="Order fields"')
+            ->assertDontSeeHtml('title="Order fields"');
+    }
+
+    #[Test]
     public function toggle_order_panel_creates_a_staff_draft(): void
     {
         $this->actingAs($this->adminUser());
@@ -51,7 +63,8 @@ class AdminInboxOrderMappingTest extends TestCase
             ->call('toggleOrderPanel')
             ->assertSet('orderPanelOpen', true)
             ->assertSee('draft')
-            ->assertSeeHtml('aria-label="Order fields"');
+            ->assertSeeHtml('aria-label="Close order panel"')
+            ->assertDontSeeHtml('aria-label="Order fields"');
 
         $conversation->refresh();
         $this->assertNotNull($conversation->draft_order_id);

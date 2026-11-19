@@ -72,6 +72,7 @@ class AdminInboxDraftReadyTest extends TestCase
             ->assertSee('Mirpur')
             ->assertSee('Edit')
             ->assertSee('Confirm')
+            ->assertDontSeeHtml('aria-label="Order fields"')
             ->call('confirmConversationDraft')
             ->assertSee('Draft confirmed and moved to New.')
             ->assertDontSeeHtml('data-inbox-draft-ready');
@@ -137,7 +138,8 @@ class AdminInboxDraftReadyTest extends TestCase
             ->assertSee('88011')
             ->assertSee('Not drafting another')
             ->assertSeeHtml('href="'.e(route('admin.orders.show', $existing)).'"')
-            ->assertDontSeeHtml('data-inbox-draft-ready');
+            ->assertDontSeeHtml('data-inbox-draft-ready')
+            ->assertDontSeeHtml('aria-label="Order fields"');
     }
 
     #[Test]

@@ -690,13 +690,6 @@
                             </p>
                         </div>
                         <div class="flex shrink-0 items-center gap-1">
-                        <button type="button"
-                            wire:click="toggleOrderPanel"
-                            class="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-[#E0D6C2] bg-white px-2.5 text-xs font-semibold text-[#6B6459] hover:border-[#C9A227] hover:text-[#C9A227] xl:px-3"
-                            aria-label="Order fields"
-                            title="Order fields">
-                            {{ $selectedConversation->draftOrder ? 'Order' : '+ Order' }}
-                        </button>
                         <x-admin.inbox-sync-button variant="thread-icon" />
                         <x-admin.inbox-sync-button variant="thread-label" />
                         </div>

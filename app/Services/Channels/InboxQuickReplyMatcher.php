@@ -488,10 +488,6 @@ class InboxQuickReplyMatcher
             }
         }
 
-        if ($deliveryReplies === []) {
-            return false;
-        }
-
         $taggedId = trim((string) ($message->quick_reply_id ?? ''));
         if ($taggedId !== '') {
             foreach ($deliveryReplies as $reply) {
@@ -508,7 +504,7 @@ class InboxQuickReplyMatcher
             return true;
         }
 
-        if ($text === '') {
+        if ($text === '' || $deliveryReplies === []) {
             return false;
         }
 

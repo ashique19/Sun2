@@ -76,8 +76,7 @@ class AdminInboxAutomations extends Component
                 ?? InboxColorGuaranteeAutomationService::REPLY_LABEL,
             'colorGuaranteeLabel' => InboxColorGuaranteeAutomationService::REPLY_LABEL,
             'colorGuaranteeCategory' => InboxColorGuaranteeAutomationService::CATEGORY_NAME,
-            'deliveryChargeBody' => app(InboxDeliveryChargeAutomationService::class)->replyBody()
-                ?? InboxDeliveryChargeAutomationService::REPLY_LABEL,
+            'deliveryChargeBody' => InboxDeliveryChargeAutomationService::BODY,
             'deliveryChargeLabel' => InboxDeliveryChargeAutomationService::REPLY_LABEL,
             'matchMinPercent' => InboxPriceQueryAutomationService::MATCH_MIN_PERCENT,
             'sessionMinutes' => InboxPriceQueryAutomationService::sessionMinutes(),

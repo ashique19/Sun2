@@ -2,22 +2,23 @@
 
 namespace Tests\Feature;
 
+use App\Models\Area;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
+use App\Models\City;
 use App\Services\Channels\InboxAutomationSettings;
 use App\Services\Channels\InboxDeliveryChargeAutomationService;
 use App\Services\Channels\InboxQuickReplyMatcher;
 use App\Services\Channels\InboxQuickReplyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 class InboxDeliveryChargeAutomationTest extends TestCase
 {
     use RefreshDatabase;
-
-    private const CHIP_BODY = 'ডেলিভারি চার্জ ১২০ টাকা, ৩-৫ দিনের মাঝে পাবেন।';
 
     protected function setUp(): void
     {
@@ -30,15 +31,10 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             'facebook.messenger.page_access_token' => 'page-token',
             'facebook.graph_version' => 'v25.0',
         ]);
-
-        app(InboxQuickReplyService::class)->save([
-            ['label' => InboxDeliveryChargeAutomationService::REPLY_LABEL, 'body' => self::CHIP_BODY],
-            ['label' => 'Salaam', 'body' => 'আসসালামু আলাইকুম'],
-        ]);
     }
 
     #[Test]
-    public function inbound_delivery_charge_ask_sends_the_saved_reply(): void
+    public function inbound_delivery_charge_ask_sends_the_general_reply(): void
     {
         Http::fake([
             'https://graph.facebook.com/*' => Http::response([
@@ -54,34 +50,157 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             ->reply($conversation, $inbound);
 
         $this->assertNotNull($sent);
-        $this->assertSame(self::CHIP_BODY, $sent->body);
+        $this->assertSame(InboxDeliveryChargeAutomationService::BODY, $sent->body);
         $this->assertTrue($sent->raw_payload[InboxDeliveryChargeAutomationService::RAW_FLAG] ?? false);
         $this->assertSame($inbound->id, $sent->reply_to_message_id);
         $this->assertSame(1, Http::recorded()->count());
     }
 
     #[Test]
-    public function edited_chip_body_is_what_gets_sent(): void
+    #[DataProvider('outsideAreas')]
+    public function named_outside_area_sends_only_the_outside_line(string $text): void
     {
         Http::fake([
             'https://graph.facebook.com/*' => Http::response([
-                'message_id' => 'm_auto_delivery_edit',
-                'recipient_id' => 'psid-delivery-edit',
+                'message_id' => 'm_auto_delivery_out_'.md5($text),
+                'recipient_id' => 'psid-delivery-out',
             ], 200),
         ]);
 
-        app(InboxQuickReplyService::class)->save([
-            ['label' => InboxDeliveryChargeAutomationService::REPLY_LABEL, 'body' => 'ডেলিভারি চার্জ ১৫০ টাকা, ৪-৬ দিন।'],
+        $conversation = $this->conversation('psid-delivery-out-'.md5($text));
+        $inbound = $this->inbound($conversation, $text);
+
+        $sent = app(InboxDeliveryChargeAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent, $text);
+        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_OUTSIDE, $sent->body);
+    }
+
+    /**
+     * @return list<list<string>>
+     */
+    public static function outsideAreas(): array
+    {
+        return [
+            ['Savar e delivery koto?'],
+            ['ashulia delivery charge?'],
+            ['Gazipur e ডেলিভারি চার্জ কত'],
+            ['tongi te koto din lagbe delivery'],
+            ['Narayanganj delivery time?'],
+            ['গাজীপুর এ ডেলিভারি চার্জ'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('dhakaCityAreas')]
+    public function named_dhaka_city_area_sends_only_the_city_line(string $text): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_delivery_dhaka_'.md5($text),
+                'recipient_id' => 'psid-delivery-dhaka',
+            ], 200),
         ]);
 
-        $conversation = $this->conversation('psid-delivery-edit');
-        $inbound = $this->inbound($conversation, 'Delivery koto');
+        $conversation = $this->conversation('psid-delivery-dhaka-'.md5($text));
+        $inbound = $this->inbound($conversation, $text);
+
+        $sent = app(InboxDeliveryChargeAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent, $text);
+        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_DHAKA, $sent->body);
+    }
+
+    /**
+     * @return list<list<string>>
+     */
+    public static function dhakaCityAreas(): array
+    {
+        return [
+            ['Mirpur e delivery koto?'],
+            ['uttara delivery charge'],
+            ['ঢাকা শহর এ ডেলিভারি চার্জ কত'],
+            ['dhanmondi te koto din lagbe delivery'],
+        ];
+    }
+
+    #[Test]
+    public function savar_wins_over_dhaka_in_the_same_message(): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_delivery_savar_dhaka',
+                'recipient_id' => 'psid-delivery-savar-dhaka',
+            ], 200),
+        ]);
+
+        $conversation = $this->conversation('psid-delivery-savar-dhaka');
+        $inbound = $this->inbound($conversation, 'Savar, Dhaka delivery charge?');
 
         $sent = app(InboxDeliveryChargeAutomationService::class)
             ->reply($conversation, $inbound);
 
         $this->assertNotNull($sent);
-        $this->assertSame('ডেলিভারি চার্জ ১৫০ টাকা, ৪-৬ দিন।', $sent->body);
+        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_OUTSIDE, $sent->body);
+    }
+
+    #[Test]
+    public function area_named_earlier_in_the_session_selects_the_matching_line(): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_delivery_session_area',
+                'recipient_id' => 'psid-delivery-session',
+            ], 200),
+        ]);
+
+        $conversation = $this->conversation('psid-delivery-session');
+        $this->inbound($conversation, 'Ashulia, Dhaka', now()->subMinutes(2));
+        $inbound = $this->inbound($conversation, 'ডেলিভারি চার্জ কত');
+
+        $sent = app(InboxDeliveryChargeAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent);
+        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_OUTSIDE, $sent->body);
+    }
+
+    #[Test]
+    public function catalog_upazila_under_dhaka_is_outside(): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_delivery_catalog',
+                'recipient_id' => 'psid-delivery-catalog',
+            ], 200),
+        ]);
+
+        $city = City::query()->create([
+            'name' => 'Dhaka',
+            'slug' => 'dhaka-dhaka',
+            'is_dhaka' => true,
+            'is_active' => true,
+        ]);
+        Area::query()->create([
+            'city_id' => $city->id,
+            'name' => 'Keraniganj',
+            'slug' => 'keraniganj',
+            'unit_type' => 'upazila',
+            'is_active' => true,
+            'delivery_charge_upto_5' => 120,
+            'delivery_charge_over_5' => 200,
+        ]);
+
+        $conversation = $this->conversation('psid-delivery-catalog');
+        $inbound = $this->inbound($conversation, 'Keraniganj delivery charge koto?');
+
+        $sent = app(InboxDeliveryChargeAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent);
+        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_OUTSIDE, $sent->body);
     }
 
     #[Test]
@@ -94,6 +213,10 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             ], 200),
         ]);
 
+        app(InboxQuickReplyService::class)->save([
+            ['label' => InboxDeliveryChargeAutomationService::REPLY_LABEL, 'body' => 'ignored chip body'],
+            ['label' => 'Salaam', 'body' => 'আসসালামু আলাইকুম'],
+        ]);
         $chip = collect(app(InboxQuickReplyService::class)->all())
             ->first(fn (array $reply): bool => app(InboxQuickReplyMatcher::class)->isDeliveryChargeReply($reply));
         $this->assertNotNull($chip);
@@ -106,7 +229,7 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             ->reply($conversation, $inbound->fresh());
 
         $this->assertNotNull($sent);
-        $this->assertSame(self::CHIP_BODY, $sent->body);
+        $this->assertSame(InboxDeliveryChargeAutomationService::BODY, $sent->body);
     }
 
     #[Test]
@@ -158,23 +281,6 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
             ->count());
         $this->assertSame(1, Http::recorded()->count());
-    }
-
-    #[Test]
-    public function no_chip_does_not_send(): void
-    {
-        Http::fake();
-        app(InboxQuickReplyService::class)->save([
-            ['label' => 'Salaam', 'body' => 'আসসালামু আলাইকুম'],
-        ]);
-
-        $conversation = $this->conversation('psid-delivery-no-chip');
-        $inbound = $this->inbound($conversation, 'ডেলিভারি চার্জ কত');
-
-        $this->assertNull(
-            app(InboxDeliveryChargeAutomationService::class)->reply($conversation, $inbound)
-        );
-        Http::assertNothingSent();
     }
 
     #[Test]

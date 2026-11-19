@@ -280,7 +280,7 @@ class InboxDeliveryChargeAutomationService
         $zone = $location['zone'];
 
         if (is_string($area) && $area !== '') {
-            if ($zone === self::ZONE_DHAKA) {
+            if ($this->isConfirmedDhakaCityPlace($area)) {
                 return self::personalizedDhakaBody($area);
             }
 
@@ -316,17 +316,14 @@ class InboxDeliveryChargeAutomationService
 
         if ($outsideLen > 0 && $outsideLen >= $dhakaLen && $outsideLen >= $catalogLen) {
             $zone = self::ZONE_OUTSIDE;
-        } elseif ($dhakaLen > 0 && $dhakaLen >= $catalogLen) {
+        } elseif ($dhakaLen > 0 && $dhakaLen >= $catalogLen && ! $this->isGenericMention($dhaka['display'] ?? $dhaka['cue'] ?? null)) {
+            $zone = self::ZONE_DHAKA;
+        } elseif ($catalog !== null && ! $this->isGenericMention($catalog['display'] ?? null)) {
+            $zone = $catalog['zone'];
+        } elseif ($dhakaLen > 0) {
             $zone = self::ZONE_DHAKA;
         } elseif ($catalog !== null) {
             $zone = $catalog['zone'];
-        } else {
-            $dhakaNeedle = $this->compactHaystack('dhaka');
-            $dhakaBn = $this->compactHaystack('ঢাকা');
-            if (($dhakaNeedle !== '' && str_contains($compact, $dhakaNeedle))
-                || ($dhakaBn !== '' && str_contains($compact, $dhakaBn))) {
-                $zone = self::ZONE_DHAKA;
-            }
         }
 
         $area = $this->bestMention($outside, $dhaka, $catalog);
@@ -334,8 +331,17 @@ class InboxDeliveryChargeAutomationService
             $area = $this->areaPrefixBeforeDelivery($text);
         }
 
-        if ($area !== null && $zone === null) {
-            $zone = self::ZONE_OUTSIDE;
+        if ($area !== null) {
+            $zone = $this->isConfirmedDhakaCityPlace($area)
+                ? self::ZONE_DHAKA
+                : self::ZONE_OUTSIDE;
+        } elseif ($zone === null) {
+            $dhakaNeedle = $this->compactHaystack('dhaka');
+            $dhakaBn = $this->compactHaystack('ঢাকা');
+            if (($dhakaNeedle !== '' && str_contains($compact, $dhakaNeedle))
+                || ($dhakaBn !== '' && str_contains($compact, $dhakaBn))) {
+                $zone = self::ZONE_DHAKA;
+            }
         }
 
         return ['zone' => $zone, 'area' => $area];
@@ -464,6 +470,83 @@ class InboxDeliveryChargeAutomationService
         }
 
         return $this->usableMention($prefix);
+    }
+
+    /**
+     * The 80৳ named-area line is only for a known Dhaka-city thana / 80৳ catalog
+     * area. A mention of ঢাকা next to somewhere else must not pull the city rate.
+     */
+    private function isConfirmedDhakaCityPlace(string $name): bool
+    {
+        if ($this->isGenericMention($name)) {
+            return false;
+        }
+
+        $compact = $this->compactHaystack($name);
+        if ($compact === '') {
+            return false;
+        }
+
+        foreach (self::OUTSIDE_CUES as $cue) {
+            $needle = $this->compactHaystack($cue);
+            if ($needle !== '' && mb_strlen($needle) >= 4 && str_contains($compact, $needle)) {
+                return false;
+            }
+        }
+
+        foreach (self::DHAKA_CITY_CUES as $cue) {
+            if ($this->isGenericMention($cue)) {
+                continue;
+            }
+            $needle = $this->compactHaystack($cue);
+            if ($needle === '' || mb_strlen($needle) < 4) {
+                continue;
+            }
+            if ($compact === $needle || str_contains($compact, $needle)) {
+                return true;
+            }
+        }
+
+        $areas = Area::query()
+            ->active()
+            ->with('city:id,name,is_dhaka')
+            ->get(['id', 'city_id', 'name', 'unit_type', 'delivery_charge_upto_5', 'aliases']);
+
+        foreach ($areas as $area) {
+            if ($this->zoneForArea($area) !== self::ZONE_DHAKA) {
+                continue;
+            }
+
+            $phrases = array_merge([$area->name], $area->aliasList());
+            foreach ($phrases as $phrase) {
+                $needle = $this->compactHaystack((string) $phrase);
+                if ($needle === '' || mb_strlen($needle) < 4) {
+                    continue;
+                }
+                if ($compact === $needle || str_contains($compact, $needle)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function isGenericMention(?string $name): bool
+    {
+        $compact = $this->compactHaystack((string) $name);
+        if ($compact === '') {
+            return $name === null || trim((string) $name) === '';
+        }
+
+        foreach (self::GENERIC_MENTIONS as $generic) {
+            $needle = $this->compactHaystack($generic);
+            if ($needle !== '' && $compact === $needle) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function usableMention(?string $name): ?string

@@ -94,6 +94,7 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             ['গাজীপুর এ ডেলিভারি চার্জ', 'গাজীপুর'],
             ['সাভার ডেলিভারি কত', 'সাভার'],
             ['তবলছড়ি ডেলিভারি কত', 'তবলছড়ি'],
+            ['তবলছড়ি, ঢাকা ডেলিভারি কত', 'তবলছড়ি'],
         ];
     }
 
@@ -144,6 +145,10 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             [
                 'মোহাম্মদপুর ডেলিভারি কত',
                 InboxDeliveryChargeAutomationService::personalizedDhakaBody('মোহাম্মদপুর'),
+            ],
+            [
+                'মিরপুর, ঢাকা ডেলিভারি কত',
+                InboxDeliveryChargeAutomationService::personalizedDhakaBody('মিরপুর'),
             ],
         ];
     }
@@ -230,6 +235,45 @@ class InboxDeliveryChargeAutomationTest extends TestCase
         $this->assertNotNull($sent);
         $this->assertSame(
             InboxDeliveryChargeAutomationService::personalizedBody('Keraniganj'),
+            $sent->body,
+        );
+    }
+
+    #[Test]
+    public function catalog_thana_under_dhaka_is_inside_even_when_not_a_hardcoded_cue(): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_delivery_catalog_thana',
+                'recipient_id' => 'psid-delivery-catalog-thana',
+            ], 200),
+        ]);
+
+        $city = City::query()->create([
+            'name' => 'Dhaka',
+            'slug' => 'dhaka-dhaka',
+            'is_dhaka' => true,
+            'is_active' => true,
+        ]);
+        Area::query()->create([
+            'city_id' => $city->id,
+            'name' => 'Khilgaon',
+            'slug' => 'khilgaon',
+            'unit_type' => 'thana',
+            'is_active' => true,
+            'delivery_charge_upto_5' => 80,
+            'delivery_charge_over_5' => 150,
+        ]);
+
+        $conversation = $this->conversation('psid-delivery-catalog-thana');
+        $inbound = $this->inbound($conversation, 'Khilgaon, Dhaka delivery charge koto?');
+
+        $sent = app(InboxDeliveryChargeAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent);
+        $this->assertSame(
+            InboxDeliveryChargeAutomationService::personalizedDhakaBody('Khilgaon'),
             $sent->body,
         );
     }

@@ -57,6 +57,7 @@ class AdminInboxAutomationsTest extends TestCase
             ->assertSee('Match '.InboxDeliveryChargeAutomationService::REPLY_LABEL)
             ->assertSee(InboxDeliveryChargeAutomationService::BODY_DHAKA)
             ->assertSee(InboxDeliveryChargeAutomationService::BODY_OUTSIDE)
+            ->assertSee('known Dhaka-city thana')
             ->assertSee(InboxDeliveryChargeAutomationService::personalizedDhakaBody('মিরপুর'))
             ->assertSee(InboxDeliveryChargeAutomationService::personalizedBody('সাভার'))
             ->assertSee(InboxPriceQueryAutomationService::PHOTO_REQUEST_BODY)

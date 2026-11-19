@@ -56,6 +56,7 @@ class ChannelOrderParser
         private AddressLocationGuesser $locationGuesser,
         private ChannelInboundMediaService $inboundMedia,
         private ChannelMessageImageMatchService $imageMatches,
+        private InboxQuickReplyMatcher $matcher,
     ) {}
 
     /**
@@ -132,9 +133,16 @@ class ChannelOrderParser
         $result['image_matches'] = $imageMatch['candidates'];
         $weak = array_merge($weak, $imageMatch['weak_points']);
 
-        $productLines = $this->matchedProductLines($inbound);
+        $lastPriceAskAt = $this->lastPriceAskAt($inbound);
+        $productLines = $this->orderedProductLines($inbound, $orderWindow, $lastPriceAskAt);
+        $fromImage = $productLines !== [];
         if ($productLines === []) {
-            $productLines = $imageMatch['products'] ?? [];
+            $productLines = $this->imageProductLinesInWindow(
+                $imageMatch['auto_hits'] ?? [],
+                $orderWindow,
+                $lastPriceAskAt,
+            );
+            $fromImage = $productLines !== [];
         }
         if ($productLines === []) {
             $nameMatch = $this->matchProductFromText($rawText);
@@ -153,7 +161,7 @@ class ChannelOrderParser
             $result['product_id'] = $productLines[0]['product_id'];
             $result['product_name'] = $productLines[0]['product_name'];
             $result['quantity'] = $productLines[0]['quantity'];
-            if ($this->inboundHasMatchedProduct($inbound) || ($imageMatch['products'] ?? []) !== []) {
+            if ($fromImage) {
                 $result['source'] = 'local+image';
             }
         }
@@ -814,31 +822,40 @@ class ChannelOrderParser
     }
 
     /**
+     * Products the customer is closing on — not every photo they asked a price for.
+     *
      * @param  Collection<int, ChannelMessage>  $inbound
+     * @param  Collection<int, ChannelMessage>  $orderWindow
+     * @return list<array{product_id:int, product_name:string, quantity:int}>
      */
-    private function inboundHasMatchedProduct(Collection $inbound): bool
+    private function orderedProductLines(Collection $inbound, Collection $orderWindow, ?Carbon $lastPriceAskAt): array
     {
-        return $this->matchedProductLines($inbound) !== [];
+        $windowLines = $this->matchedProductLines($orderWindow, $lastPriceAskAt);
+        if ($windowLines !== []) {
+            return $windowLines;
+        }
+
+        $replyLines = $this->replySelectedProductLines($inbound);
+        if ($replyLines !== []) {
+            return $replyLines;
+        }
+
+        if ($lastPriceAskAt === null) {
+            return $this->matchedProductLines($inbound, null);
+        }
+
+        return [];
     }
 
     /**
-     * Every tagged inbound photo (or a reply to a priced outbound) becomes its own line.
-     * The same catalog product on two photos is quantity 2.
-     *
-     * @param  Collection<int, ChannelMessage>  $inbound
+     * @param  Collection<int, ChannelMessage>  $messages
      * @return list<array{product_id:int, product_name:string, quantity:int}>
      */
-    private function matchedProductLines(Collection $inbound): array
+    private function matchedProductLines(Collection $messages, ?Carbon $lastPriceAskAt): array
     {
         $counts = [];
-        foreach ($inbound as $message) {
-            $productId = (int) ($message->matched_product_id ?? 0);
-            if ($productId <= 0) {
-                $parent = $message->replyTo;
-                if ($parent && $parent->direction === ChannelMessage::DIRECTION_OUTBOUND) {
-                    $productId = (int) ($parent->matched_product_id ?? 0);
-                }
-            }
+        foreach ($messages as $message) {
+            $productId = $this->selectedProductId($message, $lastPriceAskAt);
             if ($productId <= 0) {
                 continue;
             }
@@ -846,6 +863,116 @@ class ChannelOrderParser
         }
 
         return $this->productLinesFromCounts($counts);
+    }
+
+    /**
+     * @param  Collection<int, ChannelMessage>  $inbound
+     * @return list<array{product_id:int, product_name:string, quantity:int}>
+     */
+    private function replySelectedProductLines(Collection $inbound): array
+    {
+        $counts = [];
+        foreach ($inbound as $message) {
+            $productId = $this->replySelectedProductId($message);
+            if ($productId <= 0) {
+                continue;
+            }
+            $counts[$productId] = ($counts[$productId] ?? 0) + 1;
+        }
+
+        return $this->productLinesFromCounts($counts);
+    }
+
+    /**
+     * @param  list<array{message_id?:int,product_id:int,name:string}>  $hits
+     * @param  Collection<int, ChannelMessage>  $orderWindow
+     * @return list<array{product_id:int, product_name:string, quantity:int}>
+     */
+    private function imageProductLinesInWindow(array $hits, Collection $orderWindow, ?Carbon $lastPriceAskAt): array
+    {
+        $windowIds = $orderWindow->pluck('id')->all();
+        $filtered = [];
+        foreach ($hits as $hit) {
+            $messageId = (int) ($hit['message_id'] ?? 0);
+            if ($messageId <= 0 || ! in_array($messageId, $windowIds, true)) {
+                continue;
+            }
+            $message = $orderWindow->firstWhere('id', $messageId);
+            if ($message instanceof ChannelMessage && $this->isPriceQueryPhoto($message, $lastPriceAskAt)) {
+                continue;
+            }
+            $filtered[] = $hit;
+        }
+
+        return $this->productLinesFromHits($filtered);
+    }
+
+    /**
+     * @param  Collection<int, ChannelMessage>  $inbound
+     */
+    private function lastPriceAskAt(Collection $inbound): ?Carbon
+    {
+        $latest = null;
+        foreach ($inbound as $message) {
+            if (! $this->matcher->isWhichProductPriceAsk($message)) {
+                continue;
+            }
+            $sentAt = $message->sent_at;
+            if (! $sentAt instanceof Carbon) {
+                continue;
+            }
+            if ($latest === null || $sentAt->greaterThan($latest)) {
+                $latest = $sentAt;
+            }
+        }
+
+        return $latest;
+    }
+
+    private function selectedProductId(ChannelMessage $message, ?Carbon $lastPriceAskAt): int
+    {
+        $fromReply = $this->replySelectedProductId($message);
+        if ($fromReply > 0) {
+            return $fromReply;
+        }
+
+        $direct = (int) ($message->matched_product_id ?? 0);
+        if ($direct <= 0 || $this->isPriceQueryPhoto($message, $lastPriceAskAt)) {
+            return 0;
+        }
+
+        return $direct;
+    }
+
+    private function replySelectedProductId(ChannelMessage $message): int
+    {
+        $parent = $message->replyTo;
+        if (! $parent || $parent->direction !== ChannelMessage::DIRECTION_OUTBOUND) {
+            return 0;
+        }
+
+        $productId = (int) ($parent->matched_product_id ?? 0);
+        if ($productId > 0) {
+            return $productId;
+        }
+
+        $payload = is_array($parent->raw_payload) ? $parent->raw_payload : [];
+
+        return (int) ($payload[InboxPriceQueryAutomationService::RAW_PRICED_PRODUCT_ID] ?? 0);
+    }
+
+    private function isPriceQueryPhoto(ChannelMessage $message, ?Carbon $lastPriceAskAt): bool
+    {
+        if ($lastPriceAskAt === null) {
+            return false;
+        }
+
+        $sentAt = $message->sent_at;
+        if (! $sentAt instanceof Carbon) {
+            return true;
+        }
+
+        return $sentAt->lessThanOrEqualTo($lastPriceAskAt);
     }
 
     /**
@@ -981,6 +1108,7 @@ class ChannelOrderParser
      *     product_id:?int,
      *     product_name:?string,
      *     products: list<array{product_id:int,product_name:string,quantity:int}>,
+     *     auto_hits: list<array{message_id:int,product_id:int,name:string,match_percent:float,dhash:?string,newer_weight:float}>,
      *     candidates: list<array{product_id:int,name:string,match_percent:float}>,
      *     weak_points: list<string>
      * }
@@ -1001,6 +1129,7 @@ class ChannelOrderParser
                 'product_id' => null,
                 'product_name' => null,
                 'products' => [],
+                'auto_hits' => [],
                 'candidates' => [],
                 'weak_points' => $weak,
             ];
@@ -1105,6 +1234,7 @@ class ChannelOrderParser
             'product_id' => $products[0]['product_id'] ?? ($winner ? (int) $winner['product_id'] : null),
             'product_name' => $products[0]['product_name'] ?? ($winner ? (string) $winner['name'] : null),
             'products' => $products,
+            'auto_hits' => $autoHits,
             'candidates' => array_slice($candidates, 0, 5),
             'weak_points' => array_values(array_unique($weak)),
         ];

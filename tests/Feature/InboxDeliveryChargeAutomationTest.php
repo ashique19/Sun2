@@ -99,7 +99,7 @@ class InboxDeliveryChargeAutomationTest extends TestCase
 
     #[Test]
     #[DataProvider('dhakaCityAreas')]
-    public function named_dhaka_city_area_sends_the_city_line(string $text): void
+    public function named_dhaka_city_area_mentions_that_area_in_the_reply(string $text, string $expected): void
     {
         Http::fake([
             'https://graph.facebook.com/*' => Http::response([
@@ -115,7 +115,7 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             ->reply($conversation, $inbound);
 
         $this->assertNotNull($sent, $text);
-        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_DHAKA, $sent->body);
+        $this->assertSame($expected, $sent->body);
     }
 
     /**
@@ -124,10 +124,27 @@ class InboxDeliveryChargeAutomationTest extends TestCase
     public static function dhakaCityAreas(): array
     {
         return [
-            ['Mirpur e delivery koto?'],
-            ['uttara delivery charge'],
-            ['ঢাকা শহর এ ডেলিভারি চার্জ কত'],
-            ['dhanmondi te koto din lagbe delivery'],
+            [
+                'Mirpur e delivery koto?',
+                InboxDeliveryChargeAutomationService::personalizedDhakaBody('Mirpur'),
+            ],
+            [
+                'uttara delivery charge',
+                InboxDeliveryChargeAutomationService::personalizedDhakaBody('uttara'),
+            ],
+            ['ঢাকা শহর এ ডেলিভারি চার্জ কত', InboxDeliveryChargeAutomationService::BODY_DHAKA],
+            [
+                'dhanmondi te koto din lagbe delivery',
+                InboxDeliveryChargeAutomationService::personalizedDhakaBody('dhanmondi'),
+            ],
+            [
+                'মিরপুর ডেলিভারি কত',
+                InboxDeliveryChargeAutomationService::personalizedDhakaBody('মিরপুর'),
+            ],
+            [
+                'মোহাম্মদপুর ডেলিভারি কত',
+                InboxDeliveryChargeAutomationService::personalizedDhakaBody('মোহাম্মদপুর'),
+            ],
         ];
     }
 

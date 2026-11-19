@@ -64,8 +64,9 @@
         <div class="flex items-start justify-between gap-3 rounded-xl border border-[#E7DFCF] bg-[#FAF6EF]/60 p-4" data-inbox-automation="delivery_charge">
             <div class="min-w-0">
                 <p class="text-sm font-semibold text-[#1E1E1E]">Match {{ $deliveryChargeLabel }}</p>
-                <p class="mt-1 text-sm text-[#6B6459]">Dhaka city always gets the ৮০৳ / ২-৪ দিন line. Outside Dhaka, a named area (Savar, Ashulia, Gazipur, Tongi, Narayanganj, তবলছড়ি, …) is mentioned with ১২০৳ / ৩-৫ দিন.</p>
+                <p class="mt-1 text-sm text-[#6B6459]">A named Dhaka-city area (মিরপুর, মোহাম্মদপুর, …) gets ৮০৳ / ২-৪ দিন with that name. Outside Dhaka (Savar, তবলছড়ি, …) gets ১২০৳ / ৩-৫ দিন with that name. ঢাকা শহর with no specific area stays the general city line.</p>
                 <p class="mt-2 whitespace-pre-line rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $deliveryChargeBody }}</p>
+                <p class="mt-2 rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $deliveryChargeDhakaNamedExample }}</p>
                 <p class="mt-2 rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $deliveryChargeNamedExample }}</p>
             </div>
             <x-admin.switch :on="$deliveryCharge" wire:click="toggleDeliveryCharge" aria-label="Match delivery charge" />

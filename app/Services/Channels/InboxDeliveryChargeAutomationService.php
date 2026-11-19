@@ -61,7 +61,7 @@ class InboxDeliveryChargeAutomationService
         'wari', 'ramna', 'tejgaon', 'teigaon', 'pallabi', 'badda',
         'baridhara', 'lalbagh', 'kallyanpur', 'kalyanpur', 'shyamoli',
         'shamoli', 'shymoli', 'olddhaka', 'পুরানঢাকা',
-        'মিরপুর', 'উত্তরা', 'ধানমন্ডি', 'গুলশান', 'বনানী', 'মতিঝিল',
+        'মিরপুর', 'মোহাম্মদপুর', 'উত্তরা', 'ধানমন্ডি', 'গুলশান', 'বনানী', 'মতিঝিল',
         'dhakacity', 'ঢাকাশহর', 'insidedhaka', 'ঢাকারভিতরে',
     ];
 
@@ -197,6 +197,11 @@ class InboxDeliveryChargeAutomationService
         );
     }
 
+    public static function personalizedDhakaBody(string $area): string
+    {
+        return trim($area).' ডেলিভারি চার্জ ৮০ টাকা, ২-৪ দিনের মাঝে পাবেন।';
+    }
+
     public static function personalizedBody(string $area): string
     {
         return trim($area).' ডেলিভারি চার্জ ১২০ টাকা, ৩-৫ দিন সময় লাগতে পারে, সম্ভব হলে, হোম ডেলিভারি পাবেন।';
@@ -274,15 +279,16 @@ class InboxDeliveryChargeAutomationService
         $area = $location['area'];
         $zone = $location['zone'];
 
-        if ($zone === self::ZONE_DHAKA) {
-            return self::BODY_DHAKA;
-        }
-
         if (is_string($area) && $area !== '') {
+            if ($zone === self::ZONE_DHAKA) {
+                return self::personalizedDhakaBody($area);
+            }
+
             return self::personalizedBody($area);
         }
 
         return match ($zone) {
+            self::ZONE_DHAKA => self::BODY_DHAKA,
             self::ZONE_OUTSIDE => self::BODY_OUTSIDE,
             default => self::BODY,
         };

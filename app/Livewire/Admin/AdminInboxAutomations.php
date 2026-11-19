@@ -78,6 +78,7 @@ class AdminInboxAutomations extends Component
             'colorGuaranteeCategory' => InboxColorGuaranteeAutomationService::CATEGORY_NAME,
             'deliveryChargeBody' => InboxDeliveryChargeAutomationService::BODY,
             'deliveryChargeNamedExample' => InboxDeliveryChargeAutomationService::personalizedBody('সাভার'),
+            'deliveryChargeDhakaNamedExample' => InboxDeliveryChargeAutomationService::personalizedDhakaBody('মিরপুর'),
             'deliveryChargeLabel' => InboxDeliveryChargeAutomationService::REPLY_LABEL,
             'matchMinPercent' => InboxPriceQueryAutomationService::MATCH_MIN_PERCENT,
             'sessionMinutes' => InboxPriceQueryAutomationService::sessionMinutes(),

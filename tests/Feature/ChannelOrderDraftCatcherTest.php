@@ -60,7 +60,47 @@ class ChannelOrderDraftCatcherTest extends TestCase
         $this->assertSame('intent_gate', $draft->ai_parse_meta['caught_via'] ?? null);
         $this->assertSame($product->id, (int) $draft->items->first()?->product_id);
         $this->assertSame('01627237432', $draft->phone);
+        $this->assertSame('Nila', $draft->name);
         $this->assertSame($conversation->fresh()->draft_order_id, $draft->id);
+    }
+
+    #[Test]
+    public function catcher_uses_typed_name_not_the_facebook_profile_name(): void
+    {
+        $product = $this->product();
+        $this->seedDhakaMirpur();
+        $conversation = $this->conversation('PSID_TYPED_NAME');
+        $conversation->forceFill(['customer_name' => 'Hamida Ahmed'])->save();
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.test/selected.jpg',
+            'media_mime' => 'image/jpeg',
+            'matched_product_id' => $product->id,
+            'sent_at' => now()->subMinutes(6),
+        ]);
+        foreach ([
+            'parben??',
+            'Tanzima khan',
+            'Shohag clinic, puran building, rajapur, jhalokathi',
+            '01883104511',
+            'Order confirm kore rakhen',
+        ] as $offset => $body) {
+            ChannelMessage::query()->create([
+                'channel_conversation_id' => $conversation->id,
+                'direction' => ChannelMessage::DIRECTION_INBOUND,
+                'body' => $body,
+                'sent_at' => now()->subMinutes(5 - $offset),
+            ]);
+        }
+
+        $draft = app(ChannelOrderDraftCatcher::class)->catch($conversation->fresh());
+
+        $this->assertNotNull($draft);
+        $this->assertSame('Tanzima khan', $draft->name);
+        $this->assertSame('01883104511', $draft->phone);
+        $this->assertNotSame('Hamida Ahmed', $draft->name);
     }
 
     #[Test]

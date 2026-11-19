@@ -208,7 +208,7 @@ class ChannelOrderParser
     public function textHasNameCue(string $text): bool
     {
         foreach ($this->textLines($text) as $line) {
-            if ($this->looksLikeName($line)) {
+            if ($this->labeledNameValue($line) !== null || $this->looksLikeName($line)) {
                 return true;
             }
         }
@@ -288,8 +288,8 @@ class ChannelOrderParser
             return $inbound;
         }
 
-        // Include one message of context before the phone when present.
-        $start = max(0, $phoneIndex - 1);
+        // Customers often send name, then area lines, then phone as separate bubbles.
+        $start = max(0, $phoneIndex - 8);
 
         return $inbound->values()->slice($start)->values();
     }
@@ -319,40 +319,37 @@ class ChannelOrderParser
         $lines = preg_split('/\R+/u', $rawText) ?: [];
         $lines = array_values(array_filter(array_map('trim', $lines), fn ($line) => $line !== ''));
 
-        $name = null;
+        $phoneNorm = PhoneNumber::normalize($phone);
+        $extractedName = $this->extractCustomerName($lines, $phoneNorm);
+        $name = $extractedName['name'];
+        if ($name !== null && $extractedName['heuristic']) {
+            $weak[] = self::WEAK_NAME_HEURISTIC;
+        }
+
         $addressCandidates = [];
         $discardedNoise = 0;
-        $phoneNorm = PhoneNumber::normalize($phone);
 
-        foreach ($lines as $index => $line) {
+        foreach ($lines as $line) {
             $linePhone = PhoneNumber::extractFirstBangladeshMobile($line);
             if ($linePhone && PhoneNumber::normalize($linePhone) === $phoneNorm) {
-                // Name often sits on the line immediately before the phone.
-                if ($name === null && $index > 0) {
-                    $prev = $lines[$index - 1];
-                    if ($this->looksLikeName($prev)) {
-                        $name = $prev;
-                        $weak[] = self::WEAK_NAME_HEURISTIC;
-                    }
-                }
-
                 continue;
             }
 
-            if ($this->looksLikeNoise($line)) {
+            if ($this->looksLikeNoise($line) || $this->looksLikeOrderChatter($line)) {
                 $discardedNoise++;
 
                 continue;
             }
 
-            if ($name === null && $this->looksLikeName($line)) {
-                $name = $line;
-                $weak[] = self::WEAK_NAME_HEURISTIC;
-
+            if ($this->labeledNameValue($line) !== null) {
                 continue;
             }
 
-            if ($this->looksLikeAddress($line)) {
+            if ($this->looksLikeName($line)) {
+                continue;
+            }
+
+            if ($this->looksLikeAddress($line) || $this->looksLikeLocationOnly($line)) {
                 $addressCandidates[] = $line;
             } else {
                 $discardedNoise++;
@@ -381,9 +378,107 @@ class ChannelOrderParser
         ];
     }
 
+    /**
+     * @param  list<string>  $lines
+     * @return array{name:?string, heuristic: bool}
+     */
+    private function extractCustomerName(array $lines, string $phoneNorm): array
+    {
+        foreach ($lines as $line) {
+            $labeled = $this->labeledNameValue($line);
+            if ($labeled !== null) {
+                return ['name' => $labeled, 'heuristic' => false];
+            }
+        }
+
+        $phoneIndex = null;
+        foreach ($lines as $index => $line) {
+            $linePhone = PhoneNumber::extractFirstBangladeshMobile($line);
+            if ($linePhone && PhoneNumber::normalize($linePhone) === $phoneNorm) {
+                $phoneIndex = $index;
+                break;
+            }
+        }
+
+        $scanFrom = $phoneIndex ?? count($lines);
+        for ($index = $scanFrom - 1; $index >= 0; $index--) {
+            $line = $lines[$index];
+            $linePhone = PhoneNumber::extractFirstBangladeshMobile($line);
+            if ($linePhone && PhoneNumber::normalize($linePhone) === $phoneNorm) {
+                continue;
+            }
+
+            if ($this->looksLikeNoise($line) || $this->looksLikeOrderChatter($line)) {
+                continue;
+            }
+
+            if ($this->looksLikeName($line)) {
+                return ['name' => $this->cleanName($line), 'heuristic' => true];
+            }
+
+            $head = $this->leadingNameFromAddress($line);
+            if ($head !== null) {
+                return ['name' => $head, 'heuristic' => true];
+            }
+        }
+
+        return ['name' => null, 'heuristic' => false];
+    }
+
+    private function labeledNameValue(string $line): ?string
+    {
+        if (! preg_match('/^(?:আপনার\s+)?(?:নাম|name|nam)\s*[:：\-]\s*(.+)$/iu', trim($line), $matches)) {
+            return null;
+        }
+
+        $value = $this->cleanName((string) $matches[1]);
+        if ($value === '' || ! $this->looksLikeName($value)) {
+            return null;
+        }
+
+        return $value;
+    }
+
+    private function leadingNameFromAddress(string $line): ?string
+    {
+        if (! str_contains($line, ',')) {
+            return null;
+        }
+
+        $parts = preg_split('/\s*,\s*/u', $line) ?: [];
+        if (count($parts) < 2) {
+            return null;
+        }
+
+        $head = $this->cleanName((string) $parts[0]);
+        if ($head !== '' && $this->looksLikeName($head)) {
+            return $head;
+        }
+
+        return null;
+    }
+
+    private function cleanName(string $line): string
+    {
+        $line = trim($line);
+        $line = preg_replace('/^[\p{P}\p{Z}]+|[\p{P}\p{Z}]+$/u', '', $line) ?? $line;
+        $line = preg_replace('/\s+/u', ' ', $line) ?? $line;
+
+        return trim($line);
+    }
+
     private function looksLikeName(string $line): bool
     {
-        if ($this->looksLikeNoise($line) || $this->looksLikeAddress($line)) {
+        $line = $this->cleanName($line);
+        if ($line === '') {
+            return false;
+        }
+
+        if ($this->looksLikeNoise($line)
+            || $this->looksLikeOrderChatter($line)
+            || $this->looksLikeAddress($line)
+            || $this->looksLikeLocationOnly($line)
+            || $this->looksLikeProductLine($line)) {
             return false;
         }
 
@@ -391,13 +486,80 @@ class ChannelOrderParser
             return false;
         }
 
-        if (preg_match('/\d{4,}/', $line)) {
+        if (preg_match('/\d/u', $line) || str_contains($line, '?') || str_contains($line, '؟')) {
             return false;
         }
 
         $len = mb_strlen($line);
+        if ($len < 2 || $len > 60) {
+            return false;
+        }
 
-        return $len >= 2 && $len <= 60;
+        $words = preg_split('/\s+/u', $line) ?: [];
+        if ($words === [] || count($words) > 5) {
+            return false;
+        }
+
+        foreach ($words as $word) {
+            if (! preg_match('/^[\p{L}\p{M}.]+$/u', $word)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function looksLikeOrderChatter(string $line): bool
+    {
+        $normalized = mb_strtolower(trim($line));
+        if ($normalized === '') {
+            return false;
+        }
+
+        if (str_contains($normalized, '?') || str_contains($line, '؟')) {
+            return true;
+        }
+
+        return (bool) preg_match(
+            '/\b(confirm|confrom|order|delivery|parben|rakhen|tarikh|dben|koto|taka|\btk\b|soho|please|plz|lagbe|laglo|dhonnobad|inbox|price)\b|(অর্ডার|কনফার্ম|ডেলিভারি|ধন্যবাদ|পারবেন|রাখেন|তারিখ|দাম)/iu',
+            $normalized,
+        );
+    }
+
+    private function looksLikeLocationOnly(string $line): bool
+    {
+        $normalized = mb_strtolower(trim($line));
+        $normalized = trim((string) preg_replace('/[।.]/u', '', $normalized));
+
+        if ($normalized === '') {
+            return false;
+        }
+
+        if (preg_match('/\b(clinic|building|hospital|college|school|mosque|masjid|thana|sadar|union|ward)\b/iu', $normalized)) {
+            return true;
+        }
+
+        $barePlaces = [
+            'cumilla', 'comilla', 'jhalokathi', 'jhalakati', 'rajapur', 'khagrachari',
+            'khagrachhari', 'panchari', 'panchhari', 'chauddagram', 'chaudagram',
+            'fatikchhari', 'fatikchari', 'chittagong', 'chattogram', 'rangamati',
+            'bandarban', 'feni', 'noakhali', 'bhola', 'patuakhali', 'barguna',
+            'pirojpur', 'rajbari', 'narayanganj', 'gazipur', 'narsingdi',
+            'kishoreganj', 'brahmanbaria', 'chandpur', 'lakshmipur', 'shariatpur',
+            'madaripur', 'gopalganj', 'tangail', 'jamalpur', 'sherpur', 'netrokona',
+            'mymensingh', 'tripura', 'munshirhat', 'rajshahi', 'khulna', 'sylhet',
+            'barisal', 'barishal', 'rangpur', 'dhaka',
+        ];
+        if (in_array($normalized, $barePlaces, true)) {
+            return true;
+        }
+
+        $words = preg_split('/\s+/u', $normalized) ?: [];
+        if (count($words) === 1 && preg_match('/(hat|para|pur|ganj|nagar|chara|chhara|chari|bari|bazar|bazaar|gram)$/iu', $normalized)) {
+            return true;
+        }
+
+        return false;
     }
 
     private function looksLikeAddress(string $line): bool
@@ -411,20 +573,24 @@ class ChannelOrderParser
         }
 
         // House / road / area cues (EN + common BN transliteration / Bangla).
-        if (preg_match('/\b(house|road|rd\.?|block|sector|flat|floor|lane|avenue|para|bazar|thana|district|upazila|goli|রoad)\b/iu', $line)) {
+        if (preg_match('/\b(house|road|rd\.?|block|sector|flat|floor|lane|avenue|para|bazar|thana|district|upazila|goli|clinic|building|hospital)\b/iu', $line)) {
             return true;
         }
 
-        if (preg_match('/(বাড়ি|রোড|রোড|গলি|থানা|জেলা|উপজেলা|বাজার|মহল্লা)/u', $line)) {
+        if (preg_match('/(বাড়ি|রোড|গলি|থানা|জেলা|উপজেলা|বাজার|মহল্লা)/u', $line)) {
             return true;
         }
 
-        if (preg_match('/\b(dhaka|chittagong|chattogram|khulna|rajshahi|sylhet|barisal|rangpur|mymensingh|gazipur|narayanganj|mirpur|uttara|banani|gulshan|dhanmondi|bashabo|bashaboo|motijheel|farmgate)\b/iu', $line)) {
+        if (preg_match('/\b(dhaka|chittagong|chattogram|khulna|rajshahi|sylhet|barisal|rangpur|mymensingh|gazipur|narayanganj|mirpur|uttara|banani|gulshan|dhanmondi|bashabo|bashaboo|motijheel|farmgate|cumilla|comilla|jhalokathi|jhalakati|khagrachari|khagrachhari)\b/iu', $line)) {
             return true;
         }
 
         // "Thikana ..." / address labels
         if (preg_match('/^(thikana|address|ঠিকানা)\b/iu', $line)) {
+            return true;
+        }
+
+        if (substr_count($line, ',') >= 2 && mb_strlen($line) >= 16) {
             return true;
         }
 
@@ -447,7 +613,7 @@ class ChannelOrderParser
             return true;
         }
 
-        if (preg_match('/^(hi|hello|hlw|salam|assalamu|ok|okay|acha|accha|jii|ji|haan|han|hmm|hmmm|yes|no|nah|apu|bhai|thanks|thank you|tq|confirm|confrom|done|okay apu|please send this|send this)\.?$/iu', $normalized)) {
+        if (preg_match('/^(hi|hello|hlw|salam|assalamu|ok|okay|acha|accha|jii|ji|haan|han|hmm|hmmm|yes|no|nah|apu|bhai|thanks|thank you|tq|confirm|confrom|done|okay apu|please send this|send this|জি|আচ্ছা)\.?$/iu', $normalized)) {
             return true;
         }
 
@@ -796,10 +962,8 @@ PROMPT;
             }
 
             $current = $base[$key] ?? null;
-            $canOverwriteHeuristicName = $key === 'name'
-                && in_array(self::WEAK_NAME_HEURISTIC, $weakPoints, true);
 
-            if (! filled($current) || $canOverwriteHeuristicName) {
+            if (! filled($current)) {
                 $base[$key] = $gapValue;
             }
         }

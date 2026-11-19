@@ -282,6 +282,59 @@ class InboxQuickReplyMatcherTest extends TestCase
     }
 
     #[Test]
+    #[DataProvider('priceNegotiateQueries')]
+    public function detects_price_negotiate_wording(string $text): void
+    {
+        $this->assertTrue($this->matcher()->looksLikePriceNegotiate($text));
+        $this->assertFalse($this->matcher()->looksLikePriceQuery($text));
+        $this->assertSame(
+            InboxQuickReplyMatcher::INTENT_NEGOTIATE,
+            $this->matcher()->detectIntent($text),
+        );
+    }
+
+    /**
+     * @return list<list<string>>
+     */
+    public static function priceNegotiateQueries(): array
+    {
+        return [
+            ['discount hobe?'],
+            ['dam komu'],
+            ['কমাবেন আপু'],
+            ['last price den'],
+            ['ডিস্কাউন্ট দেন'],
+            ['একটু কম দিবেন'],
+        ];
+    }
+
+    #[Test]
+    public function price_asks_are_not_treated_as_negotiate(): void
+    {
+        $this->assertFalse($this->matcher()->looksLikePriceNegotiate('দাম কত'));
+        $this->assertFalse($this->matcher()->looksLikePriceNegotiate('dam koto?'));
+        $this->assertTrue($this->matcher()->looksLikePriceQuery('দাম কত'));
+        $this->assertTrue($this->matcher()->looksLikePriceQuery('dam koto?'));
+        $this->assertSame(
+            InboxQuickReplyMatcher::INTENT_PRICE,
+            $this->matcher()->detectIntent('দাম কত'),
+        );
+    }
+
+    #[Test]
+    public function detects_a_fixed_price_saved_reply(): void
+    {
+        $this->assertTrue($this->matcher()->isPriceNegotiateReply([
+            'label' => 'দাম ফিক্সড',
+            'body' => 'দাম ফিক্সড আপু',
+        ]));
+        $this->assertFalse($this->matcher()->isPriceNegotiateReply([
+            'label' => 'কোন প্রডাক্ট?',
+            'body' => 'কোন প্রডাক্টের দাম জানতে চান?',
+        ]));
+    }
+
+    #[Test]
     public function color_guarantee_matches_only_when_the_session_product_is_pahari_alchora(): void
     {
         $replies = app(InboxQuickReplyService::class)->normalize([

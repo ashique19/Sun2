@@ -16,6 +16,8 @@ class InboxQuickReplyMatcher
 
     public const INTENT_ORDER = 'order';
 
+    public const INTENT_NEGOTIATE = 'negotiate';
+
     public const VIA_TAGGED = 'tagged';
 
     public const VIA_EXAMPLE = 'example';
@@ -65,6 +67,28 @@ class InboxQuickReplyMatcher
     public const DELIVERY_CHARGE_LABEL = 'ডেলিভারি চার্জ ও সময়';
 
     /**
+     * Compacted inbound wording that is haggling, not asking what the price is.
+     *
+     * @var list<string>
+     */
+    private const PRICE_NEGOTIATE_CUES = [
+        'discount', 'discoun', 'diskaunt', 'discunt', 'descount',
+        'lastprice', 'lastprise', 'lastprize',
+        'negotiate', 'nego', 'bargain', 'bargen',
+        'cheaper', 'reduceprice', 'lessprice',
+        'komu', 'koman', 'komaben', 'komabe', 'komao',
+        'ektukom', 'ettukom', 'kichukom', 'kicukom',
+        'damkom', 'damkomu', 'damkoman',
+        'offerdan', 'offerden', 'offerdib', 'giveoffer',
+        'ডিসকাউন্ট', 'ডিস্কাউন্ট', 'ডিসকাউন',
+        'ছাড়দেন', 'ছাড়দেন', 'ছাড়দিবেন', 'ছাড়দিবেন',
+        'কমাবেন', 'কমাবে', 'কমান', 'কমাও', 'কমায়', 'কমায়', 'কমাই',
+        'কমদাম', 'কমদিবেন', 'কমদিবে', 'কমদেন', 'কমদিয়ে', 'কমদিয়ে',
+        'কিছুকম', 'একটুকম',
+        'ফিক্সড', 'দামফিক্স',
+    ];
+
+    /**
      * Bootstrap cues for the three query types staff see most.
      * Compacted (lowercase, no spaces/punct) so typos like "eta koto" / "etakoto" still hit.
      *
@@ -92,6 +116,7 @@ class InboxQuickReplyMatcher
             'কিভাবে', 'কিভাবেঅর্ডার', 'অর্ডারকরব', 'অর্ডারকরবো', 'কিভাবেনিব', 'কিভাবেঅর্ডারকরব',
             'অর্ডারকিভাবে',
         ],
+        self::INTENT_NEGOTIATE => self::PRICE_NEGOTIATE_CUES,
     ];
 
     public function __construct(
@@ -354,7 +379,31 @@ class InboxQuickReplyMatcher
 
     public function looksLikePriceQuery(string $text): bool
     {
+        if ($this->looksLikePriceNegotiate($text)) {
+            return false;
+        }
+
         return $this->detectIntent($text) === self::INTENT_PRICE;
+    }
+
+    /**
+     * True when the customer is pushing for a cheaper rate, not asking the price.
+     */
+    public function looksLikePriceNegotiate(string $text): bool
+    {
+        $compact = $this->compact($text);
+        if ($compact === '') {
+            return false;
+        }
+
+        foreach (self::PRICE_NEGOTIATE_CUES as $cue) {
+            $needle = $this->compact($cue);
+            if ($needle !== '' && str_contains($compact, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -472,6 +521,74 @@ class InboxQuickReplyMatcher
     public function isHiReply(array $reply): bool
     {
         return $this->compact((string) ($reply['label'] ?? '')) === 'hi';
+    }
+
+    /**
+     * True when this inbound is haggling: tagged against a fixed-price chip,
+     * a saved negotiate example, or discount / “komu” wording.
+     */
+    public function isPriceNegotiateAsk(ChannelMessage $message): bool
+    {
+        if ($message->direction !== ChannelMessage::DIRECTION_INBOUND) {
+            return false;
+        }
+
+        $replies = $this->quickReplies->all();
+        $negotiateReplies = [];
+        foreach ($replies as $reply) {
+            if ($this->isPriceNegotiateReply($reply)) {
+                $negotiateReplies[] = $reply;
+            }
+        }
+
+        $taggedId = trim((string) ($message->quick_reply_id ?? ''));
+        if ($taggedId !== '') {
+            foreach ($negotiateReplies as $reply) {
+                if ($reply['id'] === $taggedId) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        $text = trim((string) ($message->body ?? ''));
+        if ($text !== '' && $this->looksLikePriceNegotiate($text)) {
+            return true;
+        }
+
+        if ($text === '' || $negotiateReplies === []) {
+            return false;
+        }
+
+        $examples = InboxQuickReplyExample::query()
+            ->whereIn('quick_reply_id', array_column($negotiateReplies, 'id'))
+            ->get();
+        $match = $this->matchMessage($message, $negotiateReplies, $examples, hasInboundProductImages: false);
+
+        return is_array($match) && $this->isPriceNegotiateReply($match);
+    }
+
+    /**
+     * True when this saved reply is a fixed-price / no-discount chip.
+     *
+     * @param  array{label?: string, body?: string}  $reply
+     */
+    public function isPriceNegotiateReply(array $reply): bool
+    {
+        $haystack = $this->compact(($reply['label'] ?? '').' '.($reply['body'] ?? ''));
+        if ($haystack === '') {
+            return false;
+        }
+
+        foreach (['ডিসকাউন্ট', 'ডিস্কাউন্ট', 'ফিক্সড', 'lastprice', 'negotiate', 'discount'] as $cue) {
+            $needle = $this->compact($cue);
+            if ($needle !== '' && str_contains($haystack, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function isDeliveryChargeAsk(ChannelMessage $message): bool

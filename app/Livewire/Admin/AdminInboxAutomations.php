@@ -8,6 +8,7 @@ use App\Services\Channels\InboxColorGuaranteeAutomationService;
 use App\Services\Channels\InboxDeliveryChargeAutomationService;
 use App\Services\Channels\InboxHiReplyAutomationService;
 use App\Services\Channels\InboxLocationAutomationService;
+use App\Services\Channels\InboxPriceNegotiateAutomationService;
 use App\Services\Channels\InboxPriceQueryAutomationService;
 use App\Support\AdminAccess;
 use Livewire\Attributes\Layout;
@@ -33,6 +34,8 @@ class AdminInboxAutomations extends Component
     public bool $location = true;
 
     public bool $advance = true;
+
+    public bool $priceNegotiate = true;
 
     public ?string $statusMessage = null;
 
@@ -82,6 +85,11 @@ class AdminInboxAutomations extends Component
         $this->persist($settings, InboxAutomationSettings::ADVANCE, ! $this->advance);
     }
 
+    public function togglePriceNegotiate(InboxAutomationSettings $settings): void
+    {
+        $this->persist($settings, InboxAutomationSettings::PRICE_NEGOTIATE, ! $this->priceNegotiate);
+    }
+
     public function render()
     {
         return view('livewire.admin.admin-inbox-automations', [
@@ -106,6 +114,11 @@ class AdminInboxAutomations extends Component
             'advanceListedExample' => InboxAdvanceAutomationService::listedBody('কুমিল্লা'),
             'advanceUnlistedBody' => InboxAdvanceAutomationService::unlistedBody(),
             'advanceCodExample' => InboxAdvanceAutomationService::codRefusalBody('কুমিল্লা'),
+            'priceNegotiateBodies' => [
+                InboxPriceNegotiateAutomationService::BODY_1,
+                InboxPriceNegotiateAutomationService::BODY_2,
+                InboxPriceNegotiateAutomationService::BODY_3,
+            ],
             'matchMinPercent' => InboxPriceQueryAutomationService::MATCH_MIN_PERCENT,
             'sessionMinutes' => InboxPriceQueryAutomationService::sessionMinutes(),
         ]);
@@ -124,6 +137,7 @@ class AdminInboxAutomations extends Component
             InboxAutomationSettings::DELIVERY_CHARGE => $key === InboxAutomationSettings::DELIVERY_CHARGE ? $value : $this->deliveryCharge,
             InboxAutomationSettings::LOCATION => $key === InboxAutomationSettings::LOCATION ? $value : $this->location,
             InboxAutomationSettings::ADVANCE => $key === InboxAutomationSettings::ADVANCE ? $value : $this->advance,
+            InboxAutomationSettings::PRICE_NEGOTIATE => $key === InboxAutomationSettings::PRICE_NEGOTIATE ? $value : $this->priceNegotiate,
         ]);
         $this->photoRequest = $saved[InboxAutomationSettings::PHOTO_REQUEST];
         $this->pricedImage = $saved[InboxAutomationSettings::PRICED_IMAGE];
@@ -133,6 +147,7 @@ class AdminInboxAutomations extends Component
         $this->deliveryCharge = $saved[InboxAutomationSettings::DELIVERY_CHARGE];
         $this->location = $saved[InboxAutomationSettings::LOCATION];
         $this->advance = $saved[InboxAutomationSettings::ADVANCE];
+        $this->priceNegotiate = $saved[InboxAutomationSettings::PRICE_NEGOTIATE];
         $this->statusMessage = 'Automation saved.';
     }
 
@@ -147,5 +162,6 @@ class AdminInboxAutomations extends Component
         $this->deliveryCharge = $flags[InboxAutomationSettings::DELIVERY_CHARGE];
         $this->location = $flags[InboxAutomationSettings::LOCATION];
         $this->advance = $flags[InboxAutomationSettings::ADVANCE];
+        $this->priceNegotiate = $flags[InboxAutomationSettings::PRICE_NEGOTIATE];
     }
 }

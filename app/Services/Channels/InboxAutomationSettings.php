@@ -25,6 +25,8 @@ class InboxAutomationSettings
 
     public const ADVANCE = 'advance';
 
+    public const PRICE_NEGOTIATE = 'price_negotiate';
+
     /**
      * @var list<string>
      */
@@ -37,10 +39,11 @@ class InboxAutomationSettings
         self::DELIVERY_CHARGE,
         self::LOCATION,
         self::ADVANCE,
+        self::PRICE_NEGOTIATE,
     ];
 
     /**
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool, price_negotiate: bool}
      */
     public function all(): array
     {
@@ -77,7 +80,7 @@ class InboxAutomationSettings
 
     /**
      * @param  array<string, mixed>  $flags
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool, price_negotiate: bool}
      */
     public function save(array $flags): array
     {
@@ -98,7 +101,7 @@ class InboxAutomationSettings
     }
 
     /**
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool, price_negotiate: bool}
      */
     public function defaults(): array
     {
@@ -111,6 +114,7 @@ class InboxAutomationSettings
             self::DELIVERY_CHARGE => (bool) config('channels.inbox.auto_delivery_charge', true),
             self::LOCATION => (bool) config('channels.inbox.auto_location', true),
             self::ADVANCE => (bool) config('channels.inbox.auto_advance', true),
+            self::PRICE_NEGOTIATE => (bool) config('channels.inbox.auto_price_negotiate', true),
         ];
     }
 

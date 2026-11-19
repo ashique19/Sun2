@@ -24,6 +24,7 @@ use App\Services\Channels\InboxColorGuaranteeAutomationService;
 use App\Services\Channels\InboxDeliveryChargeAutomationService;
 use App\Services\Channels\InboxHiReplyAutomationService;
 use App\Services\Channels\InboxLocationAutomationService;
+use App\Services\Channels\InboxPriceNegotiateAutomationService;
 use App\Services\Channels\InboxPriceQueryAutomationService;
 use App\Services\Channels\InboxQuickReplyMatcher;
 use App\Services\Channels\InboxQuickReplyService;
@@ -1113,6 +1114,7 @@ class AdminInbox extends Component
             InboxDeliveryChargeAutomationService::scheduleAfterInbound($conversation, $fresh);
             InboxLocationAutomationService::scheduleAfterInbound($conversation, $fresh);
             InboxAdvanceAutomationService::scheduleAfterInbound($conversation, $fresh);
+            InboxPriceNegotiateAutomationService::scheduleAfterInbound($conversation, $fresh);
         }
     }
 

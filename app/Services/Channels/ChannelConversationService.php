@@ -107,6 +107,7 @@ class ChannelConversationService
                 InboxDeliveryChargeAutomationService::scheduleAfterInbound($conversation, $message);
                 InboxLocationAutomationService::scheduleAfterInbound($conversation, $message);
                 InboxAdvanceAutomationService::scheduleAfterInbound($conversation, $message);
+                InboxPriceNegotiateAutomationService::scheduleAfterInbound($conversation, $message);
             } elseif ($conversation->last_outbound_at === null || $sentAt->greaterThan($conversation->last_outbound_at)) {
                 $conversation->forceFill(['last_outbound_at' => $sentAt])->save();
             }

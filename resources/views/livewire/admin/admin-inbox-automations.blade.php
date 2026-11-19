@@ -3,7 +3,7 @@
         <div>
             <h1 class="font-serif text-3xl font-semibold text-[#1E1E1E]">Automations</h1>
             <p class="mt-1 text-sm text-[#8C8474]">
-                Controlled auto-replies in the current session (past hour): price asks tagged against “কোন প্রডাক্ট?”, greetings tagged against “Hi”, “{{ $colorGuaranteeLabel }}” only for “{{ $colorGuaranteeCategory }}”, “{{ $deliveryChargeLabel }}”, “{{ $locationLabel }}”, and “{{ $advanceLabel }}”.
+                Controlled auto-replies in the current session (past hour): price asks tagged against “কোন প্রডাক্ট?”, greetings tagged against “Hi”, “{{ $colorGuaranteeLabel }}” only for “{{ $colorGuaranteeCategory }}”, “{{ $deliveryChargeLabel }}”, “{{ $locationLabel }}”, “{{ $advanceLabel }}”, and stepped fixed-price replies when they negotiate.
             </p>
         </div>
         <a href="{{ route('admin.inbox') }}" wire:navigate
@@ -94,6 +94,19 @@
                 <p class="mt-2 whitespace-pre-line rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $advanceCodExample }}</p>
             </div>
             <x-admin.switch :on="$advance" wire:click="toggleAdvance" aria-label="Match advance" />
+        </div>
+
+        <div class="flex items-start justify-between gap-3 rounded-xl border border-[#E7DFCF] bg-[#FAF6EF]/60 p-4" data-inbox-automation="price_negotiate">
+            <div class="min-w-0">
+                <p class="text-sm font-semibold text-[#1E1E1E]">Reply when they negotiate the price</p>
+                <p class="mt-1 text-sm text-[#6B6459]">First ask in the session gets the fixed-price reply. A second push gets the no-discount reply. Further pushes keep repeating দুঃখিত আপু।</p>
+                <div class="mt-2 space-y-2">
+                    @foreach ($priceNegotiateBodies as $body)
+                        <p class="whitespace-pre-line rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $body }}</p>
+                    @endforeach
+                </div>
+            </div>
+            <x-admin.switch :on="$priceNegotiate" wire:click="togglePriceNegotiate" aria-label="Reply when they negotiate the price" />
         </div>
     </div>
 </div>

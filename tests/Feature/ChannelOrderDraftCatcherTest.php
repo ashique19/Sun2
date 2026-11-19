@@ -11,6 +11,7 @@ use App\Models\Product;
 use App\Services\Channels\ChannelConversationService;
 use App\Services\Channels\ChannelOrderDraftCatcher;
 use App\Services\Channels\ChannelOrderDraftService;
+use App\Services\Channels\InboxPriceQueryAutomationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -136,6 +137,137 @@ class ChannelOrderDraftCatcherTest extends TestCase
         $this->assertSame(650 * 2, (int) $items[0]->line_total);
         $this->assertSame($set->id, (int) $items[1]->product_id);
         $this->assertSame(1, (int) $items[1]->quantity);
+    }
+
+    #[Test]
+    public function catcher_skips_price_query_photos_when_the_close_has_no_new_product(): void
+    {
+        $browsed = $this->product(['name' => 'Browsed Ring', 'price' => 900]);
+        $this->seedDhakaMirpur();
+        $conversation = $this->conversation('PSID_QUERY_SKIP');
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.test/browse.jpg',
+            'media_mime' => 'image/jpeg',
+            'matched_product_id' => $browsed->id,
+            'sent_at' => now()->subMinutes(10),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'দাম কত',
+            'sent_at' => now()->subMinutes(8),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => "Nila\n01627237432\nMirpur, Dhaka",
+            'sent_at' => now(),
+        ]);
+
+        $draft = app(ChannelOrderDraftCatcher::class)->catch($conversation->fresh());
+
+        $this->assertNotNull($draft);
+        $this->assertNotContains(
+            $browsed->id,
+            $draft->items->pluck('product_id')->filter()->all(),
+        );
+    }
+
+    #[Test]
+    public function catcher_keeps_a_photo_sent_after_the_price_ask(): void
+    {
+        $browsed = $this->product(['name' => 'Browsed Ring', 'price' => 900]);
+        $ordered = $this->product(['name' => 'Ordered Set', 'price' => 1650]);
+        $this->seedDhakaMirpur();
+        $conversation = $this->conversation('PSID_QUERY_THEN_ORDER');
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.test/browse.jpg',
+            'media_mime' => 'image/jpeg',
+            'matched_product_id' => $browsed->id,
+            'sent_at' => now()->subMinutes(10),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'দাম কত apu',
+            'sent_at' => now()->subMinutes(8),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.test/order.jpg',
+            'media_mime' => 'image/jpeg',
+            'matched_product_id' => $ordered->id,
+            'sent_at' => now()->subMinutes(2),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => "Nila\n01627237432\nMirpur, Dhaka",
+            'sent_at' => now(),
+        ]);
+
+        $draft = app(ChannelOrderDraftCatcher::class)->catch($conversation->fresh());
+
+        $this->assertNotNull($draft);
+        $this->assertSame([$ordered->id], $draft->items()->pluck('product_id')->all());
+        $this->assertSame(1650, (int) $draft->subtotal);
+    }
+
+    #[Test]
+    public function catcher_uses_a_reply_to_a_priced_image_as_the_ordered_product(): void
+    {
+        $browsed = $this->product(['name' => 'Browsed Ring', 'price' => 900]);
+        $ordered = $this->product(['name' => 'Priced Set', 'price' => 1200]);
+        $this->seedDhakaMirpur();
+        $conversation = $this->conversation('PSID_REPLY_PRICED');
+
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'media_url' => 'https://example.test/browse.jpg',
+            'media_mime' => 'image/jpeg',
+            'matched_product_id' => $browsed->id,
+            'sent_at' => now()->subMinutes(10),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => 'দাম কত',
+            'sent_at' => now()->subMinutes(9),
+        ]);
+        $priced = ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_OUTBOUND,
+            'body' => null,
+            'media_url' => 'https://example.test/priced.jpg',
+            'media_mime' => 'image/jpeg',
+            'matched_product_id' => $ordered->id,
+            'raw_payload' => [
+                InboxPriceQueryAutomationService::RAW_PRICED_IMAGE => true,
+                InboxPriceQueryAutomationService::RAW_PRICED_PRODUCT_ID => $ordered->id,
+            ],
+            'sent_at' => now()->subMinutes(8),
+        ]);
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => "Nila\n01627237432\nMirpur, Dhaka",
+            'reply_to_message_id' => $priced->id,
+            'sent_at' => now(),
+        ]);
+
+        $draft = app(ChannelOrderDraftCatcher::class)->catch($conversation->fresh());
+
+        $this->assertNotNull($draft);
+        $this->assertSame([$ordered->id], $draft->items()->pluck('product_id')->all());
+        $this->assertSame(1200, (int) $draft->subtotal);
     }
 
     #[Test]

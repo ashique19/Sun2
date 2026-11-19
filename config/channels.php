@@ -160,6 +160,9 @@ return [
         // Auto-send the shop location reply when they ask for showroom / office / warehouse.
         'auto_location' => filter_var(env('CHANNEL_INBOX_AUTO_LOCATION', true), FILTER_VALIDATE_BOOL),
 
+        // Auto-reply prepaid delivery-charge rules for hill-tract / listed areas.
+        'auto_advance' => filter_var(env('CHANNEL_INBOX_AUTO_ADVANCE', true), FILTER_VALIDATE_BOOL),
+
         // Composer chips — label shown in UI, body inserted into the reply box.
         'quick_replies' => [
             ['label' => 'Salaam', 'body' => 'আসসালামু আলাইকুম'],

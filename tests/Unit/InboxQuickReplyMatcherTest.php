@@ -8,6 +8,7 @@ use App\Models\ChannelMessage;
 use App\Models\InboxQuickReplyExample;
 use App\Models\Product;
 use App\Services\Channels\ChannelMessageImageMatchService;
+use App\Services\Channels\InboxAdvanceAutomationService;
 use App\Services\Channels\InboxColorGuaranteeAutomationService;
 use App\Services\Channels\InboxLocationAutomationService;
 use App\Services\Channels\InboxQuickReplyMatcher;
@@ -199,6 +200,29 @@ class InboxQuickReplyMatcherTest extends TestCase
         $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('দাম কত'));
         $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('কবে পাবো'));
         $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('আপু আমার পার্সেল টা কবে পাঠাবেন???'));
+        $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('কুমিল্লা এডভান্স লাগবে?'));
+    }
+
+    #[Test]
+    public function detects_advance_wording_and_cod_push(): void
+    {
+        $this->assertTrue($this->matcher()->isAdvanceReply([
+            'label' => InboxAdvanceAutomationService::REPLY_LABEL,
+            'body' => InboxAdvanceAutomationService::BODY_ASK_LOCATION,
+        ]));
+        $this->assertFalse($this->matcher()->isAdvanceReply([
+            'label' => 'Address?',
+            'body' => 'আপনার সম্পূর্ণ ঠিকানাটা একটু দিবেন?',
+        ]));
+        $this->assertTrue($this->matcher()->looksLikeAdvance('এডভান্স লাগবে?'));
+        $this->assertTrue($this->matcher()->looksLikeAdvance('teknaf e advance lagbe?'));
+        $this->assertTrue($this->matcher()->looksLikeAdvance('উখিয়া তে আগে ডেলিভারি চার্জ দিতে হবে?'));
+        $this->assertFalse($this->matcher()->looksLikeAdvance('কুমিল্লা ডেলিভারি কত'));
+        $this->assertFalse($this->matcher()->looksLikeAdvance('দাম কত'));
+        $this->assertTrue($this->matcher()->looksLikeCodPush('পুরো ক্যাশ অন ডেলিভারি চাই'));
+        $this->assertTrue($this->matcher()->looksLikeCodPush('এডভান্স ছাড়া পাঠাও'));
+        $this->assertFalse($this->matcher()->looksLikeCodPush('এডভান্স লাগবে?'));
+        $this->assertFalse($this->matcher()->looksLikeLocation('এডভান্স লাগবে?'));
     }
 
     #[Test]

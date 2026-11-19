@@ -19,6 +19,7 @@ use App\Services\Channels\ChannelMessageOrderMapper;
 use App\Services\Channels\ChannelOrderDraftCatcher;
 use App\Services\Channels\ChannelOrderDraftService;
 use App\Services\Channels\ChannelReplyService;
+use App\Services\Channels\InboxAdvanceAutomationService;
 use App\Services\Channels\InboxColorGuaranteeAutomationService;
 use App\Services\Channels\InboxDeliveryChargeAutomationService;
 use App\Services\Channels\InboxHiReplyAutomationService;
@@ -1111,6 +1112,7 @@ class AdminInbox extends Component
             InboxColorGuaranteeAutomationService::scheduleAfterInbound($conversation, $fresh);
             InboxDeliveryChargeAutomationService::scheduleAfterInbound($conversation, $fresh);
             InboxLocationAutomationService::scheduleAfterInbound($conversation, $fresh);
+            InboxAdvanceAutomationService::scheduleAfterInbound($conversation, $fresh);
         }
     }
 

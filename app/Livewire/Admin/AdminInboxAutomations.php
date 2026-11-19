@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Admin;
 
+use App\Services\Channels\InboxAdvanceAutomationService;
 use App\Services\Channels\InboxAutomationSettings;
 use App\Services\Channels\InboxColorGuaranteeAutomationService;
 use App\Services\Channels\InboxDeliveryChargeAutomationService;
@@ -30,6 +31,8 @@ class AdminInboxAutomations extends Component
     public bool $deliveryCharge = true;
 
     public bool $location = true;
+
+    public bool $advance = true;
 
     public ?string $statusMessage = null;
 
@@ -74,6 +77,11 @@ class AdminInboxAutomations extends Component
         $this->persist($settings, InboxAutomationSettings::LOCATION, ! $this->location);
     }
 
+    public function toggleAdvance(InboxAutomationSettings $settings): void
+    {
+        $this->persist($settings, InboxAutomationSettings::ADVANCE, ! $this->advance);
+    }
+
     public function render()
     {
         return view('livewire.admin.admin-inbox-automations', [
@@ -90,6 +98,11 @@ class AdminInboxAutomations extends Component
             'deliveryChargeLabel' => InboxDeliveryChargeAutomationService::REPLY_LABEL,
             'locationBody' => InboxLocationAutomationService::BODY,
             'locationLabel' => InboxLocationAutomationService::REPLY_LABEL,
+            'advanceLabel' => InboxAdvanceAutomationService::REPLY_LABEL,
+            'advanceAskBody' => InboxAdvanceAutomationService::BODY_ASK_LOCATION,
+            'advanceListedExample' => InboxAdvanceAutomationService::listedBody('কুমিল্লা'),
+            'advanceUnlistedBody' => InboxAdvanceAutomationService::unlistedBody(),
+            'advanceCodExample' => InboxAdvanceAutomationService::codRefusalBody('কুমিল্লা'),
             'matchMinPercent' => InboxPriceQueryAutomationService::MATCH_MIN_PERCENT,
             'sessionMinutes' => InboxPriceQueryAutomationService::sessionMinutes(),
         ]);
@@ -107,6 +120,7 @@ class AdminInboxAutomations extends Component
             InboxAutomationSettings::COLOR_GUARANTEE => $key === InboxAutomationSettings::COLOR_GUARANTEE ? $value : $this->colorGuarantee,
             InboxAutomationSettings::DELIVERY_CHARGE => $key === InboxAutomationSettings::DELIVERY_CHARGE ? $value : $this->deliveryCharge,
             InboxAutomationSettings::LOCATION => $key === InboxAutomationSettings::LOCATION ? $value : $this->location,
+            InboxAutomationSettings::ADVANCE => $key === InboxAutomationSettings::ADVANCE ? $value : $this->advance,
         ]);
         $this->photoRequest = $saved[InboxAutomationSettings::PHOTO_REQUEST];
         $this->pricedImage = $saved[InboxAutomationSettings::PRICED_IMAGE];
@@ -115,6 +129,7 @@ class AdminInboxAutomations extends Component
         $this->colorGuarantee = $saved[InboxAutomationSettings::COLOR_GUARANTEE];
         $this->deliveryCharge = $saved[InboxAutomationSettings::DELIVERY_CHARGE];
         $this->location = $saved[InboxAutomationSettings::LOCATION];
+        $this->advance = $saved[InboxAutomationSettings::ADVANCE];
         $this->statusMessage = 'Automation saved.';
     }
 
@@ -128,5 +143,6 @@ class AdminInboxAutomations extends Component
         $this->colorGuarantee = $flags[InboxAutomationSettings::COLOR_GUARANTEE];
         $this->deliveryCharge = $flags[InboxAutomationSettings::DELIVERY_CHARGE];
         $this->location = $flags[InboxAutomationSettings::LOCATION];
+        $this->advance = $flags[InboxAutomationSettings::ADVANCE];
     }
 }

@@ -522,6 +522,10 @@ class InboxQuickReplyMatcher
 
     public function looksLikeDeliveryCharge(string $text): bool
     {
+        if ($this->looksLikeAdvance($text) || $this->looksLikeCodPush($text)) {
+            return false;
+        }
+
         $compact = $this->compactYa($text);
         if ($compact === '') {
             return false;
@@ -645,7 +649,7 @@ class InboxQuickReplyMatcher
 
     public function looksLikeLocation(string $text): bool
     {
-        if ($this->looksLikeDeliveryCharge($text)) {
+        if ($this->looksLikeAdvance($text) || $this->looksLikeCodPush($text) || $this->looksLikeDeliveryCharge($text)) {
             return false;
         }
 
@@ -751,6 +755,130 @@ class InboxQuickReplyMatcher
             'location', 'লোকেশন',
             'warehouse', 'ওয়ারহাউজ',
         ]);
+    }
+
+    public function isAdvanceAsk(ChannelMessage $message): bool
+    {
+        if ($message->direction !== ChannelMessage::DIRECTION_INBOUND) {
+            return false;
+        }
+
+        $replies = $this->quickReplies->all();
+        $advanceReplies = [];
+        foreach ($replies as $reply) {
+            if ($this->isAdvanceReply($reply)) {
+                $advanceReplies[] = $reply;
+            }
+        }
+
+        $taggedId = trim((string) ($message->quick_reply_id ?? ''));
+        if ($taggedId !== '') {
+            foreach ($advanceReplies as $reply) {
+                if ($reply['id'] === $taggedId) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        $text = trim((string) ($message->body ?? ''));
+        if ($text !== '' && $this->looksLikeAdvance($text)) {
+            return true;
+        }
+
+        if ($text === '' || $advanceReplies === []) {
+            return false;
+        }
+
+        $examples = InboxQuickReplyExample::query()
+            ->whereIn('quick_reply_id', array_column($advanceReplies, 'id'))
+            ->get();
+        $repliesById = [];
+        foreach ($advanceReplies as $reply) {
+            $repliesById[$reply['id']] = $reply;
+        }
+        $exampleHit = $this->matchExamples($text, $examples, $repliesById);
+
+        return is_array($exampleHit) && $this->isAdvanceReply($exampleHit);
+    }
+
+    public function looksLikeAdvance(string $text): bool
+    {
+        $compact = $this->compactYa($text);
+        if ($compact === '') {
+            return false;
+        }
+
+        if ($this->containsAnyCue($compact, [
+            'এডভান্স', 'অ্যাডভান্স', 'অ্যাডভান্সড',
+            'advance', 'advence', 'advanc',
+            'prepaid',
+            'বুকিংমানি', 'bookingmoney',
+        ])) {
+            return true;
+        }
+
+        $hasAge = $this->containsAnyCue($compact, ['আগে', 'age']);
+        $hasPay = $this->containsAnyCue($compact, [
+            'পাঠাতে', 'দিতে', 'দিব', 'দিবো', 'টাকা', 'পেমেন্ট', 'payment', 'pay',
+        ]);
+        $hasCharge = $this->containsAnyCue($compact, ['চার্জ', 'charge', 'ডেলিভারি', 'delivery']);
+        if ($hasAge && $hasPay && $hasCharge) {
+            return true;
+        }
+
+        return $this->containsAnyCue($compact, ['ক্যাশঅনডেলিভারি', 'cashondelivery'])
+            && $this->containsAnyCue($compact, ['হবে', 'আছে', 'কি', 'naki', 'hobe', 'ache']);
+    }
+
+    public function looksLikeCodPush(string $text): bool
+    {
+        $compact = $this->compactYa($text);
+        if ($compact === '') {
+            return false;
+        }
+
+        if ($this->containsAnyCue($compact, [
+            'পুরোক্যাশঅনডেলিভারি', 'পুরোক্যাশঅন', 'fullcashondelivery', 'fullcod',
+            'পুরোcod', 'onlycod', 'mustcod',
+            'এডভান্সছাড়া', 'advanceছাড়া', 'withoutadvance',
+            'আগেদিবনা', 'আগেদিবোনা', 'advancedibona', 'agedibona',
+            'নাদিয়েপাঠা', 'নাদিয়েপাঠা',
+        ])) {
+            return true;
+        }
+
+        $hasCod = $this->containsAnyCue($compact, ['ক্যাশঅনডেলিভারি', 'cashondelivery'])
+            || preg_match('/(?<![a-z])cod(?!e)/', $compact) === 1;
+        $wantsCod = $hasCod && $this->containsAnyCue($compact, ['চাই', 'pathao', 'পাঠা', 'করো', 'করুন', 'chai']);
+        $fullLater = $this->containsAnyCue($compact, ['পুরোটাপরে', 'পুরোটাকাপরে', 'fullpore']);
+
+        return $wantsCod || $fullLater;
+    }
+
+    /**
+     * @param  array{label?: string, body?: string}  $reply
+     */
+    public function isAdvanceReply(array $reply): bool
+    {
+        $body = trim((string) ($reply['body'] ?? ''));
+        if ($body !== '' && (
+            $body === InboxAdvanceAutomationService::BODY_ASK_LOCATION
+            || $body === InboxAdvanceAutomationService::unlistedBody()
+            || str_contains($body, 'ডেলিভারি চার্জ ১২০ টাকা আগে পাঠাতে হবে')
+            || str_contains($body, 'এডভান্স ডেলিভারি চার্জ ছাড়া আমরা পাঠাব না')
+        )) {
+            return true;
+        }
+
+        $label = $this->compactYa((string) ($reply['label'] ?? ''));
+        if ($label === '') {
+            return false;
+        }
+
+        return $this->containsAnyCue($label, ['এডভান্স', 'অ্যাডভান্স', 'advance'])
+            && ! $this->containsAnyCue($label, ['address', 'ঠিকানা']);
     }
 
     /**

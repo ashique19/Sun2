@@ -23,6 +23,8 @@ class InboxAutomationSettings
 
     public const LOCATION = 'location';
 
+    public const ADVANCE = 'advance';
+
     /**
      * @var list<string>
      */
@@ -34,10 +36,11 @@ class InboxAutomationSettings
         self::COLOR_GUARANTEE,
         self::DELIVERY_CHARGE,
         self::LOCATION,
+        self::ADVANCE,
     ];
 
     /**
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool}
      */
     public function all(): array
     {
@@ -74,7 +77,7 @@ class InboxAutomationSettings
 
     /**
      * @param  array<string, mixed>  $flags
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool}
      */
     public function save(array $flags): array
     {
@@ -95,7 +98,7 @@ class InboxAutomationSettings
     }
 
     /**
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool}
      */
     public function defaults(): array
     {
@@ -107,6 +110,7 @@ class InboxAutomationSettings
             self::COLOR_GUARANTEE => (bool) config('channels.inbox.auto_color_guarantee', true),
             self::DELIVERY_CHARGE => (bool) config('channels.inbox.auto_delivery_charge', true),
             self::LOCATION => (bool) config('channels.inbox.auto_location', true),
+            self::ADVANCE => (bool) config('channels.inbox.auto_advance', true),
         ];
     }
 

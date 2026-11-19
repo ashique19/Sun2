@@ -3,7 +3,7 @@
         <div>
             <h1 class="font-serif text-3xl font-semibold text-[#1E1E1E]">Automations</h1>
             <p class="mt-1 text-sm text-[#8C8474]">
-                Controlled auto-replies in the current session (past hour): price asks tagged against “কোন প্রডাক্ট?”, greetings tagged against “Hi”, “{{ $colorGuaranteeLabel }}” only for “{{ $colorGuaranteeCategory }}”, “{{ $deliveryChargeLabel }}”, and “{{ $locationLabel }}”.
+                Controlled auto-replies in the current session (past hour): price asks tagged against “কোন প্রডাক্ট?”, greetings tagged against “Hi”, “{{ $colorGuaranteeLabel }}” only for “{{ $colorGuaranteeCategory }}”, “{{ $deliveryChargeLabel }}”, “{{ $locationLabel }}”, and “{{ $advanceLabel }}”.
             </p>
         </div>
         <a href="{{ route('admin.inbox') }}" wire:navigate
@@ -79,6 +79,18 @@
                 <p class="mt-2 whitespace-pre-line rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $locationBody }}</p>
             </div>
             <x-admin.switch :on="$location" wire:click="toggleLocation" aria-label="Match location" />
+        </div>
+
+        <div class="flex items-start justify-between gap-3 rounded-xl border border-[#E7DFCF] bg-[#FAF6EF]/60 p-4" data-inbox-automation="advance">
+            <div class="min-w-0">
+                <p class="text-sm font-semibold text-[#1E1E1E]">Match {{ $advanceLabel }}</p>
+                <p class="mt-1 text-sm text-[#6B6459]">Prepaid delivery charge for listed hill-tract areas. Named listed area gets ১২০৳ advance; unnamed asks the location; other areas get the list; pressing for full COD after a listed area gets the refusal.</p>
+                <p class="mt-2 rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $advanceListedExample }}</p>
+                <p class="mt-2 rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $advanceAskBody }}</p>
+                <p class="mt-2 whitespace-pre-line rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $advanceUnlistedBody }}</p>
+                <p class="mt-2 whitespace-pre-line rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $advanceCodExample }}</p>
+            </div>
+            <x-admin.switch :on="$advance" wire:click="toggleAdvance" aria-label="Match advance" />
         </div>
     </div>
 </div>

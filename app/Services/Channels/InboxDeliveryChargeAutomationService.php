@@ -15,7 +15,7 @@ class InboxDeliveryChargeAutomationService
 
     public const BODY_DHAKA = 'ঢাকা শহর এলাকায় ৮০ টাকা, সময় ২-৪ দিন।';
 
-    public const BODY_OUTSIDE = 'ঢাকার বাহিরে ডেলিভারি চার্জ ১২০ টাকা, ৩-৫ দিনের মাঝে পাবেন।';
+    public const BODY_OUTSIDE = 'ঢাকা শহর এলাকার বাহিরে ডেলিভারি চার্জ ১২০ টাকা, ৩-৫ দিনের মাঝে পাবেন।';
 
     public const BODY = self::BODY_DHAKA."\n\n".self::BODY_OUTSIDE;
 

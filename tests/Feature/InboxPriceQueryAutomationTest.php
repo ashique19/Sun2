@@ -223,11 +223,11 @@ class InboxPriceQueryAutomationTest extends TestCase
     }
 
     #[Test]
-    public function match_at_eighty_percent_sends_priced_image(): void
+    public function match_at_ninety_percent_sends_priced_image(): void
     {
         Http::fake([
             'https://graph.facebook.com/*' => Http::response([
-                'message_id' => 'm_auto_eighty',
+                'message_id' => 'm_auto_ninety',
                 'recipient_id' => 'psid-auto',
             ], 200),
         ]);
@@ -237,16 +237,38 @@ class InboxPriceQueryAutomationTest extends TestCase
             InboxAutomationSettings::LOW_MATCH_WAIT => true,
         ]);
 
-        $conversation = $this->conversation('psid-auto-eighty');
+        $conversation = $this->conversation('psid-auto-ninety');
         $product = $this->productWithPricedImage();
         $this->inbound($conversation, 'দাম কত', now()->subMinutes(2));
-        $photo = $this->inboundPhoto($conversation, $product, 80.0);
+        $photo = $this->inboundPhoto($conversation, $product, 90.0);
 
         $sent = app(InboxPriceQueryAutomationService::class)
             ->handleMatchedPhoto($conversation->fresh('messages'), $photo);
 
         $this->assertNotNull($sent);
         $this->assertTrue($sent->raw_payload[InboxPriceQueryAutomationService::RAW_PRICED_IMAGE] ?? false);
+    }
+
+    #[Test]
+    public function match_below_ninety_percent_does_not_send_priced_image(): void
+    {
+        Http::fake();
+        app(InboxAutomationSettings::class)->save([
+            InboxAutomationSettings::PHOTO_REQUEST => false,
+            InboxAutomationSettings::PRICED_IMAGE => true,
+            InboxAutomationSettings::LOW_MATCH_WAIT => false,
+        ]);
+
+        $conversation = $this->conversation('psid-auto-below-ninety');
+        $product = $this->productWithPricedImage();
+        $this->inbound($conversation, 'দাম কত', now()->subMinutes(2));
+        $photo = $this->inboundPhoto($conversation, $product, 89.0);
+
+        $this->assertNull(
+            app(InboxPriceQueryAutomationService::class)
+                ->handleMatchedPhoto($conversation->fresh('messages'), $photo)
+        );
+        Http::assertNothingSent();
     }
 
     #[Test]
@@ -465,7 +487,7 @@ class InboxPriceQueryAutomationTest extends TestCase
         $second = $this->productWithPricedImage();
         $this->inbound($conversation, 'dam koto?', now()->subMinutes(3));
         $this->inboundPhoto($conversation, $first, 91.0, sentAt: now()->subMinutes(2));
-        $this->inboundPhoto($conversation, $second, 88.0, sentAt: now()->subMinute());
+        $this->inboundPhoto($conversation, $second, 92.0, sentAt: now()->subMinute());
         $ask = $this->inbound($conversation, 'দাম কত');
 
         app(InboxPriceQueryAutomationService::class)

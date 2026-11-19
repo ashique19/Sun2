@@ -356,7 +356,7 @@ class ChannelOrderDraftService
     private function hasUsefulOrderSignal(array $parsed): bool
     {
         $rawText = trim((string) ($parsed['raw_text'] ?? ''));
-        if ($rawText === '' && empty($parsed['product_id'])) {
+        if ($rawText === '' && empty($parsed['product_id']) && empty($parsed['products'])) {
             return false;
         }
 
@@ -683,30 +683,32 @@ class ChannelOrderDraftService
      */
     private function buildLines(array $parsed): array
     {
-        $quantity = max(1, (int) ($parsed['quantity'] ?? 1));
-        $productId = isset($parsed['product_id']) ? (int) $parsed['product_id'] : null;
-
-        if ($productId) {
-            $product = Product::query()->find($productId);
-            if ($product) {
-                $price = (float) (int) round((float) $product->price);
-                $purchase = (float) (int) round((float) $product->purchase_price);
-                $unitCost = (float) (int) round($product->effectiveUnitCost());
-
-                return [[
-                    'product_id' => (int) $product->id,
-                    'name' => (string) $product->name,
-                    'quantity' => $quantity,
-                    'price' => $price,
-                    'purchase_price' => $purchase,
-                    'unit_cost' => $unitCost,
-                    'line_total' => $price * $quantity,
-                    'product_image' => $product->primaryImagePath(),
-                    'base_price' => $price,
-                    'commission_rate' => (float) ($product->commission ?? 0),
-                    'max_discount' => $product->max_discount,
-                ]];
+        $entries = [];
+        if (is_array($parsed['products'] ?? null)) {
+            foreach ($parsed['products'] as $entry) {
+                if (is_array($entry)) {
+                    $entries[] = $entry;
+                }
             }
+        }
+        if ($entries === []) {
+            $entries[] = [
+                'product_id' => $parsed['product_id'] ?? null,
+                'product_name' => $parsed['product_name'] ?? null,
+                'quantity' => $parsed['quantity'] ?? 1,
+            ];
+        }
+
+        $lines = [];
+        foreach ($entries as $entry) {
+            $line = $this->buildLine($entry);
+            if ($line !== null) {
+                $lines[] = $line;
+            }
+        }
+
+        if ($lines !== []) {
+            return $lines;
         }
 
         $label = filled($parsed['product_name'] ?? null)
@@ -716,7 +718,7 @@ class ChannelOrderDraftService
         return [[
             'product_id' => null,
             'name' => $label,
-            'quantity' => $quantity,
+            'quantity' => 1,
             'price' => 0.0,
             'purchase_price' => 0.0,
             'unit_cost' => 0.0,
@@ -726,6 +728,39 @@ class ChannelOrderDraftService
             'commission_rate' => 0.0,
             'max_discount' => null,
         ]];
+    }
+
+    /**
+     * @param  array<string, mixed>  $entry
+     * @return array{product_id:?int,name:string,quantity:int,price:float,purchase_price:float,line_total:float,product_image:?string,base_price:float,commission_rate:float,max_discount:mixed,unit_cost:float}|null
+     */
+    private function buildLine(array $entry): ?array
+    {
+        $quantity = max(1, (int) ($entry['quantity'] ?? 1));
+        $productId = isset($entry['product_id']) ? (int) $entry['product_id'] : 0;
+        $product = $productId > 0 ? Product::query()->find($productId) : null;
+
+        if (! $product) {
+            return null;
+        }
+
+        $price = (float) (int) round((float) $product->price);
+        $purchase = (float) (int) round((float) $product->purchase_price);
+        $unitCost = (float) (int) round($product->effectiveUnitCost());
+
+        return [
+            'product_id' => (int) $product->id,
+            'name' => (string) $product->name,
+            'quantity' => $quantity,
+            'price' => $price,
+            'purchase_price' => $purchase,
+            'unit_cost' => $unitCost,
+            'line_total' => $price * $quantity,
+            'product_image' => $product->primaryImagePath(),
+            'base_price' => $price,
+            'commission_rate' => (float) ($product->commission ?? 0),
+            'max_discount' => $product->max_discount,
+        ];
     }
 
     /**

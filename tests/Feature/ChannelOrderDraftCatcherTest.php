@@ -65,6 +65,80 @@ class ChannelOrderDraftCatcherTest extends TestCase
     }
 
     #[Test]
+    public function catcher_adds_each_tagged_photo_as_a_line_item(): void
+    {
+        $first = $this->product(['name' => 'Gold Set', 'price' => 1650]);
+        $second = $this->product(['name' => 'Silver Pair', 'price' => 650]);
+        $third = $this->product(['name' => 'Nupur', 'price' => 1200]);
+        $this->seedDhakaMirpur();
+        $conversation = $this->conversation('PSID_MULTI_PRODUCT');
+
+        foreach ([$first, $second, $third] as $offset => $product) {
+            ChannelMessage::query()->create([
+                'channel_conversation_id' => $conversation->id,
+                'direction' => ChannelMessage::DIRECTION_INBOUND,
+                'media_url' => 'https://example.test/p'.$offset.'.jpg',
+                'media_mime' => 'image/jpeg',
+                'matched_product_id' => $product->id,
+                'sent_at' => now()->subMinutes(5 - $offset),
+            ]);
+        }
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => "Ujerung tripura,khagrachari,panchari,kuradiya tarabonchara,\n01857120756",
+            'sent_at' => now(),
+        ]);
+
+        $draft = app(ChannelOrderDraftCatcher::class)->catch($conversation->fresh());
+
+        $this->assertNotNull($draft);
+        $this->assertSame(
+            [$first->id, $second->id, $third->id],
+            $draft->items()->orderBy('id')->pluck('product_id')->all(),
+        );
+        $this->assertSame([1, 1, 1], $draft->items()->orderBy('id')->pluck('quantity')->all());
+        $this->assertSame(1650 + 650 + 1200, (int) $draft->subtotal);
+    }
+
+    #[Test]
+    public function catcher_increments_quantity_when_the_same_product_is_tagged_twice(): void
+    {
+        $pair = $this->product(['name' => 'Silver Pair', 'price' => 650]);
+        $set = $this->product(['name' => 'Gold Set', 'price' => 1650]);
+        $this->seedDhakaMirpur();
+        $conversation = $this->conversation('PSID_QTY_PRODUCT');
+
+        foreach ([$pair, $pair, $set] as $offset => $product) {
+            ChannelMessage::query()->create([
+                'channel_conversation_id' => $conversation->id,
+                'direction' => ChannelMessage::DIRECTION_INBOUND,
+                'media_url' => 'https://example.test/q'.$offset.'.jpg',
+                'media_mime' => 'image/jpeg',
+                'matched_product_id' => $product->id,
+                'sent_at' => now()->subMinutes(4 - $offset),
+            ]);
+        }
+        ChannelMessage::query()->create([
+            'channel_conversation_id' => $conversation->id,
+            'direction' => ChannelMessage::DIRECTION_INBOUND,
+            'body' => "Sathi Mondal\nMunshirhat\nChauddagram\nCumilla\n01756808261",
+            'sent_at' => now(),
+        ]);
+
+        $draft = app(ChannelOrderDraftCatcher::class)->catch($conversation->fresh());
+
+        $this->assertNotNull($draft);
+        $items = $draft->items()->orderBy('id')->get();
+        $this->assertCount(2, $items);
+        $this->assertSame($pair->id, (int) $items[0]->product_id);
+        $this->assertSame(2, (int) $items[0]->quantity);
+        $this->assertSame(650 * 2, (int) $items[0]->line_total);
+        $this->assertSame($set->id, (int) $items[1]->product_id);
+        $this->assertSame(1, (int) $items[1]->quantity);
+    }
+
+    #[Test]
     public function catcher_uses_typed_name_not_the_facebook_profile_name(): void
     {
         $product = $this->product();
@@ -326,9 +400,9 @@ class ChannelOrderDraftCatcherTest extends TestCase
         ]);
     }
 
-    private function product(): Product
+    private function product(array $overrides = []): Product
     {
-        return Product::query()->create([
+        return Product::query()->create(array_merge([
             'name' => 'Silk Kurti',
             'slug' => 'silk-kurti-catch-'.uniqid(),
             'sku' => 'CK'.random_int(100, 999),
@@ -337,7 +411,7 @@ class ChannelOrderDraftCatcherTest extends TestCase
             'stock_quantity' => 10,
             'is_published' => true,
             'display_order' => 0,
-        ]);
+        ], $overrides));
     }
 
     private function seedDhakaMirpur(): void

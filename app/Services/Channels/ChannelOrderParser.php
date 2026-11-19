@@ -69,6 +69,7 @@ class ChannelOrderParser
      *     areaId:?int,
      *     product_id:?int,
      *     product_name:?string,
+     *     products: list<array{product_id:int,product_name:string,quantity:int}>,
      *     quantity:int,
      *     missing: list<string>,
      *     weak_points: list<string>,
@@ -80,7 +81,7 @@ class ChannelOrderParser
      */
     public function parseConversation(ChannelConversation $conversation): array
     {
-        $conversation->loadMissing(['messages']);
+        $conversation->loadMissing(['messages.replyTo']);
 
         $inbound = $this->recentInboundMessages($conversation);
         $orderWindow = $this->orderWindowMessages($inbound);
@@ -127,34 +128,34 @@ class ChannelOrderParser
             }
         }
 
-        $nameMatch = $this->matchProductFromText($rawText);
-        if ($nameMatch['product_id']) {
-            $result['product_id'] = $nameMatch['product_id'];
-            $result['product_name'] = $nameMatch['product_name'];
-            $result['quantity'] = $nameMatch['quantity'];
-            $weak = array_merge($weak, $nameMatch['weak_points']);
-        }
-
-        $tagged = $inbound->last(
-            fn (ChannelMessage $message): bool => (int) ($message->matched_product_id ?? 0) > 0,
-        );
-        if ($tagged && ! $result['product_id']) {
-            $taggedProduct = Product::query()->find((int) $tagged->matched_product_id);
-            if ($taggedProduct) {
-                $result['product_id'] = (int) $taggedProduct->id;
-                $result['product_name'] = (string) $taggedProduct->name;
-                $result['source'] = 'local+image';
-            }
-        }
-
         $imageMatch = $this->matchProductFromImages($inbound);
         $result['image_matches'] = $imageMatch['candidates'];
         $weak = array_merge($weak, $imageMatch['weak_points']);
 
-        if (! $result['product_id'] && $imageMatch['product_id']) {
-            $result['product_id'] = $imageMatch['product_id'];
-            $result['product_name'] = $imageMatch['product_name'];
-            $result['source'] = 'local+image';
+        $productLines = $this->matchedProductLines($inbound);
+        if ($productLines === []) {
+            $productLines = $imageMatch['products'] ?? [];
+        }
+        if ($productLines === []) {
+            $nameMatch = $this->matchProductFromText($rawText);
+            $weak = array_merge($weak, $nameMatch['weak_points']);
+            if ($nameMatch['product_id']) {
+                $productLines = [[
+                    'product_id' => (int) $nameMatch['product_id'],
+                    'product_name' => (string) $nameMatch['product_name'],
+                    'quantity' => max(1, (int) $nameMatch['quantity']),
+                ]];
+            }
+        }
+
+        if ($productLines !== []) {
+            $result['products'] = $productLines;
+            $result['product_id'] = $productLines[0]['product_id'];
+            $result['product_name'] = $productLines[0]['product_name'];
+            $result['quantity'] = $productLines[0]['quantity'];
+            if ($this->inboundHasMatchedProduct($inbound) || ($imageMatch['products'] ?? []) !== []) {
+                $result['source'] = 'local+image';
+            }
         }
 
         // Optional Gemini: text-only gap fill. Never send image bytes (50-photo albums timed out).
@@ -813,6 +814,95 @@ class ChannelOrderParser
     }
 
     /**
+     * @param  Collection<int, ChannelMessage>  $inbound
+     */
+    private function inboundHasMatchedProduct(Collection $inbound): bool
+    {
+        return $this->matchedProductLines($inbound) !== [];
+    }
+
+    /**
+     * Every tagged inbound photo (or a reply to a priced outbound) becomes its own line.
+     * The same catalog product on two photos is quantity 2.
+     *
+     * @param  Collection<int, ChannelMessage>  $inbound
+     * @return list<array{product_id:int, product_name:string, quantity:int}>
+     */
+    private function matchedProductLines(Collection $inbound): array
+    {
+        $counts = [];
+        foreach ($inbound as $message) {
+            $productId = (int) ($message->matched_product_id ?? 0);
+            if ($productId <= 0) {
+                $parent = $message->replyTo;
+                if ($parent && $parent->direction === ChannelMessage::DIRECTION_OUTBOUND) {
+                    $productId = (int) ($parent->matched_product_id ?? 0);
+                }
+            }
+            if ($productId <= 0) {
+                continue;
+            }
+            $counts[$productId] = ($counts[$productId] ?? 0) + 1;
+        }
+
+        return $this->productLinesFromCounts($counts);
+    }
+
+    /**
+     * @param  list<array{product_id:int,name:string,match_percent?:float,newer_weight?:float}>  $hits
+     * @return list<array{product_id:int, product_name:string, quantity:int}>
+     */
+    private function productLinesFromHits(array $hits): array
+    {
+        $counts = [];
+        $names = [];
+        foreach ($hits as $hit) {
+            $productId = (int) ($hit['product_id'] ?? 0);
+            if ($productId <= 0) {
+                continue;
+            }
+            $counts[$productId] = ($counts[$productId] ?? 0) + 1;
+            $names[$productId] = (string) ($hit['name'] ?? '');
+        }
+
+        return $this->productLinesFromCounts($counts, $names);
+    }
+
+    /**
+     * @param  array<int, int>  $counts
+     * @param  array<int, string>  $names
+     * @return list<array{product_id:int, product_name:string, quantity:int}>
+     */
+    private function productLinesFromCounts(array $counts, array $names = []): array
+    {
+        if ($counts === []) {
+            return [];
+        }
+
+        $products = Product::query()
+            ->whereIn('id', array_keys($counts))
+            ->get(['id', 'name'])
+            ->keyBy('id');
+
+        $lines = [];
+        foreach ($counts as $productId => $quantity) {
+            $product = $products->get($productId);
+            $name = $product ? (string) $product->name : trim((string) ($names[$productId] ?? ''));
+            if (! $product && $name === '') {
+                continue;
+            }
+
+            $lines[] = [
+                'product_id' => (int) $productId,
+                'product_name' => $name !== '' ? $name : 'Product',
+                'quantity' => max(1, (int) $quantity),
+            ];
+        }
+
+        return $lines;
+    }
+
+    /**
      * @return array{product_id:?int, product_name:?string, quantity:int, weak_points: list<string>}
      */
     private function matchProductFromText(string $rawText): array
@@ -890,6 +980,7 @@ class ChannelOrderParser
      * @return array{
      *     product_id:?int,
      *     product_name:?string,
+     *     products: list<array{product_id:int,product_name:string,quantity:int}>,
      *     candidates: list<array{product_id:int,name:string,match_percent:float}>,
      *     weak_points: list<string>
      * }
@@ -909,6 +1000,7 @@ class ChannelOrderParser
             return [
                 'product_id' => null,
                 'product_name' => null,
+                'products' => [],
                 'candidates' => [],
                 'weak_points' => $weak,
             ];
@@ -1007,10 +1099,12 @@ class ChannelOrderParser
         usort($candidates, fn (array $a, array $b) => $b['match_percent'] <=> $a['match_percent']);
 
         $winner = $this->voteAutoProduct($autoHits);
+        $products = $this->productLinesFromHits($autoHits);
 
         return [
-            'product_id' => $winner ? (int) $winner['product_id'] : null,
-            'product_name' => $winner ? (string) $winner['name'] : null,
+            'product_id' => $products[0]['product_id'] ?? ($winner ? (int) $winner['product_id'] : null),
+            'product_name' => $products[0]['product_name'] ?? ($winner ? (string) $winner['name'] : null),
+            'products' => $products,
             'candidates' => array_slice($candidates, 0, 5),
             'weak_points' => array_values(array_unique($weak)),
         ];
@@ -1069,7 +1163,7 @@ class ChannelOrderParser
     {
         return ! filled($current['name'] ?? null)
             || ! filled($current['address'] ?? null)
-            || (empty($current['product_id']) && empty($current['product_name']));
+            || (empty($current['product_id']) && empty($current['product_name']) && empty($current['products']));
     }
 
     /**
@@ -1198,7 +1292,7 @@ PROMPT;
                 $missing[] = $field;
             }
         }
-        if (empty($result['product_id']) && empty($result['product_name'])) {
+        if (empty($result['product_id']) && empty($result['product_name']) && empty($result['products'])) {
             $missing[] = 'product';
         }
 
@@ -1225,7 +1319,7 @@ PROMPT;
             $score += in_array(self::WEAK_ADDRESS_UNRESOLVED, $weakPoints, true) ? 0.20 : 0.25;
         }
 
-        if (! empty($result['product_id'])) {
+        if (! empty($result['product_id']) || ! empty($result['products'])) {
             $score += in_array(self::WEAK_PRODUCT_NAME_FUZZY, $weakPoints, true) ? 0.15 : 0.25;
         } elseif (filled($result['product_name'] ?? null)) {
             $score += 0.08;
@@ -1249,6 +1343,7 @@ PROMPT;
             'areaId' => null,
             'product_id' => null,
             'product_name' => null,
+            'products' => [],
             'quantity' => null,
             'missing' => [],
             'weak_points' => [],

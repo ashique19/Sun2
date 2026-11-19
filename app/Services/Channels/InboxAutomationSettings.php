@@ -21,6 +21,8 @@ class InboxAutomationSettings
 
     public const DELIVERY_CHARGE = 'delivery_charge';
 
+    public const LOCATION = 'location';
+
     /**
      * @var list<string>
      */
@@ -31,10 +33,11 @@ class InboxAutomationSettings
         self::HI_REPLY,
         self::COLOR_GUARANTEE,
         self::DELIVERY_CHARGE,
+        self::LOCATION,
     ];
 
     /**
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool}
      */
     public function all(): array
     {
@@ -71,7 +74,7 @@ class InboxAutomationSettings
 
     /**
      * @param  array<string, mixed>  $flags
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool}
      */
     public function save(array $flags): array
     {
@@ -92,7 +95,7 @@ class InboxAutomationSettings
     }
 
     /**
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool}
      */
     public function defaults(): array
     {
@@ -103,6 +106,7 @@ class InboxAutomationSettings
             self::HI_REPLY => (bool) config('channels.inbox.auto_hi_reply', true),
             self::COLOR_GUARANTEE => (bool) config('channels.inbox.auto_color_guarantee', true),
             self::DELIVERY_CHARGE => (bool) config('channels.inbox.auto_delivery_charge', true),
+            self::LOCATION => (bool) config('channels.inbox.auto_location', true),
         ];
     }
 

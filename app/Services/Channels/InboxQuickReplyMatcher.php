@@ -597,6 +597,200 @@ class InboxQuickReplyMatcher
         return $hasDelivery && $hasChargeOrTime;
     }
 
+    public function isLocationAsk(ChannelMessage $message): bool
+    {
+        if ($message->direction !== ChannelMessage::DIRECTION_INBOUND) {
+            return false;
+        }
+
+        $replies = $this->quickReplies->all();
+        $locationReplies = [];
+        foreach ($replies as $reply) {
+            if ($this->isLocationReply($reply)) {
+                $locationReplies[] = $reply;
+            }
+        }
+
+        $taggedId = trim((string) ($message->quick_reply_id ?? ''));
+        if ($taggedId !== '') {
+            foreach ($locationReplies as $reply) {
+                if ($reply['id'] === $taggedId) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        $text = trim((string) ($message->body ?? ''));
+        if ($text !== '' && $this->looksLikeLocation($text)) {
+            return true;
+        }
+
+        if ($text === '' || $locationReplies === []) {
+            return false;
+        }
+
+        $examples = InboxQuickReplyExample::query()
+            ->whereIn('quick_reply_id', array_column($locationReplies, 'id'))
+            ->get();
+        $repliesById = [];
+        foreach ($locationReplies as $reply) {
+            $repliesById[$reply['id']] = $reply;
+        }
+        $exampleHit = $this->matchExamples($text, $examples, $repliesById);
+
+        return is_array($exampleHit) && $this->isLocationReply($exampleHit);
+    }
+
+    public function looksLikeLocation(string $text): bool
+    {
+        if ($this->looksLikeDeliveryCharge($text)) {
+            return false;
+        }
+
+        $compact = $this->compactYa($text);
+        if ($compact === '') {
+            return false;
+        }
+
+        if ($this->containsAnyCue($compact, [
+            'showroom', 'shooroom', 'sourum', 'sorom',
+            'শোরুম',
+        ])) {
+            return true;
+        }
+
+        if ($this->containsAnyCue($compact, [
+            'warehouse', 'warehous', 'godown',
+            'ওয়ারহাউজ', 'ওয়ারহাউজ', 'ওয়্যারহাউস', 'ওয়ারহাউস',
+            'গুদাম', 'গোডাউন',
+        ])) {
+            return true;
+        }
+
+        $hasOffice = $this->containsAnyCue($compact, ['office', 'অফিস']);
+        $hasLocationWord = $this->containsAnyCue($compact, [
+            'location', 'lokation', 'lokeshon', 'lokeson',
+            'লোকেশন', 'লোকেশান',
+        ]);
+        $hasAddress = $this->containsAnyCue($compact, ['address', 'thikana', 'ঠিকানা']);
+        $hasShop = $this->containsAnyCue($compact, ['outlet', 'দোকান']);
+        $hasVisit = $this->containsAnyCue($compact, [
+            'visit', 'ভিজিট', 'আসতেপারি', 'আসতেচাই',
+            'নিজেনিতে', 'নিজেনিয়ে', 'নিজেনিয়ে',
+            'pickup', 'পিকআপ', 'পিকআপপয়েন্ট',
+        ]);
+        $hasTheir = $this->containsAnyCue($compact, [
+            'apnader', 'apnar', 'your',
+            'আপনাদের', 'আপনার', 'তোমাদের',
+        ]);
+        $hasQuestion = $this->containsAnyCue($compact, [
+            'kothay', 'kothai', 'koi', 'where', 'ache',
+            'কোথায়', 'কোথায়', 'কই', 'কি',
+        ]);
+        $givingOwn = $this->containsAnyCue($compact, [
+            'আমারঠিকানা', 'amarthikana', 'myaddress',
+            'ঠিকানাদিলাম', 'ঠিকানাদিয়েছি', 'ঠিকানাদিয়েছি', 'ঠিকানাদিচ্ছি',
+        ]);
+        $orderLike = $hasAddress && $this->containsAnyCue($compact, [
+            'নাম', 'মোবাইল', 'mobile', 'phone',
+        ]);
+
+        if ($givingOwn || $orderLike) {
+            return false;
+        }
+
+        if ($hasOffice && ($hasQuestion || $hasTheir || $hasLocationWord || $hasAddress)) {
+            return true;
+        }
+
+        if ($hasLocationWord && ($hasQuestion || $hasTheir || $this->isBareCueAsk($compact, [
+            'location', 'lokation', 'lokeshon', 'lokeson',
+            'লোকেশন', 'লোকেশান',
+        ]))) {
+            return true;
+        }
+
+        if ($hasAddress && ($hasTheir || ($hasQuestion && ! $this->containsAnyCue($compact, ['আমার', 'amar', 'my'])) || $this->isBareCueAsk($compact, [
+            'address', 'thikana', 'ঠিকানা',
+        ]))) {
+            return true;
+        }
+
+        if ($hasShop && ($hasQuestion || $hasTheir)) {
+            return true;
+        }
+
+        return $hasVisit && ($hasQuestion || $hasTheir || $hasShop || $hasOffice || $hasLocationWord);
+    }
+
+    /**
+     * True when this saved reply is the shop-location chip (not the “Address?” customer-address chip).
+     *
+     * @param  array{label?: string, body?: string}  $reply
+     */
+    public function isLocationReply(array $reply): bool
+    {
+        $body = trim((string) ($reply['body'] ?? ''));
+        if ($body !== '' && $body === InboxLocationAutomationService::BODY) {
+            return true;
+        }
+
+        $label = $this->compactYa((string) ($reply['label'] ?? ''));
+        if ($label === '') {
+            return false;
+        }
+
+        if ($label === $this->compactYa('address') || $label === $this->compactYa('ঠিকানা')) {
+            return false;
+        }
+
+        return $this->containsAnyCue($label, [
+            'showroom', 'শোরুম',
+            'location', 'লোকেশন',
+            'warehouse', 'ওয়ারহাউজ',
+        ]);
+    }
+
+    /**
+     * @param  list<string>  $cues
+     */
+    private function containsAnyCue(string $compact, array $cues): bool
+    {
+        foreach ($cues as $cue) {
+            $needle = $this->compactYa($cue);
+            if ($needle !== '' && str_contains($compact, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  list<string>  $cues
+     */
+    private function isBareCueAsk(string $compact, array $cues): bool
+    {
+        foreach ($cues as $cue) {
+            $needle = $this->compactYa($cue);
+            if ($needle === '') {
+                continue;
+            }
+            if ($compact === $needle) {
+                return true;
+            }
+            if (str_starts_with($compact, $needle) && mb_strlen($compact) <= mb_strlen($needle) + 6) {
+                $rest = mb_substr($compact, mb_strlen($needle));
+
+                return $rest === '' || $this->containsAnyCue($rest, ['please', 'pls', 'apu', 'আপু', 'কি', 'কই']);
+            }
+        }
+
+        return false;
+    }
+
     private function compactYa(string $text): string
     {
         return strtr($this->compact($text), [

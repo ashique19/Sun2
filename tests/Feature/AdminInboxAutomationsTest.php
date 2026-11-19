@@ -8,6 +8,7 @@ use App\Services\Channels\InboxAutomationSettings;
 use App\Services\Channels\InboxColorGuaranteeAutomationService;
 use App\Services\Channels\InboxDeliveryChargeAutomationService;
 use App\Services\Channels\InboxHiReplyAutomationService;
+use App\Services\Channels\InboxLocationAutomationService;
 use App\Services\Channels\InboxPriceQueryAutomationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -55,11 +56,13 @@ class AdminInboxAutomationsTest extends TestCase
             ->assertSee('Reply Hi apu')
             ->assertSee('Match '.InboxColorGuaranteeAutomationService::REPLY_LABEL)
             ->assertSee('Match '.InboxDeliveryChargeAutomationService::REPLY_LABEL)
+            ->assertSee('Match '.InboxLocationAutomationService::REPLY_LABEL)
             ->assertSee(InboxDeliveryChargeAutomationService::BODY_DHAKA)
             ->assertSee(InboxDeliveryChargeAutomationService::BODY_OUTSIDE)
             ->assertSee('known Dhaka-city thana')
             ->assertSee(InboxDeliveryChargeAutomationService::personalizedDhakaBody('মিরপুর'))
             ->assertSee(InboxDeliveryChargeAutomationService::personalizedBody('সাভার'))
+            ->assertSee(InboxLocationAutomationService::BODY)
             ->assertSee(InboxPriceQueryAutomationService::PHOTO_REQUEST_BODY)
             ->assertSee(InboxPriceQueryAutomationService::LOW_MATCH_WAIT_BODY)
             ->assertSee(InboxHiReplyAutomationService::BODY)
@@ -72,6 +75,7 @@ class AdminInboxAutomationsTest extends TestCase
             ->assertSeeHtml('data-inbox-automation="hi_reply"')
             ->assertSeeHtml('data-inbox-automation="color_guarantee"')
             ->assertSeeHtml('data-inbox-automation="delivery_charge"')
+            ->assertSeeHtml('data-inbox-automation="location"')
             ->assertSeeHtml('class="admin-switch"')
             ->assertSeeHtml('class="admin-switch__knob"')
             ->assertSeeHtml('dir="ltr"');
@@ -88,6 +92,7 @@ class AdminInboxAutomationsTest extends TestCase
         $this->assertSame('true', $this->switchChecked($html, 'Reply Hi apu'));
         $this->assertSame('true', $this->switchChecked($html, 'Match color guarantee'));
         $this->assertSame('true', $this->switchChecked($html, 'Match delivery charge'));
+        $this->assertSame('true', $this->switchChecked($html, 'Match location'));
         $this->assertSame('false', $this->switchChecked($html, 'Send priced image'));
         $this->assertSame('false', $this->switchChecked($html, 'Ask for a moment on a weak match'));
         $this->assertStringNotContainsString('ml-6', $html);
@@ -111,6 +116,7 @@ class AdminInboxAutomationsTest extends TestCase
         $this->assertTrue($settings->enabled(InboxAutomationSettings::HI_REPLY));
         $this->assertTrue($settings->enabled(InboxAutomationSettings::COLOR_GUARANTEE));
         $this->assertTrue($settings->enabled(InboxAutomationSettings::DELIVERY_CHARGE));
+        $this->assertTrue($settings->enabled(InboxAutomationSettings::LOCATION));
         $this->assertFalse($settings->enabled(InboxAutomationSettings::PRICED_IMAGE));
         $this->assertFalse($settings->enabled(InboxAutomationSettings::LOW_MATCH_WAIT));
 
@@ -119,6 +125,7 @@ class AdminInboxAutomationsTest extends TestCase
             ->assertSet('hiReply', true)
             ->assertSet('colorGuarantee', true)
             ->assertSet('deliveryCharge', true)
+            ->assertSet('location', true)
             ->assertSet('pricedImage', false)
             ->assertSet('lowMatchWait', false)
             ->call('togglePricedImage')
@@ -133,13 +140,16 @@ class AdminInboxAutomationsTest extends TestCase
             ->call('toggleColorGuarantee')
             ->assertSet('colorGuarantee', false)
             ->call('toggleDeliveryCharge')
-            ->assertSet('deliveryCharge', false);
+            ->assertSet('deliveryCharge', false)
+            ->call('toggleLocation')
+            ->assertSet('location', false);
 
         $saved = $settings->all();
         $this->assertFalse($saved[InboxAutomationSettings::PHOTO_REQUEST]);
         $this->assertFalse($saved[InboxAutomationSettings::HI_REPLY]);
         $this->assertFalse($saved[InboxAutomationSettings::COLOR_GUARANTEE]);
         $this->assertFalse($saved[InboxAutomationSettings::DELIVERY_CHARGE]);
+        $this->assertFalse($saved[InboxAutomationSettings::LOCATION]);
         $this->assertTrue($saved[InboxAutomationSettings::PRICED_IMAGE]);
         $this->assertTrue($saved[InboxAutomationSettings::LOW_MATCH_WAIT]);
     }

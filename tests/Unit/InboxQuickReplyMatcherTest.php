@@ -9,6 +9,7 @@ use App\Models\InboxQuickReplyExample;
 use App\Models\Product;
 use App\Services\Channels\ChannelMessageImageMatchService;
 use App\Services\Channels\InboxColorGuaranteeAutomationService;
+use App\Services\Channels\InboxLocationAutomationService;
 use App\Services\Channels\InboxQuickReplyMatcher;
 use App\Services\Channels\InboxQuickReplyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -198,6 +199,33 @@ class InboxQuickReplyMatcherTest extends TestCase
         $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('দাম কত'));
         $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('কবে পাবো'));
         $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('আপু আমার পার্সেল টা কবে পাঠাবেন???'));
+    }
+
+    #[Test]
+    public function detects_the_location_saved_reply_and_wording(): void
+    {
+        $this->assertTrue($this->matcher()->isLocationReply([
+            'label' => InboxLocationAutomationService::REPLY_LABEL,
+            'body' => InboxLocationAutomationService::BODY,
+        ]));
+        $this->assertTrue($this->matcher()->isLocationReply([
+            'label' => 'Showroom',
+            'body' => 'ignored',
+        ]));
+        $this->assertFalse($this->matcher()->isLocationReply([
+            'label' => 'Address?',
+            'body' => 'আপনার সম্পূর্ণ ঠিকানাটা একটু দিবেন?',
+        ]));
+        $this->assertTrue($this->matcher()->looksLikeLocation('শোরুম আছে?'));
+        $this->assertTrue($this->matcher()->looksLikeLocation('showroom kothay?'));
+        $this->assertTrue($this->matcher()->looksLikeLocation('আপনাদের ঠিকানা কি'));
+        $this->assertTrue($this->matcher()->looksLikeLocation('location?'));
+        $this->assertTrue($this->matcher()->looksLikeLocation('লোকেশন?'));
+        $this->assertTrue($this->matcher()->looksLikeLocation('অফিস কোথায়'));
+        $this->assertFalse($this->matcher()->looksLikeLocation('মিরপুর ডেলিভারি কত'));
+        $this->assertFalse($this->matcher()->looksLikeLocation('আমার ঠিকানা মিরপুর'));
+        $this->assertFalse($this->matcher()->looksLikeLocation('দাম কত'));
+        $this->assertFalse($this->matcher()->looksLikeLocation('mirpur location'));
     }
 
     #[Test]

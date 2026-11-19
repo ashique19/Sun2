@@ -157,6 +157,9 @@ return [
         // Auto-send the ডেলিভারি চার্জ ও সময় chip when they ask delivery time/charge.
         'auto_delivery_charge' => filter_var(env('CHANNEL_INBOX_AUTO_DELIVERY_CHARGE', true), FILTER_VALIDATE_BOOL),
 
+        // Auto-send the shop location reply when they ask for showroom / office / warehouse.
+        'auto_location' => filter_var(env('CHANNEL_INBOX_AUTO_LOCATION', true), FILTER_VALIDATE_BOOL),
+
         // Composer chips — label shown in UI, body inserted into the reply box.
         'quick_replies' => [
             ['label' => 'Salaam', 'body' => 'আসসালামু আলাইকুম'],

@@ -657,6 +657,20 @@
             </div>
 
             @if ($selectedConversation)
+                @php
+                    $latestInboundMatchId = null;
+                    foreach (array_reverse($selectedConversation->messages->all()) as $composerHintMessage) {
+                        if ($composerHintMessage->direction !== 'inbound') {
+                            continue;
+                        }
+                        $matchId = $quickReplyMatches[$composerHintMessage->id]['id'] ?? null;
+                        if ($matchId === null) {
+                            continue;
+                        }
+                        $latestInboundMatchId = $matchId;
+                        break;
+                    }
+                @endphp
                 <div
                     data-inbox-live-thread
                     data-inbox-live-thread-id="{{ $selectedConversation->id }}"
@@ -701,8 +715,10 @@
                             </p>
                         </div>
                         <div class="flex shrink-0 items-center gap-1">
-                        <x-admin.inbox-sync-button variant="thread-icon" />
-                        <x-admin.inbox-sync-button variant="thread-label" />
+                            <x-admin.inbox-thread-quick-replies
+                                :quick-replies="$quickReplies"
+                                :latest-inbound-match-id="$latestInboundMatchId"
+                            />
                         </div>
                     </div>
                     @if ($inboxDraftBlocked)
@@ -1652,68 +1668,19 @@
                         <p class="mb-2 text-xs text-rose-600">{{ $message }}</p>
                     @enderror
 
-                    @if (! empty($quickReplies))
-                        @php
-                            $latestInboundMatchId = null;
-                            foreach (array_reverse($selectedConversation->messages->all()) as $composerHintMessage) {
-                                if ($composerHintMessage->direction !== 'inbound') {
-                                    continue;
-                                }
-                                $matchId = $quickReplyMatches[$composerHintMessage->id]['id'] ?? null;
-                                if ($matchId === null) {
-                                    continue;
-                                }
-                                $latestInboundMatchId = $matchId;
-                                break;
-                            }
-                        @endphp
-                        <div class="mb-2 flex items-center gap-1.5 overflow-x-auto pb-0.5" data-inbox-quick-replies>
-                            @if ($bulkPricedImageTargets !== [])
-                                <button type="button"
-                                    data-inbox-priced-image-send-all
-                                    data-inbox-priced-image-targets='@json($bulkPricedImageTargets)'
-                                    wire:click="sendUnrepliedPricedImages"
-                                    wire:loading.attr="disabled"
-                                    wire:target="sendUnrepliedPricedImages"
-                                    class="shrink-0 rounded-full border border-[#C9A227] bg-[#C9A227] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#b8911f] disabled:opacity-60"
-                                    title="Send priced images for every unreplied photo matching above 84%">
-                                    <span data-inbox-priced-image-send-all-label>Send priced images</span>
-                                    <span class="tabular-nums">({{ count($bulkPricedImageTargets) }})</span>
-                                </button>
-                            @endif
-                            @foreach ($quickReplies as $index => $quickReply)
-                                <button type="button"
-                                    data-inbox-quick-reply
-                                    data-inbox-quick-reply-id="{{ $quickReply['id'] }}"
-                                    data-inbox-quick-reply-body="{{ $quickReply['body'] }}"
-                                    x-on:click="
-                                        const body = {{ \Illuminate\Support\Js::from($quickReply['body']) }};
-                                        $wire.$set('replyText', body, false);
-                                        const ta = document.querySelector('[data-inbox-reply-text]');
-                                        if (ta) {
-                                            ta.rows = Math.max(1, Math.min(8, (String(body).match(/\n/g) || []).length + 1));
-                                            ta.focus();
-                                        }
-                                    "
-                                    @class([
-                                        'shrink-0 rounded-full border bg-[#FAF6EF] px-2.5 py-1 text-[11px] font-semibold hover:border-[#C9A227] hover:text-[#C9A227]',
-                                        'border-emerald-600 text-emerald-800 ring-2 ring-emerald-600' => $latestInboundMatchId === $quickReply['id'],
-                                        'border-[#E0D6C2] text-[#6B6459]' => $latestInboundMatchId !== $quickReply['id'],
-                                    ])>
-                                    {{ $quickReply['label'] }}
-                                </button>
-                            @endforeach
-                            <a href="{{ route('admin.inbox.quick-replies') }}" wire:navigate
-                                class="shrink-0 px-1 text-[11px] font-semibold text-[#8C8474] hover:text-[#C9A227]">
-                                Edit
-                            </a>
-                        </div>
-                    @else
-                        <div class="mb-2">
-                            <a href="{{ route('admin.inbox.quick-replies') }}" wire:navigate
-                                class="text-[11px] font-semibold text-[#C9A227] hover:underline">
-                                Add quick replies
-                            </a>
+                    @if ($bulkPricedImageTargets !== [])
+                        <div class="mb-2 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                            <button type="button"
+                                data-inbox-priced-image-send-all
+                                data-inbox-priced-image-targets='@json($bulkPricedImageTargets)'
+                                wire:click="sendUnrepliedPricedImages"
+                                wire:loading.attr="disabled"
+                                wire:target="sendUnrepliedPricedImages"
+                                class="shrink-0 rounded-full border border-[#C9A227] bg-[#C9A227] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#b8911f] disabled:opacity-60"
+                                title="Send priced images for every unreplied photo matching above 84%">
+                                <span data-inbox-priced-image-send-all-label>Send priced images</span>
+                                <span class="tabular-nums">({{ count($bulkPricedImageTargets) }})</span>
+                            </button>
                         </div>
                     @endif
 

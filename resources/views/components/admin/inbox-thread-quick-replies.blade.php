@@ -9,7 +9,7 @@
 
 <div
     class="relative"
-    x-data="{ open: false, top: 0, left: 0, ignoreOutside: false }"
+    x-data="{ open: false, top: 0, right: 0, ignoreOutside: false }"
     @keydown.escape.window="open = false"
 >
     <button type="button"
@@ -19,9 +19,8 @@
             ignoreOutside = true;
             if (open) {
                 const rect = $el.getBoundingClientRect();
-                const width = 240;
                 top = rect.bottom + 4;
-                left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+                right = Math.max(8, window.innerWidth - rect.right);
             }
             $nextTick(() => ignoreOutside = false);
         "
@@ -43,7 +42,7 @@
         <div
             x-show="open"
             x-cloak
-            x-bind:style="'position:fixed;top:' + top + 'px;left:' + left + 'px;z-index:80'"
+            x-bind:style="'position:fixed;top:' + top + 'px;right:' + right + 'px;left:auto;z-index:80'"
             @click.outside="if (! ignoreOutside) open = false"
             x-transition.opacity.duration.100ms
             role="menu"

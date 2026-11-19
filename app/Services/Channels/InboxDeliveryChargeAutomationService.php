@@ -13,7 +13,7 @@ class InboxDeliveryChargeAutomationService
 {
     public const REPLY_LABEL = 'ডেলিভারি চার্জ ও সময়';
 
-    public const BODY_DHAKA = 'ঢাকা শহর এলাকায় ৮০ টাকা, সময় ২-৪ দিন।';
+    public const BODY_DHAKA = 'ঢাকা শহর এলাকায় ডেলিভারি চার্জ ৮০ টাকা, সময় ২-৪ দিন।';
 
     public const BODY_OUTSIDE = 'ঢাকা শহর এলাকার বাহিরে ডেলিভারি চার্জ ১২০ টাকা, ৩-৫ দিনের মাঝে পাবেন।';
 
@@ -197,14 +197,9 @@ class InboxDeliveryChargeAutomationService
         );
     }
 
-    public static function personalizedBody(string $area, string $zone): string
+    public static function personalizedBody(string $area): string
     {
-        $area = trim($area);
-        if ($zone === self::ZONE_DHAKA) {
-            return $area.' ডেলিভারি চার্জ ৮০ টাকা, ২-৪ দিন সময় লাগতে পারে, সম্ভব হলে, হোম ডেলিভারি পাবেন।';
-        }
-
-        return $area.' ডেলিভারি চার্জ ১২০ টাকা, ৩-৫ দিন সময় লাগতে পারে, সম্ভব হলে, হোম ডেলিভারি পাবেন।';
+        return trim($area).' ডেলিভারি চার্জ ১২০ টাকা, ৩-৫ দিন সময় লাগতে পারে, সম্ভব হলে, হোম ডেলিভারি পাবেন।';
     }
 
     public function replyBody(?ChannelConversation $conversation = null, ?ChannelMessage $message = null): string
@@ -279,12 +274,15 @@ class InboxDeliveryChargeAutomationService
         $area = $location['area'];
         $zone = $location['zone'];
 
+        if ($zone === self::ZONE_DHAKA) {
+            return self::BODY_DHAKA;
+        }
+
         if (is_string($area) && $area !== '') {
-            return self::personalizedBody($area, $zone ?? self::ZONE_OUTSIDE);
+            return self::personalizedBody($area);
         }
 
         return match ($zone) {
-            self::ZONE_DHAKA => self::BODY_DHAKA,
             self::ZONE_OUTSIDE => self::BODY_OUTSIDE,
             default => self::BODY,
         };

@@ -75,10 +75,7 @@ class InboxDeliveryChargeAutomationTest extends TestCase
 
         $this->assertNotNull($sent, $text);
         $this->assertSame(
-            InboxDeliveryChargeAutomationService::personalizedBody(
-                $area,
-                InboxDeliveryChargeAutomationService::ZONE_OUTSIDE,
-            ),
+            InboxDeliveryChargeAutomationService::personalizedBody($area),
             $sent->body,
         );
     }
@@ -102,7 +99,7 @@ class InboxDeliveryChargeAutomationTest extends TestCase
 
     #[Test]
     #[DataProvider('dhakaCityAreas')]
-    public function named_dhaka_city_area_mentions_that_area_in_the_reply(string $text, string $expected): void
+    public function named_dhaka_city_area_sends_the_city_line(string $text): void
     {
         Http::fake([
             'https://graph.facebook.com/*' => Http::response([
@@ -118,7 +115,7 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             ->reply($conversation, $inbound);
 
         $this->assertNotNull($sent, $text);
-        $this->assertSame($expected, $sent->body);
+        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_DHAKA, $sent->body);
     }
 
     /**
@@ -127,28 +124,10 @@ class InboxDeliveryChargeAutomationTest extends TestCase
     public static function dhakaCityAreas(): array
     {
         return [
-            [
-                'Mirpur e delivery koto?',
-                InboxDeliveryChargeAutomationService::personalizedBody(
-                    'Mirpur',
-                    InboxDeliveryChargeAutomationService::ZONE_DHAKA,
-                ),
-            ],
-            [
-                'uttara delivery charge',
-                InboxDeliveryChargeAutomationService::personalizedBody(
-                    'uttara',
-                    InboxDeliveryChargeAutomationService::ZONE_DHAKA,
-                ),
-            ],
-            ['ঢাকা শহর এ ডেলিভারি চার্জ কত', InboxDeliveryChargeAutomationService::BODY_DHAKA],
-            [
-                'dhanmondi te koto din lagbe delivery',
-                InboxDeliveryChargeAutomationService::personalizedBody(
-                    'dhanmondi',
-                    InboxDeliveryChargeAutomationService::ZONE_DHAKA,
-                ),
-            ],
+            ['Mirpur e delivery koto?'],
+            ['uttara delivery charge'],
+            ['ঢাকা শহর এ ডেলিভারি চার্জ কত'],
+            ['dhanmondi te koto din lagbe delivery'],
         ];
     }
 
@@ -170,10 +149,7 @@ class InboxDeliveryChargeAutomationTest extends TestCase
 
         $this->assertNotNull($sent);
         $this->assertSame(
-            InboxDeliveryChargeAutomationService::personalizedBody(
-                'Savar',
-                InboxDeliveryChargeAutomationService::ZONE_OUTSIDE,
-            ),
+            InboxDeliveryChargeAutomationService::personalizedBody('Savar'),
             $sent->body,
         );
     }
@@ -197,10 +173,7 @@ class InboxDeliveryChargeAutomationTest extends TestCase
 
         $this->assertNotNull($sent);
         $this->assertSame(
-            InboxDeliveryChargeAutomationService::personalizedBody(
-                'Ashulia',
-                InboxDeliveryChargeAutomationService::ZONE_OUTSIDE,
-            ),
+            InboxDeliveryChargeAutomationService::personalizedBody('Ashulia'),
             $sent->body,
         );
     }
@@ -239,10 +212,7 @@ class InboxDeliveryChargeAutomationTest extends TestCase
 
         $this->assertNotNull($sent);
         $this->assertSame(
-            InboxDeliveryChargeAutomationService::personalizedBody(
-                'Keraniganj',
-                InboxDeliveryChargeAutomationService::ZONE_OUTSIDE,
-            ),
+            InboxDeliveryChargeAutomationService::personalizedBody('Keraniganj'),
             $sent->body,
         );
     }

@@ -21,6 +21,8 @@ class InboxAutomationSettings
 
     public const DELIVERY_CHARGE = 'delivery_charge';
 
+    public const PRICE_NEGOTIATE = 'price_negotiate';
+
     /**
      * @var list<string>
      */
@@ -31,10 +33,11 @@ class InboxAutomationSettings
         self::HI_REPLY,
         self::COLOR_GUARANTEE,
         self::DELIVERY_CHARGE,
+        self::PRICE_NEGOTIATE,
     ];
 
     /**
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, price_negotiate: bool}
      */
     public function all(): array
     {
@@ -71,7 +74,7 @@ class InboxAutomationSettings
 
     /**
      * @param  array<string, mixed>  $flags
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, price_negotiate: bool}
      */
     public function save(array $flags): array
     {
@@ -92,7 +95,7 @@ class InboxAutomationSettings
     }
 
     /**
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, price_negotiate: bool}
      */
     public function defaults(): array
     {
@@ -103,6 +106,7 @@ class InboxAutomationSettings
             self::HI_REPLY => (bool) config('channels.inbox.auto_hi_reply', true),
             self::COLOR_GUARANTEE => (bool) config('channels.inbox.auto_color_guarantee', true),
             self::DELIVERY_CHARGE => (bool) config('channels.inbox.auto_delivery_charge', true),
+            self::PRICE_NEGOTIATE => (bool) config('channels.inbox.auto_price_negotiate', true),
         ];
     }
 

@@ -67,6 +67,43 @@ class InboxDeliveryChargeAutomationTest extends TestCase
     }
 
     #[Test]
+    #[DataProvider('timeQuestionsWithoutArea')]
+    public function time_questions_without_an_area_send_the_general_reply(string $text): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_delivery_time_'.md5($text),
+                'recipient_id' => 'psid-delivery-time',
+            ], 200),
+        ]);
+
+        $conversation = $this->conversation('psid-delivery-time-'.md5($text));
+        $inbound = $this->inbound($conversation, $text);
+
+        $sent = app(InboxDeliveryChargeAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent, $text);
+        $this->assertSame(InboxDeliveryChargeAutomationService::BODY, $sent->body, $text);
+        $this->assertStringNotContainsString('Kotodin', (string) $sent->body);
+        $this->assertStringNotContainsString('kotodin', mb_strtolower((string) $sent->body));
+        $this->assertStringNotContainsString('কতদিন', (string) $sent->body);
+    }
+
+    /**
+     * @return list<list<string>>
+     */
+    public static function timeQuestionsWithoutArea(): array
+    {
+        return [
+            ['Kotodin lagbe delivery hoben?'],
+            ['koto din lagbe delivery?'],
+            ['কতদিন লাগবে ডেলিভারি?'],
+            ['delivery kotodin lagbe'],
+        ];
+    }
+
+    #[Test]
     #[DataProvider('outsideAreas')]
     public function named_outside_area_mentions_that_area_in_the_reply(string $text, string $area): void
     {

@@ -103,6 +103,20 @@ class InboxDeliveryChargeAutomationService
     ];
 
     /**
+     * Time/charge question wording (“kotodin lagbe” = how many days), never a place.
+     *
+     * @var list<string>
+     */
+    private const NON_PLACE_CUES = [
+        'kotodin', 'koto din', 'koto', 'din', 'days', 'day',
+        'lagbe', 'lagben', 'hoben', 'hobe', 'hobena',
+        'time', 'charge', 'cost',
+        'কতদিন', 'কত', 'কতো', 'দিন',
+        'লাগবে', 'হবেন', 'হবে',
+        'সময়', 'সময়', 'চার্জ',
+    ];
+
+    /**
      * Conversation ids already queued this HTTP request.
      *
      * @var array<int, true>
@@ -690,13 +704,31 @@ class InboxDeliveryChargeAutomationService
             return null;
         }
 
+        $kept = [];
+        foreach (preg_split('/\s+/u', $name) ?: [] as $word) {
+            $wordCompact = $this->compactHaystack($word);
+            if ($wordCompact === '' || $this->isNonPlacePhrase($wordCompact)) {
+                continue;
+            }
+            $kept[] = $word;
+        }
+
+        if ($kept === []) {
+            return null;
+        }
+
+        $name = $this->cleanPlaceName(implode(' ', $kept));
+        if ($name === '' || mb_strlen($name) < 2 || mb_strlen($name) > 40) {
+            return null;
+        }
+
         $words = preg_split('/\s+/u', $name) ?: [];
         if (count($words) > 4) {
             return null;
         }
 
         $compact = $this->compactHaystack($name);
-        if ($compact === '') {
+        if ($compact === '' || $this->isNonPlacePhrase($compact)) {
             return null;
         }
 
@@ -708,6 +740,40 @@ class InboxDeliveryChargeAutomationService
         }
 
         return $name;
+    }
+
+    private function isNonPlacePhrase(string $compact): bool
+    {
+        if ($compact === '') {
+            return true;
+        }
+
+        $needles = [];
+        foreach (self::NON_PLACE_CUES as $cue) {
+            $needle = $this->compactHaystack($cue);
+            if ($needle !== '' && strlen($needle) >= 2) {
+                $needles[] = $needle;
+            }
+        }
+        $needles = array_values(array_unique($needles));
+        usort($needles, fn (string $a, string $b): int => strlen($b) <=> strlen($a));
+
+        $remaining = $compact;
+        while ($remaining !== '') {
+            $hit = false;
+            foreach ($needles as $needle) {
+                if (str_starts_with($remaining, $needle)) {
+                    $remaining = substr($remaining, strlen($needle));
+                    $hit = true;
+                    break;
+                }
+            }
+            if (! $hit) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function standaloneArea(string $text): ?string

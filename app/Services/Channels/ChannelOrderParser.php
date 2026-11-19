@@ -219,7 +219,9 @@ class ChannelOrderParser
     public function textHasAddressCue(string $text): bool
     {
         foreach ($this->textLines($text) as $line) {
-            if ($this->looksLikeAddress($line)) {
+            if ($this->labeledLocationValue($line) !== null
+                || $this->looksLikeAddress($line)
+                || $this->looksLikeLocationOnly($line)) {
                 return true;
             }
         }
@@ -326,7 +328,7 @@ class ChannelOrderParser
             $weak[] = self::WEAK_NAME_HEURISTIC;
         }
 
-        $addressCandidates = [];
+        $extractedAddress = $this->extractCustomerAddress($lines, $phoneNorm, $name);
         $discardedNoise = 0;
 
         foreach ($lines as $line) {
@@ -337,22 +339,6 @@ class ChannelOrderParser
 
             if ($this->looksLikeNoise($line) || $this->looksLikeOrderChatter($line)) {
                 $discardedNoise++;
-
-                continue;
-            }
-
-            if ($this->labeledNameValue($line) !== null) {
-                continue;
-            }
-
-            if ($this->looksLikeName($line)) {
-                continue;
-            }
-
-            if ($this->looksLikeAddress($line) || $this->looksLikeLocationOnly($line)) {
-                $addressCandidates[] = $line;
-            } else {
-                $discardedNoise++;
             }
         }
 
@@ -360,19 +346,17 @@ class ChannelOrderParser
             $weak[] = self::WEAK_CHATTY_TRANSCRIPT;
         }
 
-        $address = null;
-        if ($addressCandidates !== []) {
-            // Keep at most a few address-like lines — never the whole chat.
-            $address = implode(', ', array_slice($addressCandidates, 0, 3));
-            if (mb_strlen($address) > 255) {
-                $address = mb_substr($address, 0, 255);
-            }
+        $address = $extractedAddress['address'];
+        if ($address !== null && mb_strlen($address) > 255) {
+            $address = mb_substr($address, 0, 255);
         }
 
         return [
             'fields' => [
                 'name' => $name,
                 'address' => $address,
+                'city' => $extractedAddress['city'],
+                'area' => $extractedAddress['area'],
             ],
             'weak_points' => $weak,
         ];
@@ -423,6 +407,205 @@ class ChannelOrderParser
         }
 
         return ['name' => null, 'heuristic' => false];
+    }
+
+    /**
+     * @param  list<string>  $lines
+     * @return array{address:?string, city:?string, area:?string}
+     */
+    private function extractCustomerAddress(array $lines, string $phoneNorm, ?string $name): array
+    {
+        $thikana = null;
+        $upazila = null;
+        $district = null;
+        $village = null;
+
+        foreach ($lines as $line) {
+            $thikana ??= $this->labeledFieldValue($line, ['পুরো ঠিকানা', 'ঠিকানা', 'address', 'thikana']);
+            $upazila ??= $this->labeledFieldValue($line, ['উপজেলা', 'upazila', 'থানা']);
+            $district ??= $this->labeledFieldValue($line, ['জেলা', 'district', 'zilla', 'zila']);
+            $village ??= $this->labeledFieldValue($line, ['গ্রাম', 'village']);
+        }
+
+        if ($thikana !== null || $upazila !== null || $district !== null || $village !== null) {
+            $parts = array_values(array_unique(array_filter([$thikana, $village, $upazila, $district])));
+
+            return [
+                'address' => $parts !== [] ? implode(', ', $parts) : null,
+                'city' => $district,
+                'area' => $upazila ?: $thikana,
+            ];
+        }
+
+        $candidates = [];
+        foreach ($lines as $line) {
+            $linePhone = PhoneNumber::extractFirstBangladeshMobile($line);
+            if ($linePhone && PhoneNumber::normalize($linePhone) === $phoneNorm) {
+                continue;
+            }
+
+            if ($this->looksLikeNoise($line)
+                || $this->looksLikeOrderChatter($line)
+                || $this->labeledNameValue($line) !== null
+                || $this->looksLikeName($line)
+                || $this->looksLikeProductLine($line)) {
+                continue;
+            }
+
+            $cleaned = $this->addressLineWithoutLeadingName($line, $name);
+            if ($cleaned === '') {
+                continue;
+            }
+
+            if ($name !== null && mb_strtolower($cleaned) === mb_strtolower($this->cleanName($name))) {
+                continue;
+            }
+
+            if ($this->looksLikeAddress($line)
+                || $this->looksLikeLocationOnly($line)
+                || $this->looksLikeAddress($cleaned)
+                || $this->looksLikeLocationOnly($cleaned)) {
+                $candidates[] = $cleaned;
+            }
+        }
+
+        $candidates = array_values(array_unique($candidates));
+        $address = $candidates !== [] ? implode(', ', array_slice($candidates, 0, 4)) : null;
+        $inferred = $this->inferCityAreaFromParts($this->addressParts($address ?? ''));
+
+        return [
+            'address' => $address,
+            'city' => $inferred['city'],
+            'area' => $inferred['area'],
+        ];
+    }
+
+    /**
+     * @param  list<string>  $labels
+     */
+    private function labeledFieldValue(string $line, array $labels): ?string
+    {
+        $quoted = array_map(fn (string $label) => preg_quote($label, '/'), $labels);
+        $pattern = '/^(?:'.implode('|', $quoted).')\s*[:：\-]\s*(.+)$/iu';
+        if (! preg_match($pattern, trim($line), $matches)) {
+            return null;
+        }
+
+        $value = $this->cleanAddressFragment((string) $matches[1]);
+
+        return $value !== '' ? $value : null;
+    }
+
+    private function labeledLocationValue(string $line): ?string
+    {
+        return $this->labeledFieldValue($line, [
+            'পুরো ঠিকানা', 'ঠিকানা', 'address', 'thikana',
+            'উপজেলা', 'upazila', 'থানা',
+            'জেলা', 'district', 'zilla', 'zila',
+            'গ্রাম', 'village',
+        ]);
+    }
+
+    private function addressLineWithoutLeadingName(string $line, ?string $name): string
+    {
+        $parts = preg_split('/\s*,\s*/u', $line) ?: [];
+        if (count($parts) < 2) {
+            return $this->cleanAddressFragment($line);
+        }
+
+        $head = $this->cleanName((string) $parts[0]);
+        $extracted = $name !== null ? mb_strtolower($this->cleanName($name)) : null;
+        $headMatchesName = $extracted !== null && mb_strtolower($head) === $extracted;
+        $words = preg_split('/\s+/u', $head) ?: [];
+        $headIsPerson = $this->looksLikeName($head) && (count($words) >= 2 || $headMatchesName);
+
+        if (! $headIsPerson && ! $headMatchesName) {
+            return $this->cleanAddressFragment($line);
+        }
+
+        array_shift($parts);
+        $rest = [];
+        foreach ($parts as $part) {
+            $cleaned = $this->cleanAddressFragment((string) $part);
+            if ($cleaned !== '') {
+                $rest[] = $cleaned;
+            }
+        }
+
+        return $rest !== [] ? implode(', ', $rest) : $this->cleanAddressFragment($line);
+    }
+
+    private function cleanAddressFragment(string $line): string
+    {
+        $line = trim($line);
+        $line = preg_replace('/^[\p{P}\p{Z}]+|[\p{P}\p{Z}]+$/u', '', $line) ?? $line;
+        $line = preg_replace('/\s+/u', ' ', $line) ?? $line;
+        $line = preg_replace('/\s*,\s*/u', ', ', $line) ?? $line;
+        $line = preg_replace('/,(?:\s*,)+/u', ', ', $line) ?? $line;
+
+        return trim($line, " \t,");
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function addressParts(string $address): array
+    {
+        if ($address === '') {
+            return [];
+        }
+
+        $parts = preg_split('/\s*,\s*/u', $address) ?: [];
+
+        return array_values(array_filter(array_map(
+            fn (string $part) => $this->cleanAddressFragment($part),
+            $parts,
+        ), fn (string $part) => $part !== ''));
+    }
+
+    /**
+     * @param  list<string>  $parts
+     * @return array{city:?string, area:?string}
+     */
+    private function inferCityAreaFromParts(array $parts): array
+    {
+        if ($parts === []) {
+            return ['city' => null, 'area' => null];
+        }
+
+        $last = $parts[count($parts) - 1];
+        $first = $parts[0];
+
+        if ($this->looksLikeDistrictName($last)) {
+            return [
+                'city' => $last,
+                'area' => count($parts) >= 2 ? $parts[count($parts) - 2] : null,
+            ];
+        }
+
+        if ($this->looksLikeDistrictName($first)) {
+            return [
+                'city' => $first,
+                'area' => count($parts) >= 2 ? $parts[1] : null,
+            ];
+        }
+
+        return ['city' => null, 'area' => null];
+    }
+
+    private function looksLikeDistrictName(string $line): bool
+    {
+        $normalized = mb_strtolower($this->cleanAddressFragment($line));
+
+        return in_array($normalized, [
+            'dhaka', 'chittagong', 'chattogram', 'khulna', 'rajshahi', 'sylhet',
+            'barisal', 'barishal', 'rangpur', 'mymensingh', 'gazipur', 'narayanganj',
+            'cumilla', 'comilla', 'jhalokathi', 'jhalakati', 'khagrachari', 'khagrachhari',
+            'rangamati', 'bandarban', 'feni', 'noakhali', 'bhola', 'patuakhali',
+            'barguna', 'pirojpur', 'rajbari', 'narsingdi', 'kishoreganj', 'brahmanbaria',
+            'chandpur', 'lakshmipur', 'shariatpur', 'madaripur', 'gopalganj', 'tangail',
+            'jamalpur', 'sherpur', 'netrokona', 'চট্টগ্রাম', 'কুমিল্লা', 'ঢাকা',
+        ], true);
     }
 
     private function labeledNameValue(string $line): ?string

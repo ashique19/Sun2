@@ -37,6 +37,9 @@ class ChannelOrderParserNameTest extends TestCase
 
         $this->assertSame('Tanzima khan', $parsed['name']);
         $this->assertSame('01883104511', $parsed['phone']);
+        $this->assertSame('Shohag clinic, puran building, rajapur, jhalokathi', $parsed['address']);
+        $this->assertSame('jhalokathi', $parsed['city']);
+        $this->assertSame('rajapur', $parsed['area']);
     }
 
     #[Test]
@@ -51,6 +54,11 @@ class ChannelOrderParserNameTest extends TestCase
 
         $this->assertSame('মিকা চাকমা', $parsed['name']);
         $this->assertSame('01897466884', $parsed['phone']);
+        $this->assertSame('থিরাম বাজার, ফটিকছড়ি, চট্টগ্রাম', $parsed['address']);
+        $this->assertSame('চট্টগ্রাম', $parsed['city']);
+        $this->assertSame('ফটিকছড়ি', $parsed['area']);
+        $this->assertStringNotContainsString('উপজেলা', (string) $parsed['address']);
+        $this->assertStringNotContainsString('ঠিকানা:', (string) $parsed['address']);
     }
 
     #[Test]
@@ -65,6 +73,10 @@ class ChannelOrderParserNameTest extends TestCase
 
         $this->assertSame('Ujerung tripura', $parsed['name']);
         $this->assertSame('01857120756', $parsed['phone']);
+        $this->assertSame('khagrachari, panchari, kuradiya tarabonchara', $parsed['address']);
+        $this->assertSame('khagrachari', $parsed['city']);
+        $this->assertSame('panchari', $parsed['area']);
+        $this->assertStringNotContainsString('Ujerung', (string) $parsed['address']);
     }
 
     #[Test]
@@ -84,6 +96,9 @@ class ChannelOrderParserNameTest extends TestCase
 
         $this->assertSame('Sathi Mondal', $parsed['name']);
         $this->assertSame('01756808261', $parsed['phone']);
+        $this->assertSame('Munshirhat, Chauddagram, Cumilla', $parsed['address']);
+        $this->assertSame('Cumilla', $parsed['city']);
+        $this->assertSame('Chauddagram', $parsed['area']);
     }
 
     #[Test]
@@ -98,6 +113,9 @@ class ChannelOrderParserNameTest extends TestCase
 
         $this->assertSame('Nila', $parsed['name']);
         $this->assertSame('01627237432', $parsed['phone']);
+        $this->assertSame('Banani, Dhaka', $parsed['address']);
+        $this->assertSame('Dhaka', $parsed['city']);
+        $this->assertSame('Banani', $parsed['area']);
     }
 
     #[Test]

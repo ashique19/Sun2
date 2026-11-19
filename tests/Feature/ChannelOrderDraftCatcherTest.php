@@ -100,6 +100,9 @@ class ChannelOrderDraftCatcherTest extends TestCase
         $this->assertNotNull($draft);
         $this->assertSame('Tanzima khan', $draft->name);
         $this->assertSame('01883104511', $draft->phone);
+        $this->assertSame('Shohag clinic, puran building, rajapur, jhalokathi', $draft->address);
+        $this->assertSame('jhalokathi', $draft->city);
+        $this->assertSame('rajapur', $draft->area);
         $this->assertNotSame('Hamida Ahmed', $draft->name);
     }
 

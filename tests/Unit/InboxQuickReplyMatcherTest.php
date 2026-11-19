@@ -199,8 +199,18 @@ class InboxQuickReplyMatcherTest extends TestCase
         $this->assertTrue($this->matcher()->looksLikeDeliveryCharge('কতদিন লাগবে'));
         $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('দাম কত'));
         $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('কবে পাবো'));
+        $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('কবে পাব'));
         $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('আপু আমার পার্সেল টা কবে পাঠাবেন???'));
         $this->assertFalse($this->matcher()->looksLikeDeliveryCharge('কুমিল্লা এডভান্স লাগবে?'));
+        $this->assertTrue($this->matcher()->looksLikeKobePabo('কবে পাব'));
+        $this->assertTrue($this->matcher()->looksLikeKobePabo('কবে পাবো'));
+        $this->assertTrue($this->matcher()->looksLikeKobePabo('kobe pabo?'));
+        $this->assertTrue($this->matcher()->looksLikeKobePabo('আমারটা কবে পাব'));
+        $this->assertFalse($this->matcher()->looksLikeKobePabo('কবে পাবেন'));
+        $this->assertFalse($this->matcher()->looksLikeKobePabo('আপু আমার পার্সেল টা কবে পাঠাবেন???'));
+        $this->assertFalse($this->matcher()->looksLikeKobePabo('ডেলিভারি চার্জ কত'));
+        $this->assertFalse($this->matcher()->looksLikeKobePabo('কতদিন লাগবে'));
+        $this->assertFalse($this->matcher()->looksLikeLocation('কবে পাব'));
     }
 
     #[Test]

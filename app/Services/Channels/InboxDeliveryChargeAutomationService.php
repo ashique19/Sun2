@@ -6,6 +6,7 @@ use App\Models\Area;
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Models\City;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -19,11 +20,36 @@ class InboxDeliveryChargeAutomationService
 
     public const BODY = self::BODY_DHAKA."\n\n".self::BODY_OUTSIDE;
 
+    public const BODY_KOBE_ASK = 'ডেলিভারি এরিয়া কোথায়?';
+
     public const RAW_FLAG = 'auto_delivery_charge';
+
+    public const RAW_KIND = 'auto_delivery_kind';
+
+    public const KIND_CHARGE = 'charge';
+
+    public const KIND_KOBE_ASK = 'kobe_ask';
+
+    public const KIND_KOBE_DAYS = 'kobe_days';
 
     public const ZONE_DHAKA = 'dhaka';
 
     public const ZONE_OUTSIDE = 'outside';
+
+    /**
+     * PHP dayOfWeek: 0 = Sunday. Spelling follows the customer-facing copy (মংগলবার).
+     *
+     * @var array<int, string>
+     */
+    private const WEEKDAYS = [
+        0 => 'রবিবার',
+        1 => 'সোমবার',
+        2 => 'মংগলবার',
+        3 => 'বুধবার',
+        4 => 'বৃহস্পতিবার',
+        5 => 'শুক্রবার',
+        6 => 'শনিবার',
+    ];
 
     /**
      * Compacted places that are billed as outside Dhaka city (120৳ / 3–5 days),
@@ -108,7 +134,7 @@ class InboxDeliveryChargeAutomationService
             return;
         }
 
-        if (! app(InboxQuickReplyMatcher::class)->isDeliveryChargeAsk($message)) {
+        if (! app(self::class)->shouldHandle($conversation, $message)) {
             return;
         }
 
@@ -156,7 +182,7 @@ class InboxDeliveryChargeAutomationService
             return null;
         }
 
-        if (! $this->matcher->isDeliveryChargeAsk($message)) {
+        if (! $this->shouldHandle($conversation, $message)) {
             return null;
         }
 
@@ -164,21 +190,21 @@ class InboxDeliveryChargeAutomationService
             return null;
         }
 
-        $body = $this->replyBody($conversation, $message);
-        if ($body === '') {
+        $plan = $this->planReply($conversation, $message);
+        if ($plan === null || $plan['body'] === '') {
             return null;
         }
 
         return InboxPriceQueryAutomationService::withConversationLock(
             (int) $conversation->id,
-            function () use ($conversation, $message, $body): ?ChannelMessage {
-                if ($this->alreadyReplied($conversation, $message, $body)) {
+            function () use ($conversation, $message, $plan): ?ChannelMessage {
+                if ($this->alreadyReplied($conversation, $message, $plan['kind'], $plan['body'])) {
                     return null;
                 }
 
                 $result = $this->replies->sendText(
                     $conversation,
-                    $body,
+                    $plan['body'],
                     false,
                     $message,
                 );
@@ -190,11 +216,76 @@ class InboxDeliveryChargeAutomationService
 
                 $payload = is_array($stored->raw_payload) ? $stored->raw_payload : [];
                 $payload[self::RAW_FLAG] = true;
+                $payload[self::RAW_KIND] = $plan['kind'];
                 $stored->forceFill(['raw_payload' => $payload])->save();
 
                 return $stored->fresh();
             },
         );
+    }
+
+    public function shouldHandle(ChannelConversation $conversation, ChannelMessage $message): bool
+    {
+        if ($message->direction !== ChannelMessage::DIRECTION_INBOUND) {
+            return false;
+        }
+
+        $text = (string) ($message->body ?? '');
+        if ($this->matcher->looksLikeKobePabo($text) || $this->matcher->isDeliveryChargeAsk($message)) {
+            return true;
+        }
+
+        if (! $this->isWaitingForKobeArea($conversation)) {
+            return false;
+        }
+
+        $hit = $this->locationFromText($text, true);
+
+        return $hit['zone'] !== null || $hit['area'] !== null;
+    }
+
+    /**
+     * @return array{kind: self::KIND_CHARGE|self::KIND_KOBE_ASK|self::KIND_KOBE_DAYS, body: string}|null
+     */
+    public function planReply(ChannelConversation $conversation, ChannelMessage $message): ?array
+    {
+        $text = (string) ($message->body ?? '');
+        $isKobe = $this->matcher->looksLikeKobePabo($text);
+        $isCharge = $this->matcher->isDeliveryChargeAsk($message) && ! $isKobe;
+
+        if ($isCharge) {
+            return [
+                'kind' => self::KIND_CHARGE,
+                'body' => $this->bodyForLocation($this->locationFor($conversation, $message)),
+            ];
+        }
+
+        $waiting = $this->isWaitingForKobeArea($conversation);
+        if (! $isKobe && ! $waiting) {
+            return null;
+        }
+
+        $location = $isKobe
+            ? $this->locationFor($conversation, $message)
+            : $this->locationFromText($text, true);
+
+        if ($location['zone'] !== null || (is_string($location['area']) && $location['area'] !== '')) {
+            $zone = $location['zone'] ?? self::ZONE_OUTSIDE;
+
+            return [
+                'kind' => self::KIND_KOBE_DAYS,
+                'body' => self::weekdayDeliveryBody($zone),
+            ];
+        }
+
+        if ($isKobe) {
+            return [
+                'kind' => self::KIND_KOBE_ASK,
+                'body' => self::BODY_KOBE_ASK,
+            ];
+        }
+
+        return null;
     }
 
     public static function personalizedDhakaBody(string $area): string
@@ -205,6 +296,23 @@ class InboxDeliveryChargeAutomationService
     public static function personalizedBody(string $area): string
     {
         return trim($area).' ডেলিভারি চার্জ ১২০ টাকা, ৩-৫ দিন সময় লাগতে পারে, সম্ভব হলে, হোম ডেলিভারি পাবেন।';
+    }
+
+    public static function weekdayDeliveryBody(string $zone, ?Carbon $now = null): string
+    {
+        $now = ($now ?? Carbon::now('Asia/Dhaka'))->copy()->timezone('Asia/Dhaka')->startOfDay();
+        $offsets = $zone === self::ZONE_DHAKA ? [3, 4] : [4, 5];
+        $first = self::banglaWeekday($now->copy()->addDays($offsets[0]));
+        $second = self::banglaWeekday($now->copy()->addDays($offsets[1]));
+
+        return "আজকে অর্ডার করলে {$first} অথবা {$second} ডেলিভারি পাবেন";
+    }
+
+    public static function banglaWeekday(Carbon $date): string
+    {
+        $index = (int) $date->copy()->timezone('Asia/Dhaka')->dayOfWeek;
+
+        return self::WEEKDAYS[$index] ?? '';
     }
 
     public function replyBody(?ChannelConversation $conversation = null, ?ChannelMessage $message = null): string
@@ -297,7 +405,7 @@ class InboxDeliveryChargeAutomationService
     /**
      * @return array{zone: self::ZONE_DHAKA|self::ZONE_OUTSIDE|null, area: ?string}
      */
-    private function locationFromText(string $text): array
+    private function locationFromText(string $text, bool $allowStandalone = false): array
     {
         $text = trim($text);
         if ($text === '') {
@@ -344,6 +452,18 @@ class InboxDeliveryChargeAutomationService
             }
         }
 
+        if ($area === null && $zone === null && $allowStandalone) {
+            $standalone = $this->standaloneArea($text);
+            if ($standalone !== null) {
+                return [
+                    'zone' => $this->isConfirmedDhakaCityPlace($standalone)
+                        ? self::ZONE_DHAKA
+                        : self::ZONE_OUTSIDE,
+                    'area' => $standalone,
+                ];
+            }
+        }
+
         return ['zone' => $zone, 'area' => $area];
     }
 
@@ -375,6 +495,25 @@ class InboxDeliveryChargeAutomationService
         return $candidates[0]['display'];
     }
 
+    private function cueMatches(string $text, string $compact, string $cue): bool
+    {
+        $needle = $this->compactHaystack($cue);
+        if ($needle === '') {
+            return false;
+        }
+
+        $len = mb_strlen($needle);
+        if ($len >= 4) {
+            return str_contains($compact, $needle);
+        }
+
+        if ($len < 3) {
+            return false;
+        }
+
+        return preg_match('/'.preg_quote($cue, '/').'/iu', $text) === 1;
+    }
+
     /**
      * @param  list<string>  $cues
      * @return array{cue: string, len: int, display: ?string}|null
@@ -384,10 +523,10 @@ class InboxDeliveryChargeAutomationService
         $best = null;
         $bestLen = 0;
         foreach ($cues as $cue) {
-            $needle = $this->compactHaystack($cue);
-            if ($needle === '' || mb_strlen($needle) < 4 || ! str_contains($compact, $needle)) {
+            if (! $this->cueMatches($text, $compact, $cue)) {
                 continue;
             }
+            $needle = $this->compactHaystack($cue);
             $len = mb_strlen($needle);
             if ($len > $bestLen) {
                 $bestLen = $len;
@@ -488,8 +627,7 @@ class InboxDeliveryChargeAutomationService
         }
 
         foreach (self::OUTSIDE_CUES as $cue) {
-            $needle = $this->compactHaystack($cue);
-            if ($needle !== '' && mb_strlen($needle) >= 4 && str_contains($compact, $needle)) {
+            if ($this->cueMatches($name, $compact, $cue)) {
                 return false;
             }
         }
@@ -498,11 +636,7 @@ class InboxDeliveryChargeAutomationService
             if ($this->isGenericMention($cue)) {
                 continue;
             }
-            $needle = $this->compactHaystack($cue);
-            if ($needle === '' || mb_strlen($needle) < 4) {
-                continue;
-            }
-            if ($compact === $needle || str_contains($compact, $needle)) {
+            if ($this->cueMatches($name, $compact, $cue)) {
                 return true;
             }
         }
@@ -576,6 +710,31 @@ class InboxDeliveryChargeAutomationService
         return $name;
     }
 
+    private function standaloneArea(string $text): ?string
+    {
+        $name = $this->usableMention($text);
+        if ($name === null) {
+            return null;
+        }
+
+        $compact = $this->compactHaystack($name);
+        if (mb_strlen($compact) < 2) {
+            return null;
+        }
+
+        foreach ([
+            'ok', 'okay', 'yes', 'no', 'ha', 'hmm', 'thanks',
+            'হবে', 'না', 'জি', 'হ্যাঁ', 'হা', 'হুম', 'আচ্ছা', 'ধন্যবাদ', 'আপু', 'apu',
+        ] as $filler) {
+            $needle = $this->compactHaystack($filler);
+            if ($needle !== '' && $compact === $needle) {
+                return null;
+            }
+        }
+
+        return $name;
+    }
+
     private function cleanPlaceName(string $name): string
     {
         $name = trim($name);
@@ -621,7 +780,32 @@ class InboxDeliveryChargeAutomationService
         ]);
     }
 
-    private function alreadyReplied(ChannelConversation $conversation, ChannelMessage $inbound, string $body): bool
+    private function isWaitingForKobeArea(ChannelConversation $conversation): bool
+    {
+        $cutoff = InboxPriceQueryAutomationService::sessionCutoff();
+
+        foreach (ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->orderByDesc('sent_at')
+            ->orderByDesc('id')
+            ->get() as $row) {
+            if ($row->sent_at !== null && $row->sent_at->lt($cutoff)) {
+                continue;
+            }
+
+            $kind = $this->autoKind($row);
+            if ($kind === null) {
+                continue;
+            }
+
+            return $kind === self::KIND_KOBE_ASK;
+        }
+
+        return false;
+    }
+
+    private function alreadyReplied(ChannelConversation $conversation, ChannelMessage $inbound, string $kind, string $body): bool
     {
         $inboundId = (int) $inbound->id;
         $cutoff = InboxPriceQueryAutomationService::sessionCutoff();
@@ -634,18 +818,46 @@ class InboxDeliveryChargeAutomationService
                 return true;
             }
 
-            $payload = is_array($row->raw_payload) ? $row->raw_payload : [];
-            $isAuto = ($payload[self::RAW_FLAG] ?? false) === true
-                || in_array((string) $row->body, [self::BODY, self::BODY_DHAKA, self::BODY_OUTSIDE, $body], true);
-            if (! $isAuto) {
+            $sentKind = $this->autoKind($row);
+            if ($sentKind === null) {
                 continue;
             }
 
-            if ($row->sent_at === null || $row->sent_at->greaterThanOrEqualTo($cutoff)) {
+            if ($row->sent_at !== null && $row->sent_at->lt($cutoff)) {
+                continue;
+            }
+
+            if ((string) $row->body === $body || $sentKind === $kind) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private function autoKind(ChannelMessage $row): ?string
+    {
+        $payload = is_array($row->raw_payload) ? $row->raw_payload : [];
+        $kind = (string) ($payload[self::RAW_KIND] ?? '');
+        if ($kind !== '') {
+            return $kind;
+        }
+
+        $body = (string) $row->body;
+        if ($body === self::BODY_KOBE_ASK) {
+            return self::KIND_KOBE_ASK;
+        }
+
+        if (str_contains($body, 'আজকে অর্ডার করলে') && str_contains($body, 'ডেলিভারি পাবেন')) {
+            return self::KIND_KOBE_DAYS;
+        }
+
+        $isAuto = ($payload[self::RAW_FLAG] ?? false) === true
+            || in_array($body, [self::BODY, self::BODY_DHAKA, self::BODY_OUTSIDE], true);
+        if ($isAuto) {
+            return self::KIND_CHARGE;
+        }
+
+        return null;
     }
 }

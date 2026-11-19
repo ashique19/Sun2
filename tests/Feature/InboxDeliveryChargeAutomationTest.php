@@ -11,6 +11,7 @@ use App\Services\Channels\InboxDeliveryChargeAutomationService;
 use App\Services\Channels\InboxQuickReplyMatcher;
 use App\Services\Channels\InboxQuickReplyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -31,6 +32,15 @@ class InboxDeliveryChargeAutomationTest extends TestCase
             'facebook.messenger.page_access_token' => 'page-token',
             'facebook.graph_version' => 'v25.0',
         ]);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-19 12:00:00', 'Asia/Dhaka'));
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     #[Test]
@@ -308,6 +318,19 @@ class InboxDeliveryChargeAutomationTest extends TestCase
     }
 
     #[Test]
+    public function kobe_paben_dispatch_questions_do_not_send(): void
+    {
+        Http::fake();
+        $conversation = $this->conversation('psid-delivery-paben');
+        $inbound = $this->inbound($conversation, 'কবে পাবেন');
+
+        $this->assertNull(
+            app(InboxDeliveryChargeAutomationService::class)->reply($conversation, $inbound)
+        );
+        Http::assertNothingSent();
+    }
+
+    #[Test]
     public function parcel_when_questions_do_not_send(): void
     {
         Http::fake();
@@ -321,16 +344,268 @@ class InboxDeliveryChargeAutomationTest extends TestCase
     }
 
     #[Test]
-    public function kobe_pabo_without_charge_does_not_send(): void
+    public function kobe_pabo_without_area_asks_for_the_delivery_area(): void
     {
-        Http::fake();
-        $conversation = $this->conversation('psid-delivery-kobe');
-        $inbound = $this->inbound($conversation, 'কবে পাবো');
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_kobe_ask',
+                'recipient_id' => 'psid-delivery-kobe',
+            ], 200),
+        ]);
 
-        $this->assertNull(
-            app(InboxDeliveryChargeAutomationService::class)->reply($conversation, $inbound)
+        $conversation = $this->conversation('psid-delivery-kobe');
+        $inbound = $this->inbound($conversation, 'কবে পাব');
+
+        $sent = app(InboxDeliveryChargeAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent);
+        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_KOBE_ASK, $sent->body);
+        $this->assertTrue($sent->raw_payload[InboxDeliveryChargeAutomationService::RAW_FLAG] ?? false);
+        $this->assertSame(
+            InboxDeliveryChargeAutomationService::KIND_KOBE_ASK,
+            $sent->raw_payload[InboxDeliveryChargeAutomationService::RAW_KIND] ?? null,
         );
-        Http::assertNothingSent();
+        $this->assertSame($inbound->id, $sent->reply_to_message_id);
+    }
+
+    #[Test]
+    #[DataProvider('kobePaboPhrases')]
+    public function kobe_pabo_phrasings_ask_for_the_delivery_area(string $text): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_kobe_ask_'.md5($text),
+                'recipient_id' => 'psid-delivery-kobe-phrase',
+            ], 200),
+        ]);
+
+        $conversation = $this->conversation('psid-delivery-kobe-phrase-'.md5($text));
+        $inbound = $this->inbound($conversation, $text);
+
+        $sent = app(InboxDeliveryChargeAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent, $text);
+        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_KOBE_ASK, $sent->body, $text);
+    }
+
+    /**
+     * @return list<list<string>>
+     */
+    public static function kobePaboPhrases(): array
+    {
+        return [
+            ['কবে পাবো'],
+            ['kobe pabo?'],
+            ['আমারটা কবে পাব'],
+        ];
+    }
+
+    #[Test]
+    public function kobe_pabo_with_mirpur_names_dhaka_weekdays(): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_kobe_dhaka',
+                'recipient_id' => 'psid-delivery-kobe-dhaka',
+            ], 200),
+        ]);
+
+        $conversation = $this->conversation('psid-delivery-kobe-dhaka');
+        $inbound = $this->inbound($conversation, 'মিরপুর কবে পাব');
+
+        $sent = app(InboxDeliveryChargeAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent);
+        $this->assertSame(
+            InboxDeliveryChargeAutomationService::weekdayDeliveryBody(InboxDeliveryChargeAutomationService::ZONE_DHAKA),
+            $sent->body,
+        );
+        $this->assertSame('আজকে অর্ডার করলে রবিবার অথবা সোমবার ডেলিভারি পাবেন', $sent->body);
+        $this->assertSame(
+            InboxDeliveryChargeAutomationService::KIND_KOBE_DAYS,
+            $sent->raw_payload[InboxDeliveryChargeAutomationService::RAW_KIND] ?? null,
+        );
+    }
+
+    #[Test]
+    public function kobe_pabo_with_savar_names_outside_weekdays(): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_kobe_out',
+                'recipient_id' => 'psid-delivery-kobe-out',
+            ], 200),
+        ]);
+
+        $conversation = $this->conversation('psid-delivery-kobe-out');
+        $inbound = $this->inbound($conversation, 'সাভার কবে পাব');
+
+        $sent = app(InboxDeliveryChargeAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent);
+        $this->assertSame(
+            InboxDeliveryChargeAutomationService::weekdayDeliveryBody(InboxDeliveryChargeAutomationService::ZONE_OUTSIDE),
+            $sent->body,
+        );
+        $this->assertSame('আজকে অর্ডার করলে সোমবার অথবা মংগলবার ডেলিভারি পাবেন', $sent->body);
+    }
+
+    #[Test]
+    public function kobe_pabo_uses_a_session_area_and_skips_the_ask(): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_kobe_session',
+                'recipient_id' => 'psid-delivery-kobe-session',
+            ], 200),
+        ]);
+
+        $conversation = $this->conversation('psid-delivery-kobe-session');
+        $this->inbound($conversation, 'মিরপুর', now()->subMinutes(4));
+        $inbound = $this->inbound($conversation, 'কবে পাব');
+
+        $sent = app(InboxDeliveryChargeAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent);
+        $this->assertSame('আজকে অর্ডার করলে রবিবার অথবা সোমবার ডেলিভারি পাবেন', $sent->body);
+    }
+
+    #[Test]
+    public function kobe_ask_then_mirpur_names_dhaka_weekdays(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_kobe_follow_'.uniqid('', true),
+                'recipient_id' => 'psid-delivery-kobe-follow',
+            ], 200);
+        });
+
+        $conversation = $this->conversation('psid-delivery-kobe-follow');
+        $service = app(InboxDeliveryChargeAutomationService::class);
+
+        $ask = $this->inbound($conversation, 'কবে পাবো', now()->subSeconds(20));
+        $asked = $service->reply($conversation, $ask);
+        $this->assertNotNull($asked);
+        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_KOBE_ASK, $asked->body);
+
+        $area = $this->inbound($conversation, 'মিরপুর');
+        $sent = $service->reply($conversation, $area);
+
+        $this->assertNotNull($sent);
+        $this->assertSame('আজকে অর্ডার করলে রবিবার অথবা সোমবার ডেলিভারি পাবেন', $sent->body);
+        $this->assertSame(2, Http::recorded()->count());
+    }
+
+    #[Test]
+    public function kobe_ask_then_savar_names_outside_weekdays(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_kobe_follow_out_'.uniqid('', true),
+                'recipient_id' => 'psid-delivery-kobe-follow-out',
+            ], 200);
+        });
+
+        $conversation = $this->conversation('psid-delivery-kobe-follow-out');
+        $service = app(InboxDeliveryChargeAutomationService::class);
+
+        $this->assertNotNull($service->reply(
+            $conversation,
+            $this->inbound($conversation, 'কবে পাব', now()->subSeconds(12)),
+        ));
+
+        $sent = $service->reply($conversation, $this->inbound($conversation, 'সাভার'));
+
+        $this->assertNotNull($sent);
+        $this->assertSame('আজকে অর্ডার করলে সোমবার অথবা মংগলবার ডেলিভারি পাবেন', $sent->body);
+    }
+
+    #[Test]
+    public function repeated_kobe_asks_without_area_send_once(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_kobe_once_'.uniqid('', true),
+                'recipient_id' => 'psid-delivery-kobe-once',
+            ], 200);
+        });
+
+        $conversation = $this->conversation('psid-delivery-kobe-once');
+        $service = app(InboxDeliveryChargeAutomationService::class);
+
+        $this->assertNotNull($service->reply(
+            $conversation,
+            $this->inbound($conversation, 'কবে পাব', now()->subSeconds(10)),
+        ));
+        $this->assertNull($service->reply($conversation, $this->inbound($conversation, 'কবে পাবো')));
+        $this->assertSame(1, Http::recorded()->count());
+    }
+
+    #[Test]
+    public function kobe_ask_then_unrelated_text_does_not_send_weekdays(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_kobe_noise_'.uniqid('', true),
+                'recipient_id' => 'psid-delivery-kobe-noise',
+            ], 200);
+        });
+
+        $conversation = $this->conversation('psid-delivery-kobe-noise');
+        $service = app(InboxDeliveryChargeAutomationService::class);
+        $this->assertNotNull($service->reply(
+            $conversation,
+            $this->inbound($conversation, 'কবে পাব', now()->subSeconds(8)),
+        ));
+
+        $this->assertNull($service->reply($conversation, $this->inbound($conversation, 'ok')));
+        $this->assertSame(1, Http::recorded()->count());
+    }
+
+    #[Test]
+    public function charge_ask_then_kobe_pabo_still_asks_for_area(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_charge_then_kobe_'.uniqid('', true),
+                'recipient_id' => 'psid-delivery-charge-then-kobe',
+            ], 200);
+        });
+
+        $conversation = $this->conversation('psid-delivery-charge-then-kobe');
+        $service = app(InboxDeliveryChargeAutomationService::class);
+
+        $charge = $service->reply(
+            $conversation,
+            $this->inbound($conversation, 'ডেলিভারি চার্জ কত', now()->subSeconds(15)),
+        );
+        $this->assertNotNull($charge);
+        $this->assertSame(InboxDeliveryChargeAutomationService::BODY, $charge->body);
+
+        $ask = $service->reply($conversation, $this->inbound($conversation, 'কবে পাব'));
+        $this->assertNotNull($ask);
+        $this->assertSame(InboxDeliveryChargeAutomationService::BODY_KOBE_ASK, $ask->body);
+        $this->assertSame(2, Http::recorded()->count());
+    }
+
+    #[Test]
+    public function weekday_offsets_match_dhaka_plus_three_four_and_outside_plus_four_five(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-15 09:00:00', 'Asia/Dhaka'));
+
+        $this->assertSame(
+            'আজকে অর্ডার করলে বুধবার অথবা বৃহস্পতিবার ডেলিভারি পাবেন',
+            InboxDeliveryChargeAutomationService::weekdayDeliveryBody(InboxDeliveryChargeAutomationService::ZONE_DHAKA),
+        );
+        $this->assertSame(
+            'আজকে অর্ডার করলে বৃহস্পতিবার অথবা শুক্রবার ডেলিভারি পাবেন',
+            InboxDeliveryChargeAutomationService::weekdayDeliveryBody(InboxDeliveryChargeAutomationService::ZONE_OUTSIDE),
+        );
     }
 
     #[Test]

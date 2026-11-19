@@ -573,6 +573,45 @@ class InboxQuickReplyMatcher
     }
 
     /**
+     * Customer asking specifically when they will receive the parcel (“কবে পাব”),
+     * not a charge/time-range question and not a parcel-dispatch “পাঠাবেন”.
+     */
+    public function looksLikeKobePabo(string $text): bool
+    {
+        if ($this->looksLikeAdvance($text) || $this->looksLikeCodPush($text)) {
+            return false;
+        }
+
+        $compact = $this->compactYa($text);
+        if ($compact === '') {
+            return false;
+        }
+
+        if (str_contains($compact, $this->compactYa('পার্সেল')) && str_contains($compact, $this->compactYa('পাঠা'))) {
+            return false;
+        }
+
+        if ($this->containsAnyCue($compact, ['পাঠা', 'patha', 'pathabo', 'pathaben', 'পাবেন'])) {
+            return false;
+        }
+
+        if (! $this->containsAnyCue($compact, ['কবে', 'kobe'])) {
+            return false;
+        }
+
+        if ($this->containsAnyCue($compact, ['পাবো', 'pabo', 'paba'])) {
+            return true;
+        }
+
+        $pab = $this->compactYa('পাব');
+        $paben = $this->compactYa('পাবেন');
+
+        return $pab !== ''
+            && str_contains($compact, $pab)
+            && ($paben === '' || ! str_contains($compact, $paben));
+    }
+
+    /**
      * True when this saved reply is the delivery time/charge chip.
      *
      * @param  array{label?: string, body?: string}  $reply
@@ -649,7 +688,7 @@ class InboxQuickReplyMatcher
 
     public function looksLikeLocation(string $text): bool
     {
-        if ($this->looksLikeAdvance($text) || $this->looksLikeCodPush($text) || $this->looksLikeDeliveryCharge($text)) {
+        if ($this->looksLikeAdvance($text) || $this->looksLikeCodPush($text) || $this->looksLikeDeliveryCharge($text) || $this->looksLikeKobePabo($text)) {
             return false;
         }
 

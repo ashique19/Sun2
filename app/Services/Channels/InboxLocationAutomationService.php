@@ -11,7 +11,7 @@ class InboxLocationAutomationService
 {
     public const REPLY_LABEL = 'লোকেশন';
 
-    public const BODY = "আমাদের শোরুম নেই।\nঅনলাইন অফিসের ঠিকানা - ঢাকা, বনশ্রী - ব্লক-এইচ, রোড-১।\nওয়ারহাউজ (psudo): সাভার, টংগি, চকবাজার।";
+    public const BODY = "সারা দেশে হোম ডেলিভারি পাবেন।\n\nআমাদের শোরুম নেই।\nঅনলাইন অফিসের ঠিকানা - ঢাকা, বনশ্রী।\n\nওয়ারহাউজ (psudo): সাভার, টংগি, চকবাজার।";
 
     public const RAW_FLAG = 'auto_location';
 

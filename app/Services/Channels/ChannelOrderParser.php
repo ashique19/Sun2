@@ -243,9 +243,109 @@ class ChannelOrderParser
      */
     private function textLines(string $text): array
     {
-        $lines = preg_split('/\R+/u', $text) ?: [];
+        $lines = preg_split('/\R+/u', $this->normalizeOrderDetailText($text)) ?: [];
 
         return array_values(array_filter(array_map('trim', $lines), fn ($line) => $line !== ''));
+    }
+
+    /**
+     * Messenger often stores “নাম:… গ্রাম:… থানা:…” as one line. Split on
+     * labeled fields so name/address extractors see one field per line.
+     * Longest labels are rewritten first so “উপজেলা” is not split as “জেলা”.
+     */
+    private function normalizeOrderDetailText(string $text): string
+    {
+        $text = str_replace(["\r\n", "\r"], "\n", $text);
+        $text = preg_replace('/<br\s*\/?>/iu', "\n", $text) ?? $text;
+
+        $placeholders = [];
+        foreach ($this->orderDetailLabels() as $index => $label) {
+            $token = "\x1EL".$index."\x1E";
+            $quoted = preg_quote($label, '/');
+            $replaced = preg_replace(
+                '/'.$quoted.'(\s*[:：ঃ=\-])/iu',
+                $token.'$1',
+                $text,
+            );
+            if (is_string($replaced)) {
+                $text = $replaced;
+                $placeholders[$token] = $label;
+            }
+        }
+
+        foreach ($placeholders as $token => $label) {
+            $text = str_replace($token, "\n".$label, $text);
+        }
+
+        return $text;
+    }
+
+    /**
+     * Longest-first so “মোবাইল নাম্বার” wins over “নাম”.
+     *
+     * @return list<string>
+     */
+    private function orderDetailLabels(): array
+    {
+        $labels = [
+            'পুরো ঠিকানা',
+            'সম্পূর্ণ ঠিকানা',
+            'আপনার নাম',
+            'আমার নাম',
+            'মোবাইল নাম্বার',
+            'মোবাইল নম্বর',
+            'মোবাইল নামবার',
+            'ফোন নাম্বার',
+            'ফোন নম্বর',
+            'mobile number',
+            'phone number',
+            'post office',
+            'পোস্ট অফিস',
+            'পোষ্ট অফিস',
+            'ঠিকানা',
+            'address',
+            'thikana',
+            'উপজেলা',
+            'upazila',
+            'গ্রাম',
+            'village',
+            'থানা',
+            'thana',
+            'জেলা',
+            'district',
+            'zilla',
+            'zila',
+            'মোবাইল',
+            'mobile',
+            'ফোন',
+            'phone',
+            'নাম',
+            'name',
+            'nam',
+        ];
+        usort($labels, fn (string $a, string $b): int => mb_strlen($b) <=> mb_strlen($a));
+
+        return $labels;
+    }
+
+    private function orderDetailLabelPattern(): string
+    {
+        $quoted = array_map(
+            fn (string $label): string => preg_quote($label, '/'),
+            $this->orderDetailLabels(),
+        );
+
+        return '(?:'.implode('|', $quoted).')';
+    }
+
+    private function truncateAtNextLabel(string $value): string
+    {
+        $labels = $this->orderDetailLabelPattern();
+        if (preg_match('/^(.*?)\s+(?='.$labels.'\s*[:：ঃ=\-])/iu', $value, $matches)) {
+            return trim((string) $matches[1]);
+        }
+
+        return trim($value);
     }
 
     /**
@@ -327,8 +427,7 @@ class ChannelOrderParser
     private function extractLocalFields(string $rawText, string $phone): array
     {
         $weak = [];
-        $lines = preg_split('/\R+/u', $rawText) ?: [];
-        $lines = array_values(array_filter(array_map('trim', $lines), fn ($line) => $line !== ''));
+        $lines = $this->textLines($rawText);
 
         $phoneNorm = PhoneNumber::normalize($phone);
         $extractedName = $this->extractCustomerName($lines, $phoneNorm);
@@ -495,12 +594,12 @@ class ChannelOrderParser
     private function labeledFieldValue(string $line, array $labels): ?string
     {
         $quoted = array_map(fn (string $label) => preg_quote($label, '/'), $labels);
-        $pattern = '/^(?:'.implode('|', $quoted).')\s*[:：\-]\s*(.+)$/iu';
+        $pattern = '/^(?:'.implode('|', $quoted).')\s*[:：ঃ=\-]\s*(.+)$/iu';
         if (! preg_match($pattern, trim($line), $matches)) {
             return null;
         }
 
-        $value = $this->cleanAddressFragment((string) $matches[1]);
+        $value = $this->cleanAddressFragment($this->truncateAtNextLabel((string) $matches[1]));
 
         return $value !== '' ? $value : null;
     }
@@ -613,17 +712,20 @@ class ChannelOrderParser
             'rangamati', 'bandarban', 'feni', 'noakhali', 'bhola', 'patuakhali',
             'barguna', 'pirojpur', 'rajbari', 'narsingdi', 'kishoreganj', 'brahmanbaria',
             'chandpur', 'lakshmipur', 'shariatpur', 'madaripur', 'gopalganj', 'tangail',
-            'jamalpur', 'sherpur', 'netrokona', 'চট্টগ্রাম', 'কুমিল্লা', 'ঢাকা',
+            'jamalpur', 'sherpur', 'netrokona',
+            'চট্টগ্রাম', 'কুমিল্লা', 'ঢাকা',
+            'খাগড়াছড়ি', 'খাগড়াছড়ি', 'রাঙ্গামাটি', 'রাঙামাটি', 'বান্দরবান',
+            'কক্সবাজার', 'ফেনী', 'নোয়াখালী', 'নোয়াখালী',
         ], true);
     }
 
     private function labeledNameValue(string $line): ?string
     {
-        if (! preg_match('/^(?:আপনার\s+)?(?:নাম|name|nam)\s*[:：\-]\s*(.+)$/iu', trim($line), $matches)) {
+        if (! preg_match('/^(?:(?:আপনার|আমার)\s+)?(?:নাম|name|nam)\s*[:：ঃ=\-]\s*(.+)$/iu', trim($line), $matches)) {
             return null;
         }
 
-        $value = $this->cleanName((string) $matches[1]);
+        $value = $this->cleanName($this->truncateAtNextLabel((string) $matches[1]));
         if ($value === '' || ! $this->looksLikeName($value)) {
             return null;
         }
@@ -713,7 +815,7 @@ class ChannelOrderParser
         }
 
         return (bool) preg_match(
-            '/\b(confirm|confrom|order|delivery|parben|rakhen|tarikh|dben|koto|taka|\btk\b|soho|please|plz|lagbe|laglo|dhonnobad|inbox|price)\b|(অর্ডার|কনফার্ম|ডেলিভারি|ধন্যবাদ|পারবেন|রাখেন|তারিখ|দাম)/iu',
+            '/\b(confirm|confrom|order|delivery|parben|rakhen|tarikh|dben|koto|taka|\btk\b|soho|please|plz|lagbe|laglo|dhonnobad|inbox|price|nite chai)\b|(অর্ডার|কনফার্ম|ডেলিভারি|ধন্যবাদ|পারবেন|রাখেন|তারিখ|দাম|নিতে চাই)/iu',
             $normalized,
         );
     }
@@ -810,6 +912,10 @@ class ChannelOrderParser
         }
 
         if (preg_match('/\b(please send|send this|nite chai)\b/iu', $normalized) && mb_strlen($normalized) <= 40) {
+            return true;
+        }
+
+        if (preg_match('/আমি নিতে চাই|নিতে চাই/u', $normalized) && mb_strlen($normalized) <= 40) {
             return true;
         }
 

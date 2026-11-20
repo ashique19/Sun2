@@ -62,6 +62,64 @@ class ChannelOrderParserNameTest extends TestCase
     }
 
     #[Test]
+    public function screenshot_gram_thana_zila_form_parses_name_and_address(): void
+    {
+        $conversation = $this->conversation('PSID_SUMA', 'Nirja C.');
+        $this->inbound($conversation, [
+            'আমি নিতে চাই',
+            "নাম:সুমা চাকমা\nগ্রাম: বেতছড়ি\nথানা:দীঘিনালা\nজেলা:খাগড়াছড়ি\nমোবাইল নাম্বার:০১৫৫৭১৮৬৬৯১",
+        ]);
+
+        $parsed = app(ChannelOrderParser::class)->parseConversation($conversation->fresh(['messages']));
+
+        $this->assertSame('সুমা চাকমা', $parsed['name']);
+        $this->assertSame('01557186691', $parsed['phone']);
+        $this->assertStringContainsString('বেতছ', (string) $parsed['address']);
+        $this->assertStringContainsString('দীঘিনালা', (string) $parsed['address']);
+        $this->assertStringContainsString('খাগ', (string) $parsed['address']);
+        $this->assertSame('দীঘিনালা', $parsed['area']);
+        $this->assertStringContainsString('খাগ', (string) $parsed['city']);
+        $this->assertNotSame('Nirja C.', $parsed['name']);
+        $this->assertNotSame('আমি নিতে চাই', $parsed['name']);
+    }
+
+    #[Test]
+    public function one_line_labeled_bangla_form_still_reads_name_and_address(): void
+    {
+        $conversation = $this->conversation('PSID_SUMA_LINE', 'Nirja C.');
+        $this->inbound($conversation, [
+            'নাম:সুমা চাকমা গ্রাম: বেতছড়ি থানা:দীঘিনালা জেলা:খাগড়াছড়ি মোবাইল নাম্বার:০১৫৫৭১৮৬৬৯১',
+        ]);
+
+        $parsed = app(ChannelOrderParser::class)->parseConversation($conversation->fresh(['messages']));
+
+        $this->assertSame('সুমা চাকমা', $parsed['name']);
+        $this->assertSame('01557186691', $parsed['phone']);
+        $this->assertStringContainsString('বেতছ', (string) $parsed['address']);
+        $this->assertStringContainsString('দীঘিনালা', (string) $parsed['address']);
+        $this->assertSame('দীঘিনালা', $parsed['area']);
+        $this->assertStringContainsString('খাগ', (string) $parsed['city']);
+        $this->assertStringNotContainsString('মোবাইল', (string) $parsed['address']);
+        $this->assertStringNotContainsString('নাম:', (string) $parsed['address']);
+    }
+
+    #[Test]
+    public function jammed_labels_without_spaces_still_split(): void
+    {
+        $conversation = $this->conversation('PSID_JAMMED', 'Someone');
+        $this->inbound($conversation, [
+            'নাম:সুমা চাকমাগ্রাম:বেতছড়িথানা:দীঘিনালাজেলা:খাগড়াছড়িমোবাইল নাম্বার:০১৫৫৭১৮৬৬৯১',
+        ]);
+
+        $parsed = app(ChannelOrderParser::class)->parseConversation($conversation->fresh(['messages']));
+
+        $this->assertSame('সুমা চাকমা', $parsed['name']);
+        $this->assertSame('01557186691', $parsed['phone']);
+        $this->assertSame('দীঘিনালা', $parsed['area']);
+        $this->assertStringContainsString('বেতছ', (string) $parsed['address']);
+    }
+
+    #[Test]
     public function leading_name_on_a_comma_address_line_is_captured(): void
     {
         $conversation = $this->conversation('PSID_UJERUNG', 'Ujerung Tripura');

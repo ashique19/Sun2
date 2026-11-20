@@ -119,6 +119,7 @@ class ChannelOrderDraftCatcher
      * @return array{
      *     order_id: int,
      *     order_number: string,
+     *     name: string,
      *     phone: string,
      *     area: string,
      *     items: string,
@@ -161,11 +162,17 @@ class ChannelOrderDraftCatcher
             ->take(2)
             ->implode(', ');
 
+        $name = trim((string) ($draft->name ?? ''));
+        if (in_array(mb_strtolower($name), ['unknown', ''], true)) {
+            $name = '';
+        }
+
         $area = trim((string) ($draft->area ?: $draft->city ?: ''));
 
         return [
             'order_id' => (int) $draft->id,
             'order_number' => (string) $draft->order_number,
+            'name' => $name,
             'phone' => $phone,
             'area' => $area,
             'items' => $itemNames,

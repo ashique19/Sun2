@@ -68,6 +68,7 @@ class AdminInboxDraftReadyTest extends TestCase
             ->assertSeeHtml('data-inbox-draft-ready')
             ->assertSee('Draft ready')
             ->assertSee('Silk Kurti')
+            ->assertSee('Nila')
             ->assertSee('01627237432')
             ->assertSee('Mirpur')
             ->assertSee('Edit')

@@ -739,6 +739,9 @@
                             @if ($inboxDraftReady['items'] !== '')
                                 <span class="min-w-0 truncate text-[#6B6459]">{{ $inboxDraftReady['items'] }}</span>
                             @endif
+                            @if (($inboxDraftReady['name'] ?? '') !== '')
+                                <span class="min-w-0 truncate text-[#6B6459]">{{ $inboxDraftReady['name'] }}</span>
+                            @endif
                             <span class="text-[#6B6459]">{{ $inboxDraftReady['phone'] }}</span>
                             @if ($inboxDraftReady['area'] !== '')
                                 <span class="text-[#6B6459]">{{ $inboxDraftReady['area'] }}</span>

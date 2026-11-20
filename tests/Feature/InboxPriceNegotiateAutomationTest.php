@@ -6,6 +6,7 @@ use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
 use App\Services\Channels\InboxAutomationSettings;
 use App\Services\Channels\InboxPriceNegotiateAutomationService;
+use App\Services\Channels\InboxQuickReplyMatcher;
 use App\Services\Channels\InboxQuickReplyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -217,6 +218,81 @@ class InboxPriceNegotiateAutomationTest extends TestCase
 
         $sent = app(InboxPriceNegotiateAutomationService::class)
             ->reply($conversation, $inbound->fresh());
+
+        $this->assertNotNull($sent);
+        $this->assertSame(InboxPriceNegotiateAutomationService::BODY_1, $sent->body);
+    }
+
+    #[Test]
+    public function english_price_fixed_chip_sends_when_the_saved_reply_is_matched(): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_nego_price_fixed',
+                'recipient_id' => 'psid-nego-price-fixed',
+            ], 200),
+        ]);
+
+        $replies = app(InboxQuickReplyService::class)->save([
+            ['label' => 'price fixed', 'body' => 'Sorry apu, the price is fixed.'],
+        ]);
+        $chip = collect($replies)->first(fn (array $reply): bool => $reply['label'] === 'price fixed');
+        $this->assertNotNull($chip);
+
+        app(InboxQuickReplyMatcher::class)->addExample($chip['id'], 'possible kina apu');
+
+        $conversation = $this->conversation('psid-nego-price-fixed');
+        $inbound = $this->inbound($conversation, 'possible kina apu');
+
+        $sent = app(InboxPriceNegotiateAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent);
+        $this->assertSame(InboxPriceNegotiateAutomationService::BODY_1, $sent->body);
+    }
+
+    #[Test]
+    public function tagged_english_price_fixed_chip_sends_even_when_the_text_is_not_a_haggle(): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_nego_en_tag',
+                'recipient_id' => 'psid-nego-en-tag',
+            ], 200),
+        ]);
+
+        $replies = app(InboxQuickReplyService::class)->save([
+            ['label' => 'Price Fixed', 'body' => 'The price is fixed apu.'],
+        ]);
+        $chip = collect($replies)->first(fn (array $reply): bool => $reply['label'] === 'Price Fixed');
+        $this->assertNotNull($chip);
+
+        $conversation = $this->conversation('psid-nego-en-tag');
+        $inbound = $this->inbound($conversation, 'apu please');
+        $inbound->forceFill(['quick_reply_id' => $chip['id']])->save();
+
+        $sent = app(InboxPriceNegotiateAutomationService::class)
+            ->reply($conversation, $inbound->fresh());
+
+        $this->assertNotNull($sent);
+        $this->assertSame(InboxPriceNegotiateAutomationService::BODY_1, $sent->body);
+    }
+
+    #[Test]
+    public function customer_price_fixed_wording_sends_without_a_tag(): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'message_id' => 'm_auto_nego_en_text',
+                'recipient_id' => 'psid-nego-en-text',
+            ], 200),
+        ]);
+
+        $conversation = $this->conversation('psid-nego-en-text');
+        $inbound = $this->inbound($conversation, 'price fixed?');
+
+        $sent = app(InboxPriceNegotiateAutomationService::class)
+            ->reply($conversation, $inbound);
 
         $this->assertNotNull($sent);
         $this->assertSame(InboxPriceNegotiateAutomationService::BODY_1, $sent->body);

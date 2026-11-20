@@ -61,6 +61,7 @@ class AdminInboxAutomationsTest extends TestCase
             ->assertSee('Match '.InboxLocationAutomationService::REPLY_LABEL)
             ->assertSee('Match '.InboxAdvanceAutomationService::REPLY_LABEL)
             ->assertSee('Reply when they negotiate the price')
+            ->assertSee('Price Fixed saved reply is matched')
             ->assertSee(InboxDeliveryChargeAutomationService::BODY_DHAKA)
             ->assertSee(InboxDeliveryChargeAutomationService::BODY_OUTSIDE)
             ->assertSee('known Dhaka-city thana')

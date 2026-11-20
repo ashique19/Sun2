@@ -305,6 +305,9 @@ class InboxQuickReplyMatcherTest extends TestCase
             ['last price den'],
             ['ডিস্কাউন্ট দেন'],
             ['একটু কম দিবেন'],
+            ['price fixed?'],
+            ['is the price fixed'],
+            ['koto last'],
         ];
     }
 
@@ -328,10 +331,52 @@ class InboxQuickReplyMatcherTest extends TestCase
             'label' => 'দাম ফিক্সড',
             'body' => 'দাম ফিক্সড আপু',
         ]));
+        $this->assertTrue($this->matcher()->isPriceNegotiateReply([
+            'label' => 'price fixed',
+            'body' => 'Sorry apu, the price is fixed.',
+        ]));
+        $this->assertTrue($this->matcher()->isPriceNegotiateReply([
+            'label' => 'Price Fixed',
+            'body' => '',
+        ]));
+        $this->assertSame(
+            InboxQuickReplyMatcher::INTENT_NEGOTIATE,
+            $this->matcher()->intentForReply([
+                'label' => 'price fixed',
+                'body' => 'Sorry apu, the price is fixed.',
+            ]),
+        );
         $this->assertFalse($this->matcher()->isPriceNegotiateReply([
             'label' => 'কোন প্রডাক্ট?',
             'body' => 'কোন প্রডাক্টের দাম জানতে চান?',
         ]));
+        $this->assertFalse($this->matcher()->isPriceNegotiateReply([
+            'label' => 'Price',
+            'body' => 'দাম ১২০০ টাকা',
+        ]));
+    }
+
+    #[Test]
+    public function price_fixed_saved_reply_matches_a_trained_customer_phrase(): void
+    {
+        $replies = app(InboxQuickReplyService::class)->save([
+            ['label' => 'price fixed', 'body' => 'Sorry apu, the price is fixed.'],
+            ['label' => 'কোন প্রডাক্ট?', 'body' => 'কোন প্রডাক্টের দাম জানতে চান?'],
+        ]);
+        $chip = collect($replies)->first(fn (array $reply): bool => $reply['label'] === 'price fixed');
+        $this->assertNotNull($chip);
+
+        $this->matcher()->addExample($chip['id'], 'possible kina apu');
+
+        $conversation = $this->conversation('psid-qr-price-fixed');
+        $inbound = $this->inbound($conversation, 'possible kina apu');
+        $matches = $this->matcher()->matchThread($conversation->fresh()->load('messages'), $replies);
+
+        $this->assertSame($chip['id'], $matches[$inbound->id]['id']);
+        $this->assertTrue($this->matcher()->isPriceNegotiateAsk($inbound));
+        $this->assertFalse($this->matcher()->isPriceNegotiateAsk(
+            $this->inbound($this->conversation('psid-qr-price-ask'), 'দাম কত'),
+        ));
     }
 
     #[Test]

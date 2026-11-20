@@ -80,12 +80,16 @@ class InboxQuickReplyMatcher
         'ektukom', 'ettukom', 'kichukom', 'kicukom',
         'damkom', 'damkomu', 'damkoman',
         'offerdan', 'offerden', 'offerdib', 'giveoffer',
+        'fixed', 'pricefixed', 'pricefix', 'fixprice', 'fixedprice',
+        'priceisfixed', 'isfixed', 'damfix', 'damfixed',
+        'kotolast', 'lastkoto', 'lastdam',
+        'fixkor', 'fixkore', 'fixkoren',
         'ডিসকাউন্ট', 'ডিস্কাউন্ট', 'ডিসকাউন',
         'ছাড়দেন', 'ছাড়দেন', 'ছাড়দিবেন', 'ছাড়দিবেন',
         'কমাবেন', 'কমাবে', 'কমান', 'কমাও', 'কমায়', 'কমায়', 'কমাই',
         'কমদাম', 'কমদিবেন', 'কমদিবে', 'কমদেন', 'কমদিয়ে', 'কমদিয়ে',
         'কিছুকম', 'একটুকম',
-        'ফিক্সড', 'দামফিক্স',
+        'ফিক্সড', 'দামফিক্স', 'দামfix', 'দামfixed',
     ];
 
     /**
@@ -525,6 +529,7 @@ class InboxQuickReplyMatcher
 
     /**
      * True when this inbound is haggling: tagged against a fixed-price chip,
+     * the inbox matcher hitting that chip (including English “price fixed”),
      * a saved negotiate example, or discount / “komu” wording.
      */
     public function isPriceNegotiateAsk(ChannelMessage $message): bool
@@ -557,20 +562,21 @@ class InboxQuickReplyMatcher
             return true;
         }
 
-        if ($text === '' || $negotiateReplies === []) {
+        if ($text === '' || $replies === []) {
             return false;
         }
 
         $examples = InboxQuickReplyExample::query()
-            ->whereIn('quick_reply_id', array_column($negotiateReplies, 'id'))
+            ->whereIn('quick_reply_id', array_column($replies, 'id'))
             ->get();
-        $match = $this->matchMessage($message, $negotiateReplies, $examples, hasInboundProductImages: false);
+        $match = $this->matchMessage($message, $replies, $examples, hasInboundProductImages: false);
 
         return is_array($match) && $this->isPriceNegotiateReply($match);
     }
 
     /**
-     * True when this saved reply is a fixed-price / no-discount chip.
+     * True when this saved reply is a fixed-price / no-discount chip,
+     * including the English “price fixed” label.
      *
      * @param  array{label?: string, body?: string}  $reply
      */
@@ -581,7 +587,7 @@ class InboxQuickReplyMatcher
             return false;
         }
 
-        foreach (['ডিসকাউন্ট', 'ডিস্কাউন্ট', 'ফিক্সড', 'lastprice', 'negotiate', 'discount'] as $cue) {
+        foreach (self::PRICE_NEGOTIATE_CUES as $cue) {
             $needle = $this->compact($cue);
             if ($needle !== '' && str_contains($haystack, $needle)) {
                 return true;

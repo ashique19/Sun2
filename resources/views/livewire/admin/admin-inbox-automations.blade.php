@@ -99,7 +99,7 @@
         <div class="flex items-start justify-between gap-3 rounded-xl border border-[#E7DFCF] bg-[#FAF6EF]/60 p-4" data-inbox-automation="price_negotiate">
             <div class="min-w-0">
                 <p class="text-sm font-semibold text-[#1E1E1E]">Reply when they negotiate the price</p>
-                <p class="mt-1 text-sm text-[#6B6459]">First ask in the session gets the fixed-price reply. A second push gets the no-discount reply. Further pushes keep repeating দুঃখিত আপু।</p>
+                <p class="mt-1 text-sm text-[#6B6459]">First ask in the session gets the fixed-price reply. A second push gets the no-discount reply. Further pushes keep repeating দুঃখিত আপু। Also fires when the Price Fixed saved reply is matched.</p>
                 <div class="mt-2 space-y-2">
                     @foreach ($priceNegotiateBodies as $body)
                         <p class="whitespace-pre-line rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $body }}</p>

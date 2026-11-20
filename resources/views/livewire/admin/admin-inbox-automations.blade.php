@@ -3,7 +3,7 @@
         <div>
             <h1 class="font-serif text-3xl font-semibold text-[#1E1E1E]">Automations</h1>
             <p class="mt-1 text-sm text-[#8C8474]">
-                Controlled auto-replies in the current session (past hour): price asks tagged against “কোন প্রডাক্ট?”, greetings tagged against “Hi”, “{{ $colorGuaranteeLabel }}” only for “{{ $colorGuaranteeCategory }}”, “{{ $deliveryChargeLabel }}”, “{{ $locationLabel }}”, “{{ $advanceLabel }}”, and stepped fixed-price replies when they negotiate.
+                Controlled auto-replies in the current session (past hour): price asks tagged against “কোন প্রডাক্ট?”, greetings tagged against “Hi”, “{{ $colorGuaranteeLabel }}” only for “{{ $colorGuaranteeCategory }}”, “{{ $deliveryChargeLabel }}”, “{{ $locationLabel }}”, “{{ $advanceLabel }}”, stepped fixed-price replies when they negotiate, and “{{ $orderProcessLabel }}” when they want to place an order.
             </p>
         </div>
         <a href="{{ route('admin.inbox') }}" wire:navigate
@@ -107,6 +107,19 @@
                 </div>
             </div>
             <x-admin.switch :on="$priceNegotiate" wire:click="togglePriceNegotiate" aria-label="Reply when they negotiate the price" />
+        </div>
+
+        <div class="flex items-start justify-between gap-3 rounded-xl border border-[#E7DFCF] bg-[#FAF6EF]/60 p-4" data-inbox-automation="order_process">
+            <div class="min-w-0">
+                <p class="text-sm font-semibold text-[#1E1E1E]">Match {{ $orderProcessLabel }}</p>
+                <p class="mt-1 text-sm text-[#6B6459]">When they want to place an order, or the “{{ $orderProcessLabel }}” saved reply is matched. Sends that chip’s body once per session.</p>
+                @if ($orderProcessBody)
+                    <p class="mt-2 whitespace-pre-line rounded-lg bg-white px-3 py-2 text-sm text-[#1E1E1E]">{{ $orderProcessBody }}</p>
+                @else
+                    <p class="mt-2 rounded-lg bg-white px-3 py-2 text-sm text-[#6B6459]">Save an “{{ $orderProcessLabel }}” quick reply to enable this.</p>
+                @endif
+            </div>
+            <x-admin.switch :on="$orderProcess" wire:click="toggleOrderProcess" aria-label="Match order process" />
         </div>
     </div>
 </div>

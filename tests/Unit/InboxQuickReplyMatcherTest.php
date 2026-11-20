@@ -93,7 +93,36 @@ class InboxQuickReplyMatcherTest extends TestCase
             ['কিভাবে অর্ডার করব'],
             ['how to order'],
             ['ki vabe nibo'],
+            ['order korte chai'],
+            ['অর্ডার করতে চাই'],
+            ['place order'],
         ];
+    }
+
+    #[Test]
+    public function detects_an_order_process_saved_reply(): void
+    {
+        $this->assertTrue($this->matcher()->isOrderProcessReply([
+            'label' => 'অর্ডার প্রসেস',
+            'body' => 'নাম, ঠিকানা আর মোবাইল দিন',
+        ]));
+        $this->assertTrue($this->matcher()->isOrderProcessReply([
+            'label' => 'Order',
+            'body' => 'নাম, ঠিকানা আর মোবাইল দিন',
+        ]));
+        $this->assertTrue($this->matcher()->looksLikeOrderProcess('kivabe order'));
+        $this->assertSame(
+            InboxQuickReplyMatcher::INTENT_ORDER,
+            $this->matcher()->intentForReply([
+                'label' => 'অর্ডার প্রসেস',
+                'body' => 'কিভাবে অর্ডার করবেন',
+            ]),
+        );
+        $this->assertFalse($this->matcher()->isOrderProcessReply([
+            'label' => 'Thanks',
+            'body' => 'ধন্যবাদ, অর্ডার কনফার্ম করা হয়েছে।',
+        ]));
+        $this->assertFalse($this->matcher()->looksLikeOrderProcess('দাম কত'));
     }
 
     #[Test]

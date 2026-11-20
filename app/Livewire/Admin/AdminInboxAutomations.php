@@ -8,6 +8,7 @@ use App\Services\Channels\InboxColorGuaranteeAutomationService;
 use App\Services\Channels\InboxDeliveryChargeAutomationService;
 use App\Services\Channels\InboxHiReplyAutomationService;
 use App\Services\Channels\InboxLocationAutomationService;
+use App\Services\Channels\InboxOrderProcessAutomationService;
 use App\Services\Channels\InboxPriceNegotiateAutomationService;
 use App\Services\Channels\InboxPriceQueryAutomationService;
 use App\Support\AdminAccess;
@@ -36,6 +37,8 @@ class AdminInboxAutomations extends Component
     public bool $advance = true;
 
     public bool $priceNegotiate = true;
+
+    public bool $orderProcess = true;
 
     public ?string $statusMessage = null;
 
@@ -90,6 +93,11 @@ class AdminInboxAutomations extends Component
         $this->persist($settings, InboxAutomationSettings::PRICE_NEGOTIATE, ! $this->priceNegotiate);
     }
 
+    public function toggleOrderProcess(InboxAutomationSettings $settings): void
+    {
+        $this->persist($settings, InboxAutomationSettings::ORDER_PROCESS, ! $this->orderProcess);
+    }
+
     public function render()
     {
         return view('livewire.admin.admin-inbox-automations', [
@@ -119,6 +127,8 @@ class AdminInboxAutomations extends Component
                 InboxPriceNegotiateAutomationService::BODY_2,
                 InboxPriceNegotiateAutomationService::BODY_3,
             ],
+            'orderProcessLabel' => InboxOrderProcessAutomationService::REPLY_LABEL,
+            'orderProcessBody' => app(InboxOrderProcessAutomationService::class)->replyBody(),
             'matchMinPercent' => InboxPriceQueryAutomationService::MATCH_MIN_PERCENT,
             'sessionMinutes' => InboxPriceQueryAutomationService::sessionMinutes(),
         ]);
@@ -138,6 +148,7 @@ class AdminInboxAutomations extends Component
             InboxAutomationSettings::LOCATION => $key === InboxAutomationSettings::LOCATION ? $value : $this->location,
             InboxAutomationSettings::ADVANCE => $key === InboxAutomationSettings::ADVANCE ? $value : $this->advance,
             InboxAutomationSettings::PRICE_NEGOTIATE => $key === InboxAutomationSettings::PRICE_NEGOTIATE ? $value : $this->priceNegotiate,
+            InboxAutomationSettings::ORDER_PROCESS => $key === InboxAutomationSettings::ORDER_PROCESS ? $value : $this->orderProcess,
         ]);
         $this->photoRequest = $saved[InboxAutomationSettings::PHOTO_REQUEST];
         $this->pricedImage = $saved[InboxAutomationSettings::PRICED_IMAGE];
@@ -148,6 +159,7 @@ class AdminInboxAutomations extends Component
         $this->location = $saved[InboxAutomationSettings::LOCATION];
         $this->advance = $saved[InboxAutomationSettings::ADVANCE];
         $this->priceNegotiate = $saved[InboxAutomationSettings::PRICE_NEGOTIATE];
+        $this->orderProcess = $saved[InboxAutomationSettings::ORDER_PROCESS];
         $this->statusMessage = 'Automation saved.';
     }
 
@@ -163,5 +175,6 @@ class AdminInboxAutomations extends Component
         $this->location = $flags[InboxAutomationSettings::LOCATION];
         $this->advance = $flags[InboxAutomationSettings::ADVANCE];
         $this->priceNegotiate = $flags[InboxAutomationSettings::PRICE_NEGOTIATE];
+        $this->orderProcess = $flags[InboxAutomationSettings::ORDER_PROCESS];
     }
 }

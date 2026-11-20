@@ -201,6 +201,7 @@ class InboxQuickReplyMatcher
         $exampleHit = $this->matchExamples($haystack, $examples, $repliesById);
         if (
             $exampleHit !== null
+            && ! $this->exampleContradictsClearIntent($haystack, $exampleHit)
             && ! $this->shouldSuppressWhichProductMatch($message, $exampleHit, $hasInboundProductImages)
         ) {
             return $exampleHit;
@@ -741,6 +742,10 @@ class InboxQuickReplyMatcher
             return true;
         }
 
+        if ($text !== '' && ($this->looksLikePriceQuery($text) || $this->looksLikeColorGuarantee($text))) {
+            return false;
+        }
+
         if ($text === '' || $deliveryReplies === []) {
             return false;
         }
@@ -920,6 +925,10 @@ class InboxQuickReplyMatcher
             return true;
         }
 
+        if ($text !== '' && ($this->looksLikePriceQuery($text) || $this->looksLikeColorGuarantee($text))) {
+            return false;
+        }
+
         if ($text === '' || $locationReplies === []) {
             return false;
         }
@@ -1077,6 +1086,10 @@ class InboxQuickReplyMatcher
         $text = trim((string) ($message->body ?? ''));
         if ($text !== '' && $this->looksLikeAdvance($text)) {
             return true;
+        }
+
+        if ($text !== '' && ($this->looksLikePriceQuery($text) || $this->looksLikeColorGuarantee($text))) {
+            return false;
         }
 
         if ($text === '' || $advanceReplies === []) {
@@ -1252,16 +1265,24 @@ class InboxQuickReplyMatcher
             return true;
         }
 
-        if ($text === '') {
+        if ($text !== '' && ($this->looksLikePriceQuery($text) || $this->hasDeliveryTimeOrChargeCue($text))) {
+            return false;
+        }
+
+        if ($text === '' || $colorReplies === []) {
             return false;
         }
 
         $examples = InboxQuickReplyExample::query()
             ->whereIn('quick_reply_id', array_column($colorReplies, 'id'))
             ->get();
-        $match = $this->matchMessage($message, $colorReplies, $examples, hasInboundProductImages: false);
+        $repliesById = [];
+        foreach ($colorReplies as $reply) {
+            $repliesById[$reply['id']] = $reply;
+        }
+        $exampleHit = $this->matchExamples($text, $examples, $repliesById);
 
-        return is_array($match) && $this->isColorGuaranteeReply($match);
+        return is_array($exampleHit) && $this->isColorGuaranteeReply($exampleHit);
     }
 
     public function looksLikeColorGuarantee(string $text): bool
@@ -1497,7 +1518,9 @@ class InboxQuickReplyMatcher
             '৫' => '5', '৬' => '6', '৭' => '7', '৮' => '8', '৯' => '9',
             "\u{200C}" => '', "\u{200D}" => '',
         ]);
-        $text = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $text) ?? $text;
+        // Keep combining marks (Bengali matras). Stripping them collapsed
+        // “টাকা” to “টক”, which then matched inside গ্যারান্টি+কালার / প্রডাক্ট.
+        $text = preg_replace('/[^\p{L}\p{M}\p{N}\s]+/u', ' ', $text) ?? $text;
 
         return trim(preg_replace('/\s+/u', ' ', $text) ?? $text);
     }
@@ -1512,6 +1535,31 @@ class InboxQuickReplyMatcher
      */
     public function intentForReply(array $reply): ?string
     {
+        if (
+            $this->isHiReply($reply)
+            || $this->isColorGuaranteeReply($reply)
+            || $this->isLocationReply($reply)
+            || $this->isAdvanceReply($reply)
+        ) {
+            return null;
+        }
+
+        if ($this->isDeliveryChargeReply($reply)) {
+            return self::INTENT_DELIVERY;
+        }
+
+        if ($this->isOrderProcessReply($reply)) {
+            return self::INTENT_ORDER;
+        }
+
+        if ($this->isPriceNegotiateReply($reply)) {
+            return self::INTENT_NEGOTIATE;
+        }
+
+        if ($this->isWhichProductReply($reply)) {
+            return self::INTENT_PRICE;
+        }
+
         return $this->detectIntent(($reply['label'] ?? '').' '.($reply['body'] ?? ''));
     }
 
@@ -1580,11 +1628,17 @@ class InboxQuickReplyMatcher
 
             $sample = (string) $example->example_normalized;
             $sampleCompact = str_replace(' ', '', $sample);
+            $foldedCompact = $this->stripMarks($compact);
+            $sampleFolded = $this->stripMarks($sampleCompact);
             $score = 0.0;
-            if ($sample === $normalized || $sampleCompact === $compact) {
+            if (
+                $sample === $normalized
+                || $sampleCompact === $compact
+                || ($foldedCompact !== '' && $sampleFolded === $foldedCompact)
+            ) {
                 $score = 1.0;
             } else {
-                similar_text($compact, $sampleCompact, $percent);
+                similar_text($foldedCompact, $sampleFolded, $percent);
                 $score = $percent / 100;
                 $maxLen = max(strlen($compact), strlen($sampleCompact));
                 if (
@@ -1722,6 +1776,41 @@ class InboxQuickReplyMatcher
             "\u{09DD}" => "\u{09A2}",
             "\u{09BC}" => '',
         ]);
+    }
+
+    /**
+     * Staff examples must not retag a clear price / colour / delivery ask onto
+     * a dedicated chip for a different automation.
+     *
+     * @param  array{id?: string, label?: string, body?: string}  $reply
+     */
+    private function exampleContradictsClearIntent(string $text, array $reply): bool
+    {
+        if ($this->looksLikePriceQuery($text) && ! $this->looksLikeColorGuarantee($text) && ! $this->hasDeliveryTimeOrChargeCue($text)) {
+            return $this->isColorGuaranteeReply($reply)
+                || $this->isDeliveryChargeReply($reply)
+                || $this->isLocationReply($reply)
+                || $this->isAdvanceReply($reply);
+        }
+
+        if ($this->looksLikeColorGuarantee($text)) {
+            return $this->isWhichProductReply($reply)
+                || $this->isDeliveryChargeReply($reply)
+                || $this->isLocationReply($reply)
+                || $this->isAdvanceReply($reply);
+        }
+
+        if ($this->hasDeliveryTimeOrChargeCue($text) || $this->looksLikeKobePabo($text)) {
+            return $this->isWhichProductReply($reply)
+                || $this->isColorGuaranteeReply($reply);
+        }
+
+        return false;
+    }
+
+    private function stripMarks(string $text): string
+    {
+        return preg_replace('/\p{M}+/u', '', $text) ?? $text;
     }
 
     private function shouldSuppressWhichProductMatch(

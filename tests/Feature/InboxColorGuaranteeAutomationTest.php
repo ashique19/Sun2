@@ -108,6 +108,29 @@ class InboxColorGuaranteeAutomationTest extends TestCase
     }
 
     #[Test]
+    public function pahari_photo_plus_a_price_ask_does_not_send_color_guarantee(): void
+    {
+        Http::fake();
+        app(InboxQuickReplyService::class)->save([
+            [
+                'label' => InboxColorGuaranteeAutomationService::REPLY_LABEL,
+                'body' => 'কালার গ্যারান্টি ২ বছর। প্রয়োজনে রূপার দোকান থেকে আবার কালার করতে পারবেন।',
+            ],
+            ['label' => 'কোন প্রডাক্ট?', 'body' => 'কোন প্রডাক্টটা দেখতে চান?'],
+        ]);
+
+        $conversation = $this->conversation('psid-color-price-ask');
+        $product = $this->productInCategory(InboxColorGuaranteeAutomationService::CATEGORY_NAME);
+        $this->inboundPhoto($conversation, $product);
+        $inbound = $this->inbound($conversation, 'price');
+
+        $this->assertNull(
+            app(InboxColorGuaranteeAutomationService::class)->reply($conversation->fresh(), $inbound)
+        );
+        Http::assertNothingSent();
+    }
+
+    #[Test]
     public function matched_pahari_photo_after_an_ask_sends_the_saved_reply(): void
     {
         Http::fake([

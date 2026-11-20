@@ -671,6 +671,27 @@ class InboxDeliveryChargeAutomationTest extends TestCase
     }
 
     #[Test]
+    public function a_price_ask_does_not_send_delivery_time(): void
+    {
+        Http::fake();
+        app(InboxQuickReplyService::class)->save([
+            [
+                'label' => InboxDeliveryChargeAutomationService::REPLY_LABEL,
+                'body' => InboxDeliveryChargeAutomationService::BODY,
+            ],
+            ['label' => 'কোন প্রডাক্ট?', 'body' => 'কোন প্রডাক্টটা দেখতে চান?'],
+        ]);
+
+        $conversation = $this->conversation('psid-delivery-price-ask');
+        $inbound = $this->inbound($conversation, 'price');
+
+        $this->assertNull(
+            app(InboxDeliveryChargeAutomationService::class)->reply($conversation, $inbound)
+        );
+        Http::assertNothingSent();
+    }
+
+    #[Test]
     public function disabled_setting_does_not_send(): void
     {
         Http::fake();

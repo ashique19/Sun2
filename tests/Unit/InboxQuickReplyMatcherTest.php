@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Services\Channels\ChannelMessageImageMatchService;
 use App\Services\Channels\InboxAdvanceAutomationService;
 use App\Services\Channels\InboxColorGuaranteeAutomationService;
+use App\Services\Channels\InboxDeliveryChargeAutomationService;
 use App\Services\Channels\InboxLocationAutomationService;
 use App\Services\Channels\InboxQuickReplyMatcher;
 use App\Services\Channels\InboxQuickReplyService;
@@ -307,9 +308,136 @@ class InboxQuickReplyMatcherTest extends TestCase
         $this->assertTrue($this->matcher()->looksLikeColorGuarantee('কালার গ্যারান্টি আছে?'));
         $this->assertTrue($this->matcher()->looksLikeColorGuarantee('color guarantee?'));
         $this->assertFalse($this->matcher()->looksLikeColorGuarantee('dam koto?'));
+        $this->assertFalse($this->matcher()->looksLikeColorGuarantee('price'));
         $this->assertTrue($this->matcher()->isPahariAlchoraCategoryName(InboxColorGuaranteeAutomationService::CATEGORY_NAME));
         $this->assertTrue($this->matcher()->isPahariAlchoraCategoryName('পাহাড়ি আলছড়া'));
         $this->assertFalse($this->matcher()->isPahariAlchoraCategoryName('Rings'));
+    }
+
+    #[Test]
+    public function dedicated_chips_do_not_inherit_price_or_delivery_intent_from_their_bodies(): void
+    {
+        $this->assertNull($this->matcher()->intentForReply([
+            'label' => InboxColorGuaranteeAutomationService::REPLY_LABEL,
+            'body' => 'কালার গ্যারান্টি ২ বছর। প্রয়োজনে রূপার দোকান থেকে আবার কালার করতে পারবেন।',
+        ]));
+        $this->assertNull($this->matcher()->intentForReply([
+            'label' => InboxLocationAutomationService::REPLY_LABEL,
+            'body' => InboxLocationAutomationService::BODY,
+        ]));
+        $this->assertNull($this->matcher()->intentForReply([
+            'label' => InboxAdvanceAutomationService::REPLY_LABEL,
+            'body' => InboxAdvanceAutomationService::BODY_ASK_LOCATION,
+        ]));
+        $this->assertSame(
+            InboxQuickReplyMatcher::INTENT_DELIVERY,
+            $this->matcher()->intentForReply([
+                'label' => InboxDeliveryChargeAutomationService::REPLY_LABEL,
+                'body' => InboxDeliveryChargeAutomationService::BODY,
+            ]),
+        );
+        $this->assertSame(
+            InboxQuickReplyMatcher::INTENT_PRICE,
+            $this->matcher()->intentForReply([
+                'label' => 'কোন প্রডাক্ট?',
+                'body' => 'কোন প্রডাক্টটা দেখতে চান?',
+            ]),
+        );
+    }
+
+    #[Test]
+    #[DataProvider('priceAsksThatMustNotStealOtherChips')]
+    public function price_asks_match_which_product_not_color_or_delivery(string $text): void
+    {
+        $replies = app(InboxQuickReplyService::class)->save([
+            [
+                'label' => InboxColorGuaranteeAutomationService::REPLY_LABEL,
+                'body' => 'কালার গ্যারান্টি ২ বছর। প্রয়োজনে রূপার দোকান থেকে আবার কালার করতে পারবেন।',
+            ],
+            [
+                'label' => InboxDeliveryChargeAutomationService::REPLY_LABEL,
+                'body' => InboxDeliveryChargeAutomationService::BODY,
+            ],
+            [
+                'label' => InboxLocationAutomationService::REPLY_LABEL,
+                'body' => InboxLocationAutomationService::BODY,
+            ],
+            [
+                'label' => InboxAdvanceAutomationService::REPLY_LABEL,
+                'body' => InboxAdvanceAutomationService::BODY_ASK_LOCATION,
+            ],
+            [
+                'label' => 'কোন প্রডাক্ট?',
+                'body' => 'কোন প্রডাক্টটা দেখতে চান?',
+            ],
+        ]);
+        $which = collect($replies)->first(
+            fn (array $reply): bool => $this->matcher()->isWhichProductReply($reply)
+        );
+        $this->assertNotNull($which);
+
+        $conversation = $this->conversation('psid-price-conflict-'.md5($text));
+        $message = $this->inbound($conversation, $text);
+
+        $this->assertFalse($this->matcher()->isColorGuaranteeAsk($message), $text);
+        $this->assertFalse($this->matcher()->isDeliveryChargeAsk($message), $text);
+        $this->assertFalse($this->matcher()->isLocationAsk($message), $text);
+        $this->assertFalse($this->matcher()->isAdvanceAsk($message), $text);
+        $this->assertTrue($this->matcher()->isWhichProductPriceAsk($message), $text);
+
+        $matches = $this->matcher()->matchThread($conversation->fresh()->load('messages'), $replies);
+        $this->assertSame($which['id'], $matches[$message->id]['id'] ?? null);
+        $this->assertSame(InboxQuickReplyMatcher::INTENT_PRICE, $matches[$message->id]['intent'] ?? null);
+    }
+
+    /**
+     * @return list<list<string>>
+     */
+    public static function priceAsksThatMustNotStealOtherChips(): array
+    {
+        return [
+            ['price'],
+            ['price?'],
+            ['dam koto'],
+            ['দাম কত'],
+            ['এটা কত'],
+        ];
+    }
+
+    #[Test]
+    public function a_price_example_tagged_to_color_does_not_retag_later_price_asks(): void
+    {
+        $replies = app(InboxQuickReplyService::class)->save([
+            [
+                'label' => InboxColorGuaranteeAutomationService::REPLY_LABEL,
+                'body' => 'কালার গ্যারান্টি ২ বছর। প্রয়োজনে রূপার দোকান থেকে আবার কালার করতে পারবেন।',
+            ],
+            [
+                'label' => 'কোন প্রডাক্ট?',
+                'body' => 'কোন প্রডাক্টটা দেখতে চান?',
+            ],
+        ]);
+        $color = collect($replies)->first(
+            fn (array $reply): bool => $this->matcher()->isColorGuaranteeReply($reply)
+        );
+        $which = collect($replies)->first(
+            fn (array $reply): bool => $this->matcher()->isWhichProductReply($reply)
+        );
+        $this->assertNotNull($color);
+        $this->assertNotNull($which);
+
+        $conversation = $this->conversation('psid-price-color-example');
+        $tagged = $this->inbound($conversation, 'price');
+        $this->matcher()->tag($tagged, $color['id'], null);
+
+        $later = $this->inbound($conversation, 'price?');
+        $this->assertFalse($this->matcher()->isColorGuaranteeAsk($later->fresh()));
+        $this->assertTrue($this->matcher()->isWhichProductPriceAsk($later->fresh()));
+
+        $matches = $this->matcher()->matchThread($conversation->fresh()->load('messages'), $replies);
+        $this->assertSame($color['id'], $matches[$tagged->id]['id']);
+        $this->assertTrue($matches[$tagged->id]['tagged']);
+        $this->assertSame($which['id'], $matches[$later->id]['id']);
     }
 
     #[Test]

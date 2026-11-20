@@ -129,6 +129,7 @@ class AdminInboxAutomations extends Component
             ],
             'orderProcessLabel' => InboxOrderProcessAutomationService::REPLY_LABEL,
             'orderProcessBody' => app(InboxOrderProcessAutomationService::class)->replyBody(),
+            'orderProcessFallbackBody' => InboxOrderProcessAutomationService::BODY_FALLBACK,
             'matchMinPercent' => InboxPriceQueryAutomationService::MATCH_MIN_PERCENT,
             'sessionMinutes' => InboxPriceQueryAutomationService::sessionMinutes(),
         ]);

@@ -98,6 +98,10 @@ class InboxAdvanceAutomationService
             return;
         }
 
+        if (InboxOrderProcessAutomationService::willHandle($message)) {
+            return;
+        }
+
         $service = app(self::class);
         if (! $service->shouldHandle($conversation, $message)) {
             return;
@@ -239,6 +243,79 @@ class InboxAdvanceAutomationService
         }
 
         return null;
+    }
+
+    /**
+     * Advance copy to send with an অর্ডার প্রসেস match.
+     *
+     * @return array{kind: self::KIND_ASK|self::KIND_LISTED|self::KIND_UNLISTED|self::KIND_COD, body: string}|null
+     */
+    public function planAlongsideOrder(ChannelConversation $conversation, ChannelMessage $message): ?array
+    {
+        $text = trim((string) ($message->body ?? ''));
+        $listed = $this->listedAreaFromSession($conversation, $message);
+        $pressingCod = $this->matcher->looksLikeCodPush($text);
+
+        if ($pressingCod && is_string($listed) && $listed !== '') {
+            return [
+                'kind' => self::KIND_COD,
+                'body' => self::codRefusalBody($listed),
+            ];
+        }
+
+        if ($listed !== null) {
+            return [
+                'kind' => self::KIND_LISTED,
+                'body' => self::listedBody($listed),
+            ];
+        }
+
+        if ($this->matcher->looksLikeAdvance($text) || $pressingCod) {
+            return [
+                'kind' => self::KIND_ASK,
+                'body' => self::BODY_ASK_LOCATION,
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array{kind: self::KIND_ASK|self::KIND_LISTED|self::KIND_UNLISTED|self::KIND_COD, body: string}|null  $plan
+     */
+    public function sendAlongsideOrder(ChannelConversation $conversation, ChannelMessage $message, ?array $plan = null): ?ChannelMessage
+    {
+        if (! $this->settings->enabled(InboxAutomationSettings::ADVANCE)) {
+            return null;
+        }
+
+        $plan ??= $this->planAlongsideOrder($conversation, $message);
+        if ($plan === null) {
+            return null;
+        }
+
+        if ($this->alreadySent($conversation, $message, $plan['kind'], $plan['body'])) {
+            return null;
+        }
+
+        $result = $this->replies->sendText(
+            $conversation,
+            $plan['body'],
+            false,
+            $message,
+        );
+
+        $stored = $result['message'] ?? null;
+        if (! ($result['ok'] ?? false) || ! $stored instanceof ChannelMessage) {
+            return null;
+        }
+
+        $payload = is_array($stored->raw_payload) ? $stored->raw_payload : [];
+        $payload[self::RAW_FLAG] = true;
+        $payload[self::RAW_KIND] = $plan['kind'];
+        $stored->forceFill(['raw_payload' => $payload])->save();
+
+        return $stored->fresh();
     }
 
     public function listedAreaFromSession(ChannelConversation $conversation, ChannelMessage $inbound): ?string
@@ -390,6 +467,16 @@ class InboxAdvanceAutomationService
             ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
             ->get() as $row) {
             if ((int) ($row->reply_to_message_id ?? 0) === $inboundId) {
+                $payload = is_array($row->raw_payload) ? $row->raw_payload : [];
+                $own = ($payload[self::RAW_FLAG] ?? false) === true
+                    || (string) $row->body === $body;
+                if ($own) {
+                    return true;
+                }
+                if (InboxAutomationSettings::isAutomatedOutbound($row)) {
+                    continue;
+                }
+
                 return true;
             }
 

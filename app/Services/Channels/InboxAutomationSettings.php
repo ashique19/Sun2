@@ -2,6 +2,7 @@
 
 namespace App\Services\Channels;
 
+use App\Models\ChannelMessage;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Cache;
 
@@ -74,6 +75,21 @@ class InboxAutomationSettings
     public function enabled(string $key): bool
     {
         return (bool) ($this->all()[$key] ?? false);
+    }
+
+    /**
+     * True when this outbound was sent by any inbox automation.
+     */
+    public static function isAutomatedOutbound(ChannelMessage $row): bool
+    {
+        $payload = is_array($row->raw_payload) ? $row->raw_payload : [];
+        foreach ($payload as $key => $value) {
+            if (is_string($key) && str_starts_with($key, 'auto_') && $value) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function anyEnabled(): bool

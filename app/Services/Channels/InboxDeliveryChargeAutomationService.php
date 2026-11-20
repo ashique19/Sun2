@@ -148,6 +148,10 @@ class InboxDeliveryChargeAutomationService
             return;
         }
 
+        if (InboxOrderProcessAutomationService::willHandle($message)) {
+            return;
+        }
+
         if (! app(self::class)->shouldHandle($conversation, $message)) {
             return;
         }
@@ -300,6 +304,86 @@ class InboxDeliveryChargeAutomationService
         }
 
         return null;
+    }
+
+    /**
+     * Delivery / কবে পাব copy to send with an অর্ডার প্রসেস match.
+     *
+     * @return array{kind: self::KIND_CHARGE|self::KIND_KOBE_ASK|self::KIND_KOBE_DAYS, body: string}|null
+     */
+    public function planAlongsideOrder(ChannelConversation $conversation, ChannelMessage $message): ?array
+    {
+        $text = (string) ($message->body ?? '');
+        $isKobe = $this->matcher->looksLikeKobePabo($text);
+        $location = $this->locationFor($conversation, $message);
+        $hasPlace = $location['zone'] !== null || (is_string($location['area']) && $location['area'] !== '');
+        $isCharge = $this->matcher->looksLikeDeliveryCharge($text) || $hasPlace;
+
+        if ($isKobe || $this->isWaitingForKobeArea($conversation)) {
+            $kobeLocation = $isKobe ? $location : $this->locationFromText($text, true);
+            if ($kobeLocation['zone'] !== null || (is_string($kobeLocation['area']) && $kobeLocation['area'] !== '')) {
+                $zone = $kobeLocation['zone'] ?? self::ZONE_OUTSIDE;
+
+                return [
+                    'kind' => self::KIND_KOBE_DAYS,
+                    'body' => self::weekdayDeliveryBody($zone),
+                ];
+            }
+
+            if ($isKobe) {
+                return [
+                    'kind' => self::KIND_KOBE_ASK,
+                    'body' => self::BODY_KOBE_ASK,
+                ];
+            }
+        }
+
+        if ($isCharge) {
+            return [
+                'kind' => self::KIND_CHARGE,
+                'body' => $this->bodyForLocation($location),
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array{kind: self::KIND_CHARGE|self::KIND_KOBE_ASK|self::KIND_KOBE_DAYS, body: string}|null  $plan
+     */
+    public function sendAlongsideOrder(ChannelConversation $conversation, ChannelMessage $message, ?array $plan = null): ?ChannelMessage
+    {
+        if (! $this->settings->enabled(InboxAutomationSettings::DELIVERY_CHARGE)) {
+            return null;
+        }
+
+        $plan ??= $this->planAlongsideOrder($conversation, $message);
+        if ($plan === null || $plan['body'] === '') {
+            return null;
+        }
+
+        if ($this->alreadyReplied($conversation, $message, $plan['kind'], $plan['body'])) {
+            return null;
+        }
+
+        $result = $this->replies->sendText(
+            $conversation,
+            $plan['body'],
+            false,
+            $message,
+        );
+
+        $stored = $result['message'] ?? null;
+        if (! ($result['ok'] ?? false) || ! $stored instanceof ChannelMessage) {
+            return null;
+        }
+
+        $payload = is_array($stored->raw_payload) ? $stored->raw_payload : [];
+        $payload[self::RAW_FLAG] = true;
+        $payload[self::RAW_KIND] = $plan['kind'];
+        $stored->forceFill(['raw_payload' => $payload])->save();
+
+        return $stored->fresh();
     }
 
     public static function personalizedDhakaBody(string $area): string
@@ -881,6 +965,13 @@ class InboxDeliveryChargeAutomationService
             ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
             ->get() as $row) {
             if ((int) ($row->reply_to_message_id ?? 0) === $inboundId) {
+                if ($this->autoKind($row) !== null || (string) $row->body === $body) {
+                    return true;
+                }
+                if (InboxAutomationSettings::isAutomatedOutbound($row)) {
+                    continue;
+                }
+
                 return true;
             }
 

@@ -643,7 +643,22 @@ class InboxQuickReplyMatcher
 
     public function looksLikeOrderProcess(string $text): bool
     {
-        return $this->detectIntent($text) === self::INTENT_ORDER;
+        $compact = $this->compact($text);
+        if ($compact === '') {
+            return false;
+        }
+
+        foreach (self::CUES[self::INTENT_ORDER] as $cue) {
+            $needle = $this->compact($cue);
+            if ($needle === '' || mb_strlen($needle) < 2) {
+                continue;
+            }
+            if (str_contains($compact, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -672,6 +687,21 @@ class InboxQuickReplyMatcher
         return false;
     }
 
+    /**
+     * @param  list<array{id: string, label: string, body: string}>  $replies
+     * @return array{id: string, label: string, body: string}|null
+     */
+    private function replyById(array $replies, string $id): ?array
+    {
+        foreach ($replies as $reply) {
+            if ($reply['id'] === $id) {
+                return $reply;
+            }
+        }
+
+        return null;
+    }
+
     public function isDeliveryChargeAsk(ChannelMessage $message): bool
     {
         if ($message->direction !== ChannelMessage::DIRECTION_INBOUND) {
@@ -694,7 +724,10 @@ class InboxQuickReplyMatcher
                 }
             }
 
-            return false;
+            $taggedReply = $this->replyById($replies, $taggedId);
+            if ($taggedReply === null || ! $this->isOrderProcessReply($taggedReply)) {
+                return false;
+            }
         }
 
         $text = trim((string) ($message->body ?? ''));
@@ -724,6 +757,19 @@ class InboxQuickReplyMatcher
             return false;
         }
 
+        return $this->hasDeliveryChargeCue($text);
+    }
+
+    /**
+     * Delivery time / charge wording, even when the same inbound also asks about advance.
+     */
+    public function hasDeliveryTimeOrChargeCue(string $text): bool
+    {
+        return $this->looksLikeKobePabo($text) || $this->hasDeliveryChargeCue($text);
+    }
+
+    private function hasDeliveryChargeCue(string $text): bool
+    {
         $compact = $this->compactYa($text);
         if ($compact === '') {
             return false;
@@ -776,7 +822,7 @@ class InboxQuickReplyMatcher
      */
     public function looksLikeKobePabo(string $text): bool
     {
-        if ($this->looksLikeAdvance($text) || $this->looksLikeCodPush($text)) {
+        if ($this->looksLikeCodPush($text)) {
             return false;
         }
 
@@ -1016,7 +1062,10 @@ class InboxQuickReplyMatcher
                 }
             }
 
-            return false;
+            $taggedReply = $this->replyById($replies, $taggedId);
+            if ($taggedReply === null || ! $this->isOrderProcessReply($taggedReply)) {
+                return false;
+            }
         }
 
         $text = trim((string) ($message->body ?? ''));

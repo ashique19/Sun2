@@ -13,6 +13,12 @@ class InboxOrderProcessAutomationService
 
     public const RAW_FLAG = 'auto_order_process';
 
+    public const RAW_KIND = 'auto_order_process_kind';
+
+    public const KIND_FALLBACK = 'fallback';
+
+    public const BODY_FALLBACK = 'সময় দিয়ে সহযোগিতা করবেন প্লিজ, চেক করে জানাচ্ছি।';
+
     /**
      * Conversation ids already queued this HTTP request.
      *
@@ -25,7 +31,23 @@ class InboxOrderProcessAutomationService
         private InboxQuickReplyMatcher $matcher,
         private InboxQuickReplyService $quickReplies,
         private ChannelReplyService $replies,
+        private InboxDeliveryChargeAutomationService $delivery,
+        private InboxAdvanceAutomationService $advance,
     ) {}
+
+    public static function willHandle(ChannelMessage $message): bool
+    {
+        if (! app(InboxAutomationSettings::class)->enabled(InboxAutomationSettings::ORDER_PROCESS)) {
+            return false;
+        }
+
+        $body = app(self::class)->replyBody();
+        if ($body === null || $body === '') {
+            return false;
+        }
+
+        return app(InboxQuickReplyMatcher::class)->isOrderProcessAsk($message);
+    }
 
     public static function scheduleAfterInbound(ChannelConversation $conversation, ChannelMessage $message): void
     {
@@ -129,6 +151,8 @@ class InboxOrderProcessAutomationService
                 $payload[self::RAW_FLAG] = true;
                 $stored->forceFill(['raw_payload' => $payload])->save();
 
+                $this->sendCompanions($conversation, $message);
+
                 return $stored->fresh();
             },
         );
@@ -139,6 +163,100 @@ class InboxOrderProcessAutomationService
         $reply = $this->savedReply();
 
         return $reply['body'] ?? null;
+    }
+
+    private function sendCompanions(ChannelConversation $conversation, ChannelMessage $message): void
+    {
+        $deliveryPlan = $this->delivery->planAlongsideOrder($conversation, $message);
+        $advancePlan = $this->advance->planAlongsideOrder($conversation, $message);
+
+        if (
+            is_array($advancePlan)
+            && in_array($advancePlan['kind'], [
+                InboxAdvanceAutomationService::KIND_LISTED,
+                InboxAdvanceAutomationService::KIND_COD,
+            ], true)
+            && is_array($deliveryPlan)
+            && $deliveryPlan['kind'] === InboxDeliveryChargeAutomationService::KIND_CHARGE
+        ) {
+            $deliveryPlan = null;
+        }
+
+        if ($this->companionsConflict($conversation, $message, $deliveryPlan, $advancePlan)) {
+            $this->sendFallback($conversation, $message);
+
+            return;
+        }
+
+        if (is_array($deliveryPlan)) {
+            $this->delivery->sendAlongsideOrder($conversation, $message, $deliveryPlan);
+        }
+
+        if (is_array($advancePlan)) {
+            $this->advance->sendAlongsideOrder($conversation, $message, $advancePlan);
+        }
+    }
+
+    /**
+     * @param  array{kind: string, body: string}|null  $deliveryPlan
+     * @param  array{kind: string, body: string}|null  $advancePlan
+     */
+    private function companionsConflict(
+        ChannelConversation $conversation,
+        ChannelMessage $message,
+        ?array $deliveryPlan,
+        ?array $advancePlan,
+    ): bool {
+        $text = (string) ($message->body ?? '');
+        $askedTime = $this->matcher->hasDeliveryTimeOrChargeCue($text);
+        $askedAdvance = $this->matcher->looksLikeAdvance($text) || $this->matcher->looksLikeCodPush($text);
+        $location = $this->delivery->locationFor($conversation, $message);
+        $hasPlace = $location['zone'] !== null
+            || (is_string($location['area']) && $location['area'] !== '')
+            || $this->advance->listedAreaFromSession($conversation, $message) !== null;
+
+        if ($askedTime && $askedAdvance && ! $hasPlace) {
+            return true;
+        }
+
+        if ($deliveryPlan === null || $advancePlan === null) {
+            return false;
+        }
+
+        $deliveryKind = $deliveryPlan['kind'];
+        $advanceKind = $advancePlan['kind'];
+
+        if ($deliveryKind === InboxDeliveryChargeAutomationService::KIND_KOBE_ASK
+            && $advanceKind === InboxAdvanceAutomationService::KIND_ASK) {
+            return true;
+        }
+
+        if ($deliveryKind === InboxDeliveryChargeAutomationService::KIND_CHARGE
+            && $advanceKind === InboxAdvanceAutomationService::KIND_ASK) {
+            return true;
+        }
+
+        return ($deliveryPlan['body'] ?? '') === InboxDeliveryChargeAutomationService::BODY;
+    }
+
+    private function sendFallback(ChannelConversation $conversation, ChannelMessage $message): void
+    {
+        $result = $this->replies->sendText(
+            $conversation,
+            self::BODY_FALLBACK,
+            false,
+            $message,
+        );
+
+        $stored = $result['message'] ?? null;
+        if (! ($result['ok'] ?? false) || ! $stored instanceof ChannelMessage) {
+            return;
+        }
+
+        $payload = is_array($stored->raw_payload) ? $stored->raw_payload : [];
+        $payload[self::RAW_FLAG] = true;
+        $payload[self::RAW_KIND] = self::KIND_FALLBACK;
+        $stored->forceFill(['raw_payload' => $payload])->save();
     }
 
     /**
@@ -165,6 +283,16 @@ class InboxOrderProcessAutomationService
             ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
             ->get() as $row) {
             if ((int) ($row->reply_to_message_id ?? 0) === $inboundId) {
+                $payload = is_array($row->raw_payload) ? $row->raw_payload : [];
+                $own = ($payload[self::RAW_FLAG] ?? false) === true
+                    || (string) $row->body === $body;
+                if ($own) {
+                    return true;
+                }
+                if (InboxAutomationSettings::isAutomatedOutbound($row)) {
+                    continue;
+                }
+
                 return true;
             }
 

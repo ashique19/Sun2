@@ -111,6 +111,8 @@ class InboxQuickReplyMatcherTest extends TestCase
             'body' => 'নাম, ঠিকানা আর মোবাইল দিন',
         ]));
         $this->assertTrue($this->matcher()->looksLikeOrderProcess('kivabe order'));
+        $this->assertTrue($this->matcher()->looksLikeOrderProcess('কবে পাব অর্ডার করব'));
+        $this->assertTrue($this->matcher()->looksLikeKobePabo('কবে পাব এডভান্স লাগবে?'));
         $this->assertSame(
             InboxQuickReplyMatcher::INTENT_ORDER,
             $this->matcher()->intentForReply([

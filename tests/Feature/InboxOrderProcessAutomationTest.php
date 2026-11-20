@@ -4,11 +4,14 @@ namespace Tests\Feature;
 
 use App\Models\ChannelConversation;
 use App\Models\ChannelMessage;
+use App\Services\Channels\InboxAdvanceAutomationService;
 use App\Services\Channels\InboxAutomationSettings;
+use App\Services\Channels\InboxDeliveryChargeAutomationService;
 use App\Services\Channels\InboxOrderProcessAutomationService;
 use App\Services\Channels\InboxQuickReplyMatcher;
 use App\Services\Channels\InboxQuickReplyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -26,6 +29,8 @@ class InboxOrderProcessAutomationTest extends TestCase
 
         config([
             'channels.inbox.auto_order_process' => true,
+            'channels.inbox.auto_delivery_charge' => true,
+            'channels.inbox.auto_advance' => true,
             'facebook.messenger.enabled' => true,
             'facebook.messenger.app_secret' => '',
             'facebook.messenger.page_access_token' => 'page-token',
@@ -129,6 +134,132 @@ class InboxOrderProcessAutomationTest extends TestCase
 
         $this->assertNotNull($sent);
         $this->assertSame(self::CHIP_BODY, $sent->body);
+    }
+
+    #[Test]
+    public function order_ask_with_kobe_pabo_also_sends_the_delivery_time_reply(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_order_kobe_'.uniqid('', true),
+                'recipient_id' => 'psid-order-kobe',
+            ], 200);
+        });
+
+        $conversation = $this->conversation('psid-order-kobe');
+        $inbound = $this->inbound($conversation, 'kivabe order kobe pabo');
+
+        $sent = app(InboxOrderProcessAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent);
+        $this->assertSame(
+            [self::CHIP_BODY, InboxDeliveryChargeAutomationService::BODY_KOBE_ASK],
+            $this->outboundBodies($conversation),
+        );
+    }
+
+    #[Test]
+    public function order_ask_with_advance_also_sends_the_advance_reply(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_order_adv_'.uniqid('', true),
+                'recipient_id' => 'psid-order-adv',
+            ], 200);
+        });
+
+        $conversation = $this->conversation('psid-order-adv');
+        $inbound = $this->inbound($conversation, 'অর্ডার করতে চাই এডভান্স লাগবে?');
+
+        $sent = app(InboxOrderProcessAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent);
+        $this->assertSame(
+            [self::CHIP_BODY, InboxAdvanceAutomationService::BODY_ASK_LOCATION],
+            $this->outboundBodies($conversation),
+        );
+    }
+
+    #[Test]
+    public function order_ask_with_kobe_and_advance_sends_the_wait_fallback(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_order_combo_'.uniqid('', true),
+                'recipient_id' => 'psid-order-combo',
+            ], 200);
+        });
+
+        $conversation = $this->conversation('psid-order-combo');
+        $inbound = $this->inbound($conversation, 'অর্ডার করতে চাই কবে পাব এডভান্স লাগবে?');
+
+        $sent = app(InboxOrderProcessAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent);
+        $this->assertSame(
+            [self::CHIP_BODY, InboxOrderProcessAutomationService::BODY_FALLBACK],
+            $this->outboundBodies($conversation),
+        );
+    }
+
+    #[Test]
+    public function named_listed_area_order_sends_advance_not_the_regular_charge(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_order_area_'.uniqid('', true),
+                'recipient_id' => 'psid-order-area',
+            ], 200);
+        });
+
+        $conversation = $this->conversation('psid-order-area');
+        $inbound = $this->inbound($conversation, 'কুমিল্লা অর্ডার করতে চাই');
+
+        $sent = app(InboxOrderProcessAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent);
+        $this->assertSame(
+            [
+                self::CHIP_BODY,
+                InboxAdvanceAutomationService::listedBody('কুমিল্লা'),
+            ],
+            $this->outboundBodies($conversation),
+        );
+    }
+
+    #[Test]
+    public function listed_area_order_with_kobe_pabo_sends_weekdays_and_advance(): void
+    {
+        Http::fake(function () {
+            return Http::response([
+                'message_id' => 'm_auto_order_kobe_area_'.uniqid('', true),
+                'recipient_id' => 'psid-order-kobe-area',
+            ], 200);
+        });
+
+        Carbon::setTestNow(Carbon::parse('2026-11-19 12:00:00', 'Asia/Dhaka'));
+
+        $conversation = $this->conversation('psid-order-kobe-area');
+        $inbound = $this->inbound($conversation, 'কুমিল্লা অর্ডার করতে চাই কবে পাব');
+
+        $sent = app(InboxOrderProcessAutomationService::class)
+            ->reply($conversation, $inbound);
+
+        $this->assertNotNull($sent);
+        $this->assertSame(
+            [
+                self::CHIP_BODY,
+                InboxDeliveryChargeAutomationService::weekdayDeliveryBody(InboxDeliveryChargeAutomationService::ZONE_OUTSIDE),
+                InboxAdvanceAutomationService::listedBody('কুমিল্লা'),
+            ],
+            $this->outboundBodies($conversation),
+        );
+
+        Carbon::setTestNow();
     }
 
     #[Test]
@@ -251,5 +382,18 @@ class InboxOrderProcessAutomationTest extends TestCase
             'body' => $body,
             'sent_at' => $sentAt ?? now(),
         ]);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function outboundBodies(ChannelConversation $conversation): array
+    {
+        return ChannelMessage::query()
+            ->where('channel_conversation_id', $conversation->id)
+            ->where('direction', ChannelMessage::DIRECTION_OUTBOUND)
+            ->orderBy('id')
+            ->pluck('body')
+            ->all();
     }
 }

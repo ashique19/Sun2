@@ -117,8 +117,12 @@ class InboxQuickReplyMatcher
         self::INTENT_ORDER => [
             'howtoorder', 'howorder', 'kivabe', 'kivabeorder', 'orderkorbo', 'oderkorbo',
             'orderprocess', 'kivabenibo', 'booking',
+            'placeorder', 'wanttoorder', 'wannaorder', 'orderplease',
+            'orderkorte', 'orderkortechai', 'orderdibo', 'orderdao', 'orderden',
+            'amiorder',
             'কিভাবে', 'কিভাবেঅর্ডার', 'অর্ডারকরব', 'অর্ডারকরবো', 'কিভাবেনিব', 'কিভাবেঅর্ডারকরব',
-            'অর্ডারকিভাবে',
+            'অর্ডারকিভাবে', 'অর্ডারপ্রসেস', 'অর্ডারকরতে', 'অর্ডারকরতেচাই',
+            'অর্ডারদিব', 'অর্ডারদিতেচাই', 'অর্ডারচাই',
         ],
         self::INTENT_NEGOTIATE => self::PRICE_NEGOTIATE_CUES,
     ];
@@ -597,6 +601,113 @@ class InboxQuickReplyMatcher
         return false;
     }
 
+    /**
+     * True when this inbound is placing / asking how to order: tagged against
+     * the “অর্ডার প্রসেস” chip, a saved example, or order-process wording.
+     */
+    public function isOrderProcessAsk(ChannelMessage $message): bool
+    {
+        if ($message->direction !== ChannelMessage::DIRECTION_INBOUND) {
+            return false;
+        }
+
+        $replies = $this->quickReplies->all();
+        $orderReplies = [];
+        foreach ($replies as $reply) {
+            if ($this->isOrderProcessReply($reply)) {
+                $orderReplies[] = $reply;
+            }
+        }
+
+        $taggedId = trim((string) ($message->quick_reply_id ?? ''));
+        if ($taggedId !== '') {
+            foreach ($orderReplies as $reply) {
+                if ($reply['id'] === $taggedId) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        $text = trim((string) ($message->body ?? ''));
+        if ($text !== '' && $this->looksLikeOrderProcess($text)) {
+            return true;
+        }
+
+        if ($text === '' || $replies === []) {
+            return false;
+        }
+
+        $examples = InboxQuickReplyExample::query()
+            ->whereIn('quick_reply_id', array_column($replies, 'id'))
+            ->get();
+        $match = $this->matchMessage($message, $replies, $examples, hasInboundProductImages: false);
+
+        return is_array($match) && $this->isOrderProcessReply($match);
+    }
+
+    public function looksLikeOrderProcess(string $text): bool
+    {
+        $compact = $this->compact($text);
+        if ($compact === '') {
+            return false;
+        }
+
+        foreach (self::CUES[self::INTENT_ORDER] as $cue) {
+            $needle = $this->compact($cue);
+            if ($needle === '' || mb_strlen($needle) < 2) {
+                continue;
+            }
+            if (str_contains($compact, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * True when this saved reply is the “অর্ডার প্রসেস” / how-to-order chip.
+     *
+     * @param  array{label?: string, body?: string}  $reply
+     */
+    public function isOrderProcessReply(array $reply): bool
+    {
+        $label = $this->compact((string) ($reply['label'] ?? ''));
+        if ($label === '') {
+            return false;
+        }
+
+        if ($label === 'order' || $label === $this->compact(InboxOrderProcessAutomationService::REPLY_LABEL)) {
+            return true;
+        }
+
+        foreach (['অর্ডারপ্রসেস', 'orderprocess', 'howtoorder', 'কিভাবেঅর্ডার', 'অর্ডারকিভাবে', 'kivabeorder'] as $cue) {
+            $needle = $this->compact($cue);
+            if ($needle !== '' && str_contains($label, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  list<array{id: string, label: string, body: string}>  $replies
+     * @return array{id: string, label: string, body: string}|null
+     */
+    private function replyById(array $replies, string $id): ?array
+    {
+        foreach ($replies as $reply) {
+            if ($reply['id'] === $id) {
+                return $reply;
+            }
+        }
+
+        return null;
+    }
+
     public function isDeliveryChargeAsk(ChannelMessage $message): bool
     {
         if ($message->direction !== ChannelMessage::DIRECTION_INBOUND) {
@@ -619,7 +730,10 @@ class InboxQuickReplyMatcher
                 }
             }
 
-            return false;
+            $taggedReply = $this->replyById($replies, $taggedId);
+            if ($taggedReply === null || ! $this->isOrderProcessReply($taggedReply)) {
+                return false;
+            }
         }
 
         $text = trim((string) ($message->body ?? ''));
@@ -649,6 +763,19 @@ class InboxQuickReplyMatcher
             return false;
         }
 
+        return $this->hasDeliveryChargeCue($text);
+    }
+
+    /**
+     * Delivery time / charge wording, even when the same inbound also asks about advance.
+     */
+    public function hasDeliveryTimeOrChargeCue(string $text): bool
+    {
+        return $this->looksLikeKobePabo($text) || $this->hasDeliveryChargeCue($text);
+    }
+
+    private function hasDeliveryChargeCue(string $text): bool
+    {
         $compact = $this->compactYa($text);
         if ($compact === '') {
             return false;
@@ -701,7 +828,7 @@ class InboxQuickReplyMatcher
      */
     public function looksLikeKobePabo(string $text): bool
     {
-        if ($this->looksLikeAdvance($text) || $this->looksLikeCodPush($text)) {
+        if ($this->looksLikeCodPush($text)) {
             return false;
         }
 
@@ -941,7 +1068,10 @@ class InboxQuickReplyMatcher
                 }
             }
 
-            return false;
+            $taggedReply = $this->replyById($replies, $taggedId);
+            if ($taggedReply === null || ! $this->isOrderProcessReply($taggedReply)) {
+                return false;
+            }
         }
 
         $text = trim((string) ($message->body ?? ''));

@@ -169,6 +169,9 @@ return [
         // Auto-reply stepped fixed-price copy when they try to negotiate.
         'auto_price_negotiate' => filter_var(env('CHANNEL_INBOX_AUTO_PRICE_NEGOTIATE', true), FILTER_VALIDATE_BOOL),
 
+        // Auto-send the অর্ডার প্রসেস saved reply when they want to place an order.
+        'auto_order_process' => filter_var(env('CHANNEL_INBOX_AUTO_ORDER_PROCESS', true), FILTER_VALIDATE_BOOL),
+
         // Composer chips — label shown in UI, body inserted into the reply box.
         'quick_replies' => [
             ['label' => 'Salaam', 'body' => 'আসসালামু আলাইকুম'],

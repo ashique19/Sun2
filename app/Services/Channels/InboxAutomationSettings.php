@@ -2,6 +2,7 @@
 
 namespace App\Services\Channels;
 
+use App\Models\ChannelMessage;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Cache;
 
@@ -27,6 +28,8 @@ class InboxAutomationSettings
 
     public const PRICE_NEGOTIATE = 'price_negotiate';
 
+    public const ORDER_PROCESS = 'order_process';
+
     /**
      * @var list<string>
      */
@@ -40,10 +43,11 @@ class InboxAutomationSettings
         self::LOCATION,
         self::ADVANCE,
         self::PRICE_NEGOTIATE,
+        self::ORDER_PROCESS,
     ];
 
     /**
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool, price_negotiate: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool, price_negotiate: bool, order_process: bool}
      */
     public function all(): array
     {
@@ -73,6 +77,21 @@ class InboxAutomationSettings
         return (bool) ($this->all()[$key] ?? false);
     }
 
+    /**
+     * True when this outbound was sent by any inbox automation.
+     */
+    public static function isAutomatedOutbound(ChannelMessage $row): bool
+    {
+        $payload = is_array($row->raw_payload) ? $row->raw_payload : [];
+        foreach ($payload as $key => $value) {
+            if (is_string($key) && str_starts_with($key, 'auto_') && $value) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function anyEnabled(): bool
     {
         return in_array(true, $this->all(), true);
@@ -80,7 +99,7 @@ class InboxAutomationSettings
 
     /**
      * @param  array<string, mixed>  $flags
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool, price_negotiate: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool, price_negotiate: bool, order_process: bool}
      */
     public function save(array $flags): array
     {
@@ -101,7 +120,7 @@ class InboxAutomationSettings
     }
 
     /**
-     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool, price_negotiate: bool}
+     * @return array{photo_request: bool, priced_image: bool, low_match_wait: bool, hi_reply: bool, color_guarantee: bool, delivery_charge: bool, location: bool, advance: bool, price_negotiate: bool, order_process: bool}
      */
     public function defaults(): array
     {
@@ -115,6 +134,7 @@ class InboxAutomationSettings
             self::LOCATION => (bool) config('channels.inbox.auto_location', true),
             self::ADVANCE => (bool) config('channels.inbox.auto_advance', true),
             self::PRICE_NEGOTIATE => (bool) config('channels.inbox.auto_price_negotiate', true),
+            self::ORDER_PROCESS => (bool) config('channels.inbox.auto_order_process', true),
         ];
     }
 
